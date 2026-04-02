@@ -104,6 +104,16 @@ static void check_invariants(const Buffer& buf, const char* context) {
             }
         }
     }
+
+    // INV-8: rope consistency — rope byte lengths match fragment sums
+    if (buf.visible_rope_len() != vis_sum) {
+        QFAIL(qPrintable(QString("INV-8 violated at %1: visible_rope_len=%2 but fragment vis_sum=%3")
+            .arg(context).arg(buf.visible_rope_len()).arg(vis_sum)));
+    }
+    if (buf.deleted_rope_len() != del_sum) {
+        QFAIL(qPrintable(QString("INV-8 violated at %1: deleted_rope_len=%2 but fragment del_sum=%3")
+            .arg(context).arg(buf.deleted_rope_len()).arg(del_sum)));
+    }
 }
 
 // ============================================================================
