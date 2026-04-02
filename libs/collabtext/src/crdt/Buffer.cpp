@@ -323,28 +323,6 @@ Locator Buffer::locator_between(const std::vector<Fragment>& frags,
     return Locator::between(lo, hi);
 }
 
-void Buffer::insert_fragment_into_tree(Fragment frag) {
-    // Set visibility before inserting
-    frag.visible = frag.compute_visible(m_undo_map);
-
-    if (m_fragment_tree.empty()) {
-        m_fragment_tree.push_item(std::move(frag));
-        return;
-    }
-
-    // Use FragmentOrderDim to find the insertion point in O(log n)
-    FragmentOrderDim target{frag.locator, frag.origin};
-
-    auto cursor = m_fragment_tree.cursor<FragmentOrderDim>();
-    cursor.seek(FragmentOrderDim::zero(), Bias::Left);
-
-    FragmentTree new_tree;
-    new_tree.push_tree(cursor.slice(target));
-    new_tree.push_item(std::move(frag));
-    new_tree.push_tree(cursor.suffix());
-    m_fragment_tree = std::move(new_tree);
-}
-
 void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
     size_t i = 0;
     while (i < frags.size()) {
