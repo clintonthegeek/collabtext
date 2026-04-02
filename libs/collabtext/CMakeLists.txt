@@ -9,6 +9,7 @@ add_library(collabtext STATIC
     src/crdt/Clock.cpp
     src/crdt/Locator.cpp
     src/crdt/UndoMap.cpp
+    src/crdt/Buffer.cpp
 )
 set_target_properties(collabtext PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(CollabText::CollabText ALIAS collabtext)
@@ -31,3 +32,4 @@ endfunction()
 
 add_crdt_test(tst_clock)
 add_crdt_test(tst_locator)
+add_crdt_test(tst_buffer)
