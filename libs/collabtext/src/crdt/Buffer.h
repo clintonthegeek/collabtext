@@ -1,8 +1,11 @@
 #pragma once
 
+#include "crdt/Anchor.h"
 #include "crdt/Clock.h"
 #include "crdt/Fragment.h"
+#include "crdt/InsertionIndex.h"
 #include "crdt/Locator.h"
+#include "crdt/SumTree.h"
 #include "crdt/UndoMap.h"
 
 #include <optional>
@@ -11,6 +14,11 @@
 #include <vector>
 
 namespace CollabText::Crdt {
+
+// Branching factor for the fragment tree. 2 for testing (aggressive splits).
+static constexpr std::size_t FRAG_TREE_B = 2;
+
+using FragmentTree = SumTree<Fragment, FRAG_TREE_B>;
 
 // Operation types for sync
 struct EditOperation {
@@ -42,7 +50,6 @@ struct EditOperation {
         Locator new_locator;      // new locator for the second half
     };
     std::vector<SplitRelocation> split_relocations;
-
 };
 
 struct UndoOperation {
@@ -90,27 +97,46 @@ public:
     /// Returns the replica ID of this buffer.
     uint16_t replica_id() const;
 
+    /// Create an Anchor at a visible byte offset.
+    Anchor anchor_at(uint32_t byte_offset, Bias bias = Bias::Left) const;
+
+    /// Resolve an Anchor back to a visible byte offset.
+    /// Returns the document length if the anchor is past the end.
+    uint32_t resolve_anchor(const Anchor& anchor) const;
+
+    /// Compare two anchors by their resolved positions.
+    int compare_anchors(const Anchor& a, const Anchor& b) const;
+
     /// For testing: access the internal fragment list.
-    const std::vector<Fragment> &fragments() const;
+    std::vector<Fragment> fragments() const;
 
 private:
+    // ---- Fragment vector helpers ----
+    // Operations modify fragments via a temporary vector, then rebuild the tree.
+
+    /// Get all fragments as a mutable vector.
+    std::vector<Fragment> get_fragments() const;
+
+    /// Rebuild the fragment tree from a vector of fragments (preserves order).
+    void set_fragments(std::vector<Fragment>&& frags);
+
     /// Insert a fragment in sorted position in the fragment list.
-    void insert_fragment(Fragment frag);
+    void insert_fragment(std::vector<Fragment>& frags, Fragment frag) const;
 
     /// Find the fragment index and byte offset within that fragment for a
     /// given visible byte offset. Returns (fragment_index, offset_within_fragment).
-    /// If byte_offset equals visible_length(), returns (m_fragments.size(), 0).
-    std::pair<size_t, uint32_t> resolve_visible_offset(uint32_t byte_offset) const;
+    std::pair<size_t, uint32_t> resolve_visible_offset(
+        const std::vector<Fragment>& frags, uint32_t byte_offset) const;
 
     /// Split a fragment at the given byte offset within it.
-    /// Both halves keep the same locator. Used for delete boundaries.
     /// Returns the index of the second half.
-    size_t split_fragment_at(size_t frag_idx, uint32_t offset_in_frag);
+    size_t split_fragment_at(std::vector<Fragment>& frags,
+                             size_t frag_idx, uint32_t offset_in_frag) const;
 
-    /// Find a locator for a new fragment given its predecessor and successor
-    /// locators. Handles the case where lo == hi (split fragments) by searching
-    /// for truly distinct boundaries.
-    Locator locator_between(size_t ins_frag) const;
+    /// Find a locator for a new fragment between frags[ins_frag-1] and
+    /// the next distinct greater locator.
+    Locator locator_between(const std::vector<Fragment>& frags,
+                            size_t ins_frag) const;
 
     /// Apply a single remote EditOperation.
     bool apply_remote_edit(const EditOperation &op);
@@ -121,16 +147,22 @@ private:
     /// Retry any deferred operations.
     void retry_deferred();
 
-    /// Atomize multi-character fragments at shared locators to ensure
-    /// correct character-level interleaving across replicas.
-    void normalize_fragments();
+    /// Atomize multi-character fragments at shared locators.
+    void normalize_fragments(std::vector<Fragment>& frags) const;
+
+    /// Insert a fragment into the tree in O(log^2 n) using cursor seek/slice.
+    void insert_fragment_into_tree(Fragment frag);
 
     uint16_t m_replica_id;
     Lamport m_clock;
     Global m_version;
     UndoMap m_undo_map;
 
-    std::vector<Fragment> m_fragments;
+    FragmentTree m_fragment_tree;
+    InsertionIndex m_insertion_index;
+
+    /// Rebuild the insertion index from the current fragment list.
+    void rebuild_insertion_index(const std::vector<Fragment>& frags);
 
     /// Deferred operations awaiting causal dependencies.
     std::vector<Operation> m_deferred;
