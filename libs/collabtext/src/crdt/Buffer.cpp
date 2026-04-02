@@ -69,6 +69,14 @@ uint32_t Buffer::visible_length() const {
     return m_fragment_tree.summary().visible_bytes;
 }
 
+uint32_t Buffer::visible_rope_len() const {
+    return m_visible_text.len();
+}
+
+uint32_t Buffer::deleted_rope_len() const {
+    return m_deleted_text.len();
+}
+
 // ---------------------------------------------------------------------------
 // Anchors
 // ---------------------------------------------------------------------------

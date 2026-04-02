@@ -3,6 +3,7 @@
 #include "crdt/Anchor.h"
 #include "crdt/Clock.h"
 #include "crdt/Fragment.h"
+#include "crdt/Rope.h"
 #include "crdt/InsertionIndex.h"
 #include "crdt/Locator.h"
 #include "crdt/OperationQueue.h"
@@ -69,6 +70,12 @@ public:
 
     /// For testing: access the internal fragment list.
     std::vector<Fragment> fragments() const;
+
+    /// For testing: visible rope byte length.
+    uint32_t visible_rope_len() const;
+
+    /// For testing: deleted rope byte length.
+    uint32_t deleted_rope_len() const;
 
 private:
     // ---- Fragment vector helpers ----
@@ -137,6 +144,8 @@ private:
 
     FragmentTree m_fragment_tree;
     InsertionIndex m_insertion_index;
+    Rope m_visible_text;
+    Rope m_deleted_text;
 
     /// Rebuild the insertion index from the current fragment list.
     void rebuild_insertion_index(const std::vector<Fragment>& frags);
