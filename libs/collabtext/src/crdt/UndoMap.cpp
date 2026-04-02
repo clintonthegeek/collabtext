@@ -53,21 +53,6 @@ bool UndoMap::was_undone(Lamport edit_id, const Global &version) const {
     return max_count % 2 == 1;
 }
 
-void UndoMap::undo(UndoMapKey key) {
-    Lamport edit_id(key.replica_id, key.lamport_value);
-    uint32_t current = undo_count(edit_id);
-    Lamport undo_id(UINT16_MAX, ++m_shim_counter);
-    insert(UndoMapEntry{{edit_id, undo_id}, current + 1});
-}
-
-void UndoMap::redo(UndoMapKey key) {
-    Lamport edit_id(key.replica_id, key.lamport_value);
-    uint32_t current = undo_count(edit_id);
-    if (current % 2 == 0) return; // not undone — nothing to redo
-    Lamport undo_id(UINT16_MAX, ++m_shim_counter);
-    insert(UndoMapEntry{{edit_id, undo_id}, current + 1});
-}
-
 size_t UndoMap::size() const {
     size_t count = 0;
     m_tree.for_each([&](const UndoMapEntry &) { ++count; });
@@ -76,7 +61,6 @@ size_t UndoMap::size() const {
 
 void UndoMap::clear() {
     m_tree = {};
-    m_shim_counter = 0;
 }
 
 } // namespace CollabText::Crdt

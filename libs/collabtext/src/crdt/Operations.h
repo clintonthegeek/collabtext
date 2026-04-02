@@ -45,9 +45,9 @@ struct EditOperation {
 struct UndoOperation {
     Lamport timestamp;
     Global version;
-    std::vector<UndoMapKey> undo_keys;     // Characters to hide/show via undo map
-    std::vector<UndoMapKey> undelete_keys;  // Characters to un-delete/re-delete via deleted flag
-    bool is_redo = false;                   // True if this is a redo operation
+    std::vector<std::pair<Lamport, uint32_t>> counts;  // (edit_id, new_count)
+    std::vector<UndoMapKey> undelete_keys;  // Characters to un-delete/re-delete
+    bool is_redo = false;                   // Direction for undelete_keys
 };
 
 using Operation = std::variant<EditOperation, UndoOperation>;

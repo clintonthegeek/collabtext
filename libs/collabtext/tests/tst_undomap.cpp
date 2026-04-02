@@ -81,20 +81,18 @@ private slots:
         QVERIFY(!map.is_undone(editE));
     }
 
-    void legacy_undo_redo_shims() {
+    void insert_and_query() {
         UndoMap map;
         UndoMapKey key(1, 10);
+        Lamport edit_id(1, 10);
+        Lamport undo_ts(2, 50);
 
         QVERIFY(!map.is_undone(key));
-        QCOMPARE(map.count(key), 0u);
 
-        map.undo(key);
+        map.insert(UndoMapEntry{{edit_id, undo_ts}, 1});
         QVERIFY(map.is_undone(key));
 
-        map.redo(key);
-        QVERIFY(!map.is_undone(key));
-
-        map.redo(key);
+        map.insert(UndoMapEntry{{edit_id, Lamport(2, 60)}, 2});
         QVERIFY(!map.is_undone(key));
     }
 

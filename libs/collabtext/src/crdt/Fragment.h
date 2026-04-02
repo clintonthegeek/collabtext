@@ -136,7 +136,7 @@ struct Fragment {
     /// Use this when building the tree to set the `visible` flag.
     bool compute_visible(const UndoMap &undo_map) const {
         if (delete_count > 0) return false;
-        return !undo_map.is_undone(UndoMapKey(origin));
+        return !undo_map.is_undone(origin);
     }
 
     /// True if this fragment is visible in the document.

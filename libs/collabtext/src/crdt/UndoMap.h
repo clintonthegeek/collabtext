@@ -76,19 +76,11 @@ public:
         return is_undone(Lamport(key.replica_id, key.lamport_value));
     }
 
-    // Legacy shims (used until Buffer migrates)
-    void undo(UndoMapKey key);
-    void redo(UndoMapKey key);
-    uint32_t count(UndoMapKey key) const {
-        return undo_count(Lamport(key.replica_id, key.lamport_value));
-    }
-
     size_t size() const;
     void clear();
 
 private:
     SumTree<UndoMapEntry, UNDO_MAP_B> m_tree;
-    uint32_t m_shim_counter = 0;
 };
 
 } // namespace CollabText::Crdt

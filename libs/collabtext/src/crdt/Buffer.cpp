@@ -915,13 +915,9 @@ bool Buffer::apply_remote_undo(const UndoOperation &op) {
     if (!m_version.observed_all(op.version))
         return false;
 
-    // Handle undo_keys (hide/show via undo map)
-    for (auto &key : op.undo_keys) {
-        if (op.is_redo) {
-            m_undo_map.redo(key);
-        } else {
-            m_undo_map.undo(key);
-        }
+    // Handle counts (insert undo entries into map)
+    for (auto &[edit_id, count] : op.counts) {
+        m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
     }
 
     // Handle undelete_keys (adjust delete counter)
@@ -1041,11 +1037,14 @@ std::optional<Operation> Buffer::undo() {
     UndoOperation op;
     op.version = m_version;
     op.is_redo = false;
+    op.timestamp = m_clock.tick();
 
     // Undo inserted characters (hide them via undo map)
     for (auto &key : entry.inserted_keys) {
-        m_undo_map.undo(key);
-        op.undo_keys.push_back(key);
+        Lamport edit_id(key.replica_id, key.lamport_value);
+        uint32_t current = m_undo_map.undo_count(edit_id);
+        m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
+        op.counts.push_back({edit_id, current + 1});
     }
 
     // Undo deleted characters (decrement delete counter)
@@ -1064,7 +1063,6 @@ std::optional<Operation> Buffer::undo() {
     }
     set_fragments(std::move(frags));
 
-    op.timestamp = m_clock.tick();
     m_version.observe(op.timestamp);
 
     return op;
@@ -1080,11 +1078,14 @@ std::optional<Operation> Buffer::redo() {
     UndoOperation op;
     op.version = m_version;
     op.is_redo = true;
+    op.timestamp = m_clock.tick();
 
-    // Redo: re-hide inserted characters
+    // Redo: increment undo count (even count = visible again)
     for (auto &key : entry.inserted_keys) {
-        m_undo_map.redo(key);
-        op.undo_keys.push_back(key);
+        Lamport edit_id(key.replica_id, key.lamport_value);
+        uint32_t current = m_undo_map.undo_count(edit_id);
+        m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
+        op.counts.push_back({edit_id, current + 1});
     }
 
     // Redo: re-delete deleted characters (increment delete counter)
@@ -1102,7 +1103,6 @@ std::optional<Operation> Buffer::redo() {
     }
     set_fragments(std::move(frags));
 
-    op.timestamp = m_clock.tick();
     m_version.observe(op.timestamp);
 
     return op;
