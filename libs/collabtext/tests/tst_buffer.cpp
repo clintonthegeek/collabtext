@@ -273,6 +273,75 @@ private slots:
         buf.apply_local_edit({{1, 2}, {3, 4}}, {"", ""});
         QCOMPARE(buf.text(), std::string("acef"));
     }
+
+    // -----------------------------------------------------------------------
+    // Opt 2: Cursor-based apply_local_edit tests
+    // -----------------------------------------------------------------------
+
+    void local_edit_replace_mid_fragment() {
+        // REGRESSION: was producing "heoXX" due to locator ordering bug
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+        buf.apply_local_edit({{2, 4}}, {"XX"});
+        QCOMPARE(buf.text(), std::string("heXXo"));
+        QCOMPARE(buf.visible_length(), 5u);
+    }
+
+    void local_edit_insert_at_start_of_fragment() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        buf.apply_local_edit({{0, 0}}, {"XX"});
+        QCOMPARE(buf.text(), std::string("XXabcdef"));
+    }
+
+    void local_edit_insert_mid_fragment() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        buf.apply_local_edit({{3, 3}}, {"XX"});
+        QCOMPARE(buf.text(), std::string("abcXXdef"));
+
+        auto frags = buf.fragments();
+        bool found_xx = false;
+        for (auto& f : frags) {
+            if (f.content == "XX") { found_xx = true; break; }
+        }
+        QVERIFY(found_xx);
+    }
+
+    void local_edit_delete_spanning_fragments() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"ab"});
+        buf.apply_local_edit({{2, 2}}, {"cd"});
+        buf.apply_local_edit({{4, 4}}, {"ef"});
+        QCOMPARE(buf.text(), std::string("abcdef"));
+
+        buf.apply_local_edit({{0, 6}}, {""});
+        QCOMPARE(buf.text(), std::string(""));
+        QCOMPARE(buf.visible_length(), 0u);
+    }
+
+    void local_edit_delete_partial_fragment() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        buf.apply_local_edit({{0, 3}}, {""});
+        QCOMPARE(buf.text(), std::string("def"));
+        QCOMPARE(buf.visible_length(), 3u);
+    }
+
+    void local_edit_multi_range_left_to_right() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abcdefghij"});
+        buf.apply_local_edit({{1, 2}, {4, 5}}, {"X", "Y"});
+        QCOMPARE(buf.text(), std::string("aXcdYfghij"));
+    }
+
+    void local_edit_replace_entire_document() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+        buf.apply_local_edit({{0, 5}}, {"world"});
+        QCOMPARE(buf.text(), std::string("world"));
+        QCOMPARE(buf.visible_length(), 5u);
+    }
 };
 
 QTEST_MAIN(TestBuffer)
