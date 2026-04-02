@@ -5,6 +5,7 @@
 #include "crdt/UndoMap.h"
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace CollabText::Crdt {
 
@@ -117,7 +118,7 @@ struct Fragment {
     Locator locator;         ///< Fractional position in the document
     std::string content;     ///< UTF-8 content
     uint32_t length = 0;     ///< Number of characters (may differ from content.size() for multi-byte)
-    uint32_t delete_count = 0;  ///< Number of active delete votes (deleted when > 0)
+    std::vector<Lamport> deletions;  ///< Lamport timestamps of deletion operations
     bool visible = true;     ///< Cached visibility (set during tree construction)
 
     Fragment() = default;
@@ -130,13 +131,16 @@ struct Fragment {
     }
 
     /// True if this fragment has been deleted (by any replica).
-    bool deleted() const { return delete_count > 0; }
+    bool deleted() const { return !deletions.empty(); }
 
-    /// Compute visibility from delete_count and undo_map.
+    /// Compute visibility from deletions and undo_map.
     /// Use this when building the tree to set the `visible` flag.
     bool compute_visible(const UndoMap &undo_map) const {
-        if (delete_count > 0) return false;
-        return !undo_map.is_undone(origin);
+        if (undo_map.is_undone(origin)) return false;
+        for (auto &del : deletions) {
+            if (!undo_map.is_undone(del)) return false;
+        }
+        return true;
     }
 
     /// True if this fragment is visible in the document.
@@ -148,7 +152,7 @@ struct Fragment {
     /// True if this fragment was ever visible (inserted but not deleted).
     /// Ignores undo state.
     bool was_visible() const {
-        return delete_count == 0;
+        return deletions.empty();
     }
 
     /// Produce a FragmentSummary for this fragment.

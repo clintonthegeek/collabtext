@@ -591,7 +591,7 @@ private slots:
                                   << "," << frags[fi].origin.value
                                   << ") len=" << frags[fi].length
                                   << " vis=" << frags[fi].visible
-                                  << " del=" << frags[fi].delete_count
+                                  << " dels=" << frags[fi].deletions.size()
                                   << " \"" << frags[fi].content << "\"\n";
                     }
                     QFAIL(qPrintable(QString("Anchor order inverted at step %1: anchor[%2]=%3 > anchor[%4]=%5 (seed %6)")
