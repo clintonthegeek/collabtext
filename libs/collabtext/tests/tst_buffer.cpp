@@ -342,6 +342,79 @@ private slots:
         QCOMPARE(buf.text(), std::string("world"));
         QCOMPARE(buf.visible_length(), 5u);
     }
+
+    // -----------------------------------------------------------------------
+    // Opt 3: VersionedFullOffset / remote edit tests
+    // -----------------------------------------------------------------------
+
+    void remote_edit_skips_unseen_fragments() {
+        // bufA inserts "aaa" first, then bufB inserts "bbb".
+        // bufB syncs opA1 before inserting, so clock values don't overlap.
+        // After convergence, bufA deletes its own "aaa"; bufB must apply
+        // that delete correctly via versioned seek (not by position).
+        Buffer bufA(1);
+        Buffer bufB(2);
+
+        auto opA1 = bufA.apply_local_edit({{0, 0}}, {"aaa"});
+        // bufB syncs opA1 first so its clock advances past replica 1's values
+        bufB.apply_ops({opA1});
+        auto opB1 = bufB.apply_local_edit({{3, 3}}, {"bbb"});
+
+        bufA.apply_ops({opB1});
+        std::string converged = bufA.text();
+        QCOMPARE(bufA.text(), bufB.text());
+
+        auto posA = converged.find("aaa");
+        QVERIFY(posA != std::string::npos);
+        auto opA2 = bufA.apply_local_edit(
+            {{static_cast<uint32_t>(posA), static_cast<uint32_t>(posA + 3)}}, {""});
+
+        bufB.apply_ops({opA2});
+
+        QCOMPARE(bufA.text(), bufB.text());
+        QCOMPARE(bufA.text().size(), size_t(3));
+        QVERIFY(bufA.text().find("bbb") != std::string::npos);
+    }
+
+    void remote_edit_version_filtered_offset() {
+        Buffer buf1(1), buf2(2), buf3(3);
+
+        auto op1 = buf1.apply_local_edit({{0, 0}}, {"111"});
+        auto op2 = buf2.apply_local_edit({{0, 0}}, {"222"});
+        auto op3 = buf3.apply_local_edit({{0, 0}}, {"333"});
+
+        buf1.apply_ops({op2});
+
+        std::string text1 = buf1.text();
+        QCOMPARE(text1.size(), size_t(6));
+
+        auto opDel = buf1.apply_local_edit({{0, 3}}, {""});
+
+        Buffer bufFinal(4);
+        bufFinal.apply_ops({op1, op2, op3, opDel});
+        for (int i = 0; i < 5; ++i) bufFinal.apply_ops({});
+
+        buf1.apply_ops({op3});
+        QCOMPARE(buf1.text(), bufFinal.text());
+    }
+
+    void remote_edit_convergence_with_concurrent_deletes() {
+        Buffer bufA(1), bufB(2);
+
+        auto opIns = bufA.apply_local_edit({{0, 0}}, {"abcdefghij"});
+        bufB.apply_ops({opIns});
+        QCOMPARE(bufB.text(), std::string("abcdefghij"));
+
+        auto opDelA = bufA.apply_local_edit({{2, 5}}, {""});
+        auto opDelB = bufB.apply_local_edit({{3, 7}}, {""});
+
+        bufA.apply_ops({opDelB});
+        bufB.apply_ops({opDelA});
+
+        QCOMPARE(bufA.text(), bufB.text());
+        // Characters at positions 2,3,4,5,6 all deleted → "abhij"
+        QCOMPARE(bufA.text(), std::string("abhij"));
+    }
 };
 
 QTEST_MAIN(TestBuffer)

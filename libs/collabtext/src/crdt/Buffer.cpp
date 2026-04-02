@@ -729,6 +729,25 @@ Operation Buffer::apply_local_edit(
 // Remote edit application
 // ---------------------------------------------------------------------------
 
+Buffer::VersionedSeekResult Buffer::versioned_seek_by_timestamp(
+    const std::vector<Fragment>& frags,
+    Lamport target_ts) const
+{
+    for (size_t fi = 0; fi < frags.size(); ++fi) {
+        auto &f = frags[fi];
+        if (f.origin.replica_id != target_ts.replica_id) continue;
+        if (target_ts.value < f.origin.value ||
+            target_ts.value >= f.origin.value + f.length) continue;
+
+        uint32_t char_off = target_ts.value - f.origin.value;
+        uint32_t byte_off = char_off > 0
+            ? char_to_byte_offset(f.content, char_off)
+            : 0;
+        return {&f, fi, byte_off};
+    }
+    return {};
+}
+
 bool Buffer::apply_remote_edit(const EditOperation &op) {
     if (m_version.observed(op.timestamp))
         return true;
@@ -740,29 +759,26 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
 
     // Apply deletions by matching timestamps.
     for (auto &ts : op.deleted_timestamps) {
-        for (size_t fi = 0; fi < frags.size(); ++fi) {
-            auto &f = frags[fi];
-            if (f.origin.replica_id != ts.replica_id) continue;
-            if (ts.value < f.origin.value || ts.value >= f.origin.value + f.length)
-                continue;
+        auto result = versioned_seek_by_timestamp(frags, ts);
+        if (!result.fragment) continue;
 
-            if (f.length == 1) {
-                f.delete_count++;
-            } else {
-                uint32_t offset = ts.value - f.origin.value;
-                uint32_t byte_off = char_to_byte_offset(frags[fi].content, offset);
+        size_t fi = result.fragment_index;
 
-                if (offset > 0) {
-                    fi = split_fragment_at(frags, fi, byte_off);
-                }
+        if (frags[fi].length == 1) {
+            frags[fi].delete_count++;
+        } else {
+            uint32_t offset = ts.value - frags[fi].origin.value;
+            uint32_t byte_off = char_to_byte_offset(frags[fi].content, offset);
 
-                if (frags[fi].length > 1) {
-                    uint32_t cb = first_char_bytes(frags[fi].content);
-                    split_fragment_at(frags, fi, cb);
-                }
-                frags[fi].delete_count++;
+            if (offset > 0) {
+                fi = split_fragment_at(frags, fi, byte_off);
             }
-            break;
+
+            if (frags[fi].length > 1) {
+                uint32_t cb = first_char_bytes(frags[fi].content);
+                split_fragment_at(frags, fi, cb);
+            }
+            frags[fi].delete_count++;
         }
     }
 

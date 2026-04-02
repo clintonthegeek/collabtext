@@ -119,6 +119,17 @@ private:
     /// Insert a fragment into the tree in O(log^2 n) using cursor seek/slice.
     void insert_fragment_into_tree(Fragment frag);
 
+    /// Seek to a fragment by timestamp, for use in remote edit application.
+    /// Returns pointer to fragment and its index, or nullptr if not found.
+    struct VersionedSeekResult {
+        const Fragment* fragment = nullptr;
+        size_t fragment_index = 0;
+        uint32_t offset_in_fragment = 0;
+    };
+    VersionedSeekResult versioned_seek_by_timestamp(
+        const std::vector<Fragment>& frags,
+        Lamport target_ts) const;
+
     uint16_t m_replica_id;
     Lamport m_clock;
     Global m_version;
