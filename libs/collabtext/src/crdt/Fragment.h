@@ -18,6 +18,8 @@ struct FragmentSummary {
     Locator max_locator;           ///< Maximum fragment Locator in subtree
     Lamport max_origin = Lamport::min(); ///< Origin of fragment with max (locator, origin)
     Global max_version;            ///< Latest timestamp in subtree
+    Global min_insertion_version;  ///< Earliest insertion version in subtree
+    Global max_insertion_version;  ///< Latest insertion version in subtree
 
     static FragmentSummary zero() { return {}; }
 
@@ -31,6 +33,8 @@ struct FragmentSummary {
             max_origin = other.max_origin;
         }
         max_version.join(other.max_version);
+        min_insertion_version.meet(other.min_insertion_version);
+        max_insertion_version.join(other.max_insertion_version);
     }
 };
 
@@ -161,6 +165,9 @@ struct Fragment {
         s.max_origin = origin;
         if (length > 0) {
             s.max_version.observe(Lamport(origin.replica_id, origin.value + length - 1));
+            Lamport ins_ts(origin.replica_id, origin.value);
+            s.min_insertion_version.observe(ins_ts);
+            s.max_insertion_version.observe(ins_ts);
         }
         return s;
     }
