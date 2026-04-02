@@ -1,4 +1,5 @@
 #include "crdt/Buffer.h"
+#include "crdt/OperationQueue.h"
 #include <algorithm>
 #include <cassert>
 #include <numeric>
@@ -713,22 +714,25 @@ bool Buffer::apply_remote_undo(const UndoOperation &op) {
 // apply_ops
 // ---------------------------------------------------------------------------
 
+bool Buffer::try_apply(const Operation& op) {
+    return std::visit([this](const auto &o) -> bool {
+        using T = std::decay_t<decltype(o)>;
+        if constexpr (std::is_same_v<T, EditOperation>) {
+            return apply_remote_edit(o);
+        } else {
+            return apply_remote_undo(o);
+        }
+    }, op);
+}
+
 void Buffer::apply_ops(const std::vector<Operation> &ops) {
     for (auto &op : ops) {
-        bool applied = std::visit([this](auto &o) -> bool {
-            using T = std::decay_t<decltype(o)>;
-            if constexpr (std::is_same_v<T, EditOperation>) {
-                return apply_remote_edit(o);
-            } else {
-                return apply_remote_undo(o);
-            }
-        }, op);
-
+        Lamport ts = get_op_timestamp(op);
+        bool applied = try_apply(op);
         if (!applied) {
-            m_deferred.push_back(op);
+            m_deferred_queue.push_item({ts, op});
         }
     }
-
     retry_deferred();
 }
 
@@ -736,24 +740,19 @@ void Buffer::retry_deferred() {
     bool progress = true;
     while (progress) {
         progress = false;
-        for (auto it = m_deferred.begin(); it != m_deferred.end(); ) {
-            bool applied = std::visit([this](auto &o) -> bool {
-                using T = std::decay_t<decltype(o)>;
-                if constexpr (std::is_same_v<T, EditOperation>) {
-                    return apply_remote_edit(o);
-                } else {
-                    return apply_remote_undo(o);
-                }
-            }, *it);
 
+        OperationQueue remaining;
+        m_deferred_queue.for_each([&](const OperationEntry& entry) {
+            bool applied = try_apply(entry.op);
             if (applied) {
-                it = m_deferred.erase(it);
                 progress = true;
             } else {
-                ++it;
+                remaining.push_item(entry);
             }
-        }
+        });
+        m_deferred_queue = std::move(remaining);
     }
+    m_deferred_replicas.clear();
 }
 
 // ---------------------------------------------------------------------------
