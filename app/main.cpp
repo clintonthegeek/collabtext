@@ -153,6 +153,8 @@ private slots:
 
     void onCursorPositionChanged()
     {
+        if (m_doc->crdt()->isApplyingRemote())
+            return;
         QTextCursor tc = m_edit->textCursor();
         int head = tc.position();
         int anchor = tc.anchor();
