@@ -593,6 +593,92 @@ private slots:
         buf.redo();
         QCOMPARE(buf.visible_length(), static_cast<uint32_t>(buf.text().size()));
     }
+
+    // -----------------------------------------------------------------------
+    // Concurrent undo (Optimization 5)
+    // -----------------------------------------------------------------------
+
+    void concurrent_undo_both_hide() {
+        // Alice and Bob each insert their own text, then each undo their own edit.
+        // A third buffer receives all ops and both undos — text should be hidden.
+        Buffer bufA(1), bufB(2), bufC(3);
+        auto insA = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        auto insB = bufB.apply_local_edit({{0, 0}}, {"world"});
+
+        // Both buffers sync each other's inserts
+        bufA.apply_ops({insB});
+        bufB.apply_ops({insA});
+        bufC.apply_ops({insA, insB});
+
+        // Each buffer undoes its own edit
+        auto undoA = bufA.undo();
+        auto undoB = bufB.undo();
+        QVERIFY(undoA.has_value());
+        QVERIFY(undoB.has_value());
+
+        // Cross-apply undos
+        bufA.apply_ops({*undoB});
+        bufB.apply_ops({*undoA});
+        bufC.apply_ops({*undoA, *undoB});
+
+        // All should converge on empty (both undos hide all text)
+        QCOMPARE(bufA.text(), std::string(""));
+        QCOMPARE(bufB.text(), std::string(""));
+        QCOMPARE(bufC.text(), std::string(""));
+    }
+
+    void concurrent_undo_then_redo_wins() {
+        // A and B each insert text. Both undo. Then A redoes — redo should win
+        // for A's text (higher undo count on A's characters means visible).
+        Buffer bufA(1), bufB(2), bufC(3);
+        auto insA = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        auto insB = bufB.apply_local_edit({{0, 0}}, {"world"});
+
+        bufA.apply_ops({insB});
+        bufB.apply_ops({insA});
+        bufC.apply_ops({insA, insB});
+
+        auto undoA = bufA.undo();
+        auto undoB = bufB.undo();
+        QVERIFY(undoA.has_value());
+        QVERIFY(undoB.has_value());
+
+        bufA.apply_ops({*undoB});
+        auto redoA = bufA.redo();
+        QVERIFY(redoA.has_value());
+
+        // Apply all ops to C and B
+        bufC.apply_ops({*undoA, *undoB, *redoA});
+        bufB.apply_ops({*undoA, *redoA});
+
+        // A's redo wins — A's text "hello" is visible; B's text "world" remains
+        // hidden (undone but not redone).
+        QVERIFY(bufA.text().find("hello") != std::string::npos);
+        QVERIFY(bufA.text().find("world") == std::string::npos);
+        QCOMPARE(bufA.text(), bufB.text());
+        QCOMPARE(bufA.text(), bufC.text());
+    }
+
+    void remote_undo_with_counts() {
+        // Verify the new counts-based UndoOperation wire format works
+        Buffer bufA(1), bufB(2);
+        auto ins = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        bufB.apply_ops({ins});
+
+        auto undoOp = bufA.undo();
+        QVERIFY(undoOp.has_value());
+
+        // Apply undo to B via remote path
+        bufB.apply_ops({*undoOp});
+        QCOMPARE(bufB.text(), std::string(""));
+
+        // Redo on A, apply to B
+        auto redoOp = bufA.redo();
+        QVERIFY(redoOp.has_value());
+        bufB.apply_ops({*redoOp});
+        QCOMPARE(bufB.text(), std::string("hello"));
+        QCOMPARE(bufA.text(), bufB.text());
+    }
 };
 
 QTEST_MAIN(TestBuffer)

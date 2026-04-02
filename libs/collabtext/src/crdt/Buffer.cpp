@@ -25,10 +25,27 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     for (auto& f : frags) {
         f.visible = f.compute_visible(m_undo_map);
     }
+
+    // Rebuild ropes from fragment content
+    Rope visible_rope, deleted_rope;
+    for (const auto& f : frags) {
+        if (f.visible) {
+            visible_rope.push_str(f.content);
+        } else {
+            deleted_rope.push_str(f.content);
+        }
+    }
+    m_visible_text = std::move(visible_rope);
+    m_deleted_text = std::move(deleted_rope);
+
     rebuild_insertion_index(frags);
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
     m_fragment_tree = std::move(tree);
+
+    // Rope consistency invariant (debug builds)
+    assert(m_visible_text.len() == m_fragment_tree.summary().visible_bytes);
+    assert(m_deleted_text.len() == m_fragment_tree.summary().deleted_bytes);
 }
 
 void Buffer::rebuild_insertion_index(const std::vector<Fragment>& frags) {
@@ -57,16 +74,19 @@ std::vector<Fragment> Buffer::fragments() const {
 // ---------------------------------------------------------------------------
 
 std::string Buffer::text() const {
-    std::string result;
-    m_fragment_tree.for_each([&](const Fragment& f) {
-        if (f.visible)
-            result += f.content;
-    });
-    return result;
+    return m_visible_text.to_string();
 }
 
 uint32_t Buffer::visible_length() const {
     return m_fragment_tree.summary().visible_bytes;
+}
+
+uint32_t Buffer::visible_rope_len() const {
+    return m_visible_text.len();
+}
+
+uint32_t Buffer::deleted_rope_len() const {
+    return m_deleted_text.len();
 }
 
 // ---------------------------------------------------------------------------
@@ -301,28 +321,6 @@ Locator Buffer::locator_between(const std::vector<Fragment>& frags,
 
     assert(lo < hi);
     return Locator::between(lo, hi);
-}
-
-void Buffer::insert_fragment_into_tree(Fragment frag) {
-    // Set visibility before inserting
-    frag.visible = frag.compute_visible(m_undo_map);
-
-    if (m_fragment_tree.empty()) {
-        m_fragment_tree.push_item(std::move(frag));
-        return;
-    }
-
-    // Use FragmentOrderDim to find the insertion point in O(log n)
-    FragmentOrderDim target{frag.locator, frag.origin};
-
-    auto cursor = m_fragment_tree.cursor<FragmentOrderDim>();
-    cursor.seek(FragmentOrderDim::zero(), Bias::Left);
-
-    FragmentTree new_tree;
-    new_tree.push_tree(cursor.slice(target));
-    new_tree.push_item(std::move(frag));
-    new_tree.push_tree(cursor.suffix());
-    m_fragment_tree = std::move(new_tree);
 }
 
 void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
@@ -895,13 +893,9 @@ bool Buffer::apply_remote_undo(const UndoOperation &op) {
     if (!m_version.observed_all(op.version))
         return false;
 
-    // Handle undo_keys (hide/show via undo map)
-    for (auto &key : op.undo_keys) {
-        if (op.is_redo) {
-            m_undo_map.redo(key);
-        } else {
-            m_undo_map.undo(key);
-        }
+    // Handle counts (insert undo entries into map)
+    for (auto &[edit_id, count] : op.counts) {
+        m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
     }
 
     // Handle undelete_keys (adjust delete counter)
@@ -1021,11 +1015,14 @@ std::optional<Operation> Buffer::undo() {
     UndoOperation op;
     op.version = m_version;
     op.is_redo = false;
+    op.timestamp = m_clock.tick();
 
     // Undo inserted characters (hide them via undo map)
     for (auto &key : entry.inserted_keys) {
-        m_undo_map.undo(key);
-        op.undo_keys.push_back(key);
+        Lamport edit_id(key.replica_id, key.lamport_value);
+        uint32_t current = m_undo_map.undo_count(edit_id);
+        m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
+        op.counts.push_back({edit_id, current + 1});
     }
 
     // Undo deleted characters (decrement delete counter)
@@ -1044,7 +1041,6 @@ std::optional<Operation> Buffer::undo() {
     }
     set_fragments(std::move(frags));
 
-    op.timestamp = m_clock.tick();
     m_version.observe(op.timestamp);
 
     return op;
@@ -1060,11 +1056,14 @@ std::optional<Operation> Buffer::redo() {
     UndoOperation op;
     op.version = m_version;
     op.is_redo = true;
+    op.timestamp = m_clock.tick();
 
-    // Redo: re-hide inserted characters
+    // Redo: increment undo count (even count = visible again)
     for (auto &key : entry.inserted_keys) {
-        m_undo_map.redo(key);
-        op.undo_keys.push_back(key);
+        Lamport edit_id(key.replica_id, key.lamport_value);
+        uint32_t current = m_undo_map.undo_count(edit_id);
+        m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
+        op.counts.push_back({edit_id, current + 1});
     }
 
     // Redo: re-delete deleted characters (increment delete counter)
@@ -1082,7 +1081,6 @@ std::optional<Operation> Buffer::redo() {
     }
     set_fragments(std::move(frags));
 
-    op.timestamp = m_clock.tick();
     m_version.observe(op.timestamp);
 
     return op;

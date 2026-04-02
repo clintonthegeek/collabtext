@@ -3,6 +3,7 @@
 #include "crdt/Anchor.h"
 #include "crdt/Clock.h"
 #include "crdt/Fragment.h"
+#include "crdt/Rope.h"
 #include "crdt/InsertionIndex.h"
 #include "crdt/Locator.h"
 #include "crdt/OperationQueue.h"
@@ -70,6 +71,12 @@ public:
     /// For testing: access the internal fragment list.
     std::vector<Fragment> fragments() const;
 
+    /// For testing: visible rope byte length.
+    uint32_t visible_rope_len() const;
+
+    /// For testing: deleted rope byte length.
+    uint32_t deleted_rope_len() const;
+
 private:
     // ---- Fragment vector helpers ----
     // Operations modify fragments via a temporary vector, then rebuild the tree.
@@ -116,9 +123,6 @@ private:
     /// Atomize multi-character fragments at shared locators.
     void normalize_fragments(std::vector<Fragment>& frags) const;
 
-    /// Insert a fragment into the tree in O(log^2 n) using cursor seek/slice.
-    void insert_fragment_into_tree(Fragment frag);
-
     /// Seek to a fragment by timestamp, for use in remote edit application.
     /// Returns pointer to fragment and its index, or nullptr if not found.
     struct VersionedSeekResult {
@@ -137,6 +141,8 @@ private:
 
     FragmentTree m_fragment_tree;
     InsertionIndex m_insertion_index;
+    Rope m_visible_text;
+    Rope m_deleted_text;
 
     /// Rebuild the insertion index from the current fragment list.
     void rebuild_insertion_index(const std::vector<Fragment>& frags);
