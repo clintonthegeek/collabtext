@@ -26,3 +26,5 @@ function(add_crdt_test name)
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
+
+add_crdt_test(tst_clock)
