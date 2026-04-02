@@ -1,6 +1,6 @@
 #pragma once
 
-#include "collabtext/YrsWrapper.h"
+#include "collabtext/CrdtEngine.h"
 
 #include <QDir>
 #include <QJsonObject>
@@ -16,11 +16,15 @@ namespace CollabText {
 // Syncthing (or equivalent) propagates the files.
 //
 // This is the "floor" transport. Direct channels layer on top.
+//
+// NOTE: Sync is currently disabled pending serialization support in the
+// native C++ CRDT engine. The file I/O structure is preserved for when
+// serialization is implemented.
 class SyncManager : public QObject {
     Q_OBJECT
 
 public:
-    explicit SyncManager(YrsDocument *crdt, QObject *parent = nullptr);
+    explicit SyncManager(CrdtEngine *engine, QObject *parent = nullptr);
     ~SyncManager() override;
 
     // Initialize with path to the shared folder and our replica ID.
@@ -46,7 +50,7 @@ private:
     void readRemoteEphemerals();
     void ensureDirectoryStructure();
 
-    YrsDocument *m_crdt;
+    CrdtEngine *m_engine;
     QTimer m_timer;
     QString m_sharedFolder;
     QString m_replicaId;

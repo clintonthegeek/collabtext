@@ -10,17 +10,15 @@
 
 namespace CollabText {
 
-SyncManager::SyncManager(YrsDocument *crdt, QObject *parent)
+SyncManager::SyncManager(CrdtEngine *engine, QObject *parent)
     : QObject(parent)
-    , m_crdt(crdt)
+    , m_engine(engine)
 {
     connect(&m_timer, &QTimer::timeout, this, &SyncManager::syncCycle);
 
-    // Capture outgoing updates from the CRDT
-    connect(m_crdt, &YrsDocument::updateProduced, this,
-            [this](const QByteArray &update) {
-                m_pendingUpdates.append(update);
-            });
+    // TODO: Re-enable when CrdtEngine gains serialization support.
+    // Previously connected to YrsDocument::updateProduced to capture
+    // outgoing updates for file-based sync.
 }
 
 SyncManager::~SyncManager()
@@ -124,18 +122,9 @@ void SyncManager::readRemoteUpdates()
         if (peerSeq <= readUpTo)
             continue; // nothing new
 
-        // Read and apply new updates
-        for (uint64_t i = readUpTo; i < peerSeq; ++i) {
-            QString filename = QStringLiteral("%1/%2.bin").arg(opsDir).arg(i);
-            QFile f(filename);
-            if (!f.open(QIODevice::ReadOnly))
-                continue;
-            QByteArray update = f.readAll();
-            if (!m_crdt->applyUpdate(update)) {
-                emit syncError(QStringLiteral("Failed to apply update %1 from %2")
-                                   .arg(i).arg(entry));
-            }
-        }
+        // TODO: Re-enable when CrdtEngine gains serialization support.
+        // Previously read .bin files and called m_crdt->applyUpdate(update).
+        // For now, skip applying remote updates.
 
         // Update cursor
         QDir().mkpath(QFileInfo(cursorPath).path());

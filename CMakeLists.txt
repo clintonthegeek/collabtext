@@ -10,7 +10,6 @@ qt_standard_project_setup()
 
 add_subdirectory(libs/collabtext)
 
-# App temporarily disabled while migrating from yrs to native CRDT engine
-# add_subdirectory(app)
+add_subdirectory(app)
 
 enable_testing()

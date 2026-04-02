@@ -6,10 +6,15 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Test)
 
 add_library(collabtext STATIC
+    src/CrdtEngine.cpp
+    src/CollabDocument.cpp
+    src/SyncManager.cpp
     src/crdt/Clock.cpp
     src/crdt/Locator.cpp
     src/crdt/UndoMap.cpp
     src/crdt/Buffer.cpp
+    include/collabtext/CollabDocument.h
+    include/collabtext/SyncManager.h
 )
 set_target_properties(collabtext PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(CollabText::CollabText ALIAS collabtext)
@@ -20,7 +25,7 @@ target_include_directories(collabtext
 )
 target_link_libraries(collabtext PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets)
 
-# Tests (added as sources are created)
+# Tests
 enable_testing()
 
 function(add_crdt_test name)
