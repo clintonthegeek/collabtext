@@ -93,6 +93,8 @@ void YrsDocument::remove(uint32_t index, uint32_t length)
 QString YrsDocument::text() const
 {
     ReadTransaction txn(m_doc);
+    if (!txn.raw())
+        return {};
     char *raw = ytext_string(m_text, txn.raw());
     QString result = QString::fromUtf8(raw);
     ystring_destroy(raw);
@@ -102,6 +104,8 @@ QString YrsDocument::text() const
 uint32_t YrsDocument::length() const
 {
     ReadTransaction txn(m_doc);
+    if (!txn.raw())
+        return 0;
     return ytext_len(m_text, txn.raw());
 }
 
@@ -132,6 +136,9 @@ bool YrsDocument::canRedo() const
 QByteArray YrsDocument::createStickyIndex(uint32_t index, int8_t assoc)
 {
     ReadTransaction txn(m_doc);
+    if (!txn.raw())
+        return {}; // transaction unavailable (doc busy), skip this cycle
+
     YStickyIndex *si = ysticky_index_from_index(m_text, txn.raw(), index, assoc);
     if (!si)
         return {};
@@ -152,6 +159,11 @@ int32_t YrsDocument::resolveStickyIndex(const QByteArray &encoded) const
         return -1;
 
     ReadTransaction txn(m_doc);
+    if (!txn.raw()) {
+        ysticky_index_destroy(si);
+        return -1; // transaction unavailable, skip
+    }
+
     Branch *branch = nullptr;
     uint32_t index = 0;
     ysticky_index_read(si, txn.raw(), &branch, &index);
@@ -164,6 +176,8 @@ int32_t YrsDocument::resolveStickyIndex(const QByteArray &encoded) const
 QByteArray YrsDocument::stateVector() const
 {
     ReadTransaction txn(m_doc);
+    if (!txn.raw())
+        return {};
     uint32_t len = 0;
     char *sv = ytransaction_state_vector_v1(txn.raw(), &len);
     QByteArray result(sv, static_cast<int>(len));
@@ -174,6 +188,8 @@ QByteArray YrsDocument::stateVector() const
 QByteArray YrsDocument::stateDiff(const QByteArray &remoteStateVector) const
 {
     ReadTransaction txn(m_doc);
+    if (!txn.raw())
+        return {};
     uint32_t len = 0;
     char *diff = ytransaction_state_diff_v1(
         txn.raw(),
