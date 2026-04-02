@@ -419,6 +419,17 @@ Operation Buffer::apply_local_edit(
 
     auto cursor = m_fragment_tree.cursor<VisibleOffset>();
     // Note: do NOT seek({0}) here — that would skip past invisible prefix
+
+    // Deferred relocations: applied during the final sort phase.
+    // Each entry: {old_locator, min_origin, new_locator}
+    // All fragments with locator == old_locator and origin >= min_origin
+    // will have their locator changed to new_locator.
+    struct DeferredReloc {
+        Locator old_loc;
+        Lamport min_origin;
+        Locator new_loc;
+    };
+    std::vector<DeferredReloc> deferred_relocs;
     // fragments. The slice() method handles the !m_did_seek case by starting
     // from the leftmost item.
     FragmentTree new_tree;
@@ -593,13 +604,10 @@ Operation Buffer::apply_local_edit(
         // ---- Insert phase ----
         if (!replacement.empty()) {
             // Determine lo/hi locators for the new fragment.
-            // lo = locator of the last fragment pushed to new_tree.
-            // hi = first locator strictly greater than lo among remaining
-            //      items (pending + cursor + old-tree scan fallback).
             Locator lo = new_tree.empty() ? Locator::min() : new_tree.last().locator;
 
-            // Check the immediate next fragment for hi.
-            Locator imm_loc;   // locator of the immediate next fragment
+            // Check the immediate next fragment's locator.
+            Locator imm_loc;
             bool has_imm = false;
             if (pending) {
                 imm_loc = pending->locator;
@@ -614,11 +622,9 @@ Operation Buffer::apply_local_edit(
             if (has_imm && imm_loc > lo) {
                 hi = imm_loc;
             } else if (has_imm) {
-                // Immediate next fragment has locator <= lo (same-locator
-                // group from splitting). Need relocation to create space.
+                // Same-locator group — need relocation to create space.
                 needs_relocation = true;
-                // Find the next locator strictly greater than lo in the
-                // original tree to bound the relocation target.
+                // Find the next locator strictly > lo in the original tree.
                 {
                     auto loc_cursor = m_fragment_tree.cursor<FragmentOrderDim>();
                     auto _prefix = loc_cursor.slice(
@@ -628,11 +634,11 @@ Operation Buffer::apply_local_edit(
                     }
                 }
             }
-            // else: no remaining fragments, hi stays max()
 
-            // Relocate the immediate next fragment if needed.
-            // Without this, inserted text would sort after same-locator
-            // fragments (the "heoXX" bug).
+            // When inserting between same-locator fragments, relocate them
+            // to create ordering space. We relocate the pending fragment now,
+            // and record a deferred relocation for remaining same-locator
+            // cursor fragments — they'll be relocated during the final sort.
             if (needs_relocation) {
                 Locator new_next_loc = Locator::between(lo, hi);
 
@@ -652,7 +658,11 @@ Operation Buffer::apply_local_edit(
                     cursor.next();
                 }
 
-                // Record split relocation for remote replicas
+                // Record deferred relocation: all fragments at old locator
+                // with origin >= reloc_origin will be relocated during sort.
+                deferred_relocs.push_back({lo, reloc_origin, new_next_loc});
+
+                // Record SplitRelocation for remote replicas
                 EditOperation::SplitRelocation reloc;
                 reloc.fragment_origin = reloc_origin;
                 reloc.split_offset = 0;
@@ -711,11 +721,36 @@ Operation Buffer::apply_local_edit(
     m_undo_stack.push_back(std::move(undo_entry));
     m_undo_cursor = m_undo_stack.size();
 
-    // ---- Sort, normalize, and rebuild ----
-    // Relocations may have moved fragments out of locator order in the
-    // push-order tree. Re-sort by (locator, origin) before normalizing.
+    // ---- Apply deferred relocations, sort, normalize, rebuild ----
     auto frags = new_tree.items();
 
+    // Apply deferred relocations using contiguous-origin walking (matching
+    // the remote side's relocation logic). Only relocate fragments that are
+    // contiguous in origin space from the split point AND share the old locator.
+    for (auto& dr : deferred_relocs) {
+        Lamport next_expected = dr.min_origin;
+        uint32_t total_chars = 0;
+        for (auto& f : frags) {
+            if (f.origin.replica_id != dr.min_origin.replica_id) continue;
+            if (f.origin.value != next_expected.value) continue;
+            // This fragment is contiguous — relocate if still at old locator
+            if (f.locator == dr.old_loc) {
+                f.locator = dr.new_loc;
+            }
+            total_chars += f.length;
+            next_expected = Lamport(f.origin.replica_id,
+                                    f.origin.value + f.length);
+        }
+        // Update SplitRelocation to cover the full contiguous extent
+        for (auto& sr : op.split_relocations) {
+            if (sr.fragment_origin == dr.min_origin && sr.new_locator == dr.new_loc) {
+                sr.fragment_length = total_chars;
+                break;
+            }
+        }
+    }
+
+    // Re-sort by (locator, origin) to restore tree ordering invariant.
     std::sort(frags.begin(), frags.end(), [](const Fragment& a, const Fragment& b) {
         if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
         return a.origin < b.origin;
