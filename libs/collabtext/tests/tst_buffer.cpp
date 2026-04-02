@@ -415,6 +415,184 @@ private slots:
         // Characters at positions 2,3,4,5,6 all deleted → "abhij"
         QCOMPARE(bufA.text(), std::string("abhij"));
     }
+
+    // -----------------------------------------------------------------------
+    // Undo/redo with remote operations
+    // -----------------------------------------------------------------------
+
+    void undo_after_remote_edit() {
+        Buffer bufA(1), bufB(2);
+        auto opA = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        auto opB = bufB.apply_local_edit({{0, 0}}, {"world"});
+
+        bufA.apply_ops({opB});
+        QCOMPARE(bufA.visible_length(), 10u);
+
+        auto undoOp = bufA.undo();
+        QVERIFY(undoOp.has_value());
+        QCOMPARE(bufA.visible_length(), 5u);
+        QCOMPARE(bufA.text(), std::string("world"));
+    }
+
+    void redo_after_remote_edit() {
+        Buffer bufA(1), bufB(2);
+        auto opA = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        auto opB = bufB.apply_local_edit({{0, 0}}, {"world"});
+
+        bufA.apply_ops({opB});
+        // Capture state before undo; concurrent inserts may interleave chars
+        std::string textBeforeUndo = bufA.text();
+        QCOMPARE(bufA.visible_length(), 10u);
+
+        bufA.undo();
+        QCOMPARE(bufA.text(), std::string("world"));
+
+        bufA.redo();
+        // Redo must restore the exact pre-undo state
+        QCOMPARE(bufA.visible_length(), 10u);
+        QCOMPARE(bufA.text(), textBeforeUndo);
+    }
+
+    void remote_undo_broadcast() {
+        Buffer bufA(1), bufB(2);
+        auto opIns = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        bufB.apply_ops({opIns});
+        QCOMPARE(bufB.text(), std::string("hello"));
+
+        auto undoOp = bufA.undo();
+        QVERIFY(undoOp.has_value());
+        bufB.apply_ops({*undoOp});
+        QCOMPARE(bufB.text(), std::string(""));
+    }
+
+    void undo_delete_with_remote_interleaving() {
+        Buffer bufA(1), bufB(2);
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"abcdef"});
+        bufB.apply_ops({op1});
+
+        auto opDel = bufA.apply_local_edit({{2, 4}}, {""});
+        auto opBins = bufB.apply_local_edit({{3, 3}}, {"X"});
+
+        bufA.apply_ops({opBins});
+        bufB.apply_ops({opDel});
+
+        QCOMPARE(bufA.text(), bufB.text());
+
+        auto undoOp = bufA.undo();
+        QVERIFY(undoOp.has_value());
+
+        std::string text = bufA.text();
+        QVERIFY(text.find('a') != std::string::npos);
+        QVERIFY(text.find('b') != std::string::npos);
+        QVERIFY(text.find('c') != std::string::npos);
+        QVERIFY(text.find('d') != std::string::npos);
+        QVERIFY(text.find('e') != std::string::npos);
+        QVERIFY(text.find('f') != std::string::npos);
+        QVERIFY(text.find('X') != std::string::npos);
+    }
+
+    void new_edit_clears_redo_stack() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abc"});
+        buf.apply_local_edit({{3, 3}}, {"def"});
+        buf.undo();
+        QCOMPARE(buf.text(), std::string("abc"));
+
+        buf.apply_local_edit({{3, 3}}, {"xyz"});
+        auto op = buf.redo();
+        QVERIFY(!op.has_value());
+        QCOMPARE(buf.text(), std::string("abcxyz"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Split relocation verification
+    // -----------------------------------------------------------------------
+
+    void split_relocation_remote_convergence() {
+        Buffer bufA(1), bufB(2);
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"abcdef"});
+        bufB.apply_ops({op1});
+
+        auto op2 = bufA.apply_local_edit({{3, 3}}, {"X"});
+        bufB.apply_ops({op2});
+
+        QCOMPARE(bufA.text(), std::string("abcXdef"));
+        QCOMPARE(bufB.text(), std::string("abcXdef"));
+    }
+
+    void split_relocation_with_concurrent_insert() {
+        Buffer bufA(1), bufB(2);
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"abcdef"});
+        bufB.apply_ops({op1});
+
+        auto opA = bufA.apply_local_edit({{3, 3}}, {"X"});
+        auto opB = bufB.apply_local_edit({{3, 3}}, {"Y"});
+
+        bufA.apply_ops({opB});
+        bufB.apply_ops({opA});
+
+        QCOMPARE(bufA.text(), bufB.text());
+        std::string text = bufA.text();
+        QCOMPARE(text.size(), size_t(8));
+        QVERIFY(text.find('X') != std::string::npos);
+        QVERIFY(text.find('Y') != std::string::npos);
+    }
+
+    void replace_mid_fragment_remote_convergence() {
+        Buffer bufA(1), bufB(2);
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        bufB.apply_ops({op1});
+
+        auto op2 = bufA.apply_local_edit({{2, 4}}, {"XX"});
+        bufB.apply_ops({op2});
+
+        QCOMPARE(bufA.text(), std::string("heXXo"));
+        QCOMPARE(bufB.text(), std::string("heXXo"));
+    }
+
+    // -----------------------------------------------------------------------
+    // apply_local_edit boundary cases
+    // -----------------------------------------------------------------------
+
+    void empty_range_insert_only() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+        buf.apply_local_edit({{2, 2}}, {"X"});
+        QCOMPARE(buf.text(), std::string("heXllo"));
+    }
+
+    void adjacent_ranges() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        buf.apply_local_edit({{1, 3}, {3, 5}}, {"X", "Y"});
+        QCOMPARE(buf.text(), std::string("aXYf"));
+    }
+
+    void delete_everything_then_insert() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+        buf.apply_local_edit({{0, 5}}, {"world"});
+        QCOMPARE(buf.text(), std::string("world"));
+        QCOMPARE(buf.visible_length(), static_cast<uint32_t>(buf.text().size()));
+    }
+
+    void visible_length_always_matches_text() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello world"});
+        QCOMPARE(buf.visible_length(), static_cast<uint32_t>(buf.text().size()));
+
+        buf.apply_local_edit({{5, 6}}, {"_"});
+        QCOMPARE(buf.visible_length(), static_cast<uint32_t>(buf.text().size()));
+
+        buf.apply_local_edit({{0, 3}}, {""});
+        QCOMPARE(buf.visible_length(), static_cast<uint32_t>(buf.text().size()));
+
+        buf.undo();
+        QCOMPARE(buf.visible_length(), static_cast<uint32_t>(buf.text().size()));
+
+        buf.redo();
+        QCOMPARE(buf.visible_length(), static_cast<uint32_t>(buf.text().size()));
+    }
 };
 
 QTEST_MAIN(TestBuffer)
