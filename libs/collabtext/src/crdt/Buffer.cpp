@@ -25,10 +25,27 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     for (auto& f : frags) {
         f.visible = f.compute_visible(m_undo_map);
     }
+
+    // Rebuild ropes from fragment content
+    Rope visible_rope, deleted_rope;
+    for (const auto& f : frags) {
+        if (f.visible) {
+            visible_rope.push_str(f.content);
+        } else {
+            deleted_rope.push_str(f.content);
+        }
+    }
+    m_visible_text = std::move(visible_rope);
+    m_deleted_text = std::move(deleted_rope);
+
     rebuild_insertion_index(frags);
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
     m_fragment_tree = std::move(tree);
+
+    // Rope consistency invariant (debug builds)
+    assert(m_visible_text.len() == m_fragment_tree.summary().visible_bytes);
+    assert(m_deleted_text.len() == m_fragment_tree.summary().deleted_bytes);
 }
 
 void Buffer::rebuild_insertion_index(const std::vector<Fragment>& frags) {
@@ -57,12 +74,7 @@ std::vector<Fragment> Buffer::fragments() const {
 // ---------------------------------------------------------------------------
 
 std::string Buffer::text() const {
-    std::string result;
-    m_fragment_tree.for_each([&](const Fragment& f) {
-        if (f.visible)
-            result += f.content;
-    });
-    return result;
+    return m_visible_text.to_string();
 }
 
 uint32_t Buffer::visible_length() const {
