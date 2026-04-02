@@ -409,6 +409,9 @@ Operation Buffer::apply_local_edit(
     Lamport deletion_ts = m_clock.tick();
     undo_entry.deletion_id = deletion_ts;
 
+    // Track actually-deleted character timestamps for building deletion_runs.
+    std::vector<Lamport> deleted_timestamps;
+
     // Sort ranges ascending (left-to-right) — offsets are in the OLD tree's
     // visible space and never change during processing.
     std::vector<size_t> order(ranges.size());
@@ -444,7 +447,7 @@ Operation Buffer::apply_local_edit(
         f.visible = false;
         undo_entry.had_deletions = true;
         for (uint32_t c = 0; c < f.length; ++c) {
-            op.deleted_timestamps.push_back(f.timestamp_at(c));
+            deleted_timestamps.push_back(f.timestamp_at(c));
         }
     };
 
@@ -757,6 +760,25 @@ Operation Buffer::apply_local_edit(
     });
     normalize_fragments(frags);
     set_fragments(std::move(frags));
+
+    // Build run-length encoded deletion descriptors from the deleted timestamps.
+    // Sort by (replica_id, value) then group contiguous runs.
+    {
+        std::sort(deleted_timestamps.begin(), deleted_timestamps.end());
+        for (size_t i = 0; i < deleted_timestamps.size(); ) {
+            uint16_t rid = deleted_timestamps[i].replica_id;
+            uint32_t start = deleted_timestamps[i].value;
+            uint32_t count = 1;
+            while (i + count < deleted_timestamps.size() &&
+                   deleted_timestamps[i + count].replica_id == rid &&
+                   deleted_timestamps[i + count].value == start + count) {
+                ++count;
+            }
+            op.deletion_runs.push_back({rid, start, count});
+            i += count;
+        }
+    }
+
     return op;
 }
 
@@ -764,23 +786,60 @@ Operation Buffer::apply_local_edit(
 // Remote edit application
 // ---------------------------------------------------------------------------
 
-Buffer::VersionedSeekResult Buffer::versioned_seek_by_timestamp(
-    const std::vector<Fragment>& frags,
-    Lamport target_ts) const
+void Buffer::apply_deletion_runs(
+    std::vector<Fragment>& frags,
+    const std::vector<EditOperation::DeletionRun>& runs,
+    Lamport deletion_id)
 {
-    for (size_t fi = 0; fi < frags.size(); ++fi) {
-        auto &f = frags[fi];
-        if (f.origin.replica_id != target_ts.replica_id) continue;
-        if (target_ts.value < f.origin.value ||
-            target_ts.value >= f.origin.value + f.length) continue;
+    // Process each deletion run. Each run targets characters from a single
+    // replica with contiguous Lamport values. Find the fragment(s) containing
+    // those characters, split at boundaries, and mark deleted.
+    for (auto& run : runs) {
+        uint32_t remaining = run.count;
+        uint32_t next_val = run.start_value;
 
-        uint32_t char_off = target_ts.value - f.origin.value;
-        uint32_t byte_off = char_off > 0
-            ? char_to_byte_offset(f.content, char_off)
-            : 0;
-        return {&f, fi, byte_off};
+        while (remaining > 0) {
+            // Find the fragment containing character (run.replica_id, next_val)
+            bool found = false;
+            for (size_t fi = 0; fi < frags.size(); ++fi) {
+                auto &f = frags[fi];
+                if (f.origin.replica_id != run.replica_id) continue;
+                if (next_val < f.origin.value ||
+                    next_val >= f.origin.value + f.length) continue;
+
+                found = true;
+                uint32_t char_off = next_val - f.origin.value;
+                uint32_t avail = f.length - char_off;
+                uint32_t to_del = std::min(remaining, avail);
+
+                if (char_off == 0 && to_del == f.length) {
+                    // Delete entire fragment
+                    f.deletions.push_back(deletion_id);
+                } else {
+                    // Need to split
+                    if (char_off > 0) {
+                        uint32_t byte_off = char_to_byte_offset(f.content, char_off);
+                        fi = split_fragment_at(frags, fi, byte_off);
+                        // fi now points to the second half
+                        to_del = std::min(remaining, frags[fi].length);
+                    }
+
+                    if (to_del < frags[fi].length) {
+                        uint32_t byte_off = char_to_byte_offset(frags[fi].content, to_del);
+                        split_fragment_at(frags, fi, byte_off);
+                        // fi still points to the first part (to be deleted)
+                    }
+
+                    frags[fi].deletions.push_back(deletion_id);
+                }
+
+                next_val += to_del;
+                remaining -= to_del;
+                break;
+            }
+            if (!found) break; // Character not found, skip remaining
+        }
     }
-    return {};
 }
 
 bool Buffer::apply_remote_edit(const EditOperation &op) {
@@ -792,30 +851,8 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
 
     auto frags = get_fragments();
 
-    // Apply deletions by matching timestamps.
-    for (auto &ts : op.deleted_timestamps) {
-        auto result = versioned_seek_by_timestamp(frags, ts);
-        if (!result.fragment) continue;
-
-        size_t fi = result.fragment_index;
-
-        if (frags[fi].length == 1) {
-            frags[fi].deletions.push_back(op.deletion_id);
-        } else {
-            uint32_t offset = ts.value - frags[fi].origin.value;
-            uint32_t byte_off = char_to_byte_offset(frags[fi].content, offset);
-
-            if (offset > 0) {
-                fi = split_fragment_at(frags, fi, byte_off);
-            }
-
-            if (frags[fi].length > 1) {
-                uint32_t cb = first_char_bytes(frags[fi].content);
-                split_fragment_at(frags, fi, cb);
-            }
-            frags[fi].deletions.push_back(op.deletion_id);
-        }
-    }
+    // Apply deletion runs
+    apply_deletion_runs(frags, op.deletion_runs, op.deletion_id);
 
     // Apply split relocations.
     for (auto &reloc : op.split_relocations) {
