@@ -728,9 +728,20 @@ bool Buffer::try_apply(const Operation& op) {
 void Buffer::apply_ops(const std::vector<Operation> &ops) {
     for (auto &op : ops) {
         Lamport ts = get_op_timestamp(op);
+        uint16_t replica = ts.replica_id;
+
+        if (m_deferred_replicas.count(replica)) {
+            // This replica already has a deferred op — defer this one too.
+            // Since ops from the same replica are causally ordered, if an
+            // earlier op couldn't apply, this one can't either.
+            enqueue_deferred({ts, op});
+            continue;
+        }
+
         bool applied = try_apply(op);
         if (!applied) {
-            m_deferred_queue.push_item({ts, op});
+            m_deferred_replicas.insert(replica);
+            enqueue_deferred({ts, op});
         }
     }
     retry_deferred();
@@ -740,19 +751,41 @@ void Buffer::retry_deferred() {
     bool progress = true;
     while (progress) {
         progress = false;
+        m_deferred_replicas.clear();
 
         OperationQueue remaining;
         m_deferred_queue.for_each([&](const OperationEntry& entry) {
+            if (m_deferred_replicas.count(entry.timestamp.replica_id)) {
+                remaining.push_item(entry);
+                return;
+            }
             bool applied = try_apply(entry.op);
             if (applied) {
                 progress = true;
             } else {
+                m_deferred_replicas.insert(entry.timestamp.replica_id);
                 remaining.push_item(entry);
             }
         });
         m_deferred_queue = std::move(remaining);
     }
-    m_deferred_replicas.clear();
+}
+
+void Buffer::enqueue_deferred(OperationEntry entry) {
+    // Maintain timestamp order so retry_deferred visits lower-timestamp
+    // (earlier) ops first per replica, making per-replica blocking correct.
+    if (m_deferred_queue.empty()) {
+        m_deferred_queue.push_item(std::move(entry));
+        return;
+    }
+    TimestampDim target{entry.timestamp};
+    auto cursor = m_deferred_queue.cursor<TimestampDim>();
+    cursor.seek(TimestampDim::zero(), Bias::Left);
+    OperationQueue new_queue;
+    new_queue.push_tree(cursor.slice(target));
+    new_queue.push_item(std::move(entry));
+    new_queue.push_tree(cursor.suffix());
+    m_deferred_queue = std::move(new_queue);
 }
 
 // ---------------------------------------------------------------------------

@@ -110,6 +110,9 @@ private:
     /// Retry any deferred operations.
     void retry_deferred();
 
+    /// Insert an entry into the deferred queue in timestamp order.
+    void enqueue_deferred(OperationEntry entry);
+
     /// Atomize multi-character fragments at shared locators.
     void normalize_fragments(std::vector<Fragment>& frags) const;
 
