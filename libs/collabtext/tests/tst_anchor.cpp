@@ -141,6 +141,133 @@ private slots:
         buf.apply_local_edit({{3, 4}}, {""});
         QCOMPARE(buf.resolve_anchor(anchor), 4u);
     }
+
+    // -----------------------------------------------------------------------
+    // Complex anchor scenarios
+    // -----------------------------------------------------------------------
+
+    void anchor_through_undo_redo() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        auto anchor = buf.anchor_at(3, Bias::Left);
+        QCOMPARE(buf.resolve_anchor(anchor), 3u);
+
+        buf.apply_local_edit({{1, 3}}, {""});
+        QCOMPARE(buf.resolve_anchor(anchor), 1u);
+
+        buf.undo();
+        QCOMPARE(buf.resolve_anchor(anchor), 3u);
+
+        buf.redo();
+        QCOMPARE(buf.resolve_anchor(anchor), 1u);
+    }
+
+    void anchor_with_remote_insert() {
+        Buffer bufA(1), bufB(2);
+        auto op = bufA.apply_local_edit({{0, 0}}, {"abcdef"});
+        bufB.apply_ops({op});
+
+        auto anchor = bufA.anchor_at(3, Bias::Left);
+        QCOMPARE(bufA.resolve_anchor(anchor), 3u);
+
+        auto opB = bufB.apply_local_edit({{1, 1}}, {"XX"});
+        bufA.apply_ops({opB});
+
+        QCOMPARE(bufA.resolve_anchor(anchor), 5u);
+    }
+
+    void anchor_with_concurrent_inserts_at_same_position() {
+        Buffer bufA(1), bufB(2);
+        auto op = bufA.apply_local_edit({{0, 0}}, {"abc"});
+        bufB.apply_ops({op});
+
+        auto opA = bufA.apply_local_edit({{2, 2}}, {"X"});
+        auto opB = bufB.apply_local_edit({{2, 2}}, {"Y"});
+
+        auto anchor = bufA.anchor_at(2, Bias::Left);
+
+        bufA.apply_ops({opB});
+        bufB.apply_ops({opA});
+
+        QCOMPARE(bufA.text(), bufB.text());
+        uint32_t pos = bufA.resolve_anchor(anchor);
+        QVERIFY(pos <= bufA.visible_length());
+    }
+
+    void anchor_min_max_always_stable() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+
+        auto amin = Anchor::min();
+        auto amax = Anchor::max();
+
+        QCOMPARE(buf.resolve_anchor(amin), 0u);
+        QCOMPARE(buf.resolve_anchor(amax), 5u);
+
+        buf.apply_local_edit({{0, 0}}, {"XX"});
+        QCOMPARE(buf.resolve_anchor(amin), 0u);
+        QCOMPARE(buf.resolve_anchor(amax), 7u);
+
+        buf.apply_local_edit({{0, 7}}, {""});
+        QCOMPARE(buf.resolve_anchor(amin), 0u);
+        QCOMPARE(buf.resolve_anchor(amax), 0u);
+
+        buf.undo();
+        QCOMPARE(buf.resolve_anchor(amin), 0u);
+        QCOMPARE(buf.resolve_anchor(amax), 7u);
+    }
+
+    void anchor_through_many_edits() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"0123456789"});
+        auto anchor = buf.anchor_at(5, Bias::Left);
+
+        for (int i = 0; i < 10; ++i) {
+            buf.apply_local_edit({{0, 0}}, {"X"});
+        }
+
+        QCOMPARE(buf.resolve_anchor(anchor), 15u);
+
+        buf.apply_local_edit({{0, 10}}, {""});
+        QCOMPARE(buf.resolve_anchor(anchor), 5u);
+    }
+
+    void compare_anchors_with_edits() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abcdef"});
+
+        auto a = buf.anchor_at(2, Bias::Left);
+        auto b = buf.anchor_at(4, Bias::Left);
+        QVERIFY(buf.compare_anchors(a, b) < 0);
+
+        buf.apply_local_edit({{3, 3}}, {"XYZ"});
+        QVERIFY(buf.compare_anchors(a, b) < 0);
+
+        buf.apply_local_edit({{2, 7}}, {""});
+        int cmp = buf.compare_anchors(a, b);
+        Q_UNUSED(cmp);
+    }
+
+    void anchor_on_empty_document() {
+        Buffer buf(1);
+        auto anchor = buf.anchor_at(0, Bias::Left);
+        QCOMPARE(buf.resolve_anchor(anchor), 0u);
+
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+        uint32_t pos = buf.resolve_anchor(anchor);
+        QVERIFY(pos <= buf.visible_length());
+    }
+
+    void anchor_on_fully_deleted_text() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+        auto anchor = buf.anchor_at(2, Bias::Left);
+        QCOMPARE(buf.resolve_anchor(anchor), 2u);
+
+        buf.apply_local_edit({{0, 5}}, {""});
+        uint32_t pos = buf.resolve_anchor(anchor);
+        QVERIFY(pos <= buf.visible_length());
+    }
 };
 
 QTEST_MAIN(TestAnchor)
