@@ -123,16 +123,12 @@ private:
     /// Atomize multi-character fragments at shared locators.
     void normalize_fragments(std::vector<Fragment>& frags) const;
 
-    /// Seek to a fragment by timestamp, for use in remote edit application.
-    /// Returns pointer to fragment and its index, or nullptr if not found.
-    struct VersionedSeekResult {
-        const Fragment* fragment = nullptr;
-        size_t fragment_index = 0;
-        uint32_t offset_in_fragment = 0;
-    };
-    VersionedSeekResult versioned_seek_by_timestamp(
-        const std::vector<Fragment>& frags,
-        Lamport target_ts) const;
+    /// Apply deletion runs: batch-delete characters identified by Lamport
+    /// timestamp ranges, splitting fragments as needed.
+    void apply_deletion_runs(
+        std::vector<Fragment>& frags,
+        const std::vector<EditOperation::DeletionRun>& runs,
+        Lamport deletion_id);
 
     uint16_t m_replica_id;
     Lamport m_clock;

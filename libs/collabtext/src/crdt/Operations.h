@@ -27,8 +27,15 @@ struct EditOperation {
     };
     std::vector<InsertedFragment> inserted_fragments;
 
-    // Timestamps of characters that were deleted by this edit.
-    std::vector<Lamport> deleted_timestamps;
+    // Run-length encoded deletion descriptors. Each run identifies a
+    // contiguous sequence of characters by (origin_replica, start_value, count).
+    // The receiver finds these characters and marks them deleted.
+    struct DeletionRun {
+        uint16_t replica_id;
+        uint32_t start_value;
+        uint32_t count;
+    };
+    std::vector<DeletionRun> deletion_runs;
 
     // Lamport ID used to track this edit's deletions in the UndoMap.
     // All fragments deleted by this edit have this pushed into their deletions vector.
