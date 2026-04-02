@@ -154,31 +154,19 @@ private slots:
 
     void onCursorPositionChanged()
     {
-        // Defer to next event loop tick. Creating sticky indices opens a
-        // read transaction, which fails if called during Qt's finishEdit
-        // (yrs may still hold an internal lock from the preceding write).
-        QTimer::singleShot(0, this, &PeerPane::captureCursorState);
-    }
-
-    void captureCursorState()
-    {
         if (m_doc->crdt()->isApplyingRemote())
             return;
 
+        // Store plain character offsets. Both peers converge to the same
+        // CRDT state via sync, so offsets are meaningful. No yrs transaction
+        // needed — avoids all lock contention with the CRDT engine.
         QTextCursor tc = m_edit->textCursor();
-        int head = tc.position();
-        int anchor = tc.anchor();
-
-        QByteArray headSticky = m_doc->stickyIndexAt(head, 0);
-        QByteArray anchorSticky = m_doc->stickyIndexAt(anchor, 0);
 
         QJsonObject state;
         state[QStringLiteral("name")] = m_displayName;
         state[QStringLiteral("color")] = m_color.name();
-        state[QStringLiteral("cursor_head")] =
-            QString::fromLatin1(headSticky.toBase64());
-        state[QStringLiteral("cursor_anchor")] =
-            QString::fromLatin1(anchorSticky.toBase64());
+        state[QStringLiteral("cursor_head")] = tc.position();
+        state[QStringLiteral("cursor_anchor")] = tc.anchor();
 
         m_sync->setEphemeralState(state);
     }
@@ -187,27 +175,15 @@ private slots:
     {
         Q_UNUSED(replicaId);
 
-        QString headB64 = state.value(QStringLiteral("cursor_head")).toString();
-        QString anchorB64 =
-            state.value(QStringLiteral("cursor_anchor")).toString();
+        int headPos = state.value(QStringLiteral("cursor_head")).toInt(-1);
+        int anchorPos = state.value(QStringLiteral("cursor_anchor")).toInt(headPos);
         QColor color(
             state.value(QStringLiteral("color")).toString(QStringLiteral("#888")));
         m_remoteName =
             state.value(QStringLiteral("name")).toString(QStringLiteral("?"));
 
-        QByteArray headEnc = QByteArray::fromBase64(headB64.toLatin1());
-        QByteArray anchorEnc = QByteArray::fromBase64(anchorB64.toLatin1());
-
-        if (headEnc.isEmpty())
-            return;
-
-        int headPos = m_doc->resolveSticky(headEnc);
-        int anchorPos = anchorEnc.isEmpty() ? headPos
-                                            : m_doc->resolveSticky(anchorEnc);
         if (headPos < 0)
             return;
-        if (anchorPos < 0)
-            anchorPos = headPos;
 
         m_remoteHead = headPos;
         m_remoteAnchor = anchorPos;
