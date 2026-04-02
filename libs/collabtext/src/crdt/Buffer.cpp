@@ -403,125 +403,277 @@ Operation Buffer::apply_local_edit(
 {
     assert(ranges.size() == new_text.size());
 
-    auto frags = get_fragments();
-
     EditOperation op;
     op.ranges = ranges;
     op.new_text = new_text;
     op.version = m_version;
-
     UndoEntry undo_entry;
 
-    // Process ranges from right to left so that byte offsets remain valid.
+    // Sort ranges ascending (left-to-right) — offsets are in the OLD tree's
+    // visible space and never change during processing.
     std::vector<size_t> order(ranges.size());
     std::iota(order.begin(), order.end(), 0);
     std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
-        return ranges[a].first > ranges[b].first;
+        return ranges[a].first < ranges[b].first;
     });
 
-    for (size_t idx : order) {
+    auto cursor = m_fragment_tree.cursor<VisibleOffset>();
+    // Note: do NOT seek({0}) here — that would skip past invisible prefix
+    // fragments. The slice() method handles the !m_did_seek case by starting
+    // from the leftmost item.
+    FragmentTree new_tree;
+
+    // Pending: the remaining half of a fragment split at a range boundary.
+    // Carried across ranges when a single old-tree fragment spans multiple ranges.
+    std::optional<Fragment> pending;
+
+    // Helper: mark a fragment as deleted and record timestamps for op/undo.
+    auto mark_deleted = [&](Fragment& f) {
+        f.delete_count++;
+        f.visible = false;
+        for (uint32_t c = 0; c < f.length; ++c) {
+            Lamport ts = f.timestamp_at(c);
+            op.deleted_timestamps.push_back(ts);
+            undo_entry.deleted_keys.push_back(UndoMapKey(ts));
+        }
+    };
+
+    // Helper: split a fragment at a byte offset, returning {first_half, second_half}.
+    auto split_frag = [](const Fragment& f, uint32_t byte_off)
+        -> std::pair<Fragment, Fragment>
+    {
+        uint32_t char_count = count_utf8_chars(f.content, byte_off);
+        Fragment first;
+        first.origin = f.origin;
+        first.locator = f.locator;
+        first.content = f.content.substr(0, byte_off);
+        first.length = char_count;
+        first.delete_count = f.delete_count;
+        first.visible = f.visible;
+
+        Fragment second;
+        second.origin = Lamport(f.origin.replica_id, f.origin.value + char_count);
+        second.locator = f.locator;
+        second.content = f.content.substr(byte_off);
+        second.length = f.length - char_count;
+        second.delete_count = f.delete_count;
+        second.visible = f.visible;
+        return {std::move(first), std::move(second)};
+    };
+
+    // Helper: consume visible bytes from pending/cursor, pushing unchanged
+    // fragments to new_tree. Used for inter-range gaps.
+    auto consume_unchanged = [&](uint32_t vis_bytes) {
+        // Consume from pending first
+        while (pending && vis_bytes > 0) {
+            if (pending->visible) {
+                uint32_t pv = static_cast<uint32_t>(pending->content.size());
+                if (pv <= vis_bytes) {
+                    new_tree.push_item(std::move(*pending));
+                    vis_bytes -= pv;
+                    pending.reset();
+                } else {
+                    auto [first, second] = split_frag(*pending, vis_bytes);
+                    new_tree.push_item(std::move(first));
+                    pending = std::move(second);
+                    vis_bytes = 0;
+                }
+            } else {
+                // Invisible — push, no visible bytes consumed
+                new_tree.push_item(std::move(*pending));
+                pending.reset();
+            }
+        }
+        // Consume from cursor
+        while (vis_bytes > 0 && cursor.item()) {
+            Fragment frag = *cursor.item();
+            if (!frag.visible) {
+                new_tree.push_item(std::move(frag));
+                cursor.next();
+                continue;
+            }
+            uint32_t fv = static_cast<uint32_t>(frag.content.size());
+            if (fv <= vis_bytes) {
+                new_tree.push_item(std::move(frag));
+                vis_bytes -= fv;
+                cursor.next();
+            } else {
+                auto [first, second] = split_frag(frag, vis_bytes);
+                new_tree.push_item(std::move(first));
+                pending = std::move(second);
+                cursor.next();
+                vis_bytes = 0;
+            }
+        }
+    };
+
+    // Helper: consume and delete visible bytes from pending/cursor.
+    auto consume_deleted = [&](uint32_t vis_bytes) {
+        // From pending
+        while (pending && vis_bytes > 0) {
+            if (pending->visible) {
+                uint32_t pv = static_cast<uint32_t>(pending->content.size());
+                if (pv <= vis_bytes) {
+                    mark_deleted(*pending);
+                    new_tree.push_item(std::move(*pending));
+                    vis_bytes -= pv;
+                    pending.reset();
+                } else {
+                    auto [first, second] = split_frag(*pending, vis_bytes);
+                    mark_deleted(first);
+                    new_tree.push_item(std::move(first));
+                    pending = std::move(second);
+                    vis_bytes = 0;
+                }
+            } else {
+                new_tree.push_item(std::move(*pending));
+                pending.reset();
+            }
+        }
+        // From cursor
+        while (vis_bytes > 0 && cursor.item()) {
+            Fragment frag = *cursor.item();
+            if (!frag.visible) {
+                new_tree.push_item(std::move(frag));
+                cursor.next();
+                continue;
+            }
+            uint32_t fv = static_cast<uint32_t>(frag.content.size());
+            if (fv <= vis_bytes) {
+                mark_deleted(frag);
+                new_tree.push_item(std::move(frag));
+                vis_bytes -= fv;
+                cursor.next();
+            } else {
+                auto [first, second] = split_frag(frag, vis_bytes);
+                mark_deleted(first);
+                new_tree.push_item(std::move(first));
+                pending = std::move(second);
+                cursor.next();
+                vis_bytes = 0;
+            }
+        }
+    };
+
+    // ---- Phase 0: Prefix copy (up to first range) ----
+    if (!order.empty()) {
+        uint32_t first_start = ranges[order[0]].first;
+        // Use cursor.slice for O(log n) bulk copy
+        new_tree.push_tree(cursor.slice({first_start}));
+        // Handle straddling fragment (cursor.position < first_start means
+        // a visible fragment spans the boundary)
+        if (cursor.item() && cursor.position().value < first_start) {
+            uint32_t split_byte = first_start - cursor.position().value;
+            auto [first, second] = split_frag(*cursor.item(), split_byte);
+            new_tree.push_item(std::move(first));
+            pending = std::move(second);
+            cursor.next();
+        }
+    }
+
+    // ---- Process each range ----
+    uint32_t prev_end = order.empty() ? 0 : ranges[order[0]].first;
+
+    for (size_t oi = 0; oi < order.size(); ++oi) {
+        size_t idx = order[oi];
         uint32_t start = ranges[idx].first;
         uint32_t end = ranges[idx].second;
         const std::string &replacement = new_text[idx];
 
-        // --- Delete phase: mark [start, end) as deleted ---
-        if (end > start) {
-            auto [start_frag, start_off] = resolve_visible_offset(frags, start);
-
-            if (start_frag < frags.size() && start_off > 0) {
-                start_frag = split_fragment_at(frags, start_frag, start_off);
-            }
-
-            uint32_t remaining = end - start;
-            size_t fi = start_frag;
-            while (remaining > 0 && fi < frags.size()) {
-                if (!frags[fi].is_visible(m_undo_map)) {
-                    fi++;
-                    continue;
-                }
-
-                uint32_t frag_bytes = static_cast<uint32_t>(frags[fi].content.size());
-
-                if (frag_bytes <= remaining) {
-                    frags[fi].delete_count++;
-                    for (uint32_t c = 0; c < frags[fi].length; ++c) {
-                        Lamport ts = frags[fi].timestamp_at(c);
-                        op.deleted_timestamps.push_back(ts);
-                        undo_entry.deleted_keys.push_back(UndoMapKey(ts));
-                    }
-                    remaining -= frag_bytes;
-                    fi++;
-                } else {
-                    split_fragment_at(frags, fi, remaining);
-                    frags[fi].delete_count++;
-                    for (uint32_t c = 0; c < frags[fi].length; ++c) {
-                        Lamport ts = frags[fi].timestamp_at(c);
-                        op.deleted_timestamps.push_back(ts);
-                        undo_entry.deleted_keys.push_back(UndoMapKey(ts));
-                    }
-                    remaining = 0;
-                }
-            }
+        // Inter-range gap: copy unchanged content between previous end and this start
+        if (start > prev_end) {
+            consume_unchanged(start - prev_end);
         }
 
-        // --- Insert phase ---
+        // ---- Delete phase ----
+        if (end > start) {
+            consume_deleted(end - start);
+        }
+
+        // ---- Insert phase ----
         if (!replacement.empty()) {
-            auto [ins_frag, ins_off] = resolve_visible_offset(frags, start);
+            // Determine lo/hi locators for the new fragment.
+            // lo = locator of the last fragment pushed to new_tree.
+            // hi = first locator strictly greater than lo among remaining
+            //      items (pending + cursor + old-tree scan fallback).
+            Locator lo = new_tree.empty() ? Locator::min() : new_tree.last().locator;
 
-            if (ins_frag < frags.size() && ins_off > 0) {
-                Lamport split_origin = frags[ins_frag].origin;
-                uint32_t split_frag_length = frags[ins_frag].length;
-                uint32_t split_char_offset = count_utf8_chars(
-                    frags[ins_frag].content, ins_off);
+            // Check the immediate next fragment for hi.
+            Locator imm_loc;   // locator of the immediate next fragment
+            bool has_imm = false;
+            if (pending) {
+                imm_loc = pending->locator;
+                has_imm = true;
+            } else if (cursor.item()) {
+                imm_loc = cursor.item()->locator;
+                has_imm = true;
+            }
 
-                size_t second_idx = split_fragment_at(frags, ins_frag, ins_off);
-
-                Locator orig_loc = frags[ins_frag].locator;
-                Locator next_hi = Locator::max();
-                for (size_t i = second_idx + 1; i < frags.size(); ++i) {
-                    if (frags[i].locator > orig_loc) {
-                        next_hi = frags[i].locator;
-                        break;
+            Locator hi = Locator::max();
+            bool needs_relocation = false;
+            if (has_imm && imm_loc > lo) {
+                hi = imm_loc;
+            } else if (has_imm) {
+                // Immediate next fragment has locator <= lo (same-locator
+                // group from splitting). Need relocation to create space.
+                needs_relocation = true;
+                // Find the next locator strictly greater than lo in the
+                // original tree to bound the relocation target.
+                {
+                    auto loc_cursor = m_fragment_tree.cursor<FragmentOrderDim>();
+                    auto _prefix = loc_cursor.slice(
+                        FragmentOrderDim{lo, Lamport::max()});
+                    if (loc_cursor.item() && loc_cursor.item()->locator > lo) {
+                        hi = loc_cursor.item()->locator;
                     }
                 }
-                Locator second_loc = Locator::between(orig_loc, next_hi);
+            }
+            // else: no remaining fragments, hi stays max()
 
-                Lamport second_origin = frags[second_idx].origin;
-                Fragment moved = std::move(frags[second_idx]);
-                frags.erase(frags.begin() + static_cast<ptrdiff_t>(second_idx));
-                moved.locator = second_loc;
-                insert_fragment(frags, std::move(moved));
+            // Relocate the immediate next fragment if needed.
+            // Without this, inserted text would sort after same-locator
+            // fragments (the "heoXX" bug).
+            if (needs_relocation) {
+                Locator new_next_loc = Locator::between(lo, hi);
 
-                size_t new_second_idx = 0;
-                for (size_t i = 0; i < frags.size(); ++i) {
-                    if (frags[i].origin == second_origin &&
-                        frags[i].locator == second_loc) {
-                        new_second_idx = i;
-                        break;
-                    }
+                Lamport reloc_origin;
+                uint32_t reloc_length = 0;
+
+                if (pending) {
+                    reloc_origin = pending->origin;
+                    reloc_length = pending->length;
+                    pending->locator = new_next_loc;
+                } else if (cursor.item()) {
+                    Fragment f = *cursor.item();
+                    reloc_origin = f.origin;
+                    reloc_length = f.length;
+                    f.locator = new_next_loc;
+                    pending = std::move(f);
+                    cursor.next();
                 }
 
+                // Record split relocation for remote replicas
                 EditOperation::SplitRelocation reloc;
-                reloc.fragment_origin = split_origin;
-                reloc.split_offset = split_char_offset;
-                reloc.fragment_length = split_frag_length;
-                reloc.new_locator = second_loc;
+                reloc.fragment_origin = reloc_origin;
+                reloc.split_offset = 0;
+                reloc.fragment_length = reloc_length;
+                reloc.new_locator = new_next_loc;
                 op.split_relocations.push_back(std::move(reloc));
 
-                ins_frag = new_second_idx;
+                hi = new_next_loc;
             }
 
-            Locator new_loc = locator_between(frags, ins_frag);
+            Locator new_loc = Locator::between(lo, hi);
 
-            uint32_t char_count = count_utf8_chars(replacement, static_cast<uint32_t>(replacement.size()));
+            uint32_t char_count = count_utf8_chars(
+                replacement, static_cast<uint32_t>(replacement.size()));
 
             Lamport frag_origin = m_clock.tick();
-            for (uint32_t c = 1; c < char_count; ++c) {
-                m_clock.tick();
-            }
+            for (uint32_t c = 1; c < char_count; ++c) m_clock.tick();
 
             Fragment frag(frag_origin, new_loc, replacement, char_count);
-            insert_fragment(frags, frag);
+            frag.visible = true;
+            new_tree.push_item(std::move(frag));
 
             EditOperation::InsertedFragment ins_rec;
             ins_rec.origin = frag_origin;
@@ -535,23 +687,39 @@ Operation Buffer::apply_local_edit(
                     UndoMapKey(frag_origin.replica_id, frag_origin.value + c));
             }
         }
+
+        prev_end = end;
     }
 
-    // Every edit operation gets its own unique timestamp.
+    // ---- Suffix ----
+    if (pending) {
+        new_tree.push_item(std::move(*pending));
+        pending.reset();
+    }
+    new_tree.push_tree(cursor.suffix());
+
+    // ---- Timestamp ----
     if (op.inserted_fragments.empty()) {
         op.timestamp = m_clock.tick();
     } else {
         op.timestamp = Lamport(m_replica_id, m_clock.value - 1);
     }
-
-    // Update version vector
     m_version.observe(op.timestamp);
 
-    // Push undo entry
+    // ---- Undo entry ----
     m_undo_stack.resize(m_undo_cursor);
     m_undo_stack.push_back(std::move(undo_entry));
     m_undo_cursor = m_undo_stack.size();
 
+    // ---- Sort, normalize, and rebuild ----
+    // Relocations may have moved fragments out of locator order in the
+    // push-order tree. Re-sort by (locator, origin) before normalizing.
+    auto frags = new_tree.items();
+
+    std::sort(frags.begin(), frags.end(), [](const Fragment& a, const Fragment& b) {
+        if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
+        return a.origin < b.origin;
+    });
     normalize_fragments(frags);
     set_fragments(std::move(frags));
     return op;
