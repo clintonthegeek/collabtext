@@ -854,6 +854,84 @@ private slots:
             QCOMPARE(bufs[r].text(), bufs[0].text());
         }
     }
+    // =======================================================================
+    // ADVERSARIAL: High-frequency undo/redo to stress UndoMap SumTree
+    // =======================================================================
+
+    void undo_redo_storm() {
+        uint64_t seed = std::random_device{}();
+        qDebug() << "Seed:" << seed;
+        std::mt19937 rng(seed);
+
+        constexpr int N = 3;
+        Buffer bufs[N] = {Buffer(1), Buffer(2), Buffer(3)};
+
+        // Each replica builds a base of 5 edits
+        std::vector<std::vector<Operation>> all_ops(N);
+        for (int r = 0; r < N; ++r) {
+            for (int i = 0; i < 5; ++i) {
+                auto op = random_edit(bufs[r], rng);
+                all_ops[r].push_back(op);
+            }
+        }
+
+        // Cross-apply base edits
+        for (int r = 0; r < N; ++r) {
+            for (int s = 0; s < N; ++s) {
+                if (r != s) bufs[r].apply_ops(all_ops[s]);
+            }
+            check_invariants(bufs[r], qPrintable(QString("base_%1").arg(r)));
+        }
+
+        // Storm: 200 steps, ~50% undo/redo, ~30% edit, ~20% sync
+        // Track ALL ops per replica for final convergence sync.
+        std::vector<std::vector<Operation>> all_storm_ops(N);
+        for (int step = 0; step < 200; ++step) {
+            int r = rng() % N;
+            int action = rng() % 100;
+
+            if (action < 25) {
+                // Undo
+                auto op = bufs[r].undo();
+                if (op) all_storm_ops[r].push_back(*op);
+            } else if (action < 50) {
+                // Redo
+                auto op = bufs[r].redo();
+                if (op) all_storm_ops[r].push_back(*op);
+            } else if (action < 80) {
+                // New edit (clears redo stack, grows undo stack)
+                auto op = random_edit(bufs[r], rng);
+                all_storm_ops[r].push_back(op);
+            } else {
+                // Partial sync: random pair exchanges all ops so far
+                int s = rng() % N;
+                if (s != r) {
+                    bufs[r].apply_ops(all_storm_ops[s]);
+                    bufs[s].apply_ops(all_storm_ops[r]);
+                }
+            }
+
+            check_invariants(bufs[r],
+                qPrintable(QString("storm_%1_r%2").arg(step).arg(r)));
+        }
+
+        // Final sync: everyone gets everything (idempotent — dupes are no-ops)
+        for (int r = 0; r < N; ++r) {
+            for (int s = 0; s < N; ++s) {
+                if (r != s) bufs[r].apply_ops(all_storm_ops[s]);
+            }
+        }
+
+        for (int r = 0; r < N; ++r) {
+            check_invariants(bufs[r],
+                qPrintable(QString("storm_final_%1").arg(r)));
+        }
+
+        // Convergence
+        for (int r = 1; r < N; ++r) {
+            QCOMPARE(bufs[r].text(), bufs[0].text());
+        }
+    }
 };
 
 QTEST_MAIN(TestFuzz)
