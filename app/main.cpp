@@ -116,7 +116,7 @@ protected:
 private slots:
     void onContentsChange(int position, int charsRemoved, int charsAdded)
     {
-        if (m_applying)
+        if (m_applying || m_doc->crdt()->isApplyingRemote())
             return;
         m_applying = true;
 
