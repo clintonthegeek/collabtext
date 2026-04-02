@@ -679,6 +679,95 @@ private slots:
         QCOMPARE(bufB.text(), std::string("hello"));
         QCOMPARE(bufA.text(), bufB.text());
     }
+
+    // -----------------------------------------------------------------------
+    // Unified deletion tracking
+    // -----------------------------------------------------------------------
+
+    void fragment_with_multiple_deletions() {
+        // Two replicas delete the same character. Undo one — still invisible.
+        // Undo both — visible.
+        Buffer bufA(1), bufB(2), bufC(3);
+        auto ins = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        bufB.apply_ops({ins});
+        bufC.apply_ops({ins});
+
+        // A deletes "h", B deletes "h"
+        auto delA = bufA.apply_local_edit({{0, 1}}, {""});
+        auto delB = bufB.apply_local_edit({{0, 1}}, {""});
+
+        // C receives both deletes
+        bufC.apply_ops({delA, delB});
+        QCOMPARE(bufC.text(), std::string("ello"));
+
+        // A undoes its delete — but B's delete still active
+        auto undoA = bufA.undo();
+        QVERIFY(undoA.has_value());
+        bufC.apply_ops({*undoA});
+        QCOMPARE(bufC.text(), std::string("ello"));
+
+        // B undoes its delete — now both deletions undone, "h" visible
+        auto undoB = bufB.undo();
+        QVERIFY(undoB.has_value());
+        bufC.apply_ops({*undoB});
+        QCOMPARE(bufC.text(), std::string("hello"));
+    }
+
+    void deletion_undo_roundtrip() {
+        // Delete, undo, redo — verify the parity model works end-to-end
+        Buffer bufA(1), bufB(2);
+        auto ins = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        bufB.apply_ops({ins});
+
+        auto del = bufA.apply_local_edit({{1, 4}}, {""});
+        bufB.apply_ops({del});
+        QCOMPARE(bufA.text(), std::string("ho"));
+        QCOMPARE(bufB.text(), std::string("ho"));
+
+        auto undo = bufA.undo();
+        QVERIFY(undo.has_value());
+        bufB.apply_ops({*undo});
+        QCOMPARE(bufA.text(), std::string("hello"));
+        QCOMPARE(bufB.text(), std::string("hello"));
+
+        auto redo = bufA.redo();
+        QVERIFY(redo.has_value());
+        bufB.apply_ops({*redo});
+        QCOMPARE(bufA.text(), std::string("ho"));
+        QCOMPARE(bufB.text(), std::string("ho"));
+    }
+
+    void concurrent_delete_and_insertion_undo() {
+        // B inserts "hello", A receives. A deletes "ell". B undoes insertion.
+        // After merge: everything invisible. B redoes → "ho". A undoes delete → "hello".
+        Buffer bufA(1), bufB(2);
+        auto ins = bufB.apply_local_edit({{0, 0}}, {"hello"});
+        bufA.apply_ops({ins});
+
+        auto del = bufA.apply_local_edit({{1, 4}}, {""});
+        auto undoB = bufB.undo();
+        QVERIFY(undoB.has_value());
+
+        bufA.apply_ops({*undoB});
+        bufB.apply_ops({del});
+
+        QCOMPARE(bufA.text(), std::string(""));
+        QCOMPARE(bufB.text(), std::string(""));
+
+        auto redoB = bufB.redo();
+        QVERIFY(redoB.has_value());
+        bufA.apply_ops({*redoB});
+
+        QCOMPARE(bufA.text(), std::string("ho"));
+        QCOMPARE(bufB.text(), std::string("ho"));
+
+        auto undoA = bufA.undo();
+        QVERIFY(undoA.has_value());
+        bufB.apply_ops({*undoA});
+
+        QCOMPARE(bufA.text(), std::string("hello"));
+        QCOMPARE(bufB.text(), std::string("hello"));
+    }
 };
 
 QTEST_MAIN(TestBuffer)
