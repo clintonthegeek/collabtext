@@ -332,6 +332,7 @@ Operation Buffer::apply_local_edit(
             if (ins_frag < m_fragments.size() && ins_off > 0) {
                 // Record info for the split relocation before splitting
                 Lamport split_origin = m_fragments[ins_frag].origin;
+                uint32_t split_frag_length = m_fragments[ins_frag].length;
                 uint32_t split_char_offset = count_utf8_chars(
                     m_fragments[ins_frag].content, ins_off);
 
@@ -369,10 +370,14 @@ Operation Buffer::apply_local_edit(
                     }
                 }
 
-                // Record the split relocation so remotes can apply it
+                // Record the split relocation so remotes can apply it.
+                // fragment_length is the length of the fragment BEFORE
+                // the split (both halves combined), so that remotes know
+                // exactly which characters belong to the second half.
                 EditOperation::SplitRelocation reloc;
                 reloc.fragment_origin = split_origin;
                 reloc.split_offset = split_char_offset;
+                reloc.fragment_length = split_frag_length;
                 reloc.new_locator = second_loc;
                 op.split_relocations.push_back(std::move(reloc));
 
@@ -476,30 +481,71 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
 
     // Apply split relocations: when the sender split a fragment to insert
     // in the middle, we apply the same split and locator change here.
+    //
+    // The target character is identified by its globally unique Lamport
+    // timestamp, which never changes regardless of how the fragment has
+    // been split by concurrent operations.  When the original fragment
+    // was concurrently split into multiple sub-fragments, ALL sub-fragments
+    // from the split point onward must be relocated.
+    //
+    // Concurrent split relocations at the same point or overlapping
+    // ranges: two replicas may split the same fragment at the same or
+    // different offsets, assigning different new locators.  To ensure
+    // convergence regardless of application order, each sub-fragment's
+    // effective locator is max(current_locator, proposed_new_locator).
+    // This ensures the same locator always wins.
     for (auto &reloc : op.split_relocations) {
-        // Find the fragment containing the split point character
-        Lamport target(reloc.fragment_origin.replica_id,
-                       reloc.fragment_origin.value + reloc.split_offset);
+        Lamport target_ts(reloc.fragment_origin.replica_id,
+                          reloc.fragment_origin.value + reloc.split_offset);
+
+        // Find the fragment containing the target character.
         for (size_t fi = 0; fi < m_fragments.size(); ++fi) {
             auto &f = m_fragments[fi];
-            if (f.origin.replica_id != target.replica_id) continue;
-            if (target.value < f.origin.value ||
-                target.value >= f.origin.value + f.length)
-                continue;
+            if (f.origin.replica_id != target_ts.replica_id) continue;
+            if (target_ts.value < f.origin.value ||
+                target_ts.value >= f.origin.value + f.length) continue;
 
-            uint32_t char_off = target.value - f.origin.value;
-            if (char_off == 0) {
-                // Already split at this boundary. Just relocate.
-                Fragment moved = std::move(m_fragments[fi]);
-                m_fragments.erase(m_fragments.begin() + static_cast<ptrdiff_t>(fi));
-                moved.locator = reloc.new_locator;
-                insert_fragment(std::move(moved));
-            } else if (char_off < f.length) {
+            // Split if the target char is not at the fragment start.
+            uint32_t char_off = target_ts.value - f.origin.value;
+            if (char_off > 0) {
                 uint32_t byte_off = char_to_byte_offset(f.content, char_off);
-                size_t second_idx = split_fragment_at(fi, byte_off);
-                Fragment moved = std::move(m_fragments[second_idx]);
-                m_fragments.erase(m_fragments.begin() + static_cast<ptrdiff_t>(second_idx));
-                moved.locator = reloc.new_locator;
+                fi = split_fragment_at(fi, byte_off);
+            }
+
+            // Collect sub-fragments from the split point onward that
+            // were part of the original fragment.  The original fragment
+            // covered timestamps [fragment_origin.value,
+            //   fragment_origin.value + fragment_length).
+            // Sub-fragments are identified by: same replica_id,
+            // contiguous timestamps, within the original range.
+            // Each sub-fragment's effective locator is
+            // max(current, new_locator) to resolve concurrent splits.
+            uint32_t end_ts = reloc.fragment_origin.value
+                              + reloc.fragment_length;
+            uint32_t next_expected = target_ts.value;
+            struct RelocEntry { size_t idx; Locator effective; };
+            std::vector<RelocEntry> to_relocate;
+            for (size_t si = 0; si < m_fragments.size(); ++si) {
+                if (next_expected >= end_ts) break;
+                auto &sf = m_fragments[si];
+                if (sf.origin.replica_id != target_ts.replica_id) continue;
+                if (sf.origin.value != next_expected) continue;
+                // Clamp: only include characters up to end_ts
+                // (the fragment might extend beyond if it was merged,
+                // though that shouldn't happen in practice).
+                Locator eff = (reloc.new_locator > sf.locator)
+                              ? reloc.new_locator : sf.locator;
+                if (eff != sf.locator) {
+                    to_relocate.push_back({si, eff});
+                }
+                next_expected = sf.origin.value + sf.length;
+            }
+
+            // Relocate in reverse index order to keep indices stable.
+            for (auto it = to_relocate.rbegin(); it != to_relocate.rend(); ++it) {
+                Fragment moved = std::move(m_fragments[it->idx]);
+                m_fragments.erase(m_fragments.begin() + static_cast<ptrdiff_t>(it->idx));
+                moved.locator = it->effective;
                 insert_fragment(std::move(moved));
             }
             break;

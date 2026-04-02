@@ -38,6 +38,7 @@ struct EditOperation {
     struct SplitRelocation {
         Lamport fragment_origin;  // origin of the fragment being split
         uint32_t split_offset;    // character offset within fragment where split happens
+        uint32_t fragment_length; // total character length of the fragment being split
         Locator new_locator;      // new locator for the second half
     };
     std::vector<SplitRelocation> split_relocations;
