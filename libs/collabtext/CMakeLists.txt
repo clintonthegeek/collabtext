@@ -8,6 +8,7 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Test)
 add_library(collabtext STATIC
     src/crdt/Clock.cpp
     src/crdt/Locator.cpp
+    src/crdt/UndoMap.cpp
 )
 set_target_properties(collabtext PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(CollabText::CollabText ALIAS collabtext)
