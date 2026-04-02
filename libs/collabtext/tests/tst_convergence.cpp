@@ -11,7 +11,6 @@ class TestConvergence : public QObject {
 private:
     // Helper: generate a random edit on a buffer
     Operation random_edit(Buffer &buf, std::mt19937 &rng) {
-        std::string current = buf.text();
         uint32_t len = buf.visible_length();
 
         // Random start position (0 to len)
@@ -37,9 +36,26 @@ private:
         for (int i = 0; i < num_replicas; ++i)
             replicas.emplace_back(static_cast<uint16_t>(i + 1)); // replica IDs start at 1
 
-        // Pending operations: (operation, source_replica_id)
-        struct PendingOp { Operation op; uint16_t source; };
-        std::vector<PendingOp> pending;
+        // Per-replica incoming queues. Each queue holds ops from OTHER replicas
+        // that haven't been delivered yet.
+        std::vector<std::vector<Operation>> incoming(num_replicas);
+
+        // Broadcast an operation from source to all other replicas' queues,
+        // inserting at a random position (simulates out-of-order delivery)
+        // with random duplication (simulates network retransmissions).
+        auto broadcast = [&](const Operation &op, int source_idx) {
+            int copies = 1 + (rng() % 3);
+            for (int r = 0; r < num_replicas; ++r) {
+                if (r == source_idx) continue;
+                for (int c = 0; c < copies; ++c) {
+                    size_t pos = incoming[r].empty()
+                        ? 0
+                        : (rng() % (incoming[r].size() + 1));
+                    incoming[r].insert(
+                        incoming[r].begin() + static_cast<ptrdiff_t>(pos), op);
+                }
+            }
+        };
 
         for (int i = 0; i < num_ops; ++i) {
             int action = rng() % 100;
@@ -48,15 +64,7 @@ private:
                 // Random edit on random replica
                 int r = rng() % num_replicas;
                 auto op = random_edit(replicas[r], rng);
-
-                // Broadcast with random duplication (1-3 copies)
-                // and random insertion position (out-of-order)
-                int copies = 1 + (rng() % 3);
-                for (int c = 0; c < copies; ++c) {
-                    size_t pos = pending.empty() ? 0 : (rng() % (pending.size() + 1));
-                    pending.insert(pending.begin() + static_cast<ptrdiff_t>(pos),
-                        PendingOp{op, replicas[r].replica_id()});
-                }
+                broadcast(op, r);
             } else if (action < 70) {
                 // Random undo/redo
                 int r = rng() % num_replicas;
@@ -66,40 +74,33 @@ private:
                 else
                     op = replicas[r].redo();
                 if (op) {
-                    int copies = 1 + (rng() % 2);
-                    for (int c = 0; c < copies; ++c) {
-                        size_t pos = pending.empty() ? 0 : (rng() % (pending.size() + 1));
-                        pending.insert(pending.begin() + static_cast<ptrdiff_t>(pos),
-                            PendingOp{*op, replicas[r].replica_id()});
-                    }
+                    broadcast(*op, r);
                 }
             } else {
-                // Deliver some pending ops to a random replica
-                if (!pending.empty()) {
-                    int r = rng() % num_replicas;
-                    int count = 1 + (rng() % std::min<int>(5, static_cast<int>(pending.size())));
+                // Deliver some pending ops to a random replica from its queue
+                int r = rng() % num_replicas;
+                if (!incoming[r].empty()) {
+                    int count = 1 + (rng() % std::min<int>(5, static_cast<int>(incoming[r].size())));
                     std::vector<Operation> batch;
-                    for (int c = 0; c < count && !pending.empty(); ++c) {
-                        if (pending.front().source != replicas[r].replica_id())
-                            batch.push_back(pending.front().op);
-                        pending.erase(pending.begin());
+                    for (int c = 0; c < count && !incoming[r].empty(); ++c) {
+                        batch.push_back(incoming[r].front());
+                        incoming[r].erase(incoming[r].begin());
                     }
-                    if (!batch.empty())
-                        replicas[r].apply_ops(batch);
+                    replicas[r].apply_ops(batch);
                 }
             }
         }
 
-        // Drain ALL pending to ALL replicas
-        for (const auto &p : pending) {
-            for (auto &replica : replicas) {
-                if (replica.replica_id() != p.source)
-                    replica.apply_ops({p.op});
+        // Drain ALL remaining incoming ops to each replica
+        for (int r = 0; r < num_replicas; ++r) {
+            if (!incoming[r].empty()) {
+                replicas[r].apply_ops(incoming[r]);
+                incoming[r].clear();
             }
         }
 
         // Multiple flush passes for deferred ops
-        for (int pass = 0; pass < 10; ++pass) {
+        for (int pass = 0; pass < 20; ++pass) {
             for (auto &replica : replicas)
                 replica.apply_ops({});
         }

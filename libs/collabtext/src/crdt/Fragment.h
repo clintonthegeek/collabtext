@@ -20,7 +20,7 @@ struct Fragment {
     Locator locator;         ///< Fractional position in the document
     std::string content;     ///< UTF-8 content
     uint32_t length = 0;     ///< Number of characters (may differ from content.size() for multi-byte)
-    bool deleted = false;    ///< Tombstone flag (CRDT delete, not undo)
+    uint32_t delete_count = 0;  ///< Number of active delete votes (deleted when > 0)
 
     Fragment() = default;
     Fragment(Lamport orig, Locator loc, std::string text, uint32_t len)
@@ -31,27 +31,23 @@ struct Fragment {
         return Lamport(origin.replica_id, origin.value + offset);
     }
 
+    /// True if this fragment has been deleted (by any replica).
+    bool deleted() const { return delete_count > 0; }
+
     /// True if this fragment is visible in the document
     /// (not deleted and not undone).
     bool is_visible(const UndoMap &undo_map) const {
-        // A fragment is visible if it is not deleted AND
-        // at least one of its characters is not undone.
-        // For simplicity in the initial implementation, we treat
-        // the whole fragment as visible/invisible. Fine-grained
-        // per-character undo requires splitting.
-        if (deleted) return false;
+        if (delete_count > 0) return false;
 
         // Check if the first character is undone. For single-char
         // fragments (the common case after splitting) this is exact.
-        // Multi-char fragments: we check the first char as a proxy.
-        // The Buffer layer should split fragments when partial undo occurs.
         return !undo_map.is_undone(UndoMapKey(origin));
     }
 
     /// True if this fragment was ever visible (inserted but not deleted).
     /// Ignores undo state.
     bool was_visible() const {
-        return !deleted;
+        return delete_count == 0;
     }
 };
 
