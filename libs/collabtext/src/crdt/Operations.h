@@ -30,6 +30,10 @@ struct EditOperation {
     // Timestamps of characters that were deleted by this edit.
     std::vector<Lamport> deleted_timestamps;
 
+    // Lamport ID used to track this edit's deletions in the UndoMap.
+    // All fragments deleted by this edit have this pushed into their deletions vector.
+    Lamport deletion_id;
+
     // When inserting in the middle of a fragment, the local side splits
     // the fragment and gives the second half a new locator. Remote replicas
     // need to apply the same split to stay convergent.
@@ -46,8 +50,6 @@ struct UndoOperation {
     Lamport timestamp;
     Global version;
     std::vector<std::pair<Lamport, uint32_t>> counts;  // (edit_id, new_count)
-    std::vector<UndoMapKey> undelete_keys;  // Characters to un-delete/re-delete
-    bool is_redo = false;                   // Direction for undelete_keys
 };
 
 using Operation = std::variant<EditOperation, UndoOperation>;

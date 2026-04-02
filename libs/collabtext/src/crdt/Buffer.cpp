@@ -281,7 +281,7 @@ size_t Buffer::split_fragment_at(std::vector<Fragment>& frags,
     second.locator = orig.locator;
     second.content = orig.content.substr(offset_in_frag);
     second.length = orig.length - char_count;
-    second.delete_count = orig.delete_count;
+    second.deletions = orig.deletions;
 
     orig.content = orig.content.substr(0, offset_in_frag);
     orig.length = char_count;
@@ -362,7 +362,7 @@ void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
                         single.locator = f.locator;
                         single.content = f.content.substr(byte_pos, char_bytes);
                         single.length = 1;
-                        single.delete_count = f.delete_count;
+                        single.deletions = f.deletions;
                         extracted.push_back(std::move(single));
                         byte_pos += char_bytes;
                     }
@@ -406,6 +406,8 @@ Operation Buffer::apply_local_edit(
     op.new_text = new_text;
     op.version = m_version;
     UndoEntry undo_entry;
+    Lamport deletion_ts = m_clock.tick();
+    undo_entry.deletion_id = deletion_ts;
 
     // Sort ranges ascending (left-to-right) — offsets are in the OLD tree's
     // visible space and never change during processing.
@@ -438,12 +440,11 @@ Operation Buffer::apply_local_edit(
 
     // Helper: mark a fragment as deleted and record timestamps for op/undo.
     auto mark_deleted = [&](Fragment& f) {
-        f.delete_count++;
+        f.deletions.push_back(deletion_ts);
         f.visible = false;
+        undo_entry.had_deletions = true;
         for (uint32_t c = 0; c < f.length; ++c) {
-            Lamport ts = f.timestamp_at(c);
-            op.deleted_timestamps.push_back(ts);
-            undo_entry.deleted_keys.push_back(UndoMapKey(ts));
+            op.deleted_timestamps.push_back(f.timestamp_at(c));
         }
     };
 
@@ -457,7 +458,7 @@ Operation Buffer::apply_local_edit(
         first.locator = f.locator;
         first.content = f.content.substr(0, byte_off);
         first.length = char_count;
-        first.delete_count = f.delete_count;
+        first.deletions = f.deletions;
         first.visible = f.visible;
 
         Fragment second;
@@ -465,7 +466,7 @@ Operation Buffer::apply_local_edit(
         second.locator = f.locator;
         second.content = f.content.substr(byte_off);
         second.length = f.length - char_count;
-        second.delete_count = f.delete_count;
+        second.deletions = f.deletions;
         second.visible = f.visible;
         return {std::move(first), std::move(second)};
     };
@@ -712,6 +713,7 @@ Operation Buffer::apply_local_edit(
     } else {
         op.timestamp = Lamport(m_replica_id, m_clock.value - 1);
     }
+    op.deletion_id = deletion_ts;
     m_version.observe(op.timestamp);
 
     // ---- Undo entry ----
@@ -798,7 +800,7 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
         size_t fi = result.fragment_index;
 
         if (frags[fi].length == 1) {
-            frags[fi].delete_count++;
+            frags[fi].deletions.push_back(op.deletion_id);
         } else {
             uint32_t offset = ts.value - frags[fi].origin.value;
             uint32_t byte_off = char_to_byte_offset(frags[fi].content, offset);
@@ -811,7 +813,7 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
                 uint32_t cb = first_char_bytes(frags[fi].content);
                 split_fragment_at(frags, fi, cb);
             }
-            frags[fi].delete_count++;
+            frags[fi].deletions.push_back(op.deletion_id);
         }
     }
 
@@ -868,6 +870,8 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
     // Update clock and version
     m_clock.observe(op.timestamp);
     m_version.observe(op.timestamp);
+    m_clock.observe(op.deletion_id);
+    m_version.observe(op.deletion_id);
 
     for (auto &ins : op.inserted_fragments) {
         Lamport last_ts(ins.origin.replica_id, ins.origin.value + ins.length - 1);
@@ -893,32 +897,15 @@ bool Buffer::apply_remote_undo(const UndoOperation &op) {
     if (!m_version.observed_all(op.version))
         return false;
 
-    // Handle counts (insert undo entries into map)
     for (auto &[edit_id, count] : op.counts) {
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
-    }
-
-    // Handle undelete_keys (adjust delete counter)
-    auto frags = get_fragments();
-    for (auto &key : op.undelete_keys) {
-        for (auto &f : frags) {
-            if (f.origin.replica_id == key.replica_id &&
-                key.lamport_value >= f.origin.value &&
-                key.lamport_value < f.origin.value + f.length) {
-                if (op.is_redo)
-                    f.delete_count++;   // re-delete
-                else if (f.delete_count > 0)
-                    f.delete_count--;   // un-delete
-                break;
-            }
-        }
     }
 
     m_clock.observe(op.timestamp);
     m_version.observe(op.timestamp);
     m_version.join(op.version);
 
-    normalize_fragments(frags);
+    auto frags = get_fragments();
     set_fragments(std::move(frags));
     return true;
 }
@@ -1014,10 +1001,8 @@ std::optional<Operation> Buffer::undo() {
 
     UndoOperation op;
     op.version = m_version;
-    op.is_redo = false;
     op.timestamp = m_clock.tick();
 
-    // Undo inserted characters (hide them via undo map)
     for (auto &key : entry.inserted_keys) {
         Lamport edit_id(key.replica_id, key.lamport_value);
         uint32_t current = m_undo_map.undo_count(edit_id);
@@ -1025,24 +1010,17 @@ std::optional<Operation> Buffer::undo() {
         op.counts.push_back({edit_id, current + 1});
     }
 
-    // Undo deleted characters (decrement delete counter)
-    auto frags = get_fragments();
-    for (auto &key : entry.deleted_keys) {
-        for (auto &f : frags) {
-            if (f.origin.replica_id == key.replica_id &&
-                key.lamport_value >= f.origin.value &&
-                key.lamport_value < f.origin.value + f.length &&
-                f.delete_count > 0) {
-                f.delete_count--;
-                break;
-            }
-        }
-        op.undelete_keys.push_back(key);
+    if (entry.had_deletions) {
+        uint32_t current = m_undo_map.undo_count(entry.deletion_id);
+        m_undo_map.insert(
+            UndoMapEntry{{entry.deletion_id, op.timestamp}, current + 1});
+        op.counts.push_back({entry.deletion_id, current + 1});
     }
+
+    auto frags = get_fragments();
     set_fragments(std::move(frags));
 
     m_version.observe(op.timestamp);
-
     return op;
 }
 
@@ -1055,10 +1033,8 @@ std::optional<Operation> Buffer::redo() {
 
     UndoOperation op;
     op.version = m_version;
-    op.is_redo = true;
     op.timestamp = m_clock.tick();
 
-    // Redo: increment undo count (even count = visible again)
     for (auto &key : entry.inserted_keys) {
         Lamport edit_id(key.replica_id, key.lamport_value);
         uint32_t current = m_undo_map.undo_count(edit_id);
@@ -1066,23 +1042,17 @@ std::optional<Operation> Buffer::redo() {
         op.counts.push_back({edit_id, current + 1});
     }
 
-    // Redo: re-delete deleted characters (increment delete counter)
-    auto frags = get_fragments();
-    for (auto &key : entry.deleted_keys) {
-        for (auto &f : frags) {
-            if (f.origin.replica_id == key.replica_id &&
-                key.lamport_value >= f.origin.value &&
-                key.lamport_value < f.origin.value + f.length) {
-                f.delete_count++;
-                break;
-            }
-        }
-        op.undelete_keys.push_back(key);
+    if (entry.had_deletions) {
+        uint32_t current = m_undo_map.undo_count(entry.deletion_id);
+        m_undo_map.insert(
+            UndoMapEntry{{entry.deletion_id, op.timestamp}, current + 1});
+        op.counts.push_back({entry.deletion_id, current + 1});
     }
+
+    auto frags = get_fragments();
     set_fragments(std::move(frags));
 
     m_version.observe(op.timestamp);
-
     return op;
 }
 

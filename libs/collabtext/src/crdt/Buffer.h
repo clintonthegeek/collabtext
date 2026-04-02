@@ -155,7 +155,8 @@ private:
     /// created by that edit, plus keys for characters deleted.
     struct UndoEntry {
         std::vector<UndoMapKey> inserted_keys;  // Characters we inserted
-        std::vector<UndoMapKey> deleted_keys;    // Characters we deleted
+        Lamport deletion_id;                     // Edit timestamp (for undoing deletions)
+        bool had_deletions = false;              // Whether this edit deleted characters
     };
     std::vector<UndoEntry> m_undo_stack;
     size_t m_undo_cursor = 0;  // Points past the last undoable entry
