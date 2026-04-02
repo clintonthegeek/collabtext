@@ -10,6 +10,7 @@
 #include <QPlainTextEdit>
 #include <QStatusBar>
 #include <QTextCursor>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <collabtext/CollabDocument.h>
@@ -153,8 +154,17 @@ private slots:
 
     void onCursorPositionChanged()
     {
+        // Defer to next event loop tick. Creating sticky indices opens a
+        // read transaction, which fails if called during Qt's finishEdit
+        // (yrs may still hold an internal lock from the preceding write).
+        QTimer::singleShot(0, this, &PeerPane::captureCursorState);
+    }
+
+    void captureCursorState()
+    {
         if (m_doc->crdt()->isApplyingRemote())
             return;
+
         QTextCursor tc = m_edit->textCursor();
         int head = tc.position();
         int anchor = tc.anchor();
