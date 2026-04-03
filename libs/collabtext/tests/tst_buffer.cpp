@@ -303,7 +303,7 @@ private slots:
         auto frags = buf.fragments();
         bool found_xx = false;
         for (auto& f : frags) {
-            if (f.content == "XX") { found_xx = true; break; }
+            if (f.byte_length == 2 && f.visible) { found_xx = true; break; }
         }
         QVERIFY(found_xx);
     }

@@ -109,7 +109,7 @@ private slots:
             auto frags = buf.fragments();
             uint32_t total_bytes = 0;
             for (auto& f : frags)
-                total_bytes += static_cast<uint32_t>(f.content.size());
+                total_bytes += f.byte_length;
             QCOMPARE(buf.visible_rope_len() + buf.deleted_rope_len(), total_bytes);
             QCOMPARE(buf.visible_rope_len(), buf.visible_length());
         }
@@ -135,7 +135,7 @@ private slots:
             auto frags = buf->fragments();
             uint32_t total = 0;
             for (auto& f : frags)
-                total += static_cast<uint32_t>(f.content.size());
+                total += f.byte_length;
             QCOMPARE(buf->visible_rope_len() + buf->deleted_rope_len(), total);
             QCOMPARE(buf->visible_rope_len(), buf->visible_length());
         }

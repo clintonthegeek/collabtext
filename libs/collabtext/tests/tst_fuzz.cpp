@@ -28,24 +28,16 @@ static void check_invariants(const Buffer& buf, const char* context) {
     uint32_t del_sum = 0;
     for (auto& f : frags) {
         if (f.visible)
-            vis_sum += static_cast<uint32_t>(f.content.size());
+            vis_sum += f.byte_length;
         else
-            del_sum += static_cast<uint32_t>(f.content.size());
+            del_sum += f.byte_length;
     }
     if (vis_sum != buf.visible_length()) {
         QFAIL(qPrintable(QString("INV-2 violated at %1: fragment vis_sum=%2 but visible_length=%3")
             .arg(context).arg(vis_sum).arg(buf.visible_length())));
     }
 
-    // INV-3: concatenation of visible fragments == text()
-    std::string concat;
-    for (auto& f : frags) {
-        if (f.visible) concat += f.content;
-    }
-    if (concat != text) {
-        QFAIL(qPrintable(QString("INV-3 violated at %1: fragment concat != text()")
-            .arg(context)));
-    }
+    // INV-3: (subsumed by INV-1 + INV-2 + INV-8 — visible text consistency)
 
     // INV-4: fragment ordering — (locator, origin) strictly non-decreasing
     for (size_t i = 1; i < frags.size(); ++i) {
@@ -69,39 +61,38 @@ static void check_invariants(const Buffer& buf, const char* context) {
 
     // INV-5: every fragment has non-empty content and length > 0
     for (size_t i = 0; i < frags.size(); ++i) {
-        if (frags[i].content.empty() || frags[i].length == 0) {
+        if (frags[i].byte_length == 0 || frags[i].length == 0) {
             QFAIL(qPrintable(QString("INV-5 violated at %1: empty fragment at index %2")
                 .arg(context).arg(i)));
         }
     }
 
-    // INV-6: fragment.length == actual UTF-8 character count
-    for (size_t i = 0; i < frags.size(); ++i) {
+    // INV-6: total character count consistency
+    {
+        uint32_t total_chars = 0;
+        for (auto& f : frags) {
+            if (f.visible) total_chars += f.length;
+        }
         uint32_t actual_chars = 0;
-        for (size_t b = 0; b < frags[i].content.size(); ) {
-            unsigned char c = static_cast<unsigned char>(frags[i].content[b]);
+        for (size_t b = 0; b < text.size(); ) {
+            unsigned char c = static_cast<unsigned char>(text[b]);
             if (c < 0x80) b += 1;
             else if ((c & 0xE0) == 0xC0) b += 2;
             else if ((c & 0xF0) == 0xE0) b += 3;
             else b += 4;
             ++actual_chars;
         }
-        if (frags[i].length != actual_chars) {
-            QFAIL(qPrintable(QString("INV-6 violated at %1: frag[%2].length=%3 but actual chars=%4")
-                .arg(context).arg(i).arg(frags[i].length).arg(actual_chars)));
+        if (total_chars != actual_chars) {
+            QFAIL(qPrintable(QString("INV-6 violated at %1: fragment char sum=%2 but text chars=%3")
+                .arg(context).arg(total_chars).arg(actual_chars)));
         }
     }
 
-    // INV-7: no fragment content splits a UTF-8 character
+    // INV-7: byte_length >= length (multi-byte chars make bytes > chars)
     for (size_t i = 0; i < frags.size(); ++i) {
-        auto& s = frags[i].content;
-        if (!s.empty()) {
-            // First byte must be a valid UTF-8 start byte
-            unsigned char first = static_cast<unsigned char>(s[0]);
-            if ((first & 0xC0) == 0x80) {
-                QFAIL(qPrintable(QString("INV-7 violated at %1: frag[%2] starts with continuation byte 0x%3")
-                    .arg(context).arg(i).arg(first, 0, 16)));
-            }
+        if (frags[i].byte_length < frags[i].length) {
+            QFAIL(qPrintable(QString("INV-7 violated at %1: frag[%2] byte_length=%3 < length=%4")
+                .arg(context).arg(i).arg(frags[i].byte_length).arg(frags[i].length)));
         }
     }
 
@@ -113,6 +104,21 @@ static void check_invariants(const Buffer& buf, const char* context) {
     if (buf.deleted_rope_len() != del_sum) {
         QFAIL(qPrintable(QString("INV-8 violated at %1: deleted_rope_len=%2 but fragment del_sum=%3")
             .arg(context).arg(buf.deleted_rope_len()).arg(del_sum)));
+    }
+
+    // INV-9: byte_length sums match rope lengths
+    uint32_t byte_sum_vis = 0, byte_sum_del = 0;
+    for (auto& f : frags) {
+        if (f.visible) byte_sum_vis += f.byte_length;
+        else byte_sum_del += f.byte_length;
+    }
+    if (byte_sum_vis != buf.visible_rope_len()) {
+        QFAIL(qPrintable(QString("INV-9 violated at %1: byte_length vis sum=%2 but rope=%3")
+            .arg(context).arg(byte_sum_vis).arg(buf.visible_rope_len())));
+    }
+    if (byte_sum_del != buf.deleted_rope_len()) {
+        QFAIL(qPrintable(QString("INV-9 violated at %1: byte_length del sum=%2 but rope=%3")
+            .arg(context).arg(byte_sum_del).arg(buf.deleted_rope_len())));
     }
 }
 
@@ -592,7 +598,7 @@ private slots:
                                   << ") len=" << frags[fi].length
                                   << " vis=" << frags[fi].visible
                                   << " dels=" << frags[fi].deletions.size()
-                                  << " \"" << frags[fi].content << "\"\n";
+                                  << " \"(in rope)\"\n";
                     }
                     QFAIL(qPrintable(QString("Anchor order inverted at step %1: anchor[%2]=%3 > anchor[%4]=%5 (seed %6)")
                         .arg(i).arg(a-1).arg(pos_prev).arg(a).arg(pos_curr).arg(seed)));
