@@ -107,6 +107,12 @@ private:
     size_t split_fragment_at(std::vector<Fragment>& frags,
                              size_t frag_idx, uint32_t offset_in_frag) const;
 
+    /// Extract a fragment's text from the visible or deleted rope.
+    /// Walks frags [0..frag_idx) to compute the byte offset, then extracts byte_length bytes.
+    /// IMPORTANT: Only valid when frags are in rope-matching order (before sort/normalize).
+    std::string extract_fragment_text(
+        const std::vector<Fragment>& frags, size_t frag_idx) const;
+
     /// Find a locator for a new fragment between frags[ins_frag-1] and
     /// the next distinct greater locator.
     Locator locator_between(const std::vector<Fragment>& frags,
