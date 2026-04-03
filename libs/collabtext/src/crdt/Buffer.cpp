@@ -20,19 +20,108 @@ std::vector<Fragment> Buffer::get_fragments() const {
     return m_fragment_tree.items();
 }
 
+/// Pack (replica_id, value) into a single uint64_t for map lookup.
+static uint64_t origin_key(const Lamport& origin) {
+    return (static_cast<uint64_t>(origin.replica_id) << 32) | origin.value;
+}
+
 void Buffer::set_fragments(std::vector<Fragment>&& frags) {
-    // Set cached visibility flags based on current undo map
+    static const std::unordered_map<uint64_t, std::string> empty_map;
+    set_fragments(std::move(frags), empty_map);
+}
+
+void Buffer::set_fragments(std::vector<Fragment>&& frags,
+                           const std::unordered_map<uint64_t, std::string>& new_texts) {
+    // --- Step 1: Build old-entry table from the current fragment tree ---
+    struct OldEntry {
+        uint16_t replica_id;
+        uint32_t origin_value;
+        uint32_t char_length;
+        uint32_t byte_length;
+        bool     was_visible;
+        uint32_t rope_offset;   // byte offset in old_vis or old_del
+    };
+    std::vector<OldEntry> old_entries;
+
+    uint32_t vis_off = 0, del_off = 0;
+    m_fragment_tree.for_each([&](const Fragment& f) {
+        OldEntry e;
+        e.replica_id   = f.origin.replica_id;
+        e.origin_value = f.origin.value;
+        e.char_length  = f.length;
+        e.byte_length  = f.byte_length;
+        e.was_visible  = f.visible;
+        if (f.visible) {
+            e.rope_offset = vis_off;
+            vis_off += f.byte_length;
+        } else {
+            e.rope_offset = del_off;
+            del_off += f.byte_length;
+        }
+        old_entries.push_back(e);
+    });
+
+    // --- Step 2: Extract old rope text for random access ---
+    std::string old_vis = m_visible_text.to_string();
+    std::string old_del = m_deleted_text.to_string();
+
+    // --- Step 3: Set visibility, then reconstruct ropes ---
     for (auto& f : frags) {
         f.visible = f.compute_visible(m_undo_map);
     }
 
-    // Rebuild ropes from fragment content
     Rope visible_rope, deleted_rope;
     for (const auto& f : frags) {
+        std::string_view text;
+        std::string extracted;
+
+        // Search old entries for a parent whose origin range contains this fragment
+        bool found = false;
+        for (const auto& oe : old_entries) {
+            if (oe.replica_id == f.origin.replica_id &&
+                f.origin.value >= oe.origin_value &&
+                f.origin.value + f.length <= oe.origin_value + oe.char_length) {
+
+                // Compute character offset within the parent
+                uint32_t char_off = f.origin.value - oe.origin_value;
+
+                // Pick the right old rope text
+                const std::string& rope_text = oe.was_visible ? old_vis : old_del;
+
+                // Walk UTF-8 bytes from the parent's rope_offset,
+                // counting char_off characters to find byte_off
+                uint32_t byte_off = 0;
+                uint32_t pos = oe.rope_offset;
+                for (uint32_t c = 0; c < char_off; ++c) {
+                    unsigned char ch = static_cast<unsigned char>(rope_text[pos + byte_off]);
+                    if (ch < 0x80) byte_off += 1;
+                    else if ((ch & 0xE0) == 0xC0) byte_off += 2;
+                    else if ((ch & 0xF0) == 0xE0) byte_off += 3;
+                    else byte_off += 4;
+                }
+
+                extracted = rope_text.substr(oe.rope_offset + byte_off, f.byte_length);
+                text = extracted;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            // Check new_texts map (for future Task 7)
+            auto it = new_texts.find(origin_key(f.origin));
+            if (it != new_texts.end()) {
+                text = it->second;
+            } else {
+                // Fall back to f.content during transition
+                text = f.content;
+            }
+        }
+
         if (f.visible) {
-            visible_rope.push_str(f.content);
+            visible_rope.push_str(text);
         } else {
-            deleted_rope.push_str(f.content);
+            deleted_rope.push_str(text);
         }
     }
     m_visible_text = std::move(visible_rope);

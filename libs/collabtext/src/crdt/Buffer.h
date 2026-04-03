@@ -14,6 +14,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace CollabText::Crdt {
@@ -86,6 +87,12 @@ private:
 
     /// Rebuild the fragment tree from a vector of fragments (preserves order).
     void set_fragments(std::vector<Fragment>&& frags);
+
+    /// Rebuild the fragment tree, reconstructing ropes from old ropes via
+    /// origin-interval lookup.  new_texts maps origin_key -> text for
+    /// freshly-inserted fragments whose text is not in the old ropes.
+    void set_fragments(std::vector<Fragment>&& frags,
+                       const std::unordered_map<uint64_t, std::string>& new_texts);
 
     /// Insert a fragment in sorted position in the fragment list.
     void insert_fragment(std::vector<Fragment>& frags, Fragment frag) const;
