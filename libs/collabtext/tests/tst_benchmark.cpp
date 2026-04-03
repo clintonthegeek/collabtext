@@ -363,15 +363,20 @@ private slots:
     //    creation feasible. Compare with benchmark 5 to see scaling.
     // ========================================================================
     void tombstone_degradation_large() {
-        qDebug().noquote() << "\n=== Tombstone Degradation Large (10K doc) ===";
-        const int NUM_OPS = 100;
+        qDebug().noquote() << "\n=== Tombstone Degradation Scaling ===";
+        qDebug().noquote() << "  (Measures how doc size amplifies tombstone cost)";
+        const int NUM_OPS = 50;
 
-        for (double frac : {0.5, 0.9}) {
+        // Compare 3K vs 5K vs 8K docs, all at 50% tombstones.
+        // Shows whether tombstone cost scales linearly with total fragments.
+        for (uint32_t doc_size : {3000u, 5000u, 8000u}) {
             std::mt19937 rng(42);
             Buffer buf(1);
-            build_document(buf, 10000, rng);
+            build_document(buf, doc_size, rng);
 
-            create_tombstones(buf, frac, rng);
+            create_tombstones(buf, 0.5, rng);
+
+            uint32_t frags_before = static_cast<uint32_t>(buf.fragments().size());
 
             auto t0 = Clock::now();
             for (int i = 0; i < NUM_OPS; ++i)
@@ -380,7 +385,8 @@ private slots:
 
             int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
             char label[64];
-            std::snprintf(label, sizeof(label), "10K, %.0f%% tombstones", frac * 100);
+            std::snprintf(label, sizeof(label), "%uK, 50%% tombstones (%u frags)",
+                          doc_size / 1000, frags_before);
             BenchResult r;
             r.name = label;
             r.ns_per_op = total_ns / NUM_OPS;
@@ -604,12 +610,12 @@ private slots:
     // 10. Undo stack depth
     // ========================================================================
     void undo_stack_depth() {
-        qDebug().noquote() << "\n=== Undo Stack Depth (100K doc) ===";
+        qDebug().noquote() << "\n=== Undo Stack Depth (10K doc) ===";
 
         for (int N : {100, 500, 1000}) {
             std::mt19937 rng(42);
             Buffer buf(1);
-            build_document(buf, 100000, rng);
+            build_document(buf, 10000, rng);
 
             // Perform N edits
             for (int i = 0; i < N; ++i)
@@ -685,24 +691,29 @@ private slots:
         qDebug().noquote() << "\n=== Tombstone-Undo Interaction ===";
         std::mt19937 rng(42);
         Buffer buf(1);
-        build_document(buf, 5000, rng);
+        build_document(buf, 2000, rng);
 
-        // Delete 90% char-by-char: this creates ~4500 edits, each deleting one char.
-        // Since the document is ASCII, every byte is a character boundary.
+        // Delete 80% char-by-char: ~1600 edits, each creating one tombstone.
         uint32_t initial_len = buf.visible_length();
-        uint32_t to_delete = static_cast<uint32_t>(initial_len * 0.9);
+        uint32_t to_delete = static_cast<uint32_t>(initial_len * 0.8);
+
+        auto t_del_start = Clock::now();
         for (uint32_t i = 0; i < to_delete; ++i) {
             uint32_t len = buf.visible_length();
             if (len == 0) break;
             uint32_t pos = rng() % len;
             buf.apply_local_edit({{pos, pos + 1}}, {""});
         }
+        auto t_del_end = Clock::now();
+        int64_t del_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t_del_end - t_del_start).count();
 
-        qDebug().noquote() << "  after deletions: vis=" << buf.visible_length()
-                           << " frags=" << buf.fragments().size();
+        uint32_t frags_after_del = static_cast<uint32_t>(buf.fragments().size());
+        qDebug().noquote() << "  setup: deleted" << to_delete << "chars in"
+                           << (del_ns / 1000000) << "ms — vis=" << buf.visible_length()
+                           << " frags=" << frags_after_del;
 
-        // Undo the last 1000 deletions
-        const int UNDO_COUNT = 1000;
+        // Undo the last 500 deletions — measure undo cost with heavy tombstones
+        const int UNDO_COUNT = 500;
         auto t0 = Clock::now();
         int undone = 0;
         for (int i = 0; i < UNDO_COUNT; ++i) {
@@ -713,7 +724,9 @@ private slots:
         int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
 
         BenchResult r;
-        r.name = "undo 1000 deletions (90% tombstones)";
+        char label[80];
+        std::snprintf(label, sizeof(label), "undo %d deletions (%u tombstone frags)", undone, frags_after_del);
+        r.name = label;
         r.ns_per_op = undone > 0 ? total_ns / undone : 0;
         r.ops_per_sec = undone > 0 ? undone * 1e9 / total_ns : 0;
         r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
