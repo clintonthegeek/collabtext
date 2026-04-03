@@ -134,7 +134,8 @@ private:
     void enqueue_deferred(OperationEntry entry);
 
     /// Atomize multi-character fragments at shared locators.
-    void normalize_fragments(std::vector<Fragment>& frags) const;
+    void normalize_fragments(std::vector<Fragment>& frags,
+                             std::unordered_map<uint64_t, std::string>& new_texts) const;
 
     /// Apply deletion runs: batch-delete characters identified by Lamport
     /// timestamp ranges, splitting fragments as needed.

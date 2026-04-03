@@ -59,7 +59,7 @@ static void check_invariants(const Buffer& buf, const char* context) {
         }
     }
 
-    // INV-5: every fragment has non-empty content and length > 0
+    // INV-5: every fragment has non-zero byte_length and length > 0
     for (size_t i = 0; i < frags.size(); ++i) {
         if (frags[i].byte_length == 0 || frags[i].length == 0) {
             QFAIL(qPrintable(QString("INV-5 violated at %1: empty fragment at index %2")

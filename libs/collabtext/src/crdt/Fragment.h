@@ -4,7 +4,6 @@
 #include "crdt/Locator.h"
 #include "crdt/UndoMap.h"
 #include <cstdint>
-#include <string>
 #include <vector>
 
 namespace CollabText::Crdt {
@@ -116,18 +115,14 @@ struct Fragment {
 
     Lamport origin;          ///< Timestamp of the first character
     Locator locator;         ///< Fractional position in the document
-    std::string content;     ///< UTF-8 content
-    uint32_t byte_length = 0; ///< Byte length of content (shadow field, kept in sync with content.size())
-    uint32_t length = 0;     ///< Number of characters (may differ from content.size() for multi-byte)
+    uint32_t byte_length = 0; ///< Byte length of content in the rope
+    uint32_t length = 0;     ///< Number of characters (may differ from byte_length for multi-byte)
     std::vector<Lamport> deletions;  ///< Lamport timestamps of deletion operations
     bool visible = true;     ///< Cached visibility (set during tree construction)
 
     Fragment() = default;
-    Fragment(Lamport orig, Locator loc, std::string text, uint32_t len)
-        : origin(orig), locator(loc), content(std::move(text)), length(len)
-    {
-        byte_length = static_cast<uint32_t>(content.size());
-    }
+    Fragment(Lamport orig, Locator loc, uint32_t byte_len, uint32_t char_len)
+        : origin(orig), locator(loc), byte_length(byte_len), length(char_len) {}
 
     /// Lamport timestamp of the character at `offset` within this fragment.
     Lamport timestamp_at(uint32_t offset) const {
