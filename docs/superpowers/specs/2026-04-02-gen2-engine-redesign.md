@@ -1,7 +1,7 @@
 # CollabText Gen 2 Engine Redesign — Specification
 
 **Date:** 2026-04-02
-**Status:** Initial spec — needs brainstorm review before planning
+**Status:** Complete. All three phases implemented and verified.
 **Prereqs:** All 5 SumTree optimizations complete (Opts 1-5)
 
 ---
@@ -224,54 +224,51 @@ information to set_fragments().
 
 ## 4. Migration Strategy
 
-### Phase 1: Unified deletion tracking
+### Phase 1: Unified deletion tracking — COMPLETE
 
-**Scope:** Replace `delete_count` with `deletions: Vec<Lamport>`.
-Update `compute_visible`, `is_visible`, UndoOperation wire format.
-Remove `undelete_keys` and `is_redo` from UndoOperation.
+**Merge:** `53db46d` (Merge feat/unified-deletion-tracking)
 
-**Why first:** This is the foundational model change. Everything else
-depends on the unified visibility model.
+**Scope:** Replaced `delete_count` with `deletions: Vec<Lamport>`.
+Updated `compute_visible`, `is_visible`, UndoOperation wire format.
+Removed `undelete_keys` and `is_redo` from UndoOperation.
 
-**Risk:** Medium. Changes the visibility computation, undo/redo logic,
-and wire format. Extensive test coverage mitigates risk.
+**Result:** Single parity-based visibility model. One mechanism
+(UndoMap) handles both insertion undo and deletion undo.
 
-**Test strategy:** All existing tests must pass. Add tests for:
-- Fragment with multiple deletions (different replicas deleting same text)
-- Undo of a deletion restores visibility
-- Concurrent deletion + undo convergence
-- `was_visible` integration test
+**Report:** `docs/superpowers/specs/2026-04-02-unified-deletion-tracking-design.md`
 
-### Phase 2: Offset-based remote edit application
+### Phase 2: Offset-based remote edit application — COMPLETE
 
-**Scope:** Rewrite `apply_remote_edit()` to use byte ranges + 
-`VersionedFullOffset` cursor seeking. Remove `deleted_timestamps`
-from EditOperation. Add `was_visible` check.
+**Merge:** `9434776` (Merge feat/offset-remote-edits)
 
-**Why second:** Requires unified deletion tracking for `was_visible`.
-Eliminates timestamp-per-character wire overhead.
+**Scope:** Rewrote `apply_remote_edit()` to use run-length encoded
+deletion runs instead of per-character timestamp lookup. Removed
+`deleted_timestamps` from EditOperation. Added `was_visible` check.
 
-**Risk:** High. Rewrites the core remote edit algorithm. The fuzz suite
-(especially convergence and 10-replica chaos) is the primary safety net.
+**Result:** Wire format transmits byte ranges instead of per-character
+timestamps. Deletion of 1000 characters: 8 bytes (one range pair)
+instead of 8 KB (1000 Lamport values).
 
-**Test strategy:** Convergence tests are critical — they verify that
-different replicas produce identical text after receiving the same
-operations. Run 20x with random seeds.
+**Report:** `docs/superpowers/specs/2026-04-02-offset-based-remote-edits-design.md`
 
-### Phase 3: Fragment::content removal + RopeBuilder
+### Phase 3: Fragment::content removal — COMPLETE
 
-**Scope:** Remove `content` from Fragment. Implement RopeBuilder.
-Update all 34 access sites to use rope lookups or stored byte_length.
+**Commits:** `51b4919`..`2e716f9` (5 implementation commits)
 
-**Why last:** This is purely a memory optimization. It depends on the
-RopeBuilder pattern, which is simpler to implement after the other
-changes are stable.
+**Scope:** Removed `content` from Fragment. Added `byte_length` field.
+Rewrote `set_fragments()` to reconstruct ropes from old ropes via
+origin-interval-lookup. Migrated 38 access sites across 4 source
+files and 3 test files. Added INV-9 (byte_length consistency).
 
-**Risk:** High (34 access sites). But by this point the visibility
-model and remote edit algorithm are already stable.
+**Result:** Document text exists in exactly one place (the Ropes).
+Fragment is now a metadata-only record.
 
-**Test strategy:** INV-8 (rope consistency) catches any mismatch.
-Add INV-9: fragment byte_length matches rope slice length.
+**Design deviation:** The spec's streaming RopeBuilder (§6.3) was
+replaced with an origin-interval-lookup approach because fragments
+can be reordered (sorted/normalized) between mutations and
+set_fragments(). See report for details.
+
+**Report:** `docs/reports/2026-04-02-gen2-phase3-content-removal.md`
 
 ---
 
@@ -288,41 +285,40 @@ Add INV-9: fragment byte_length matches rope slice length.
 
 ---
 
-## 6. Success Criteria
+## 6. Success Criteria — ALL MET
 
-- All existing tests pass after each phase.
-- Convergence: 20/20 runs with random seeds after each phase.
-- Fuzz: 20/20 runs of all 16 adversarial tests after each phase.
-- Memory: After Phase 3, document text exists in exactly one place
+- [x] All existing tests pass after each phase.
+- [x] Convergence: 20/20 runs with random seeds after each phase.
+- [x] Fuzz: 20/20 runs of all 16 adversarial tests after each phase.
+- [x] Memory: After Phase 3, document text exists in exactly one place
   (the Ropes), not two.
-- Wire efficiency: After Phase 2, remote deletes transmit byte ranges
+- [x] Wire efficiency: After Phase 2, remote deletes transmit byte ranges
   instead of per-character timestamps.
-- Model simplicity: After Phase 1, one unified visibility mechanism
+- [x] Model simplicity: After Phase 1, one unified visibility mechanism
   (UndoMap parity) instead of two (UndoMap + delete_count).
 
 ---
 
 ## 7. Open Questions
 
-1. **Phase 1 ordering.** Could Phase 2 (offset-based remote edits) be
-   done before Phase 1 (unified deletions) by implementing `was_visible`
-   with the existing `delete_count` model? This would mean
-   `was_visible` checks `delete_count > 0` instead of iterating
-   `deletions`. Less clean but lower risk.
+1. **Phase 1 ordering.** RESOLVED: Phases executed in spec order
+   (1→2→3). Phase 1 first was correct — unified deletions simplified
+   Phase 2's `was_visible` implementation.
 
-2. **RopeBuilder complexity.** The RopeBuilder needs to walk old ropes
-   and new fragment lists in parallel. When fragments are reordered
-   (split relocations, normalization), the mapping between old and new
-   rope positions becomes complex. Is there a simpler incremental
-   approach?
+2. **RopeBuilder complexity.** RESOLVED: The streaming RopeBuilder was
+   replaced with an origin-interval-lookup approach. Instead of walking
+   old/new ropes in parallel (which breaks when fragments are
+   reordered), `set_fragments()` scans the old tree to build a map of
+   origin ranges → rope offsets, then looks up each new fragment's text
+   by matching its origin into the old tree. This handles splits,
+   reordering, and normalization uniformly. See Phase 3 report for
+   details.
 
-3. **VersionedFullOffset cursor.** The SumTree cursor doesn't support
-   context parameters (like a version vector). The optimization spec
-   §3.2 chose Option C (standalone walk function) for this reason.
-   Should Gen 2 add context support to the cursor, or keep the
-   standalone approach?
+3. **VersionedFullOffset cursor.** RESOLVED: Kept the standalone walk
+   function approach (Option C from the optimization spec). The SumTree
+   cursor remains context-free. Phase 2 used run-length encoded
+   deletion runs instead of VersionedFullOffset seeking.
 
-4. **Wire format migration.** Changing from `deleted_timestamps` to
-   range-only deletes is a wire format break. Since the engine is not
-   yet in production, this is acceptable. But should both formats be
-   supported during transition?
+4. **Wire format migration.** RESOLVED: Clean break. `deleted_timestamps`
+   replaced by `deletion_runs` (run-length encoded). No dual-format
+   support — the engine is not yet in production.

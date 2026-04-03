@@ -1,7 +1,7 @@
 # Fragment::content Removal — Design Spec
 
 **Date:** 2026-04-02
-**Status:** Design ready. Implementation deferred to fresh session.
+**Status:** Complete. Implemented in commits `51b4919`..`2e716f9`.
 **Prereqs:** Gen 2 Phases 1-2 complete (unified deletions, deletion runs)
 
 ---
@@ -133,47 +133,51 @@ This is O(n) in the worst case (walking to find the offset), but
 splitting only happens during edits where we're already walking
 the fragment list.
 
-## 7. Open Design Questions
+## 7. Open Design Questions — RESOLVED
 
-1. **Caching rope offsets.** Should fragments cache their rope
-   offset? This would make lookups O(1) but offsets invalidate on
-   every mutation. Probably not worth it.
+1. **Caching rope offsets.** Not done. Offsets invalidate on every
+   mutation, and the origin-interval-lookup is fast enough.
 
-2. **Splitting without text access.** For `apply_remote_edit`, we
-   split at character offsets within a fragment. We need to convert
-   character offset → byte offset, which requires reading the text.
-   Could we store a byte-per-character array? Overkill for now.
+2. **Splitting without text access.** Text is extracted from the rope
+   via `extract_fragment_text()` (walks preceding fragments to compute
+   offset). For `normalize_fragments()`, which runs after sort, the
+   same origin-interval-lookup used by `set_fragments()` is used.
 
-3. **Test migration.** The fuzz suite's `check_invariants()` reads
-   `f.content` for INV-3 (concat check), INV-5 (non-empty check),
-   INV-6 (char count check), INV-7 (UTF-8 boundary check). These
-   need to use rope extraction instead.
+3. **Test migration.** INV-3 removed (redundant with INV-1+2+8).
+   INV-5/6/7 rewritten to use `byte_length` and global checks.
+   INV-9 added for byte_length↔rope consistency.
 
-4. **InsertionIndex.** `rebuild_insertion_index` reads
-   `f.content.size()`. Replace with `f.byte_length`.
+4. **InsertionIndex.** `rebuild_insertion_index` now uses `f.byte_length`.
 
-## 8. Risk Assessment
+5. **RopeBuilder vs origin-interval-lookup.** The spec's streaming
+   RopeBuilder (§6.3) was replaced with an origin-interval-lookup
+   approach. See `docs/reports/2026-04-02-gen2-phase3-content-removal.md`
+   §2 for rationale.
 
-**HIGH RISK.** This is the most invasive change in the Gen 2
-redesign. 34 access sites across production code and tests.
-Every splitting operation needs rope text lookup. The RopeBuilder
-pattern is new and untested.
+## 8. Risk Assessment — POST-MORTEM
 
-**Mitigation:** The fuzz suite checks 8 structural invariants after
-every operation. Add INV-9 (fragment byte_length matches rope
-accounting). Test incrementally — start with RopeBuilder, then
-migrate splitting, then remove content.
+Risk was high as predicted (38 access sites, not 34 — tests had
+more references than initially counted). The incremental shadow-field
+approach (adding `byte_length` alongside `content`, migrating site by
+site, removing `content` last) was critical for managing the risk.
 
-## 9. Recommended Task Decomposition
+One latent bug was discovered: `split_fragment_at()` was not propagating
+the `visible` flag to the second half. This was harmless with content-based
+text access but caused out-of-bounds rope reads after migration. Fixed
+in commit `4c04671`.
 
-1. Implement RopeBuilder class + unit tests
-2. Wire RopeBuilder into set_fragments (alongside existing content)
-3. Add rope text lookup helper
-4. Migrate Category A sites (byte_length — trivial)
-5. Migrate Category B sites (splitting — requires rope lookup)
-6. Migrate Category C sites (UTF-8 nav — requires rope lookup)
-7. Migrate Category D (set_fragments uses RopeBuilder only)
-8. Migrate Category E (fragment construction)
-9. Remove Fragment::content field
-10. Update test assertions
-11. Full verification
+The fuzz suite (9 invariants, 16 adversarial scenarios, 20x random seeds)
+caught zero regressions during the migration, validating the incremental
+approach.
+
+## 9. Actual Task Decomposition
+
+1. Add `byte_length` shadow field to Fragment (`51b4919`)
+2. Rewrite `set_fragments()` with origin-interval-lookup (`50e1e98`)
+3. Add `extract_fragment_text()` helper
+4. Migrate `split_fragment_at`, `apply_deletion_runs` splitting
+5. Migrate `apply_local_edit` helpers, anchors, byte-length sites
+   (3-5 in single commit `4c04671`)
+6. Update test invariants (`1a0220e`)
+7. Remove `Fragment::content` field (`2e716f9`)
+8. Full verification — 20/20 fuzz, 20/20 convergence
