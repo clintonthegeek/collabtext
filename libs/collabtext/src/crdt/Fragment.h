@@ -117,13 +117,17 @@ struct Fragment {
     Lamport origin;          ///< Timestamp of the first character
     Locator locator;         ///< Fractional position in the document
     std::string content;     ///< UTF-8 content
+    uint32_t byte_length = 0; ///< Byte length of content (shadow field, kept in sync with content.size())
     uint32_t length = 0;     ///< Number of characters (may differ from content.size() for multi-byte)
     std::vector<Lamport> deletions;  ///< Lamport timestamps of deletion operations
     bool visible = true;     ///< Cached visibility (set during tree construction)
 
     Fragment() = default;
     Fragment(Lamport orig, Locator loc, std::string text, uint32_t len)
-        : origin(orig), locator(loc), content(std::move(text)), length(len) {}
+        : origin(orig), locator(loc), content(std::move(text)), length(len)
+    {
+        byte_length = static_cast<uint32_t>(content.size());
+    }
 
     /// Lamport timestamp of the character at `offset` within this fragment.
     Lamport timestamp_at(uint32_t offset) const {
@@ -159,7 +163,7 @@ struct Fragment {
     /// Uses the cached `visible` flag for byte accounting.
     FragmentSummary summary() const {
         FragmentSummary s;
-        uint32_t bytes = static_cast<uint32_t>(content.size());
+        uint32_t bytes = byte_length;
         if (visible) {
             s.visible_bytes = bytes;
         } else {

@@ -280,10 +280,12 @@ size_t Buffer::split_fragment_at(std::vector<Fragment>& frags,
     second.origin = Lamport(orig.origin.replica_id, orig.origin.value + char_count);
     second.locator = orig.locator;
     second.content = orig.content.substr(offset_in_frag);
+    second.byte_length = static_cast<uint32_t>(second.content.size());
     second.length = orig.length - char_count;
     second.deletions = orig.deletions;
 
     orig.content = orig.content.substr(0, offset_in_frag);
+    orig.byte_length = static_cast<uint32_t>(orig.content.size());
     orig.length = char_count;
 
     Lamport saved_origin = orig.origin;
@@ -361,6 +363,7 @@ void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
                         single.origin = Lamport(f.origin.replica_id, f.origin.value + c);
                         single.locator = f.locator;
                         single.content = f.content.substr(byte_pos, char_bytes);
+                        single.byte_length = char_bytes;
                         single.length = 1;
                         single.deletions = f.deletions;
                         extracted.push_back(std::move(single));
@@ -460,6 +463,7 @@ Operation Buffer::apply_local_edit(
         first.origin = f.origin;
         first.locator = f.locator;
         first.content = f.content.substr(0, byte_off);
+        first.byte_length = byte_off;
         first.length = char_count;
         first.deletions = f.deletions;
         first.visible = f.visible;
@@ -468,6 +472,7 @@ Operation Buffer::apply_local_edit(
         second.origin = Lamport(f.origin.replica_id, f.origin.value + char_count);
         second.locator = f.locator;
         second.content = f.content.substr(byte_off);
+        second.byte_length = static_cast<uint32_t>(second.content.size());
         second.length = f.length - char_count;
         second.deletions = f.deletions;
         second.visible = f.visible;
