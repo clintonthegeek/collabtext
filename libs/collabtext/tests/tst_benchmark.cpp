@@ -1,5 +1,7 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include "crdt/NetworkSim.h"
+#include "crdt/EditStrategy.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -841,6 +843,141 @@ private slots:
 
         QVERIFY2(removed > 0, "GC should have removed tombstones");
         QVERIFY2(frags_after < frags_dirty, "Fragment count should decrease after GC");
+    }
+
+    // ========================================================================
+    // 14. Realistic 3-client throughput
+    // ========================================================================
+    void realistic_3_client_throughput() {
+        qDebug() << "\n--- Realistic 3-Client Throughput ---";
+
+        NetworkSim net(3, {.min_latency_ms = 100, .max_latency_ms = 100,
+                           .duplicate_probability = 0.0}, 42);
+        std::mt19937 rng(42);
+        RealisticStrategy strategies[3];
+
+        const int TOTAL_OPS = 300;  // 100 per replica (reduced for wall-time budget)
+        auto t0 = Clock::now();
+        for (int i = 0; i < TOTAL_OPS; ++i) {
+            int r = i % 3;
+            auto action = strategies[r].next_edit(net.buffer(r), rng);
+            net.edit(r, action);
+            net.tick(2);  // 2ms between ops (fast typing)
+        }
+        net.drain();
+        auto t1 = Clock::now();
+
+        double wall_ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+        qDebug().noquote() << QString("  %1 ops (3 clients x %2), wall time: %3 ms")
+            .arg(TOTAL_OPS).arg(TOTAL_OPS / 3).arg(wall_ms, 0, 'f', 1);
+        qDebug().noquote() << QString("  Throughput: %1 ops/sec")
+            .arg(TOTAL_OPS / (wall_ms / 1000.0), 0, 'f', 0);
+        for (int r = 0; r < 3; ++r) {
+            qDebug().noquote() << QString("  Replica %1: %2 fragments, %3 visible bytes")
+                .arg(r)
+                .arg(net.buffer(r).fragment_count())
+                .arg(net.buffer(r).visible_length());
+        }
+
+        net.assert_convergence("realistic_throughput");
+    }
+
+    // ========================================================================
+    // 15. Reconnect sync cost
+    // ========================================================================
+    void reconnect_sync_cost() {
+        qDebug() << "\n--- Reconnect Sync Cost ---";
+
+        for (int n_edits : {50, 100, 200}) {
+            NetworkSim net(3, {.min_latency_ms = 0, .max_latency_ms = 0}, 42);
+            std::mt19937 rng(42);
+            RealisticStrategy strategy;
+
+            // Seed some initial text
+            net.edit(0, {{0, 0}}, {std::string(1000, 'x')});
+            net.tick(1);
+            net.drain();
+
+            // Disconnect replica 2
+            net.disconnect(2);
+
+            // Replicas 0 and 1 make N edits each
+            for (int i = 0; i < n_edits * 2; ++i) {
+                int r = i % 2;
+                net.edit(r, strategy.next_edit(net.buffer(r), rng));
+                net.tick(1);
+            }
+
+            uint32_t frags_before = static_cast<uint32_t>(net.buffer(2).fragment_count());
+
+            // Reconnect and measure sync time (tick first to deliver bulk pending ops)
+            net.reconnect(2);
+            net.tick(10000);
+            auto t0 = Clock::now();
+            net.drain();
+            auto t1 = Clock::now();
+
+            double sync_ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+            uint32_t frags_after = static_cast<uint32_t>(net.buffer(2).fragment_count());
+
+            qDebug().noquote() << QString("  N=%1 edits: sync=%2 ms, frags %3 -> %4")
+                .arg(n_edits).arg(sync_ms, 0, 'f', 1)
+                .arg(frags_before).arg(frags_after);
+
+            net.assert_convergence("reconnect_sync");
+        }
+    }
+
+    // ========================================================================
+    // 16. GC under sustained editing
+    // ========================================================================
+    void gc_under_sustained_editing() {
+        qDebug() << "\n--- GC Under Sustained Editing ---";
+
+        for (bool gc_enabled : {false, true}) {
+            NetworkSim net(3, {.min_latency_ms = 0, .max_latency_ms = 0}, 42);
+            std::mt19937 rng(42);
+            RealisticStrategy strategies[3];
+
+            qDebug().noquote() << QString("  GC %1:").arg(gc_enabled ? "ON" : "OFF");
+
+            const int TOTAL_GC_OPS = 600;  // reduced for wall-time budget (O(n^2) fragment cost)
+            const int GC_INTERVAL = 100;
+            const int REPORT_INTERVAL = 200;
+
+            auto t_start = Clock::now();
+            for (int i = 0; i < TOTAL_GC_OPS; ++i) {
+                int r = i % 3;
+                net.edit(r, strategies[r].next_edit(net.buffer(r), rng));
+                net.tick(1);
+
+                // GC every GC_INTERVAL ops
+                if (gc_enabled && i > 0 && i % GC_INTERVAL == 0) {
+                    for (int gr = 0; gr < 3; ++gr)
+                        net.collect_garbage(gr);
+                }
+
+                // Report at intervals
+                if (i > 0 && i % REPORT_INTERVAL == 0) {
+                    auto t_now = Clock::now();
+                    double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                        t_now - t_start).count() / 1000.0;
+                    qDebug().noquote() << QString("    @%1 ops: %2 frags (r0), %3 ms elapsed")
+                        .arg(i)
+                        .arg(net.buffer(0).fragment_count())
+                        .arg(elapsed, 0, 'f', 1);
+                }
+            }
+            auto t_end = Clock::now();
+
+            net.drain();
+            double total_ms = std::chrono::duration_cast<std::chrono::microseconds>(
+                t_end - t_start).count() / 1000.0;
+            qDebug().noquote() << QString("    Final: %1 frags (r0), %2 ms total, %3 ops/sec")
+                .arg(net.buffer(0).fragment_count())
+                .arg(total_ms, 0, 'f', 1)
+                .arg(TOTAL_GC_OPS / (total_ms / 1000.0), 0, 'f', 0);
+        }
     }
 };
 
