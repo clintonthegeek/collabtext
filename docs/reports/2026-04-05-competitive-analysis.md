@@ -235,14 +235,29 @@ Replace the extract-mutate-rebuild pattern with in-place SumTree operations:
 - **Rope integration**: Store text inline in fragments or in a parallel rope
   tree that mirrors the fragment tree structure.
 
-### 7.2 Expected Impact
+### 7.2 Actual Impact (Phases 1 & 2 Complete)
 
-With O(log n) mutations and ~1,500 fragments at 100K doc size:
-- Current: ~37.7 ms/op (scanning 1,500 fragments)
-- Target: ~0.01-0.1 ms/op (touching ~11 tree nodes at log2(1500))
-- Expected improvement: **300-3,000x**
+Phase 1 (inline text) and Phase 2 (in-place SumTree mutations + B=6)
+achieved a **2-3x improvement** across all benchmarks:
 
-This would place us in the Yjs/Automerge 2.0 tier for practical throughput.
+| Doc Size | Before | After | Improvement |
+|----------|-------:|------:|------------:|
+| 1K | 203 ops/sec | 357 | 1.8x |
+| 100K | 27 ops/sec | 60 | 2.2x |
+| 1M | 22 ops/sec | 66 | 3.0x |
+| 3-client | 17 ops/sec | 23 | 1.4x |
+
+The 300-3,000x target was not reached because the O(n) full path
+(get_fragments + vector manipulation + set_fragments) still dominates for
+edits involving deletions. The insertion-only fast path achieves O(log n)
+but only covers a fraction of real-world operations.
+
+**Remaining bottleneck:** Deletion runs require origin-based lookup in a
+locator-ordered tree (O(n) scan). An origin-based secondary index would
+make the full remote edit path O(log n).
+
+See `docs/reports/2026-04-05-performance-refactor-results.md` for full
+benchmark comparison.
 
 ---
 
