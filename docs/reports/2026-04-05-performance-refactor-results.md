@@ -147,16 +147,66 @@ common operations.
 
 ---
 
-## 6. Next Steps
+## 6. Phase 3: Origin Index + Locator Fix (Complete)
 
-1. **Origin-based index for deletion runs** — secondary SumTree mapping
-   origin timestamps to fragment positions, enabling O(log n) deletion
-   lookups. Would make the full remote edit path O(log n).
+**Commit:** `9371f31`
 
-2. **Fix Locator::between** — ensure `biased_mid()` always returns strictly
-   between lo and hi. Enables the local edit fast path for all edits, not
-   just deletions.
+### Origin Index
+Added `m_origin_index` — per-replica sorted map (`unordered_map<uint16_t,
+map<uint32_t, Locator>>`) for O(log n) fragment lookup by origin timestamp.
+Expanded `apply_remote_edit_fast` to handle whole-fragment deletions using
+the origin index + edit_item. Falls back to full path for partial deletions
+(which require fragment splitting).
 
-3. **Phase 2B: Full apply_remote_edit optimization** — with origin index,
-   handle deletion runs + insertions via in-place tree mutations. Target:
-   O(log n) for all common remote edits.
+### Locator::between Fix
+Fixed `biased_mid()` to return `lo` (not `lo + 1 == hi`) when gap == 1.
+Fixed `between()` to descend to the next digit level when gap == 1 at the
+no-more-digits case. New stress tests verify strict ordering.
+
+**Known regression:** Prepend operations grow locator depth ~1 level per 2
+inserts (was ~1 level per 65536 inserts). This is a trade-off for
+correctness — the old behavior could produce locators equal to neighbors.
+Future work: reverse-biased allocation for prepend patterns.
+
+**Task 4 (local edit fast path expansion) reverted:** The cursor-built tree
+doesn't maintain correct locator ordering when insertions create new
+locators. Investigation needed into why the ordering breaks despite the
+Locator::between fix. The fast path remains deletion-only.
+
+### Benchmark Results
+
+| Benchmark | Phase 2 | Phase 3 | Improvement |
+|-----------|--------:|--------:|------------:|
+| 1K doc | 357 | **379** | +6% |
+| 10K doc | 232 | **257** | +11% |
+| 100K doc | 60 | **68** | +13% |
+| 3-client | 23 | **25** | +9% |
+
+### Cumulative Improvement (All Phases)
+
+| Benchmark | Original | Now | Total |
+|-----------|----------|-----|-------|
+| 1K doc | 203 | **379** | **1.9x** |
+| 10K doc | 121 | **257** | **2.1x** |
+| 100K doc | 27 | **68** | **2.5x** |
+| 1M doc | 22 | **66** | **3.0x** |
+| 3-client | 17 | **25** | **1.5x** |
+| Tombstone 50% | 8 | **18** | **2.3x** |
+| Tombstone 90% | Timeout | **14** | **fixed** |
+
+---
+
+## 7. Next Steps
+
+1. **Investigate local edit fast path ordering** — why does the cursor-built
+   tree not maintain locator ordering for insertions, despite the between()
+   fix? Likely an issue with how fragments are positioned relative to
+   pending/suffix after cursor operations.
+
+2. **Prepend-optimized Locator allocation** — reverse-biased `biased_mid`
+   for patterns where lo is close to DMIN. Prevents locator depth explosion
+   for prepend-heavy editing.
+
+3. **Partial deletion in fast path** — currently falls back to full O(n)
+   path for deletions that require splitting. Could use SumTree mutations
+   to split + delete in O(log n).
