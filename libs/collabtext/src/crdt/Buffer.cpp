@@ -173,6 +173,28 @@ uint32_t Buffer::deleted_rope_len() const {
     return m_deleted_text.len();
 }
 
+size_t Buffer::tombstone_count() const {
+    size_t count = 0;
+    m_fragment_tree.for_each([&](const Fragment& f) {
+        if (!f.visible) ++count;
+    });
+    return count;
+}
+
+size_t Buffer::fragment_count() const {
+    size_t count = 0;
+    m_fragment_tree.for_each([&](const Fragment&) { ++count; });
+    return count;
+}
+
+size_t Buffer::max_undo_depth() const {
+    return m_max_undo_depth;
+}
+
+void Buffer::set_max_undo_depth(size_t depth) {
+    m_max_undo_depth = depth;
+}
+
 // ---------------------------------------------------------------------------
 // Anchors
 // ---------------------------------------------------------------------------

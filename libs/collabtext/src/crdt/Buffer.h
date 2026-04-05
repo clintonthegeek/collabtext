@@ -78,6 +78,18 @@ public:
     /// For testing: deleted rope byte length.
     uint32_t deleted_rope_len() const;
 
+    /// Number of tombstone (invisible) fragments in the tree.
+    size_t tombstone_count() const;
+
+    /// Total fragment count (visible + tombstone).
+    size_t fragment_count() const;
+
+    /// Maximum undo stack depth. Oldest entries are discarded when exceeded.
+    size_t max_undo_depth() const;
+
+    /// Set the maximum undo stack depth.
+    void set_max_undo_depth(size_t depth);
+
 private:
     // ---- Fragment vector helpers ----
     // Operations modify fragments via a temporary vector, then rebuild the tree.
@@ -170,6 +182,7 @@ private:
     };
     std::vector<UndoEntry> m_undo_stack;
     size_t m_undo_cursor = 0;  // Points past the last undoable entry
+    size_t m_max_undo_depth = 1000;
 };
 
 } // namespace CollabText::Crdt
