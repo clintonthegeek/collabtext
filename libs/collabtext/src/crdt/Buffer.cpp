@@ -231,10 +231,39 @@ size_t Buffer::collect_garbage() {
         frags.end());
 
     size_t removed = original_count - frags.size();
-    if (removed > 0) {
+
+    // Coalesce adjacent fragments (may reduce count further)
+    size_t before_coalesce = frags.size();
+    coalesce_fragments(frags);
+    size_t coalesced = before_coalesce - frags.size();
+
+    if (removed > 0 || coalesced > 0) {
         set_fragments(std::move(frags));
     }
     return removed;
+}
+
+void Buffer::coalesce_fragments(std::vector<Fragment>& frags) {
+    if (frags.size() < 2) return;
+    size_t write = 0;
+    for (size_t read = 1; read < frags.size(); ++read) {
+        Fragment& prev = frags[write];
+        Fragment& curr = frags[read];
+        if (prev.visible == curr.visible &&
+            prev.locator == curr.locator &&
+            prev.origin.replica_id == curr.origin.replica_id &&
+            prev.origin.value + prev.length == curr.origin.value &&
+            prev.deletions == curr.deletions) {
+            // Coalesce: extend prev to cover curr
+            prev.byte_length += curr.byte_length;
+            prev.length += curr.length;
+        } else {
+            ++write;
+            if (write != read)
+                frags[write] = std::move(curr);
+        }
+    }
+    frags.resize(write + 1);
 }
 
 // ---------------------------------------------------------------------------

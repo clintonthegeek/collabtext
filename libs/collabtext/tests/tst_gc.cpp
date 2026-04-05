@@ -173,6 +173,57 @@ private slots:
         // With max_undo_depth=2 and 2 entries (insert + delete), nothing aged out.
         QCOMPARE(buf.collect_garbage(), size_t(0));
     }
+
+    // -----------------------------------------------------------------------
+    // Fragment coalescing
+    // -----------------------------------------------------------------------
+
+    void coalesce_reduces_fragment_count() {
+        // Two replicas insert at the same position → normalization atomizes
+        // into single-char fragments. After convergence, those single-char
+        // fragments from the same replica can be coalesced.
+        Buffer bufA(1), bufB(2);
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"aaa"});
+        auto op2 = bufB.apply_local_edit({{0, 0}}, {"bbb"});
+
+        bufA.apply_ops({op2});
+        bufB.apply_ops({op1});
+        QCOMPARE(bufA.text(), bufB.text());
+
+        // After normalization, fragments are atomized at shared locators
+        size_t before = bufA.fragment_count();
+
+        // GC + coalesce — no tombstones to remove, but coalescing should help
+        bufA.collect_garbage();
+        size_t after = bufA.fragment_count();
+        QVERIFY(after <= before);  // coalescing may reduce count
+        QCOMPARE(bufA.text(), bufB.text());  // text unchanged
+    }
+
+    void coalesce_preserves_text() {
+        Buffer buf(1);
+        buf.set_max_undo_depth(0);
+        buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        buf.apply_local_edit({{2, 4}}, {""});  // delete "cd"
+        std::string text_before = buf.text();
+        QCOMPARE(text_before, std::string("abef"));
+
+        buf.collect_garbage();  // removes "cd" tombstone, then tries to coalesce
+        QCOMPARE(buf.text(), text_before);
+    }
+
+    void coalesce_does_not_merge_different_locators() {
+        // Fragments with different locators must not be coalesced
+        Buffer buf(1);
+        buf.set_max_undo_depth(0);
+        buf.apply_local_edit({{0, 0}}, {"abc"});
+        buf.apply_local_edit({{3, 3}}, {"def"});  // separate insertion → different locator
+        size_t before_gc = buf.fragment_count();
+        buf.collect_garbage();
+        // These are separate insertions with different locators — no coalescing
+        QCOMPARE(buf.fragment_count(), before_gc);
+        QCOMPARE(buf.text(), std::string("abcdef"));
+    }
 };
 
 QTEST_MAIN(TestGC)

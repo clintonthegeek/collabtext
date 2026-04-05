@@ -176,6 +176,9 @@ private:
     /// Trim the undo stack to m_max_undo_depth entries.
     void trim_undo_stack();
 
+    /// Merge adjacent fragments that meet coalescing conditions.
+    static void coalesce_fragments(std::vector<Fragment>& frags);
+
     /// Deferred operations awaiting causal dependencies.
     OperationQueue m_deferred_queue;
     std::set<uint16_t> m_deferred_replicas;
