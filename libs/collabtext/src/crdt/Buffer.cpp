@@ -218,15 +218,23 @@ size_t Buffer::collect_garbage() {
     auto frags = get_fragments();
     size_t original_count = frags.size();
 
-    // Remove GC-eligible tombstones
+    // Remove GC-eligible tombstones.
+    // A tombstone is safe to GC when ALL its deletions are:
+    //   (a) from the local replica (remote deletions could be undone by
+    //       a remote undo we haven't seen yet), AND
+    //   (b) not in the local undo stack (local deletions could be undone).
+    // Tombstones with any remote deletion are kept until watermark-based
+    // GC confirms they're permanent (future Option D).
     frags.erase(
         std::remove_if(frags.begin(), frags.end(), [&](const Fragment& f) {
             if (f.visible) return false;  // not a tombstone
             for (const auto& del : f.deletions) {
+                if (del.replica_id != m_replica_id)
+                    return false;  // remote deletion — cannot guarantee permanence
                 if (protected_ids.count(origin_key(del)))
                     return false;  // protected by undo stack
             }
-            return true;  // all deletions are permanent — safe to remove
+            return true;  // all deletions are local + permanent — safe to remove
         }),
         frags.end());
 
