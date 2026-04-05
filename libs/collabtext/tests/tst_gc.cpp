@@ -97,6 +97,82 @@ private slots:
         QCOMPARE(buf.text(), text_before);
         QCOMPARE(buf.tombstone_count(), size_t(0));
     }
+
+    // -----------------------------------------------------------------------
+    // GC + Undo interaction
+    // -----------------------------------------------------------------------
+
+    void gc_protects_undoable_deletions() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abc"});
+        buf.apply_local_edit({{0, 3}}, {""});  // delete all
+        QCOMPARE(buf.text(), std::string(""));
+        QVERIFY(buf.tombstone_count() > 0);
+
+        // Tombstone should be protected (deletion_id is in undo stack)
+        QCOMPARE(buf.collect_garbage(), size_t(0));
+
+        // Undo the deletion — text comes back
+        buf.undo();
+        QCOMPARE(buf.text(), std::string("abc"));
+    }
+
+    void gc_after_undo_redo_cycle() {
+        Buffer buf(1);
+        buf.set_max_undo_depth(0);  // nothing protected
+        buf.apply_local_edit({{0, 0}}, {"abc"});
+        buf.apply_local_edit({{0, 3}}, {""});  // delete
+        buf.undo();  // restore
+        buf.redo();  // re-delete
+        QCOMPARE(buf.text(), std::string(""));
+
+        // All undo entries were trimmed (max_undo_depth=0), so GC is safe
+        size_t removed = buf.collect_garbage();
+        QVERIFY(removed > 0);
+        QCOMPARE(buf.tombstone_count(), size_t(0));
+        QCOMPARE(buf.text(), std::string(""));
+    }
+
+    void gc_partial_protection() {
+        // Two separate deletions: one protected, one not
+        Buffer buf(1);
+        buf.set_max_undo_depth(1);
+        buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        buf.apply_local_edit({{0, 3}}, {""});  // delete "abc" — undo entry 1
+        buf.apply_local_edit({{0, 3}}, {""});  // delete "def" — undo entry 2, pushes 1 out
+
+        QCOMPARE(buf.text(), std::string(""));
+
+        // "abc" tombstones: deletion_id from entry 1, which aged out → GC-eligible
+        // "def" tombstones: deletion_id from entry 2, still in stack → protected
+        size_t before = buf.tombstone_count();
+        size_t removed = buf.collect_garbage();
+        QVERIFY(removed > 0);
+        QVERIFY(removed < before);  // some but not all removed
+        QVERIFY(buf.tombstone_count() > 0);  // "def" tombstones remain
+        QCOMPARE(buf.text(), std::string(""));
+
+        // Undo the "def" deletion — "def" comes back
+        buf.undo();
+        QCOMPARE(buf.text(), std::string("def"));
+
+        // Nothing left to undo (entry 1 aged out)
+        auto op = buf.undo();
+        QVERIFY(!op.has_value());
+    }
+
+    void gc_with_multiple_deletions_on_same_fragment() {
+        Buffer buf(1);
+        buf.set_max_undo_depth(2);
+        buf.apply_local_edit({{0, 0}}, {"hello"});   // entry 0
+        buf.apply_local_edit({{0, 5}}, {""});         // entry 1: delete "hello"
+        buf.undo();                                    // undo delete
+        buf.redo();                                    // redo delete
+        QCOMPARE(buf.text(), std::string(""));
+
+        // With max_undo_depth=2 and 2 entries (insert + delete), nothing aged out.
+        QCOMPARE(buf.collect_garbage(), size_t(0));
+    }
 };
 
 QTEST_MAIN(TestGC)
