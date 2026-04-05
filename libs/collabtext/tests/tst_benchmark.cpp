@@ -782,6 +782,66 @@ private slots:
             }
         }
     }
+
+    void gc_effectiveness() {
+        qDebug() << "\n--- GC Effectiveness ---";
+
+        std::mt19937 rng(42);
+        Buffer buf(1);
+        buf.set_max_undo_depth(0);  // everything GC-eligible immediately
+        build_document(buf, 5000, rng, 100);
+
+        size_t frags_clean = buf.fragment_count();
+        qDebug().noquote() << QString("  Clean doc:   %1 fragments").arg(frags_clean);
+
+        create_tombstones(buf, 0.5, rng);
+        size_t frags_dirty = buf.fragment_count();
+        size_t tombstones = buf.tombstone_count();
+        qDebug().noquote() << QString("  After 50%% tombstones: %1 fragments (%2 tombstones)")
+            .arg(frags_dirty).arg(tombstones);
+
+        // Measure edit throughput BEFORE GC
+        auto t0 = Clock::now();
+        int ops_before = 0;
+        while (Clock::now() - t0 < std::chrono::milliseconds(500)) {
+            random_edit(buf, rng);
+            ++ops_before;
+        }
+        auto elapsed_before = Clock::now() - t0;
+        double ns_before = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed_before).count()
+                           / static_cast<double>(ops_before);
+
+        // Run GC
+        auto gc_start = Clock::now();
+        size_t removed = buf.collect_garbage();
+        auto gc_elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+            Clock::now() - gc_start).count();
+
+        size_t frags_after = buf.fragment_count();
+        qDebug().noquote() << QString("  After GC:    %1 fragments (removed %2, GC took %3 us)")
+            .arg(frags_after).arg(removed).arg(gc_elapsed);
+
+        // Measure edit throughput AFTER GC
+        auto t1 = Clock::now();
+        int ops_after = 0;
+        while (Clock::now() - t1 < std::chrono::milliseconds(500)) {
+            random_edit(buf, rng);
+            ++ops_after;
+        }
+        auto elapsed_after = Clock::now() - t1;
+        double ns_after = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed_after).count()
+                          / static_cast<double>(ops_after);
+
+        double speedup = ns_before / ns_after;
+        qDebug().noquote() << QString("  Before GC: %1 ns/op (%2 ops/sec)")
+            .arg(ns_before, 0, 'f', 0).arg(1e9 / ns_before, 0, 'f', 0);
+        qDebug().noquote() << QString("  After GC:  %1 ns/op (%2 ops/sec)")
+            .arg(ns_after, 0, 'f', 0).arg(1e9 / ns_after, 0, 'f', 0);
+        qDebug().noquote() << QString("  Speedup:   %1x").arg(speedup, 0, 'f', 1);
+
+        QVERIFY2(removed > 0, "GC should have removed tombstones");
+        QVERIFY2(frags_after < frags_dirty, "Fragment count should decrease after GC");
+    }
 };
 
 QTEST_MAIN(TestBenchmark)
