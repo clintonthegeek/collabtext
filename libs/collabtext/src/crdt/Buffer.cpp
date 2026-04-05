@@ -231,14 +231,61 @@ size_t Buffer::collect_garbage() {
         frags.end());
 
     size_t removed = original_count - frags.size();
-
-    // Coalesce adjacent fragments (may reduce count further)
-    size_t before_coalesce = frags.size();
-    coalesce_fragments(frags);
-    size_t coalesced = before_coalesce - frags.size();
-
-    if (removed > 0 || coalesced > 0) {
+    if (removed > 0) {
         set_fragments(std::move(frags));
+    }
+
+    // Pass 2: Coalesce adjacent fragments.  Coalesced fragments span
+    // multiple old entries, so we must extract text from the current
+    // (post-GC) ropes and provide it via new_texts.
+    auto frags2 = get_fragments();
+    size_t before_coalesce = frags2.size();
+    if (before_coalesce < 2) return removed;
+
+    // Extract text for each fragment from current ropes (O(n))
+    std::vector<std::string> texts(frags2.size());
+    {
+        uint32_t vis_off = 0, del_off = 0;
+        for (size_t i = 0; i < frags2.size(); ++i) {
+            const auto& f = frags2[i];
+            if (f.visible) {
+                texts[i] = m_visible_text.substr(vis_off, f.byte_length);
+                vis_off += f.byte_length;
+            } else {
+                texts[i] = m_deleted_text.substr(del_off, f.byte_length);
+                del_off += f.byte_length;
+            }
+        }
+    }
+
+    // Coalesce, concatenating text and registering merged text in new_texts
+    std::unordered_map<uint64_t, std::string> new_texts;
+    size_t write = 0;
+    for (size_t read = 1; read < frags2.size(); ++read) {
+        Fragment& prev = frags2[write];
+        Fragment& curr = frags2[read];
+        if (prev.visible == curr.visible &&
+            prev.locator == curr.locator &&
+            prev.origin.replica_id == curr.origin.replica_id &&
+            prev.origin.value + prev.length == curr.origin.value &&
+            prev.deletions == curr.deletions) {
+            texts[write] += texts[read];
+            new_texts[origin_key(prev.origin)] = texts[write];
+            prev.byte_length += curr.byte_length;
+            prev.length += curr.length;
+        } else {
+            ++write;
+            if (write != read) {
+                frags2[write] = std::move(curr);
+                texts[write] = std::move(texts[read]);
+            }
+        }
+    }
+    frags2.resize(write + 1);
+
+    size_t coalesced = before_coalesce - frags2.size();
+    if (coalesced > 0) {
+        set_fragments(std::move(frags2), new_texts);
     }
     return removed;
 }

@@ -1,7 +1,38 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include <random>
 
 using namespace CollabText::Crdt;
+
+static void check_invariants(const Buffer& buf, const char* context) {
+    auto frags = buf.fragments();
+    std::string text = buf.text();
+    if (buf.visible_length() != static_cast<uint32_t>(text.size()))
+        QFAIL(qPrintable(QString("INV-1 at %1").arg(context)));
+    uint32_t vis_sum = 0, del_sum = 0;
+    for (auto& f : frags) {
+        if (f.visible) vis_sum += f.byte_length;
+        else del_sum += f.byte_length;
+    }
+    if (vis_sum != buf.visible_length())
+        QFAIL(qPrintable(QString("INV-2 at %1").arg(context)));
+    for (size_t i = 1; i < frags.size(); ++i) {
+        auto cmp = frags[i].locator <=> frags[i-1].locator;
+        if (cmp < 0) QFAIL(qPrintable(QString("INV-4 at %1").arg(context)));
+        if (cmp == 0 && frags[i].origin <= frags[i-1].origin)
+            QFAIL(qPrintable(QString("INV-4 at %1").arg(context)));
+    }
+    for (size_t i = 0; i < frags.size(); ++i) {
+        if (frags[i].byte_length == 0 || frags[i].length == 0)
+            QFAIL(qPrintable(QString("INV-5 at %1").arg(context)));
+        if (frags[i].byte_length < frags[i].length)
+            QFAIL(qPrintable(QString("INV-7 at %1").arg(context)));
+    }
+    if (buf.visible_rope_len() != vis_sum)
+        QFAIL(qPrintable(QString("INV-8 at %1 vis").arg(context)));
+    if (buf.deleted_rope_len() != del_sum)
+        QFAIL(qPrintable(QString("INV-8 at %1 del").arg(context)));
+}
 
 class TestGC : public QObject {
     Q_OBJECT
@@ -223,6 +254,61 @@ private slots:
         // These are separate insertions with different locators — no coalescing
         QCOMPARE(buf.fragment_count(), before_gc);
         QCOMPARE(buf.text(), std::string("abcdef"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Stress tests
+    // -----------------------------------------------------------------------
+
+    void gc_preserves_invariants_stress() {
+        uint64_t seed = std::random_device{}();
+        qDebug() << "Seed:" << seed;
+        std::mt19937 rng(seed);
+
+        Buffer buf(1);
+        buf.set_max_undo_depth(20);
+
+        for (int i = 0; i < 200; ++i) {
+            std::string text = buf.text();
+            uint32_t len = static_cast<uint32_t>(text.size());
+            uint32_t start = 0, end = 0;
+            if (len > 0) {
+                std::vector<uint32_t> bounds = {0};
+                for (size_t b = 0; b < text.size(); ) {
+                    unsigned char c = static_cast<unsigned char>(text[b]);
+                    if (c < 0x80) b += 1;
+                    else if ((c & 0xE0) == 0xC0) b += 2;
+                    else if ((c & 0xF0) == 0xE0) b += 3;
+                    else b += 4;
+                    bounds.push_back(static_cast<uint32_t>(b));
+                }
+                size_t si = rng() % bounds.size();
+                start = bounds[si];
+                size_t ei = si + (rng() % (bounds.size() - si));
+                end = bounds[ei];
+            }
+            std::string replacement;
+            if (rng() % 3 != 0) {
+                int count = 1 + (rng() % 5);
+                for (int c = 0; c < count; ++c)
+                    replacement += static_cast<char>('a' + (rng() % 26));
+            }
+            buf.apply_local_edit({{start, end}}, {replacement});
+            check_invariants(buf, qPrintable(QString("edit_%1").arg(i)));
+
+            if (i % 25 == 0 && i > 0) {
+                buf.collect_garbage();
+                check_invariants(buf, qPrintable(QString("gc_%1").arg(i)));
+            }
+
+            if (rng() % 5 == 0) {
+                if (rng() % 2 == 0) buf.undo(); else buf.redo();
+                check_invariants(buf, qPrintable(QString("undo_redo_%1").arg(i)));
+            }
+        }
+
+        buf.collect_garbage();
+        check_invariants(buf, "final_gc");
     }
 };
 
