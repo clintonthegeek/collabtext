@@ -13,6 +13,7 @@ add_library(collabtext STATIC
     src/crdt/Locator.cpp
     src/crdt/UndoMap.cpp
     src/crdt/Buffer.cpp
+    src/crdt/NetworkSim.cpp
     include/collabtext/CollabDocument.h
     include/collabtext/SyncManager.h
 )
@@ -23,7 +24,7 @@ target_include_directories(collabtext
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-target_link_libraries(collabtext PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets)
+target_link_libraries(collabtext PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
 
 # Tests
 enable_testing()
