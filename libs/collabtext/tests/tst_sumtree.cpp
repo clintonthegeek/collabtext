@@ -655,6 +655,352 @@ private slots:
         for (int i = 0; i < 100; ++i)
             QCOMPARE(items[i].value, i);
     }
+
+    // ---- In-place mutation tests ----
+
+    void for_each_mut_basic() {
+        TestTree tree;
+        for (int i = 1; i <= 10; ++i)
+            tree.push_item({i});
+
+        // Double every value
+        tree.for_each_mut([](IntItem& item) {
+            item.value *= 2;
+        });
+
+        auto items = tree.items();
+        QCOMPARE(items.size(), 10u);
+        for (int i = 0; i < 10; ++i)
+            QCOMPARE(items[i].value, (i + 1) * 2);
+
+        // Verify summaries updated
+        QCOMPARE(tree.summary().count, 10);
+        QCOMPARE(tree.summary().sum, 110); // 2+4+6+...+20 = 110
+        QCOMPARE(tree.summary().max_value, 20);
+    }
+
+    void for_each_mut_copy_on_write() {
+        // Ensure COW: modifying a shared tree doesn't affect the original
+        TestTree tree;
+        for (int i = 1; i <= 10; ++i)
+            tree.push_item({i});
+
+        // Make a copy (shares structure)
+        TestTree copy = tree;
+
+        // Mutate the copy
+        copy.for_each_mut([](IntItem& item) {
+            item.value = 0;
+        });
+
+        // Original should be unchanged
+        auto orig_items = tree.items();
+        for (int i = 0; i < 10; ++i)
+            QCOMPARE(orig_items[i].value, i + 1);
+        QCOMPARE(tree.summary().sum, 55);
+
+        // Copy should be all zeros
+        QCOMPARE(copy.summary().sum, 0);
+    }
+
+    void recompute_all_summaries_basic() {
+        TestTree tree;
+        for (int i = 1; i <= 10; ++i)
+            tree.push_item({i});
+
+        // Recompute without changes should preserve summaries
+        tree.recompute_all_summaries();
+        QCOMPARE(tree.summary().count, 10);
+        QCOMPARE(tree.summary().sum, 55);
+        QCOMPARE(tree.summary().max_value, 10);
+    }
+
+    void edit_item_basic() {
+        TestTree tree;
+        for (int i = 1; i <= 10; ++i)
+            tree.push_item({i});
+
+        // Edit item at index 4 (value=5), change to 99
+        bool found = tree.edit_item(ItemCount{4}, [](IntItem& item) {
+            item.value = 99;
+        });
+        QVERIFY(found);
+
+        auto items = tree.items();
+        QCOMPARE(items[4].value, 99);
+        // Others unchanged
+        QCOMPARE(items[0].value, 1);
+        QCOMPARE(items[9].value, 10);
+
+        // Verify summaries: 1+2+3+4+99+6+7+8+9+10 = 149
+        QCOMPARE(tree.summary().count, 10);
+        QCOMPARE(tree.summary().sum, 149);
+        QCOMPARE(tree.summary().max_value, 99);
+    }
+
+    void edit_item_not_found() {
+        TestTree tree;
+        for (int i = 1; i <= 5; ++i)
+            tree.push_item({i});
+
+        // Seek past end
+        bool found = tree.edit_item(ItemCount{10}, [](IntItem& item) {
+            item.value = 99;
+        });
+        QVERIFY(!found);
+
+        // Tree unchanged
+        QCOMPARE(tree.summary().sum, 15);
+    }
+
+    void edit_item_by_sum() {
+        TestTree tree;
+        // Items: 3, 5, 2, 4 -> cumulative: 3, 8, 10, 14
+        tree.push_item({3});
+        tree.push_item({5});
+        tree.push_item({2});
+        tree.push_item({4});
+
+        // Edit item at cumulative sum 3 (Left bias = first item with end > 3 = item[1]=5)
+        bool found = tree.edit_item(ItemSum{3}, [](IntItem& item) {
+            item.value = 50;
+        });
+        QVERIFY(found);
+
+        auto items = tree.items();
+        QCOMPARE(items[0].value, 3);
+        QCOMPARE(items[1].value, 50);
+        QCOMPARE(items[2].value, 2);
+        QCOMPARE(items[3].value, 4);
+        QCOMPARE(tree.summary().sum, 59); // 3+50+2+4
+    }
+
+    void insert_item_basic() {
+        TestTree tree;
+        for (int i = 1; i <= 5; ++i)
+            tree.push_item({i * 10}); // 10, 20, 30, 40, 50
+
+        // Insert 25 at index 2 (before item with value 30)
+        tree.insert_item(ItemCount{2}, IntItem{25});
+
+        auto items = tree.items();
+        QCOMPARE(items.size(), 6u);
+        QCOMPARE(items[0].value, 10);
+        QCOMPARE(items[1].value, 20);
+        QCOMPARE(items[2].value, 25);
+        QCOMPARE(items[3].value, 30);
+        QCOMPARE(items[4].value, 40);
+        QCOMPARE(items[5].value, 50);
+
+        QCOMPARE(tree.summary().count, 6);
+        QCOMPARE(tree.summary().sum, 175); // 10+20+25+30+40+50
+    }
+
+    void insert_item_at_beginning() {
+        TestTree tree;
+        for (int i = 1; i <= 5; ++i)
+            tree.push_item({i * 10});
+
+        // Insert at index 0 (before everything)
+        tree.insert_item(ItemCount{0}, IntItem{5});
+
+        auto items = tree.items();
+        QCOMPARE(items.size(), 6u);
+        QCOMPARE(items[0].value, 5);
+        QCOMPARE(items[1].value, 10);
+    }
+
+    void insert_item_at_end() {
+        TestTree tree;
+        for (int i = 1; i <= 5; ++i)
+            tree.push_item({i * 10});
+
+        // Insert past end (appends)
+        tree.insert_item(ItemCount{5}, IntItem{60});
+
+        auto items = tree.items();
+        QCOMPARE(items.size(), 6u);
+        QCOMPARE(items[5].value, 60);
+    }
+
+    void insert_item_causes_splits() {
+        // With B=2 (MaxChildren=4), inserting 20+ items via insert_item
+        // should cause multiple splits
+        TestTree tree;
+
+        // Insert in reverse order to stress splitting
+        for (int i = 20; i >= 1; --i) {
+            tree.insert_item(ItemCount{0}, IntItem{i});
+        }
+
+        auto items = tree.items();
+        QCOMPARE(items.size(), 20u);
+        for (int i = 0; i < 20; ++i)
+            QCOMPARE(items[i].value, i + 1);
+
+        int expected_sum = 20 * 21 / 2; // 210
+        QCOMPARE(tree.summary().count, 20);
+        QCOMPARE(tree.summary().sum, expected_sum);
+        QCOMPARE(tree.summary().max_value, 20);
+    }
+
+    void insert_item_into_empty_tree() {
+        TestTree tree;
+        tree.insert_item(ItemCount{0}, IntItem{42});
+
+        QCOMPARE(tree.summary().count, 1);
+        QCOMPARE(tree.summary().sum, 42);
+        auto items = tree.items();
+        QCOMPARE(items[0].value, 42);
+    }
+
+    void remove_item_basic() {
+        TestTree tree;
+        for (int i = 1; i <= 10; ++i)
+            tree.push_item({i});
+
+        // Remove item at index 4 (value=5)
+        bool found = tree.remove_item<ItemCount>(ItemCount{4});
+        QVERIFY(found);
+
+        auto items = tree.items();
+        QCOMPARE(items.size(), 9u);
+        // 1,2,3,4,6,7,8,9,10
+        QCOMPARE(items[0].value, 1);
+        QCOMPARE(items[3].value, 4);
+        QCOMPARE(items[4].value, 6);
+        QCOMPARE(items[8].value, 10);
+
+        QCOMPARE(tree.summary().count, 9);
+        QCOMPARE(tree.summary().sum, 50); // 55 - 5
+    }
+
+    void remove_item_first() {
+        TestTree tree;
+        for (int i = 1; i <= 5; ++i)
+            tree.push_item({i});
+
+        bool found = tree.remove_item<ItemCount>(ItemCount{0});
+        QVERIFY(found);
+
+        auto items = tree.items();
+        QCOMPARE(items.size(), 4u);
+        QCOMPARE(items[0].value, 2);
+    }
+
+    void remove_item_last() {
+        TestTree tree;
+        for (int i = 1; i <= 5; ++i)
+            tree.push_item({i});
+
+        bool found = tree.remove_item<ItemCount>(ItemCount{4});
+        QVERIFY(found);
+
+        auto items = tree.items();
+        QCOMPARE(items.size(), 4u);
+        QCOMPARE(items[3].value, 4);
+    }
+
+    void remove_item_not_found() {
+        TestTree tree;
+        for (int i = 1; i <= 5; ++i)
+            tree.push_item({i});
+
+        bool found = tree.remove_item<ItemCount>(ItemCount{10});
+        QVERIFY(!found);
+        QCOMPARE(tree.summary().count, 5);
+    }
+
+    void remove_item_all() {
+        TestTree tree;
+        for (int i = 1; i <= 10; ++i)
+            tree.push_item({i});
+
+        // Remove all items one by one from the front
+        for (int i = 0; i < 10; ++i) {
+            bool found = tree.remove_item<ItemCount>(ItemCount{0});
+            QVERIFY(found);
+            QCOMPARE(tree.summary().count, 9 - i);
+        }
+
+        QVERIFY(tree.empty());
+        QCOMPARE(tree.summary().count, 0);
+        QCOMPARE(tree.summary().sum, 0);
+    }
+
+    void remove_item_all_from_back() {
+        TestTree tree;
+        for (int i = 1; i <= 10; ++i)
+            tree.push_item({i});
+
+        // Remove from the back each time
+        for (int remaining = 10; remaining > 0; --remaining) {
+            bool found = tree.remove_item<ItemCount>(ItemCount{remaining - 1});
+            QVERIFY(found);
+        }
+
+        QVERIFY(tree.empty());
+    }
+
+    void mixed_operations() {
+        TestTree tree;
+
+        // Build initial tree: 10, 20, 30, 40, 50
+        for (int i = 1; i <= 5; ++i)
+            tree.push_item({i * 10});
+
+        // Insert 25 at index 2 -> 10, 20, 25, 30, 40, 50
+        tree.insert_item(ItemCount{2}, IntItem{25});
+        QCOMPARE(tree.summary().count, 6);
+
+        // Edit item at index 3 (value=30) to 35 -> 10, 20, 25, 35, 40, 50
+        tree.edit_item(ItemCount{3}, [](IntItem& item) {
+            item.value = 35;
+        });
+
+        // Remove item at index 0 (value=10) -> 20, 25, 35, 40, 50
+        tree.remove_item<ItemCount>(ItemCount{0});
+
+        auto items = tree.items();
+        QCOMPARE(items.size(), 5u);
+        QCOMPARE(items[0].value, 20);
+        QCOMPARE(items[1].value, 25);
+        QCOMPARE(items[2].value, 35);
+        QCOMPARE(items[3].value, 40);
+        QCOMPARE(items[4].value, 50);
+
+        QCOMPARE(tree.summary().count, 5);
+        QCOMPARE(tree.summary().sum, 170); // 20+25+35+40+50
+        QCOMPARE(tree.summary().max_value, 50);
+    }
+
+    void insert_and_remove_stress() {
+        // Insert 50 items via insert_item, then remove them all
+        TestTree tree;
+        for (int i = 0; i < 50; ++i) {
+            // Insert at position i (append)
+            tree.insert_item(ItemCount{i}, IntItem{i + 1});
+        }
+
+        QCOMPARE(tree.summary().count, 50);
+
+        // Verify order
+        auto items = tree.items();
+        for (int i = 0; i < 50; ++i)
+            QCOMPARE(items[i].value, i + 1);
+
+        // Remove every other item from front
+        for (int i = 0; i < 25; ++i) {
+            tree.remove_item<ItemCount>(ItemCount{0});
+        }
+        QCOMPARE(tree.summary().count, 25);
+
+        // Remove remaining
+        for (int i = 0; i < 25; ++i) {
+            tree.remove_item<ItemCount>(ItemCount{0});
+        }
+        QVERIFY(tree.empty());
+    }
 };
 
 QTEST_MAIN(tst_sumtree)

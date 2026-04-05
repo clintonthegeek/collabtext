@@ -18,8 +18,8 @@
 
 namespace CollabText::Crdt {
 
-// Branching factor for the fragment tree. 2 for testing (aggressive splits).
-static constexpr std::size_t FRAG_TREE_B = 2;
+// Branching factor for the fragment tree. 6 gives MaxChildren=12.
+static constexpr std::size_t FRAG_TREE_B = 6;
 
 using FragmentTree = SumTree<Fragment, FRAG_TREE_B>;
 

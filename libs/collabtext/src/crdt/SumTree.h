@@ -513,6 +513,72 @@ public:
         for (auto& item : items) push_item(Item(item));
     }
 
+    // ---- In-place mutations ----
+
+    /// Mutable iteration: call fn on each item, updating summaries bottom-up.
+    template<typename F>
+    void for_each_mut(F&& fn) {
+        if (m_root) for_each_node_mut(ensure_mutable(m_root), fn);
+    }
+
+    /// Recompute all summaries bottom-up (items unchanged, just re-aggregate).
+    void recompute_all_summaries() {
+        if (m_root) recompute_all_summaries_recursive(ensure_mutable(m_root));
+    }
+
+    /// Seek to item at target position, call fn(item), propagate summaries up.
+    /// Returns true if item was found and edited.
+    template<typename D, typename F>
+        requires DimensionOf<D, Summary>
+    bool edit_item(const D& target, F&& fn, Bias bias = Bias::Left) {
+        if (!m_root) return false;
+        return edit_item_recursive<D>(ensure_mutable(m_root), target, fn, bias, D::zero());
+    }
+
+    /// Seek to position, insert item before the first item at that position.
+    /// Handles leaf splitting and root growth.
+    template<typename D>
+        requires DimensionOf<D, Summary>
+    void insert_item(const D& target, Item item, Bias bias = Bias::Left) {
+        if (!m_root) {
+            m_root = make_leaf();
+        }
+        auto overflow = insert_item_recursive<D>(ensure_mutable(m_root), target, std::move(item), bias, D::zero());
+        if (overflow) {
+            auto new_root = make_internal(m_root->height + 1);
+            auto& in = new_root->internal();
+            in.children[0] = std::move(m_root);
+            in.child_summaries[0] = in.children[0]->summary;
+            in.children[1] = std::move(overflow);
+            in.child_summaries[1] = in.children[1]->summary;
+            in.count = 2;
+            recompute_summary(*new_root);
+            m_root = std::move(new_root);
+        }
+    }
+
+    /// Seek to item at target position, remove it.
+    /// Handles empty-child cleanup and root shrinking.
+    /// Returns true if an item was found and removed.
+    template<typename D>
+        requires DimensionOf<D, Summary>
+    bool remove_item(const D& target, Bias bias = Bias::Left) {
+        if (!m_root) return false;
+        bool found = remove_item_recursive<D>(ensure_mutable(m_root), target, bias, D::zero());
+        if (!found) return false;
+        // Shrink root if needed
+        if (m_root->is_leaf()) {
+            if (m_root->leaf().count == 0) m_root = nullptr;
+        } else {
+            if (m_root->internal().count == 1) {
+                m_root = std::move(m_root->internal().children[0]);
+            } else if (m_root->internal().count == 0) {
+                m_root = nullptr;
+            }
+        }
+        return true;
+    }
+
 private:
     NodePtr m_root;
 
@@ -790,6 +856,352 @@ private:
                 for_each_node(in.children[i].get(), fn);
             }
         }
+    }
+
+    // ---- Mutable iteration ----
+
+    template<typename F>
+    static void for_each_node_mut(NodePtr& node, F& fn) {
+        ensure_mutable(node);
+        if (node->is_leaf()) {
+            auto& lf = node->leaf();
+            for (uint16_t i = 0; i < lf.count; ++i) {
+                fn(lf.items[i]);
+                lf.item_summaries[i] = lf.items[i].summary();
+            }
+            recompute_summary(*node);
+        } else {
+            auto& in = node->internal();
+            for (uint16_t i = 0; i < in.count; ++i) {
+                for_each_node_mut(in.children[i], fn);
+                in.child_summaries[i] = in.children[i]->summary;
+            }
+            recompute_summary(*node);
+        }
+    }
+
+    // ---- Recompute all summaries ----
+
+    static void recompute_all_summaries_recursive(NodePtr& node) {
+        ensure_mutable(node);
+        if (node->is_leaf()) {
+            auto& lf = node->leaf();
+            for (uint16_t i = 0; i < lf.count; ++i) {
+                lf.item_summaries[i] = lf.items[i].summary();
+            }
+            recompute_summary(*node);
+        } else {
+            auto& in = node->internal();
+            for (uint16_t i = 0; i < in.count; ++i) {
+                recompute_all_summaries_recursive(in.children[i]);
+                in.child_summaries[i] = in.children[i]->summary;
+            }
+            recompute_summary(*node);
+        }
+    }
+
+    // ---- edit_item recursive helper ----
+
+    template<typename D, typename F>
+    static bool edit_item_recursive(NodePtr& node, const D& target, F& fn,
+                                    Bias bias, D cumulative) {
+        ensure_mutable(node);
+        if (node->is_leaf()) {
+            auto& lf = node->leaf();
+            for (uint16_t i = 0; i < lf.count; ++i) {
+                D item_end = cumulative;
+                item_end.add_summary(lf.item_summaries[i]);
+                bool past = (bias == Bias::Left)
+                    ? (target < item_end)
+                    : !(item_end < target);
+                if (past) {
+                    fn(lf.items[i]);
+                    lf.item_summaries[i] = lf.items[i].summary();
+                    recompute_summary(*node);
+                    return true;
+                }
+                cumulative = item_end;
+            }
+            return false;
+        }
+
+        auto& in = node->internal();
+        for (uint16_t i = 0; i < in.count; ++i) {
+            D child_end = cumulative;
+            child_end.add_summary(in.child_summaries[i]);
+            bool past = (bias == Bias::Left)
+                ? (target < child_end)
+                : !(child_end < target);
+            if (past) {
+                bool found = edit_item_recursive<D>(
+                    ensure_mutable(in.children[i]), target, fn, bias, cumulative);
+                if (found) {
+                    in.child_summaries[i] = in.children[i]->summary;
+                    recompute_summary(*node);
+                }
+                return found;
+            }
+            cumulative = child_end;
+        }
+        return false;
+    }
+
+    // ---- insert_item recursive helper ----
+
+    /// Insert item at sought position. Returns overflow node if leaf/internal splits.
+    template<typename D>
+    static NodePtr insert_item_recursive(NodePtr& node, const D& target,
+                                         Item item, Bias bias, D cumulative) {
+        ensure_mutable(node);
+        if (node->is_leaf()) {
+            auto& lf = node->leaf();
+            // Find insertion index: first item where cumulative > target (Left)
+            // or cumulative >= target (Right)
+            uint16_t insert_idx = lf.count; // default: append
+            D pos = cumulative;
+            for (uint16_t i = 0; i < lf.count; ++i) {
+                D item_end = pos;
+                item_end.add_summary(lf.item_summaries[i]);
+                bool past = (bias == Bias::Left)
+                    ? (target < item_end)
+                    : !(item_end < target);
+                if (past) {
+                    insert_idx = i;
+                    break;
+                }
+                pos = item_end;
+            }
+
+            Summary item_sum = item.summary();
+
+            if (lf.count < MaxChildren) {
+                // Shift items right to make room
+                for (uint16_t i = lf.count; i > insert_idx; --i) {
+                    lf.items[i] = std::move(lf.items[i - 1]);
+                    lf.item_summaries[i] = lf.item_summaries[i - 1];
+                }
+                lf.items[insert_idx] = std::move(item);
+                lf.item_summaries[insert_idx] = item_sum;
+                lf.count++;
+                recompute_summary(*node);
+                return nullptr;
+            }
+
+            // Leaf is full — split using temp arrays
+            // Build a virtual array of MaxChildren+1 items
+            uint16_t total = static_cast<uint16_t>(MaxChildren + 1);
+            uint16_t mid = total / 2;
+
+            auto right = make_leaf();
+            auto& rlf = right->leaf();
+
+            // We need to distribute items [0..insert_idx) + new_item + [insert_idx..MaxChildren)
+            // Left gets [0..mid), right gets [mid..total)
+
+            // Helper: get item/summary at virtual index j
+            // j < insert_idx: original[j]
+            // j == insert_idx: new item
+            // j > insert_idx: original[j-1]
+
+            // Populate left half
+            uint16_t left_count = mid;
+            uint16_t right_count = total - mid;
+
+            // We'll rebuild lf in-place for the left, and populate rlf for right.
+            // First, save all items we need (since we're modifying lf in place).
+            // Actually, we can be clever: if insert_idx >= mid, left half is just
+            // lf.items[0..mid) unchanged, and we only need to handle the right half.
+            // But for simplicity and correctness, use temp arrays.
+
+            std::array<Item, MaxChildren + 1> tmp_items;
+            std::array<Summary, MaxChildren + 1> tmp_summaries;
+            for (uint16_t i = 0; i < insert_idx; ++i) {
+                tmp_items[i] = std::move(lf.items[i]);
+                tmp_summaries[i] = lf.item_summaries[i];
+            }
+            tmp_items[insert_idx] = std::move(item);
+            tmp_summaries[insert_idx] = item_sum;
+            for (uint16_t i = insert_idx; i < static_cast<uint16_t>(MaxChildren); ++i) {
+                tmp_items[i + 1] = std::move(lf.items[i]);
+                tmp_summaries[i + 1] = lf.item_summaries[i];
+            }
+
+            // Fill left (reuse current node)
+            for (uint16_t i = 0; i < left_count; ++i) {
+                lf.items[i] = std::move(tmp_items[i]);
+                lf.item_summaries[i] = tmp_summaries[i];
+            }
+            lf.count = left_count;
+
+            // Fill right
+            for (uint16_t i = 0; i < right_count; ++i) {
+                rlf.items[i] = std::move(tmp_items[mid + i]);
+                rlf.item_summaries[i] = tmp_summaries[mid + i];
+            }
+            rlf.count = right_count;
+
+            recompute_summary(*node);
+            recompute_summary(*right);
+            return right;
+        }
+
+        // Internal node — seek into the correct child
+        auto& in = node->internal();
+        uint16_t child_idx = in.count - 1; // default: last child
+        D child_start = cumulative; // cumulative position at start of chosen child
+        {
+            D pos = cumulative;
+            for (uint16_t i = 0; i < in.count; ++i) {
+                D child_end = pos;
+                child_end.add_summary(in.child_summaries[i]);
+                bool past = (bias == Bias::Left)
+                    ? (target < child_end)
+                    : !(child_end < target);
+                if (past) {
+                    child_idx = i;
+                    child_start = pos;
+                    break;
+                }
+                // If this is the last child and we didn't break,
+                // child_start should be pos (before advancing past it)
+                child_start = pos;
+                pos = child_end;
+            }
+        }
+
+        auto overflow = insert_item_recursive<D>(
+            ensure_mutable(in.children[child_idx]), target, std::move(item), bias, child_start);
+
+        in.child_summaries[child_idx] = in.children[child_idx]->summary;
+        recompute_summary(*node);
+
+        if (!overflow) return nullptr;
+
+        // Need to insert overflow after child_idx
+        uint16_t insert_at = child_idx + 1;
+
+        if (in.count < MaxChildren) {
+            // Shift children right
+            for (uint16_t i = in.count; i > insert_at; --i) {
+                in.children[i] = std::move(in.children[i - 1]);
+                in.child_summaries[i] = in.child_summaries[i - 1];
+            }
+            in.children[insert_at] = std::move(overflow);
+            in.child_summaries[insert_at] = in.children[insert_at]->summary;
+            in.count++;
+            recompute_summary(*node);
+            return nullptr;
+        }
+
+        // Internal node full — split
+        // Build virtual array of MaxChildren+1 children
+        uint16_t total = static_cast<uint16_t>(MaxChildren + 1);
+        uint16_t mid = total / 2;
+
+        std::array<NodePtr, MaxChildren + 1> tmp_children;
+        std::array<Summary, MaxChildren + 1> tmp_summaries;
+        for (uint16_t i = 0; i < insert_at; ++i) {
+            tmp_children[i] = std::move(in.children[i]);
+            tmp_summaries[i] = in.child_summaries[i];
+        }
+        tmp_children[insert_at] = std::move(overflow);
+        tmp_summaries[insert_at] = tmp_children[insert_at]->summary;
+        for (uint16_t i = insert_at; i < static_cast<uint16_t>(MaxChildren); ++i) {
+            tmp_children[i + 1] = std::move(in.children[i]);
+            tmp_summaries[i + 1] = in.child_summaries[i];
+        }
+
+        auto right = make_internal(node->height);
+        auto& rin = right->internal();
+
+        uint16_t left_count = mid;
+        uint16_t right_count = total - mid;
+
+        for (uint16_t i = 0; i < left_count; ++i) {
+            in.children[i] = std::move(tmp_children[i]);
+            in.child_summaries[i] = tmp_summaries[i];
+        }
+        // Clear any stale entries in left node
+        for (uint16_t i = left_count; i < static_cast<uint16_t>(MaxChildren); ++i) {
+            in.children[i] = nullptr;
+        }
+        in.count = left_count;
+
+        for (uint16_t i = 0; i < right_count; ++i) {
+            rin.children[i] = std::move(tmp_children[mid + i]);
+            rin.child_summaries[i] = tmp_summaries[mid + i];
+        }
+        rin.count = right_count;
+
+        recompute_summary(*node);
+        recompute_summary(*right);
+        return right;
+    }
+
+    // ---- remove_item recursive helper ----
+
+    /// Remove item at sought position. Returns true if found and removed.
+    template<typename D>
+    static bool remove_item_recursive(NodePtr& node, const D& target,
+                                      Bias bias, D cumulative) {
+        ensure_mutable(node);
+        if (node->is_leaf()) {
+            auto& lf = node->leaf();
+            for (uint16_t i = 0; i < lf.count; ++i) {
+                D item_end = cumulative;
+                item_end.add_summary(lf.item_summaries[i]);
+                bool past = (bias == Bias::Left)
+                    ? (target < item_end)
+                    : !(item_end < target);
+                if (past) {
+                    // Remove by shifting left
+                    for (uint16_t j = i; j + 1 < lf.count; ++j) {
+                        lf.items[j] = std::move(lf.items[j + 1]);
+                        lf.item_summaries[j] = lf.item_summaries[j + 1];
+                    }
+                    lf.count--;
+                    recompute_summary(*node);
+                    return true;
+                }
+                cumulative = item_end;
+            }
+            return false;
+        }
+
+        auto& in = node->internal();
+        for (uint16_t i = 0; i < in.count; ++i) {
+            D child_end = cumulative;
+            child_end.add_summary(in.child_summaries[i]);
+            bool past = (bias == Bias::Left)
+                ? (target < child_end)
+                : !(child_end < target);
+            if (past) {
+                bool found = remove_item_recursive<D>(
+                    ensure_mutable(in.children[i]), target, bias, cumulative);
+                if (!found) return false;
+
+                // Check if child became empty
+                bool child_empty = in.children[i]->is_leaf()
+                    ? (in.children[i]->leaf().count == 0)
+                    : (in.children[i]->internal().count == 0);
+
+                if (child_empty) {
+                    // Remove empty child by shifting left
+                    for (uint16_t j = i; j + 1 < in.count; ++j) {
+                        in.children[j] = std::move(in.children[j + 1]);
+                        in.child_summaries[j] = in.child_summaries[j + 1];
+                    }
+                    in.children[in.count - 1] = nullptr;
+                    in.count--;
+                } else {
+                    in.child_summaries[i] = in.children[i]->summary;
+                }
+                recompute_summary(*node);
+                return true;
+            }
+            cumulative = child_end;
+        }
+        return false;
     }
 };
 
