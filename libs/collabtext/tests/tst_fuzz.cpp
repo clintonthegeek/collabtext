@@ -253,6 +253,9 @@ private slots:
         std::mt19937 rng(seed);
 
         Buffer bufA(1), bufB(2), bufC(3);
+        bufA.set_max_undo_depth(30);
+        bufB.set_max_undo_depth(30);
+        bufC.set_max_undo_depth(30);
         std::vector<std::vector<Operation>> queues(3);
 
         auto broadcast = [&](const Operation& op, int source) {
@@ -273,13 +276,17 @@ private slots:
                 int r = rng() % 3;
                 auto op = random_edit(*bufs[r], rng);
                 broadcast(op, r);
-            } else if (action < 70) {
+            } else if (action < 65) {
                 // Undo/redo
                 int r = rng() % 3;
                 std::optional<Operation> op;
                 if (rng() % 2 == 0) op = bufs[r]->undo();
                 else op = bufs[r]->redo();
                 if (op) broadcast(*op, r);
+            } else if (action < 80) {
+                // GC on a random replica
+                int r = rng() % 3;
+                bufs[r]->collect_garbage();
             } else {
                 // Deliver some ops
                 int r = rng() % 3;
