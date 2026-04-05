@@ -3,7 +3,6 @@
 #include "crdt/Anchor.h"
 #include "crdt/Clock.h"
 #include "crdt/Fragment.h"
-#include "crdt/Rope.h"
 #include "crdt/InsertionIndex.h"
 #include "crdt/Locator.h"
 #include "crdt/OperationQueue.h"
@@ -72,10 +71,10 @@ public:
     /// For testing: access the internal fragment list.
     std::vector<Fragment> fragments() const;
 
-    /// For testing: visible rope byte length.
+    /// For testing: visible text byte length.
     uint32_t visible_rope_len() const;
 
-    /// For testing: deleted rope byte length.
+    /// For testing: deleted text byte length.
     uint32_t deleted_rope_len() const;
 
     /// Number of tombstone (invisible) fragments in the tree.
@@ -110,12 +109,6 @@ private:
     /// Rebuild the fragment tree from a vector of fragments (preserves order).
     void set_fragments(std::vector<Fragment>&& frags);
 
-    /// Rebuild the fragment tree, reconstructing ropes from old ropes via
-    /// origin-interval lookup.  new_texts maps origin_key -> text for
-    /// freshly-inserted fragments whose text is not in the old ropes.
-    void set_fragments(std::vector<Fragment>&& frags,
-                       const std::unordered_map<uint64_t, std::string>& new_texts);
-
     /// Insert a fragment in sorted position in the fragment list.
     void insert_fragment(std::vector<Fragment>& frags, Fragment frag) const;
 
@@ -128,12 +121,6 @@ private:
     /// Returns the index of the second half.
     size_t split_fragment_at(std::vector<Fragment>& frags,
                              size_t frag_idx, uint32_t offset_in_frag) const;
-
-    /// Extract a fragment's text from the visible or deleted rope.
-    /// Walks frags [0..frag_idx) to compute the byte offset, then extracts byte_length bytes.
-    /// IMPORTANT: Only valid when frags are in rope-matching order (before sort/normalize).
-    std::string extract_fragment_text(
-        const std::vector<Fragment>& frags, size_t frag_idx) const;
 
     /// Find a locator for a new fragment between frags[ins_frag-1] and
     /// the next distinct greater locator.
@@ -156,8 +143,7 @@ private:
     void enqueue_deferred(OperationEntry entry);
 
     /// Atomize multi-character fragments at shared locators.
-    void normalize_fragments(std::vector<Fragment>& frags,
-                             std::unordered_map<uint64_t, std::string>& new_texts) const;
+    void normalize_fragments(std::vector<Fragment>& frags) const;
 
     /// Apply deletion runs: batch-delete characters identified by Lamport
     /// timestamp ranges, splitting fragments as needed.
@@ -173,8 +159,6 @@ private:
 
     FragmentTree m_fragment_tree;
     InsertionIndex m_insertion_index;
-    Rope m_visible_text;
-    Rope m_deleted_text;
 
     /// Rebuild the insertion index from the current fragment list.
     void rebuild_insertion_index(const std::vector<Fragment>& frags);

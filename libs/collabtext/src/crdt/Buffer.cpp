@@ -27,110 +27,14 @@ static uint64_t origin_key(const Lamport& origin) {
 }
 
 void Buffer::set_fragments(std::vector<Fragment>&& frags) {
-    static const std::unordered_map<uint64_t, std::string> empty_map;
-    set_fragments(std::move(frags), empty_map);
-}
-
-void Buffer::set_fragments(std::vector<Fragment>&& frags,
-                           const std::unordered_map<uint64_t, std::string>& new_texts) {
-    // --- Step 1: Build old-entry table from the current fragment tree ---
-    struct OldEntry {
-        uint16_t replica_id;
-        uint32_t origin_value;
-        uint32_t char_length;
-        uint32_t byte_length;
-        bool     was_visible;
-        uint32_t rope_offset;   // byte offset in old_vis or old_del
-    };
-    std::vector<OldEntry> old_entries;
-
-    uint32_t vis_off = 0, del_off = 0;
-    m_fragment_tree.for_each([&](const Fragment& f) {
-        OldEntry e;
-        e.replica_id   = f.origin.replica_id;
-        e.origin_value = f.origin.value;
-        e.char_length  = f.length;
-        e.byte_length  = f.byte_length;
-        e.was_visible  = f.visible;
-        if (f.visible) {
-            e.rope_offset = vis_off;
-            vis_off += f.byte_length;
-        } else {
-            e.rope_offset = del_off;
-            del_off += f.byte_length;
-        }
-        old_entries.push_back(e);
-    });
-
-    // --- Step 2: Extract old rope text for random access ---
-    std::string old_vis = m_visible_text.to_string();
-    std::string old_del = m_deleted_text.to_string();
-
-    // --- Step 3: Set visibility, then reconstruct ropes ---
     for (auto& f : frags) {
         f.visible = f.compute_visible(m_undo_map);
+        assert(f.byte_length == f.text.size());
     }
-
-    Rope visible_rope, deleted_rope;
-    for (const auto& f : frags) {
-        std::string_view text;
-        std::string extracted;
-
-        // Search old entries for a parent whose origin range contains this fragment
-        bool found = false;
-        for (const auto& oe : old_entries) {
-            if (oe.replica_id == f.origin.replica_id &&
-                f.origin.value >= oe.origin_value &&
-                f.origin.value + f.length <= oe.origin_value + oe.char_length) {
-
-                // Compute character offset within the parent
-                uint32_t char_off = f.origin.value - oe.origin_value;
-
-                // Pick the right old rope text
-                const std::string& rope_text = oe.was_visible ? old_vis : old_del;
-
-                // Walk UTF-8 bytes from the parent's rope_offset,
-                // counting char_off characters to find byte_off
-                uint32_t byte_off = 0;
-                uint32_t pos = oe.rope_offset;
-                for (uint32_t c = 0; c < char_off; ++c) {
-                    unsigned char ch = static_cast<unsigned char>(rope_text[pos + byte_off]);
-                    if (ch < 0x80) byte_off += 1;
-                    else if ((ch & 0xE0) == 0xC0) byte_off += 2;
-                    else if ((ch & 0xF0) == 0xE0) byte_off += 3;
-                    else byte_off += 4;
-                }
-
-                extracted = rope_text.substr(oe.rope_offset + byte_off, f.byte_length);
-                text = extracted;
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            auto it = new_texts.find(origin_key(f.origin));
-            assert(it != new_texts.end() && "Fragment not in old tree and not in new_texts");
-            text = it->second;
-        }
-
-        if (f.visible) {
-            visible_rope.push_str(text);
-        } else {
-            deleted_rope.push_str(text);
-        }
-    }
-    m_visible_text = std::move(visible_rope);
-    m_deleted_text = std::move(deleted_rope);
-
     rebuild_insertion_index(frags);
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
     m_fragment_tree = std::move(tree);
-
-    // Rope consistency invariant (debug builds)
-    assert(m_visible_text.len() == m_fragment_tree.summary().visible_bytes);
-    assert(m_deleted_text.len() == m_fragment_tree.summary().deleted_bytes);
 }
 
 void Buffer::rebuild_insertion_index(const std::vector<Fragment>& frags) {
@@ -159,7 +63,12 @@ std::vector<Fragment> Buffer::fragments() const {
 // ---------------------------------------------------------------------------
 
 std::string Buffer::text() const {
-    return m_visible_text.to_string();
+    std::string result;
+    result.reserve(m_fragment_tree.summary().visible_bytes);
+    m_fragment_tree.for_each([&](const Fragment& f) {
+        if (f.visible) result += f.text;
+    });
+    return result;
 }
 
 uint32_t Buffer::visible_length() const {
@@ -167,11 +76,11 @@ uint32_t Buffer::visible_length() const {
 }
 
 uint32_t Buffer::visible_rope_len() const {
-    return m_visible_text.len();
+    return m_fragment_tree.summary().visible_bytes;
 }
 
 uint32_t Buffer::deleted_rope_len() const {
-    return m_deleted_text.len();
+    return m_fragment_tree.summary().deleted_bytes;
 }
 
 size_t Buffer::tombstone_count() const {
@@ -218,59 +127,11 @@ size_t Buffer::sweep_and_coalesce(Pred is_gc_eligible) {
         frags.end());
 
     size_t removed = original_count - frags.size();
-    if (removed > 0) {
+
+    coalesce_fragments(frags);
+
+    if (removed > 0 || frags.size() < original_count) {
         set_fragments(std::move(frags));
-    }
-
-    // Pass 2: Coalesce adjacent fragments.  Coalesced fragments span
-    // multiple old entries, so we must extract text from the current
-    // (post-GC) ropes and provide it via new_texts.
-    auto frags2 = get_fragments();
-    size_t before_coalesce = frags2.size();
-    if (before_coalesce < 2) return removed;
-
-    std::vector<std::string> texts(frags2.size());
-    {
-        uint32_t vis_off = 0, del_off = 0;
-        for (size_t i = 0; i < frags2.size(); ++i) {
-            const auto& f = frags2[i];
-            if (f.visible) {
-                texts[i] = m_visible_text.substr(vis_off, f.byte_length);
-                vis_off += f.byte_length;
-            } else {
-                texts[i] = m_deleted_text.substr(del_off, f.byte_length);
-                del_off += f.byte_length;
-            }
-        }
-    }
-
-    std::unordered_map<uint64_t, std::string> new_texts;
-    size_t write = 0;
-    for (size_t read = 1; read < frags2.size(); ++read) {
-        Fragment& prev = frags2[write];
-        Fragment& curr = frags2[read];
-        if (prev.visible == curr.visible &&
-            prev.locator == curr.locator &&
-            prev.origin.replica_id == curr.origin.replica_id &&
-            prev.origin.value + prev.length == curr.origin.value &&
-            prev.deletions == curr.deletions) {
-            texts[write] += texts[read];
-            new_texts[origin_key(prev.origin)] = texts[write];
-            prev.byte_length += curr.byte_length;
-            prev.length += curr.length;
-        } else {
-            ++write;
-            if (write != read) {
-                frags2[write] = std::move(curr);
-                texts[write] = std::move(texts[read]);
-            }
-        }
-    }
-    frags2.resize(write + 1);
-
-    size_t coalesced = before_coalesce - frags2.size();
-    if (coalesced > 0) {
-        set_fragments(std::move(frags2), new_texts);
     }
     return removed;
 }
@@ -327,7 +188,7 @@ void Buffer::coalesce_fragments(std::vector<Fragment>& frags) {
             prev.origin.replica_id == curr.origin.replica_id &&
             prev.origin.value + prev.length == curr.origin.value &&
             prev.deletions == curr.deletions) {
-            // Coalesce: extend prev to cover curr
+            prev.text += curr.text;
             prev.byte_length += curr.byte_length;
             prev.length += curr.length;
         } else {
@@ -372,51 +233,38 @@ static uint32_t chars_to_bytes(const std::string &s, uint32_t char_offset) {
 
 Anchor Buffer::anchor_at(uint32_t byte_offset, Bias bias) const {
     if (m_fragment_tree.empty()) return Anchor::min();
-
     uint32_t accumulated = 0;
-    uint32_t vis_rope_pos = 0;
     Anchor result = Anchor::max();
     bool found = false;
-
     m_fragment_tree.for_each([&](const Fragment& f) {
         if (found) return;
         if (!f.visible) return;
-
         if (accumulated + f.byte_length > byte_offset) {
             uint32_t offset_in_frag = byte_offset - accumulated;
-            std::string ftext = m_visible_text.substr(vis_rope_pos, f.byte_length);
-            uint32_t char_offset = count_chars(ftext, offset_in_frag);
+            uint32_t char_offset = count_chars(f.text, offset_in_frag);
             result = Anchor(f.origin.replica_id, f.origin.value + char_offset, bias);
             found = true;
             return;
         }
         accumulated += f.byte_length;
-        vis_rope_pos += f.byte_length;
     });
-
     return result;
 }
 
 uint32_t Buffer::resolve_anchor(const Anchor& anchor) const {
     if (anchor.is_min()) return 0;
     if (anchor.is_max()) return visible_length();
-
     uint32_t accumulated = 0;
-    uint32_t vis_rope_pos = 0;
     uint32_t result = visible_length();
     bool found = false;
-
     m_fragment_tree.for_each([&](const Fragment& f) {
         if (found) return;
-
         if (f.origin.replica_id == anchor.replica_id &&
             anchor.char_value >= f.origin.value &&
             anchor.char_value < f.origin.value + f.length) {
-
             if (f.visible) {
                 uint32_t char_offset = anchor.char_value - f.origin.value;
-                std::string ftext = m_visible_text.substr(vis_rope_pos, f.byte_length);
-                uint32_t byte_off = chars_to_bytes(ftext, char_offset);
+                uint32_t byte_off = chars_to_bytes(f.text, char_offset);
                 result = accumulated + byte_off;
             } else {
                 result = accumulated;
@@ -424,13 +272,10 @@ uint32_t Buffer::resolve_anchor(const Anchor& anchor) const {
             found = true;
             return;
         }
-
         if (f.visible) {
             accumulated += f.byte_length;
-            vis_rope_pos += f.byte_length;
         }
     });
-
     return result;
 }
 
@@ -525,58 +370,32 @@ size_t Buffer::split_fragment_at(std::vector<Fragment>& frags,
     assert(offset_in_frag > 0);
     assert(offset_in_frag < frags[frag_idx].byte_length);
 
-    std::string text = extract_fragment_text(frags, frag_idx);
     Fragment &orig = frags[frag_idx];
-    uint32_t char_count = count_utf8_chars(text, offset_in_frag);
+    uint32_t char_count = count_utf8_chars(orig.text, offset_in_frag);
 
     Fragment second;
     second.origin = Lamport(orig.origin.replica_id, orig.origin.value + char_count);
     second.locator = orig.locator;
-    second.byte_length = orig.byte_length - offset_in_frag;
+    second.text = orig.text.substr(offset_in_frag);
+    second.byte_length = static_cast<uint32_t>(second.text.size());
     second.length = orig.length - char_count;
     second.deletions = orig.deletions;
     second.visible = orig.visible;
 
+    orig.text.resize(offset_in_frag);
     orig.byte_length = offset_in_frag;
     orig.length = char_count;
 
-    Lamport saved_origin = orig.origin;
+    Lamport second_origin = second.origin;
     Locator saved_locator = orig.locator;
-
-    Lamport second_origin(saved_origin.replica_id, saved_origin.value + char_count);
     insert_fragment(frags, std::move(second));
 
     for (size_t i = frag_idx + 1; i < frags.size(); ++i) {
-        if (frags[i].origin == second_origin &&
-            frags[i].locator == saved_locator) {
+        if (frags[i].origin == second_origin && frags[i].locator == saved_locator)
             return i;
-        }
     }
-
     assert(false && "split_fragment_at: could not find second half after insert");
     return frag_idx + 1;
-}
-
-std::string Buffer::extract_fragment_text(
-    const std::vector<Fragment>& frags, size_t frag_idx) const
-{
-    const Fragment& target = frags[frag_idx];
-
-    uint32_t vis_offset = 0;
-    uint32_t del_offset = 0;
-    for (size_t i = 0; i < frag_idx; ++i) {
-        if (frags[i].visible) {
-            vis_offset += frags[i].byte_length;
-        } else {
-            del_offset += frags[i].byte_length;
-        }
-    }
-
-    if (target.visible) {
-        return m_visible_text.substr(vis_offset, target.byte_length);
-    } else {
-        return m_deleted_text.substr(del_offset, target.byte_length);
-    }
 }
 
 Locator Buffer::locator_between(const std::vector<Fragment>& frags,
@@ -599,13 +418,11 @@ Locator Buffer::locator_between(const std::vector<Fragment>& frags,
     return Locator::between(lo, hi);
 }
 
-void Buffer::normalize_fragments(std::vector<Fragment>& frags,
-                                  std::unordered_map<uint64_t, std::string>& new_texts) const {
+void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
     size_t i = 0;
     while (i < frags.size()) {
         size_t run_start = i;
         Locator loc = frags[i].locator;
-
         size_t run_end = i + 1;
         while (run_end < frags.size() && frags[run_end].locator == loc)
             run_end++;
@@ -626,42 +443,7 @@ void Buffer::normalize_fragments(std::vector<Fragment>& frags,
                 if (f.length == 1) {
                     extracted.push_back(std::move(f));
                 } else {
-                    // Extract text from old ropes via origin-interval-lookup
-                    std::string ftext;
-                    {
-                        uint32_t v_off = 0, d_off = 0;
-                        m_fragment_tree.for_each([&](const Fragment& old_f) {
-                            if (!ftext.empty()) return;
-                            if (old_f.origin.replica_id == f.origin.replica_id &&
-                                f.origin.value >= old_f.origin.value &&
-                                f.origin.value + f.length <= old_f.origin.value + old_f.length) {
-                                // Found parent
-                                uint32_t char_off = f.origin.value - old_f.origin.value;
-                                const Rope& rope = old_f.visible ? m_visible_text : m_deleted_text;
-                                uint32_t rope_off = old_f.visible ? v_off : d_off;
-                                // Walk UTF-8 to find byte offset
-                                std::string rope_text = rope.substr(rope_off, old_f.byte_length);
-                                uint32_t byte_off = 0;
-                                for (uint32_t c = 0; c < char_off; ++c) {
-                                    unsigned char ch = static_cast<unsigned char>(rope_text[byte_off]);
-                                    if (ch < 0x80) byte_off += 1;
-                                    else if ((ch & 0xE0) == 0xC0) byte_off += 2;
-                                    else if ((ch & 0xF0) == 0xE0) byte_off += 3;
-                                    else byte_off += 4;
-                                }
-                                ftext = rope_text.substr(byte_off, f.byte_length);
-                                return;
-                            }
-                            if (old_f.visible) v_off += old_f.byte_length;
-                            else d_off += old_f.byte_length;
-                        });
-                    }
-                    if (ftext.empty()) {
-                        // Fragment not found in old tree — check new_texts
-                        auto it = new_texts.find(origin_key(f.origin));
-                        assert(it != new_texts.end() && "Fragment not in old tree and not in new_texts (normalize)");
-                        ftext = it->second;
-                    }
+                    const std::string& ftext = f.text;
                     uint32_t byte_pos = 0;
                     for (uint32_t c = 0; c < f.length; ++c) {
                         uint32_t char_bytes = 1;
@@ -671,12 +453,10 @@ void Buffer::normalize_fragments(std::vector<Fragment>& frags,
                         else if (ch >= 0xC0) char_bytes = 2;
 
                         Lamport single_origin(f.origin.replica_id, f.origin.value + c);
-                        // Register atomized fragment text in new_texts for set_fragments
-                        new_texts[origin_key(single_origin)] = ftext.substr(byte_pos, char_bytes);
-
                         Fragment single;
                         single.origin = single_origin;
                         single.locator = f.locator;
+                        single.text = ftext.substr(byte_pos, char_bytes);
                         single.byte_length = char_bytes;
                         single.length = 1;
                         single.deletions = f.deletions;
@@ -700,7 +480,6 @@ void Buffer::normalize_fragments(std::vector<Fragment>& frags,
                 frags.begin() + static_cast<ptrdiff_t>(run_start),
                 std::make_move_iterator(extracted.begin()),
                 std::make_move_iterator(extracted.end()));
-
             i = run_start + extracted.size();
         } else {
             i = run_end;
@@ -754,17 +533,9 @@ Operation Buffer::apply_local_edit(
     // from the leftmost item.
     FragmentTree new_tree;
 
-    // Rope position trackers — byte positions in the OLD visible/deleted ropes.
-    uint32_t vis_rope_pos = 0;
-    uint32_t del_rope_pos = 0;
-
     // Pending: the remaining half of a fragment split at a range boundary.
     // Carried across ranges when a single old-tree fragment spans multiple ranges.
-    struct PendingFrag {
-        Fragment frag;
-        std::string text;
-    };
-    std::optional<PendingFrag> pending;
+    std::optional<Fragment> pending;
 
     // Helper: mark a fragment as deleted and record timestamps for op/undo.
     auto mark_deleted = [&](Fragment& f) {
@@ -777,13 +548,14 @@ Operation Buffer::apply_local_edit(
     };
 
     // Helper: split a fragment at a byte offset, returning {first_half, second_half}.
-    auto split_frag = [](const Fragment& f, uint32_t byte_off,
-                         const std::string& text) -> std::pair<Fragment, Fragment>
+    auto split_frag = [](const Fragment& f, uint32_t byte_off)
+        -> std::pair<Fragment, Fragment>
     {
-        uint32_t char_count = count_utf8_chars(text, byte_off);
+        uint32_t char_count = count_utf8_chars(f.text, byte_off);
         Fragment first;
         first.origin = f.origin;
         first.locator = f.locator;
+        first.text = f.text.substr(0, byte_off);
         first.byte_length = byte_off;
         first.length = char_count;
         first.deletions = f.deletions;
@@ -792,6 +564,7 @@ Operation Buffer::apply_local_edit(
         Fragment second;
         second.origin = Lamport(f.origin.replica_id, f.origin.value + char_count);
         second.locator = f.locator;
+        second.text = f.text.substr(byte_off);
         second.byte_length = f.byte_length - byte_off;
         second.length = f.length - char_count;
         second.deletions = f.deletions;
@@ -799,40 +572,26 @@ Operation Buffer::apply_local_edit(
         return {std::move(first), std::move(second)};
     };
 
-    // Helper: extract text for a cursor item from the old ropes and advance rope pos.
-    auto extract_cursor_text = [&]() -> std::string {
-        const Fragment& frag = *cursor.item();
-        std::string extracted_text;
-        if (frag.visible) {
-            extracted_text = m_visible_text.substr(vis_rope_pos, frag.byte_length);
-            vis_rope_pos += frag.byte_length;
-        } else {
-            extracted_text = m_deleted_text.substr(del_rope_pos, frag.byte_length);
-            del_rope_pos += frag.byte_length;
-        }
-        return extracted_text;
-    };
-
     // Helper: consume visible bytes from pending/cursor, pushing unchanged
     // fragments to new_tree. Used for inter-range gaps.
     auto consume_unchanged = [&](uint32_t vis_bytes) {
         // Consume from pending first
         while (pending && vis_bytes > 0) {
-            if (pending->frag.visible) {
-                uint32_t pv = pending->frag.byte_length;
+            if (pending->visible) {
+                uint32_t pv = pending->byte_length;
                 if (pv <= vis_bytes) {
-                    new_tree.push_item(std::move(pending->frag));
+                    new_tree.push_item(std::move(*pending));
                     vis_bytes -= pv;
                     pending.reset();
                 } else {
-                    auto [first, second] = split_frag(pending->frag, vis_bytes, pending->text);
+                    auto [first, second] = split_frag(*pending, vis_bytes);
                     new_tree.push_item(std::move(first));
-                    pending = PendingFrag{std::move(second), pending->text.substr(vis_bytes)};
+                    pending = std::move(second);
                     vis_bytes = 0;
                 }
             } else {
                 // Invisible — push, no visible bytes consumed
-                new_tree.push_item(std::move(pending->frag));
+                new_tree.push_item(std::move(*pending));
                 pending.reset();
             }
         }
@@ -840,22 +599,20 @@ Operation Buffer::apply_local_edit(
         while (vis_bytes > 0 && cursor.item()) {
             if (!cursor.item()->visible) {
                 Fragment frag = *cursor.item();
-                std::string text = extract_cursor_text();
                 new_tree.push_item(std::move(frag));
                 cursor.next();
                 continue;
             }
             Fragment frag = *cursor.item();
-            std::string text = extract_cursor_text();
             uint32_t fv = frag.byte_length;
             if (fv <= vis_bytes) {
                 new_tree.push_item(std::move(frag));
                 vis_bytes -= fv;
                 cursor.next();
             } else {
-                auto [first, second] = split_frag(frag, vis_bytes, text);
+                auto [first, second] = split_frag(frag, vis_bytes);
                 new_tree.push_item(std::move(first));
-                pending = PendingFrag{std::move(second), text.substr(vis_bytes)};
+                pending = std::move(second);
                 cursor.next();
                 vis_bytes = 0;
             }
@@ -866,22 +623,22 @@ Operation Buffer::apply_local_edit(
     auto consume_deleted = [&](uint32_t vis_bytes) {
         // From pending
         while (pending && vis_bytes > 0) {
-            if (pending->frag.visible) {
-                uint32_t pv = pending->frag.byte_length;
+            if (pending->visible) {
+                uint32_t pv = pending->byte_length;
                 if (pv <= vis_bytes) {
-                    mark_deleted(pending->frag);
-                    new_tree.push_item(std::move(pending->frag));
+                    mark_deleted(*pending);
+                    new_tree.push_item(std::move(*pending));
                     vis_bytes -= pv;
                     pending.reset();
                 } else {
-                    auto [first, second] = split_frag(pending->frag, vis_bytes, pending->text);
+                    auto [first, second] = split_frag(*pending, vis_bytes);
                     mark_deleted(first);
                     new_tree.push_item(std::move(first));
-                    pending = PendingFrag{std::move(second), pending->text.substr(vis_bytes)};
+                    pending = std::move(second);
                     vis_bytes = 0;
                 }
             } else {
-                new_tree.push_item(std::move(pending->frag));
+                new_tree.push_item(std::move(*pending));
                 pending.reset();
             }
         }
@@ -889,13 +646,11 @@ Operation Buffer::apply_local_edit(
         while (vis_bytes > 0 && cursor.item()) {
             if (!cursor.item()->visible) {
                 Fragment frag = *cursor.item();
-                std::string text = extract_cursor_text();
                 new_tree.push_item(std::move(frag));
                 cursor.next();
                 continue;
             }
             Fragment frag = *cursor.item();
-            std::string text = extract_cursor_text();
             uint32_t fv = frag.byte_length;
             if (fv <= vis_bytes) {
                 mark_deleted(frag);
@@ -903,10 +658,10 @@ Operation Buffer::apply_local_edit(
                 vis_bytes -= fv;
                 cursor.next();
             } else {
-                auto [first, second] = split_frag(frag, vis_bytes, text);
+                auto [first, second] = split_frag(frag, vis_bytes);
                 mark_deleted(first);
                 new_tree.push_item(std::move(first));
-                pending = PendingFrag{std::move(second), text.substr(vis_bytes)};
+                pending = std::move(second);
                 cursor.next();
                 vis_bytes = 0;
             }
@@ -918,18 +673,13 @@ Operation Buffer::apply_local_edit(
         uint32_t first_start = ranges[order[0]].first;
         // Use cursor.slice for O(log n) bulk copy
         new_tree.push_tree(cursor.slice({first_start}));
-        // Advance rope positions past the sliced prefix
-        auto sliced_summary = new_tree.summary();
-        vis_rope_pos = sliced_summary.visible_bytes;
-        del_rope_pos = sliced_summary.deleted_bytes;
         // Handle straddling fragment (cursor.position < first_start means
         // a visible fragment spans the boundary)
         if (cursor.item() && cursor.position().value < first_start) {
             uint32_t split_byte = first_start - cursor.position().value;
-            std::string text = extract_cursor_text();
-            auto [first, second] = split_frag(*cursor.item(), split_byte, text);
+            auto [first, second] = split_frag(*cursor.item(), split_byte);
             new_tree.push_item(std::move(first));
-            pending = PendingFrag{std::move(second), text.substr(split_byte)};
+            pending = std::move(second);
             cursor.next();
         }
     }
@@ -962,7 +712,7 @@ Operation Buffer::apply_local_edit(
             Locator imm_loc;
             bool has_imm = false;
             if (pending) {
-                imm_loc = pending->frag.locator;
+                imm_loc = pending->locator;
                 has_imm = true;
             } else if (cursor.item()) {
                 imm_loc = cursor.item()->locator;
@@ -998,16 +748,15 @@ Operation Buffer::apply_local_edit(
                 uint32_t reloc_length = 0;
 
                 if (pending) {
-                    reloc_origin = pending->frag.origin;
-                    reloc_length = pending->frag.length;
-                    pending->frag.locator = new_next_loc;
+                    reloc_origin = pending->origin;
+                    reloc_length = pending->length;
+                    pending->locator = new_next_loc;
                 } else if (cursor.item()) {
                     Fragment f = *cursor.item();
-                    std::string f_text = extract_cursor_text();
                     reloc_origin = f.origin;
                     reloc_length = f.length;
                     f.locator = new_next_loc;
-                    pending = PendingFrag{std::move(f), std::move(f_text)};
+                    pending = std::move(f);
                     cursor.next();
                 }
 
@@ -1035,7 +784,8 @@ Operation Buffer::apply_local_edit(
             for (uint32_t c = 1; c < char_count; ++c) m_clock.tick();
 
             Fragment frag(frag_origin, new_loc,
-                          static_cast<uint32_t>(replacement.size()), char_count);
+                          static_cast<uint32_t>(replacement.size()), char_count,
+                          replacement);
             frag.visible = true;
             new_tree.push_item(std::move(frag));
 
@@ -1057,7 +807,7 @@ Operation Buffer::apply_local_edit(
 
     // ---- Suffix ----
     if (pending) {
-        new_tree.push_item(std::move(pending->frag));
+        new_tree.push_item(std::move(*pending));
         pending.reset();
     }
     new_tree.push_tree(cursor.suffix());
@@ -1111,12 +861,8 @@ Operation Buffer::apply_local_edit(
         if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
         return a.origin < b.origin;
     });
-    std::unordered_map<uint64_t, std::string> new_texts;
-    for (auto& ins : op.inserted_fragments) {
-        new_texts[origin_key(ins.origin)] = ins.content;
-    }
-    normalize_fragments(frags, new_texts);
-    set_fragments(std::move(frags), new_texts);
+    normalize_fragments(frags);
+    set_fragments(std::move(frags));
 
     // Build run-length encoded deletion descriptors from the deleted timestamps.
     // Sort by (replica_id, value) then group contiguous runs.
@@ -1175,16 +921,14 @@ void Buffer::apply_deletion_runs(
                 } else {
                     // Need to split
                     if (char_off > 0) {
-                        std::string ftext = extract_fragment_text(frags, fi);
-                        uint32_t byte_off = char_to_byte_offset(ftext, char_off);
+                        uint32_t byte_off = char_to_byte_offset(frags[fi].text, char_off);
                         fi = split_fragment_at(frags, fi, byte_off);
                         // fi now points to the second half
                         to_del = std::min(remaining, frags[fi].length);
                     }
 
                     if (to_del < frags[fi].length) {
-                        std::string ftext = extract_fragment_text(frags, fi);
-                        uint32_t byte_off = char_to_byte_offset(ftext, to_del);
+                        uint32_t byte_off = char_to_byte_offset(frags[fi].text, to_del);
                         split_fragment_at(frags, fi, byte_off);
                         // fi still points to the first part (to be deleted)
                     }
@@ -1226,8 +970,7 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
 
             uint32_t char_off = target_ts.value - f.origin.value;
             if (char_off > 0) {
-                std::string ftext = extract_fragment_text(frags, fi);
-                uint32_t byte_off = char_to_byte_offset(ftext, char_off);
+                uint32_t byte_off = char_to_byte_offset(f.text, char_off);
                 fi = split_fragment_at(frags, fi, byte_off);
             }
 
@@ -1261,8 +1004,9 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
     // Apply insertions
     for (auto &ins : op.inserted_fragments) {
         Fragment frag(ins.origin, ins.locator,
-                      static_cast<uint32_t>(ins.content.size()), ins.length);
-        insert_fragment(frags, frag);
+                      static_cast<uint32_t>(ins.content.size()), ins.length,
+                      ins.content);
+        insert_fragment(frags, std::move(frag));
     }
 
     // Update clock and version
@@ -1279,12 +1023,8 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
 
     m_version.join(op.version);
 
-    std::unordered_map<uint64_t, std::string> new_texts;
-    for (auto &ins : op.inserted_fragments) {
-        new_texts[origin_key(ins.origin)] = ins.content;
-    }
-    normalize_fragments(frags, new_texts);
-    set_fragments(std::move(frags), new_texts);
+    normalize_fragments(frags);
+    set_fragments(std::move(frags));
     return true;
 }
 
