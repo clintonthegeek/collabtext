@@ -90,6 +90,10 @@ public:
     /// Set the maximum undo stack depth.
     void set_max_undo_depth(size_t depth);
 
+    /// Run garbage collection: remove tombstones whose deletions are no longer
+    /// in the undo stack. Returns the number of tombstones removed.
+    size_t collect_garbage();
+
 private:
     // ---- Fragment vector helpers ----
     // Operations modify fragments via a temporary vector, then rebuild the tree.
@@ -168,6 +172,9 @@ private:
 
     /// Rebuild the insertion index from the current fragment list.
     void rebuild_insertion_index(const std::vector<Fragment>& frags);
+
+    /// Trim the undo stack to m_max_undo_depth entries.
+    void trim_undo_stack();
 
     /// Deferred operations awaiting causal dependencies.
     OperationQueue m_deferred_queue;

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <numeric>
+#include <unordered_set>
 
 namespace CollabText::Crdt {
 
@@ -193,6 +194,47 @@ size_t Buffer::max_undo_depth() const {
 
 void Buffer::set_max_undo_depth(size_t depth) {
     m_max_undo_depth = depth;
+}
+
+void Buffer::trim_undo_stack() {
+    if (m_undo_stack.size() <= m_max_undo_depth) return;
+    size_t excess = m_undo_stack.size() - m_max_undo_depth;
+    m_undo_stack.erase(m_undo_stack.begin(),
+                       m_undo_stack.begin() + static_cast<ptrdiff_t>(excess));
+    if (excess > m_undo_cursor)
+        m_undo_cursor = 0;
+    else
+        m_undo_cursor -= excess;
+}
+
+size_t Buffer::collect_garbage() {
+    // Build protected set: deletion IDs still in the undo stack
+    std::unordered_set<uint64_t> protected_ids;
+    for (const auto& entry : m_undo_stack) {
+        if (entry.had_deletions)
+            protected_ids.insert(origin_key(entry.deletion_id));
+    }
+
+    auto frags = get_fragments();
+    size_t original_count = frags.size();
+
+    // Remove GC-eligible tombstones
+    frags.erase(
+        std::remove_if(frags.begin(), frags.end(), [&](const Fragment& f) {
+            if (f.visible) return false;  // not a tombstone
+            for (const auto& del : f.deletions) {
+                if (protected_ids.count(origin_key(del)))
+                    return false;  // protected by undo stack
+            }
+            return true;  // all deletions are permanent — safe to remove
+        }),
+        frags.end());
+
+    size_t removed = original_count - frags.size();
+    if (removed > 0) {
+        set_fragments(std::move(frags));
+    }
+    return removed;
 }
 
 // ---------------------------------------------------------------------------
@@ -931,6 +973,7 @@ Operation Buffer::apply_local_edit(
     m_undo_stack.resize(m_undo_cursor);
     m_undo_stack.push_back(std::move(undo_entry));
     m_undo_cursor = m_undo_stack.size();
+    trim_undo_stack();
 
     // ---- Apply deferred relocations, sort, normalize, rebuild ----
     auto frags = new_tree.items();
