@@ -94,6 +94,12 @@ public:
     /// in the undo stack. Returns the number of tombstones removed.
     size_t collect_garbage();
 
+    /// Watermark-based GC: remove tombstones whose deletions have ALL been
+    /// observed by the watermark (all replicas have seen them) AND are not
+    /// in the local undo stack.  Call when all replicas have synced past
+    /// the watermark.  Returns the number of tombstones removed.
+    size_t compact(const Global& watermark);
+
 private:
     // ---- Fragment vector helpers ----
     // Operations modify fragments via a temporary vector, then rebuild the tree.
@@ -178,6 +184,11 @@ private:
 
     /// Merge adjacent fragments that meet coalescing conditions.
     static void coalesce_fragments(std::vector<Fragment>& frags);
+
+    /// Shared implementation: remove tombstones matching predicate, then
+    /// coalesce.  The predicate returns true for GC-eligible fragments.
+    template<typename Pred>
+    size_t sweep_and_coalesce(Pred is_gc_eligible);
 
     /// Deferred operations awaiting causal dependencies.
     OperationQueue m_deferred_queue;

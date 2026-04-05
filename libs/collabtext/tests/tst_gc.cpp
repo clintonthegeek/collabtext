@@ -422,6 +422,201 @@ private slots:
         check_invariants(bufB, "final_B");
         QCOMPARE(bufA.text(), bufB.text());
     }
+
+    // -----------------------------------------------------------------------
+    // Watermark-based compact()
+    // -----------------------------------------------------------------------
+
+    void compact_removes_remote_tombstones() {
+        // collect_garbage() can't remove remote-deletion tombstones,
+        // but compact() can when the watermark covers the deletion.
+        Buffer bufA(1), bufB(2);
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        bufB.apply_ops({op1});
+
+        // B deletes "hello" — creates tombstone with B's deletion_id
+        auto op2 = bufB.apply_local_edit({{0, 5}}, {""});
+        bufA.apply_ops({op2});
+        QCOMPARE(bufA.text(), std::string(""));
+        QCOMPARE(bufB.text(), std::string(""));
+
+        // A's collect_garbage won't remove this — deletion is from B
+        bufA.set_max_undo_depth(0);
+        QCOMPARE(bufA.collect_garbage(), size_t(0));
+        QVERIFY(bufA.tombstone_count() > 0);
+
+        // But compact() with a watermark covering B's deletion WILL remove it
+        Global watermark;
+        watermark.join(bufA.version());
+        watermark.meet(bufB.version());
+        size_t removed = bufA.compact(watermark);
+        QVERIFY(removed > 0);
+        QCOMPARE(bufA.tombstone_count(), size_t(0));
+        QCOMPARE(bufA.text(), std::string(""));
+        check_invariants(bufA, "after_compact");
+    }
+
+    void compact_respects_undo_protection() {
+        Buffer bufA(1), bufB(2);
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        bufB.apply_ops({op1});
+
+        auto op2 = bufA.apply_local_edit({{0, 5}}, {""});
+        bufB.apply_ops({op2});
+
+        Global watermark;
+        watermark.join(bufA.version());
+        watermark.meet(bufB.version());
+
+        // A's deletion IS in A's undo stack — compact should NOT remove
+        QCOMPARE(bufA.compact(watermark), size_t(0));
+        QVERIFY(bufA.tombstone_count() > 0);
+
+        // Undo the deletion — text comes back
+        bufA.undo();
+        QCOMPARE(bufA.text(), std::string("hello"));
+    }
+
+    void compact_ignores_deletions_beyond_watermark() {
+        Buffer bufA(1), bufB(2);
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
+        bufB.apply_ops({op1});
+
+        // Snapshot watermark BEFORE B deletes
+        Global watermark;
+        watermark.join(bufA.version());
+        watermark.meet(bufB.version());
+
+        // B deletes — this deletion is NOT covered by the watermark
+        auto op2 = bufB.apply_local_edit({{0, 5}}, {""});
+        bufA.apply_ops({op2});
+        bufA.set_max_undo_depth(0);
+
+        // compact with old watermark should NOT remove (deletion > watermark)
+        QCOMPARE(bufA.compact(watermark), size_t(0));
+        QVERIFY(bufA.tombstone_count() > 0);
+    }
+
+    void compact_convergence_both_replicas() {
+        // Both replicas compact at the same watermark — convergence preserved
+        Buffer bufA(1), bufB(2);
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
+        bufB.apply_ops({op1});
+
+        auto op2 = bufA.apply_local_edit({{0, 5}}, {""});  // A deletes "hello"
+        auto op3 = bufB.apply_local_edit({{6, 11}}, {""});  // B deletes "world"
+        bufA.apply_ops({op3});
+        bufB.apply_ops({op2});
+        QCOMPARE(bufA.text(), bufB.text());
+
+        // Compute watermark = meet of both versions
+        Global watermark;
+        watermark.join(bufA.version());
+        watermark.meet(bufB.version());
+
+        // Both compact at the same watermark
+        bufA.set_max_undo_depth(0);
+        bufB.set_max_undo_depth(0);
+        bufA.compact(watermark);
+        bufB.compact(watermark);
+
+        QCOMPARE(bufA.text(), bufB.text());
+        QCOMPARE(bufA.tombstone_count(), size_t(0));
+        QCOMPARE(bufB.tombstone_count(), size_t(0));
+        check_invariants(bufA, "A_after_compact");
+        check_invariants(bufB, "B_after_compact");
+
+        // Further edits should work fine
+        auto op4 = bufA.apply_local_edit({{0, 0}}, {"new "});
+        bufB.apply_ops({op4});
+        QCOMPARE(bufA.text(), bufB.text());
+        check_invariants(bufA, "A_after_edit");
+        check_invariants(bufB, "B_after_edit");
+    }
+
+    void compact_convergence_fuzz() {
+        uint64_t seed = std::random_device{}();
+        qDebug() << "Seed:" << seed;
+        std::mt19937 rng(seed);
+
+        Buffer bufA(1), bufB(2);
+        bufA.set_max_undo_depth(10);
+        bufB.set_max_undo_depth(10);
+        std::vector<Operation> queueA, queueB;
+
+        auto random_boundary_edit = [&](Buffer& buf) -> Operation {
+            std::string text = buf.text();
+            uint32_t len = static_cast<uint32_t>(text.size());
+            uint32_t start = 0, end = 0;
+            if (len > 0) {
+                std::vector<uint32_t> bounds = {0};
+                for (size_t b = 0; b < text.size(); ) {
+                    unsigned char c = static_cast<unsigned char>(text[b]);
+                    if (c < 0x80) b += 1;
+                    else if ((c & 0xE0) == 0xC0) b += 2;
+                    else if ((c & 0xF0) == 0xE0) b += 3;
+                    else b += 4;
+                    bounds.push_back(static_cast<uint32_t>(b));
+                }
+                size_t si = rng() % bounds.size();
+                start = bounds[si];
+                size_t ei = si + (rng() % (bounds.size() - si));
+                end = bounds[ei];
+            }
+            std::string rep;
+            if (rng() % 2 == 0) {
+                int c = 1 + (rng() % 3);
+                for (int j = 0; j < c; ++j)
+                    rep += static_cast<char>('a' + (rng() % 26));
+            }
+            return buf.apply_local_edit({{start, end}}, {rep});
+        };
+
+        for (int i = 0; i < 80; ++i) {
+            int action = rng() % 100;
+            if (action < 40) {
+                auto op = random_boundary_edit(bufA);
+                queueB.push_back(op);
+            } else if (action < 80) {
+                auto op = random_boundary_edit(bufB);
+                queueA.push_back(op);
+            } else {
+                // Sync: drain all queues, then compact at shared watermark
+                if (!queueA.empty()) bufA.apply_ops(queueA);
+                if (!queueB.empty()) bufB.apply_ops(queueB);
+                queueA.clear();
+                queueB.clear();
+                for (int pass = 0; pass < 5; ++pass) {
+                    bufA.apply_ops({});
+                    bufB.apply_ops({});
+                }
+                Global watermark;
+                watermark.join(bufA.version());
+                watermark.meet(bufB.version());
+                bufA.compact(watermark);
+                bufB.compact(watermark);
+                check_invariants(bufA, qPrintable(QString("A_compact_%1").arg(i)));
+                check_invariants(bufB, qPrintable(QString("B_compact_%1").arg(i)));
+            }
+        }
+
+        // Final sync + compact
+        if (!queueA.empty()) bufA.apply_ops(queueA);
+        if (!queueB.empty()) bufB.apply_ops(queueB);
+        for (int pass = 0; pass < 20; ++pass) {
+            bufA.apply_ops({});
+            bufB.apply_ops({});
+        }
+        Global watermark;
+        watermark.join(bufA.version());
+        watermark.meet(bufB.version());
+        bufA.compact(watermark);
+        bufB.compact(watermark);
+
+        check_invariants(bufA, "final_A");
+        check_invariants(bufB, "final_B");
+        QCOMPARE(bufA.text(), bufB.text());
+    }
 };
 
 QTEST_MAIN(TestGC)

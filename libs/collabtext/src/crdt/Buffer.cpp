@@ -194,6 +194,7 @@ size_t Buffer::max_undo_depth() const {
 
 void Buffer::set_max_undo_depth(size_t depth) {
     m_max_undo_depth = depth;
+    trim_undo_stack();
 }
 
 void Buffer::trim_undo_stack() {
@@ -207,35 +208,13 @@ void Buffer::trim_undo_stack() {
         m_undo_cursor -= excess;
 }
 
-size_t Buffer::collect_garbage() {
-    // Build protected set: deletion IDs still in the undo stack
-    std::unordered_set<uint64_t> protected_ids;
-    for (const auto& entry : m_undo_stack) {
-        if (entry.had_deletions)
-            protected_ids.insert(origin_key(entry.deletion_id));
-    }
-
+template<typename Pred>
+size_t Buffer::sweep_and_coalesce(Pred is_gc_eligible) {
     auto frags = get_fragments();
     size_t original_count = frags.size();
 
-    // Remove GC-eligible tombstones.
-    // A tombstone is safe to GC when ALL its deletions are:
-    //   (a) from the local replica (remote deletions could be undone by
-    //       a remote undo we haven't seen yet), AND
-    //   (b) not in the local undo stack (local deletions could be undone).
-    // Tombstones with any remote deletion are kept until watermark-based
-    // GC confirms they're permanent (future Option D).
     frags.erase(
-        std::remove_if(frags.begin(), frags.end(), [&](const Fragment& f) {
-            if (f.visible) return false;  // not a tombstone
-            for (const auto& del : f.deletions) {
-                if (del.replica_id != m_replica_id)
-                    return false;  // remote deletion — cannot guarantee permanence
-                if (protected_ids.count(origin_key(del)))
-                    return false;  // protected by undo stack
-            }
-            return true;  // all deletions are local + permanent — safe to remove
-        }),
+        std::remove_if(frags.begin(), frags.end(), is_gc_eligible),
         frags.end());
 
     size_t removed = original_count - frags.size();
@@ -250,7 +229,6 @@ size_t Buffer::collect_garbage() {
     size_t before_coalesce = frags2.size();
     if (before_coalesce < 2) return removed;
 
-    // Extract text for each fragment from current ropes (O(n))
     std::vector<std::string> texts(frags2.size());
     {
         uint32_t vis_off = 0, del_off = 0;
@@ -266,7 +244,6 @@ size_t Buffer::collect_garbage() {
         }
     }
 
-    // Coalesce, concatenating text and registering merged text in new_texts
     std::unordered_map<uint64_t, std::string> new_texts;
     size_t write = 0;
     for (size_t read = 1; read < frags2.size(); ++read) {
@@ -296,6 +273,47 @@ size_t Buffer::collect_garbage() {
         set_fragments(std::move(frags2), new_texts);
     }
     return removed;
+}
+
+size_t Buffer::collect_garbage() {
+    // Build protected set: deletion IDs still in the undo stack
+    std::unordered_set<uint64_t> protected_ids;
+    for (const auto& entry : m_undo_stack) {
+        if (entry.had_deletions)
+            protected_ids.insert(origin_key(entry.deletion_id));
+    }
+
+    return sweep_and_coalesce([&](const Fragment& f) {
+        if (f.visible) return false;
+        for (const auto& del : f.deletions) {
+            if (del.replica_id != m_replica_id)
+                return false;  // remote deletion — needs watermark GC
+            if (protected_ids.count(origin_key(del)))
+                return false;  // protected by undo stack
+        }
+        return true;
+    });
+}
+
+size_t Buffer::compact(const Global& watermark) {
+    // Build local undo protection set
+    std::unordered_set<uint64_t> protected_ids;
+    for (const auto& entry : m_undo_stack) {
+        if (entry.had_deletions)
+            protected_ids.insert(origin_key(entry.deletion_id));
+    }
+
+    return sweep_and_coalesce([&](const Fragment& f) {
+        if (f.visible) return false;
+        if (f.deletions.empty()) return false;  // undone insertion, not a deletion tombstone
+        for (const auto& del : f.deletions) {
+            if (!watermark.observed(del))
+                return false;  // not all replicas have seen this deletion
+            if (protected_ids.count(origin_key(del)))
+                return false;  // locally undo-protected
+        }
+        return true;
+    });
 }
 
 void Buffer::coalesce_fragments(std::vector<Fragment>& frags) {
