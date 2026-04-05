@@ -14,6 +14,7 @@ static constexpr uint64_t DMAX = std::numeric_limits<uint64_t>::max();
 static uint64_t biased_mid(uint64_t lo, uint64_t hi) {
     assert(lo < hi);
     uint64_t gap = hi - lo;
+    if (gap == 1) return lo;  // No integer strictly between; caller must descend
     uint64_t step = gap >> 48;
     if (step == 0) step = 1;
     return lo + step;
@@ -103,14 +104,18 @@ Locator Locator::between(const Locator &lo, const Locator &hi) {
             }
         }
 
-        // lo has no more digits. (result..., ld) == lo prefix at this depth.
-        // Any value > ld and < hd works.
-        // But we also need < hi. If hi has more digits and hd is the digit,
-        // then we need result < hi. Since ld < hd, picking biased_mid(ld, hd) works
-        // as long as the result < hd (which biased_mid guarantees since it returns < hi
-        // when gap > 0).
-        uint64_t mid = biased_mid(ld, hd);
-        result.push_back(mid);
+        // lo has no more digits. (result..., ld) == lo at this depth.
+        // Need a value strictly > ld and strictly < hd.
+        if (ld + 1 < hd) {
+            uint64_t mid = biased_mid(ld, hd);
+            result.push_back(mid);
+            return Locator(result);
+        }
+        // ld + 1 == hd: no integer strictly between at this level.
+        // Descend below ld. Since lo has no more digits,
+        // (..., ld, X) where X > 0 is strictly > lo and strictly < hi.
+        result.push_back(ld);
+        result.push_back(biased_mid(DMIN, DMAX));
         return Locator(result);
     }
 

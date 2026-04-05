@@ -35,6 +35,27 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
     m_fragment_tree = std::move(tree);
+    rebuild_origin_index();
+}
+
+void Buffer::rebuild_origin_index() {
+    m_origin_index.clear();
+    m_fragment_tree.for_each([this](const Fragment& f) {
+        m_origin_index[f.origin.replica_id][f.origin.value] = f.locator;
+    });
+}
+
+std::optional<Locator> Buffer::origin_index_lookup(
+    uint16_t replica_id, uint32_t origin_value) const
+{
+    auto rep_it = m_origin_index.find(replica_id);
+    if (rep_it == m_origin_index.end()) return std::nullopt;
+    auto& rep_map = rep_it->second;
+    if (rep_map.empty()) return std::nullopt;
+    auto it = rep_map.upper_bound(origin_value);
+    if (it == rep_map.begin()) return std::nullopt;
+    --it;
+    return it->second;
 }
 
 void Buffer::rebuild_insertion_index(const std::vector<Fragment>& frags) {
@@ -829,14 +850,14 @@ Operation Buffer::apply_local_edit(
 
     // ---- Apply deferred relocations, sort, normalize, rebuild ----
     if (deferred_relocs.empty() && op.inserted_fragments.empty()) {
-        // Fast path: no relocations and no insertions (pure deletion edit).
-        // The cursor-built tree preserves correct (locator, origin) ordering
-        // because push_tree/push_item maintain order and no new locators were
-        // generated. We skip the O(n) extract-sort-rebuild.
+        // Fast path: no relocations. The cursor-built tree preserves correct
+        // (locator, origin) ordering because push_tree/push_item maintain
+        // order and insertions go to unique new locators. Skip O(n) sort.
         new_tree.for_each_mut([this](Fragment& f) {
             f.visible = f.compute_visible(m_undo_map);
         });
         m_fragment_tree = std::move(new_tree);
+        rebuild_origin_index();
     } else {
         // Full path: extract, relocate, sort, normalize, rebuild
         auto frags = new_tree.items();
@@ -959,11 +980,48 @@ void Buffer::apply_deletion_runs(
 
 bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
     if (!op.split_relocations.empty()) return false;
-    if (!op.deletion_runs.empty()) return false;
     for (auto &ins : op.inserted_fragments) {
         if (ins.length != 1) return false;
     }
 
+    // Apply deletion runs via origin index + edit_item
+    for (auto& run : op.deletion_runs) {
+        uint32_t remaining = run.count;
+        uint32_t next_val = run.start_value;
+
+        while (remaining > 0) {
+            auto loc_opt = origin_index_lookup(run.replica_id, next_val);
+            if (!loc_opt) break;
+
+            FragmentOrderDim target{*loc_opt, Lamport(run.replica_id, next_val)};
+            bool needs_fallback = false;
+
+            bool found = m_fragment_tree.edit_item<FragmentOrderDim>(
+                target,
+                [&](Fragment& f) {
+                    if (f.origin.replica_id != run.replica_id) { needs_fallback = true; return; }
+                    if (next_val < f.origin.value || next_val >= f.origin.value + f.length) {
+                        needs_fallback = true; return;
+                    }
+
+                    uint32_t char_off = next_val - f.origin.value;
+                    uint32_t avail = f.length - char_off;
+                    uint32_t to_del = std::min(remaining, avail);
+
+                    if (char_off == 0 && to_del == f.length) {
+                        f.deletions.push_back(op.deletion_id);
+                        next_val += to_del;
+                        remaining -= to_del;
+                    } else {
+                        needs_fallback = true; // Partial deletion needs split
+                    }
+                });
+
+            if (needs_fallback || !found) return false;
+        }
+    }
+
+    // Apply insertions
     for (auto &ins : op.inserted_fragments) {
         Fragment frag(ins.origin, ins.locator,
                       static_cast<uint32_t>(ins.content.size()), ins.length,
@@ -971,9 +1029,9 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
         frag.visible = true;
         FragmentOrderDim target{ins.locator, ins.origin};
         m_fragment_tree.insert_item<FragmentOrderDim>(target, std::move(frag));
+        m_origin_index[ins.origin.replica_id][ins.origin.value] = ins.locator;
     }
 
-    // Update clock and version (same as existing code)
     m_clock.observe(op.timestamp);
     m_version.observe(op.timestamp);
     m_clock.observe(op.deletion_id);

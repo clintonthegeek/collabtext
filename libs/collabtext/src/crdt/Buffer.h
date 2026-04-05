@@ -10,6 +10,7 @@
 #include "crdt/SumTree.h"
 #include "crdt/UndoMap.h"
 
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -162,6 +163,12 @@ private:
 
     FragmentTree m_fragment_tree;
     InsertionIndex m_insertion_index;
+
+    /// Per-replica origin index: maps (replica_id -> sorted map of origin_value -> Locator).
+    /// Used by the fast path to find a fragment's locator in O(log n).
+    std::unordered_map<uint16_t, std::map<uint32_t, Locator>> m_origin_index;
+    void rebuild_origin_index();
+    std::optional<Locator> origin_index_lookup(uint16_t replica_id, uint32_t origin_value) const;
 
     /// Rebuild the insertion index from the current fragment list.
     void rebuild_insertion_index(const std::vector<Fragment>& frags);

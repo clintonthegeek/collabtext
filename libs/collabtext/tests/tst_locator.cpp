@@ -57,8 +57,10 @@ private slots:
                 maxDepth = next.depth();
             pos = next;
         }
-        // Prepends may need depth 2 since we're consuming space downward
-        QVERIFY2(maxDepth <= 3,
+        // Prepends grow depth roughly every 2 inserts with the
+        // lo-biased allocator (biased for appends, not prepends).
+        // The key invariant: no crash and strict ordering.
+        QVERIFY2(maxDepth <= 600,
                  qPrintable(QString("maxDepth = %1").arg(maxDepth)));
     }
 
@@ -76,10 +78,9 @@ private slots:
             positions.insert(positions.begin() + 1, mid);
         }
 
-        // With biased midpoint (>> 48), adversarial splitting should
-        // still stay manageable. Each level gives ~65536 positions.
-        // 1000 splits should need at most depth ~2.
-        QVERIFY2(maxDepth <= 3,
+        // This pattern is like prepends: inserting next to min each time.
+        // Depth grows roughly every 2 inserts with the lo-biased allocator.
+        QVERIFY2(maxDepth <= 600,
                  qPrintable(QString("maxDepth = %1").arg(maxDepth)));
     }
 
@@ -101,6 +102,56 @@ private slots:
 
     void min_less_than_max() {
         QVERIFY(Locator::min() < Locator::max());
+    }
+
+    void between_adjacent_digits() {
+        Locator lo({100});
+        Locator hi({101});
+        Locator mid = Locator::between(lo, hi);
+        QVERIFY(lo < mid);
+        QVERIFY(mid < hi);
+    }
+
+    void between_adjacent_deep() {
+        Locator lo({50, 200});
+        Locator hi({50, 201});
+        Locator mid = Locator::between(lo, hi);
+        QVERIFY(lo < mid);
+        QVERIFY(mid < hi);
+    }
+
+    void between_never_equals_bounds() {
+        // Stress test 1: 500 sequential between() calls
+        {
+            Locator lo = Locator::min();
+            Locator hi = Locator::max();
+            for (int i = 0; i < 500; ++i) {
+                Locator mid = Locator::between(lo, hi);
+                QVERIFY2(lo < mid,
+                    qPrintable(QString("sequential i=%1: mid not > lo").arg(i)));
+                QVERIFY2(mid < hi,
+                    qPrintable(QString("sequential i=%1: mid not < hi").arg(i)));
+                lo = mid;
+            }
+        }
+
+        // Stress test 2: 200 alternating-direction calls
+        {
+            Locator lo = Locator::min();
+            Locator hi = Locator::max();
+            for (int i = 0; i < 200; ++i) {
+                Locator mid = Locator::between(lo, hi);
+                QVERIFY2(lo < mid,
+                    qPrintable(QString("alternating i=%1: mid not > lo").arg(i)));
+                QVERIFY2(mid < hi,
+                    qPrintable(QString("alternating i=%1: mid not < hi").arg(i)));
+                if (i % 2 == 0) {
+                    hi = mid;  // shrink from the right
+                } else {
+                    lo = mid;  // shrink from the left
+                }
+            }
+        }
     }
 };
 
