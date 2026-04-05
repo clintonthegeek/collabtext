@@ -984,40 +984,117 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
         if (ins.length != 1) return false;
     }
 
-    // Apply deletion runs via origin index + edit_item
+    // Apply deletion runs via origin index + in-place tree mutations.
+    // Handles partial deletions by splitting fragments in place.
     for (auto& run : op.deletion_runs) {
         uint32_t remaining = run.count;
         uint32_t next_val = run.start_value;
 
         while (remaining > 0) {
             auto loc_opt = origin_index_lookup(run.replica_id, next_val);
-            if (!loc_opt) break;
+            if (!loc_opt) return false;  // Can't find fragment, fall back
 
             FragmentOrderDim target{*loc_opt, Lamport(run.replica_id, next_val)};
-            bool needs_fallback = false;
+
+            // Capture fragment info for potential splitting
+            struct SplitInfo {
+                bool found = false;
+                bool needs_split_before = false;  // split at char_off > 0
+                bool needs_split_after = false;   // split after to_del < length
+                uint32_t char_off = 0;
+                uint32_t to_del = 0;
+                // Info for building the split-off fragments
+                Fragment before_frag;  // chars [0, char_off)
+                Fragment after_frag;   // chars [char_off + to_del, length)
+            };
+            SplitInfo info;
 
             bool found = m_fragment_tree.edit_item<FragmentOrderDim>(
                 target,
                 [&](Fragment& f) {
-                    if (f.origin.replica_id != run.replica_id) { needs_fallback = true; return; }
-                    if (next_val < f.origin.value || next_val >= f.origin.value + f.length) {
-                        needs_fallback = true; return;
-                    }
+                    if (f.origin.replica_id != run.replica_id) return;
+                    if (next_val < f.origin.value ||
+                        next_val >= f.origin.value + f.length) return;
 
-                    uint32_t char_off = next_val - f.origin.value;
-                    uint32_t avail = f.length - char_off;
-                    uint32_t to_del = std::min(remaining, avail);
+                    info.found = true;
+                    info.char_off = next_val - f.origin.value;
+                    uint32_t avail = f.length - info.char_off;
+                    info.to_del = std::min(remaining, avail);
 
-                    if (char_off == 0 && to_del == f.length) {
+                    if (info.char_off == 0 && info.to_del == f.length) {
+                        // Whole-fragment deletion — simple case
                         f.deletions.push_back(op.deletion_id);
-                        next_val += to_del;
-                        remaining -= to_del;
                     } else {
-                        needs_fallback = true; // Partial deletion needs split
+                        // Partial deletion — need to split.
+                        // Build the split-off fragments BEFORE modifying f.
+                        uint32_t byte_off_start = (info.char_off > 0)
+                            ? char_to_byte_offset(f.text, info.char_off) : 0;
+                        uint32_t byte_off_end = char_to_byte_offset(
+                            f.text, info.char_off + info.to_del);
+
+                        if (info.char_off > 0) {
+                            // "before" fragment: chars [0, char_off)
+                            info.needs_split_before = true;
+                            info.before_frag.origin = f.origin;
+                            info.before_frag.locator = f.locator;
+                            info.before_frag.text = f.text.substr(0, byte_off_start);
+                            info.before_frag.byte_length = byte_off_start;
+                            info.before_frag.length = info.char_off;
+                            info.before_frag.deletions = f.deletions;
+                            info.before_frag.visible = f.visible;
+                        }
+
+                        if (info.char_off + info.to_del < f.length) {
+                            // "after" fragment: chars [char_off + to_del, length)
+                            info.needs_split_after = true;
+                            uint32_t after_char_start = info.char_off + info.to_del;
+                            info.after_frag.origin = Lamport(
+                                f.origin.replica_id,
+                                f.origin.value + after_char_start);
+                            info.after_frag.locator = f.locator;
+                            info.after_frag.text = f.text.substr(byte_off_end);
+                            info.after_frag.byte_length = static_cast<uint32_t>(
+                                info.after_frag.text.size());
+                            info.after_frag.length = f.length - after_char_start;
+                            info.after_frag.deletions = f.deletions;
+                            info.after_frag.visible = f.visible;
+                        }
+
+                        // Mutate f in place to become the deleted middle part
+                        f.origin = Lamport(f.origin.replica_id,
+                                           f.origin.value + info.char_off);
+                        f.text = f.text.substr(byte_off_start,
+                                               byte_off_end - byte_off_start);
+                        f.byte_length = static_cast<uint32_t>(f.text.size());
+                        f.length = info.to_del;
+                        f.deletions.push_back(op.deletion_id);
                     }
+
+                    next_val += info.to_del;
+                    remaining -= info.to_del;
                 });
 
-            if (needs_fallback || !found) return false;
+            if (!found || !info.found) return false;
+
+            // Insert split-off fragments outside of edit_item
+            if (info.needs_split_before) {
+                FragmentOrderDim before_target{
+                    info.before_frag.locator, info.before_frag.origin};
+                m_fragment_tree.insert_item<FragmentOrderDim>(
+                    before_target, std::move(info.before_frag));
+                m_origin_index[info.before_frag.origin.replica_id]
+                              [info.before_frag.origin.value] =
+                    info.before_frag.locator;
+            }
+            if (info.needs_split_after) {
+                FragmentOrderDim after_target{
+                    info.after_frag.locator, info.after_frag.origin};
+                m_fragment_tree.insert_item<FragmentOrderDim>(
+                    after_target, std::move(info.after_frag));
+                m_origin_index[info.after_frag.origin.replica_id]
+                              [info.after_frag.origin.value] =
+                    info.after_frag.locator;
+            }
         }
     }
 
