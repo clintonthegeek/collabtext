@@ -29,7 +29,7 @@ Locator Locator::max() {
 }
 
 Locator Locator::between(const Locator &lo, const Locator &hi) {
-    assert(lo < hi);
+    assert(lo <= hi);  // Allow equal; algorithm descends to next digit level
 
     // Walk through digit levels. At each level we try to find a value
     // strictly between lo's digit and hi's digit at that level.

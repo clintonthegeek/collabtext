@@ -120,6 +120,20 @@ private slots:
         QVERIFY(mid < hi);
     }
 
+    void between_equal_arguments()
+    {
+        // When lo == hi, result is strictly greater than both
+        // (algorithm descends to a deeper digit level)
+        Locator a({500});
+        Locator mid = Locator::between(a, a);
+        QVERIFY(a < mid);
+
+        // Two-digit equal locator
+        Locator b({100, 200});
+        Locator mid2 = Locator::between(b, b);
+        QVERIFY(b < mid2);
+    }
+
     void between_never_equals_bounds() {
         // Stress test 1: 500 sequential between() calls
         {
