@@ -828,41 +828,53 @@ Operation Buffer::apply_local_edit(
     trim_undo_stack();
 
     // ---- Apply deferred relocations, sort, normalize, rebuild ----
-    auto frags = new_tree.items();
+    if (deferred_relocs.empty() && op.inserted_fragments.empty()) {
+        // Fast path: no relocations and no insertions (pure deletion edit).
+        // The cursor-built tree preserves correct (locator, origin) ordering
+        // because push_tree/push_item maintain order and no new locators were
+        // generated. We skip the O(n) extract-sort-rebuild.
+        new_tree.for_each_mut([this](Fragment& f) {
+            f.visible = f.compute_visible(m_undo_map);
+        });
+        m_fragment_tree = std::move(new_tree);
+    } else {
+        // Full path: extract, relocate, sort, normalize, rebuild
+        auto frags = new_tree.items();
 
-    // Apply deferred relocations using contiguous-origin walking (matching
-    // the remote side's relocation logic). Only relocate fragments that are
-    // contiguous in origin space from the split point AND share the old locator.
-    for (auto& dr : deferred_relocs) {
-        Lamport next_expected = dr.min_origin;
-        uint32_t total_chars = 0;
-        for (auto& f : frags) {
-            if (f.origin.replica_id != dr.min_origin.replica_id) continue;
-            if (f.origin.value != next_expected.value) continue;
-            // This fragment is contiguous — relocate if still at old locator
-            if (f.locator == dr.old_loc) {
-                f.locator = dr.new_loc;
+        // Apply deferred relocations using contiguous-origin walking (matching
+        // the remote side's relocation logic). Only relocate fragments that are
+        // contiguous in origin space from the split point AND share the old locator.
+        for (auto& dr : deferred_relocs) {
+            Lamport next_expected = dr.min_origin;
+            uint32_t total_chars = 0;
+            for (auto& f : frags) {
+                if (f.origin.replica_id != dr.min_origin.replica_id) continue;
+                if (f.origin.value != next_expected.value) continue;
+                // This fragment is contiguous — relocate if still at old locator
+                if (f.locator == dr.old_loc) {
+                    f.locator = dr.new_loc;
+                }
+                total_chars += f.length;
+                next_expected = Lamport(f.origin.replica_id,
+                                        f.origin.value + f.length);
             }
-            total_chars += f.length;
-            next_expected = Lamport(f.origin.replica_id,
-                                    f.origin.value + f.length);
-        }
-        // Update SplitRelocation to cover the full contiguous extent
-        for (auto& sr : op.split_relocations) {
-            if (sr.fragment_origin == dr.min_origin && sr.new_locator == dr.new_loc) {
-                sr.fragment_length = total_chars;
-                break;
+            // Update SplitRelocation to cover the full contiguous extent
+            for (auto& sr : op.split_relocations) {
+                if (sr.fragment_origin == dr.min_origin && sr.new_locator == dr.new_loc) {
+                    sr.fragment_length = total_chars;
+                    break;
+                }
             }
         }
+
+        // Re-sort by (locator, origin) to restore tree ordering invariant.
+        std::sort(frags.begin(), frags.end(), [](const Fragment& a, const Fragment& b) {
+            if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
+            return a.origin < b.origin;
+        });
+        normalize_fragments(frags);
+        set_fragments(std::move(frags));
     }
-
-    // Re-sort by (locator, origin) to restore tree ordering invariant.
-    std::sort(frags.begin(), frags.end(), [](const Fragment& a, const Fragment& b) {
-        if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
-        return a.origin < b.origin;
-    });
-    normalize_fragments(frags);
-    set_fragments(std::move(frags));
 
     // Build run-length encoded deletion descriptors from the deleted timestamps.
     // Sort by (replica_id, value) then group contiguous runs.
@@ -945,6 +957,36 @@ void Buffer::apply_deletion_runs(
     }
 }
 
+bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
+    if (!op.split_relocations.empty()) return false;
+    if (!op.deletion_runs.empty()) return false;
+    for (auto &ins : op.inserted_fragments) {
+        if (ins.length != 1) return false;
+    }
+
+    for (auto &ins : op.inserted_fragments) {
+        Fragment frag(ins.origin, ins.locator,
+                      static_cast<uint32_t>(ins.content.size()), ins.length,
+                      ins.content);
+        frag.visible = true;
+        FragmentOrderDim target{ins.locator, ins.origin};
+        m_fragment_tree.insert_item<FragmentOrderDim>(target, std::move(frag));
+    }
+
+    // Update clock and version (same as existing code)
+    m_clock.observe(op.timestamp);
+    m_version.observe(op.timestamp);
+    m_clock.observe(op.deletion_id);
+    m_version.observe(op.deletion_id);
+    for (auto &ins : op.inserted_fragments) {
+        Lamport last_ts(ins.origin.replica_id, ins.origin.value + ins.length - 1);
+        m_clock.observe(last_ts);
+        m_version.observe(last_ts);
+    }
+    m_version.join(op.version);
+    return true;
+}
+
 bool Buffer::apply_remote_edit(const EditOperation &op) {
     if (m_version.observed(op.timestamp))
         return true;
@@ -952,6 +994,11 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
     if (!m_version.observed_all(op.version))
         return false;
 
+    // Try fast path
+    if (apply_remote_edit_fast(op))
+        return true;
+
+    // Full path (existing code)
     auto frags = get_fragments();
 
     // Apply deletion runs
@@ -1047,8 +1094,9 @@ bool Buffer::apply_remote_undo(const UndoOperation &op) {
     m_version.observe(op.timestamp);
     m_version.join(op.version);
 
-    auto frags = get_fragments();
-    set_fragments(std::move(frags));
+    m_fragment_tree.for_each_mut([this](Fragment& f) {
+        f.visible = f.compute_visible(m_undo_map);
+    });
     return true;
 }
 
@@ -1159,8 +1207,9 @@ std::optional<Operation> Buffer::undo() {
         op.counts.push_back({entry.deletion_id, current + 1});
     }
 
-    auto frags = get_fragments();
-    set_fragments(std::move(frags));
+    m_fragment_tree.for_each_mut([this](Fragment& f) {
+        f.visible = f.compute_visible(m_undo_map);
+    });
 
     m_version.observe(op.timestamp);
     return op;
@@ -1191,8 +1240,9 @@ std::optional<Operation> Buffer::redo() {
         op.counts.push_back({entry.deletion_id, current + 1});
     }
 
-    auto frags = get_fragments();
-    set_fragments(std::move(frags));
+    m_fragment_tree.for_each_mut([this](Fragment& f) {
+        f.visible = f.compute_visible(m_undo_map);
+    });
 
     m_version.observe(op.timestamp);
     return op;

@@ -130,6 +130,9 @@ private:
     /// Apply a single remote EditOperation.
     bool apply_remote_edit(const EditOperation &op);
 
+    /// Fast path for apply_remote_edit: insertion-only single-char edits.
+    bool apply_remote_edit_fast(const EditOperation &op);
+
     /// Apply a single remote UndoOperation.
     bool apply_remote_undo(const UndoOperation &op);
 
