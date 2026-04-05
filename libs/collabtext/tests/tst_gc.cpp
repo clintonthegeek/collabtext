@@ -310,6 +310,118 @@ private slots:
         buf.collect_garbage();
         check_invariants(buf, "final_gc");
     }
+
+    // -----------------------------------------------------------------------
+    // Multi-replica convergence with GC
+    // -----------------------------------------------------------------------
+
+    void gc_preserves_convergence() {
+        Buffer bufA(1), bufB(2);
+
+        auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
+        bufB.apply_ops({op1});
+        QCOMPARE(bufA.text(), bufB.text());
+
+        auto op2 = bufA.apply_local_edit({{0, 5}}, {""});
+        auto op3 = bufB.apply_local_edit({{6, 11}}, {""});
+
+        bufA.apply_ops({op3});
+        bufB.apply_ops({op2});
+        QCOMPARE(bufA.text(), bufB.text());
+
+        bufA.set_max_undo_depth(0);
+        bufA.collect_garbage();
+
+        QCOMPARE(bufA.text(), bufB.text());
+        check_invariants(bufA, "after_gc_A");
+        check_invariants(bufB, "after_gc_B");
+
+        auto op4 = bufA.apply_local_edit({{0, 0}}, {"new "});
+        bufB.apply_ops({op4});
+        QCOMPARE(bufA.text(), bufB.text());
+    }
+
+    void gc_convergence_fuzz() {
+        uint64_t seed = std::random_device{}();
+        qDebug() << "Seed:" << seed;
+        std::mt19937 rng(seed);
+
+        Buffer bufA(1), bufB(2);
+        bufA.set_max_undo_depth(10);
+        bufB.set_max_undo_depth(10);
+        std::vector<Operation> queueA, queueB;
+
+        auto random_boundary_edit = [&](Buffer& buf) -> Operation {
+            std::string text = buf.text();
+            uint32_t len = static_cast<uint32_t>(text.size());
+            uint32_t start = 0, end = 0;
+            if (len > 0) {
+                std::vector<uint32_t> bounds = {0};
+                for (size_t b = 0; b < text.size(); ) {
+                    unsigned char c = static_cast<unsigned char>(text[b]);
+                    if (c < 0x80) b += 1;
+                    else if ((c & 0xE0) == 0xC0) b += 2;
+                    else if ((c & 0xF0) == 0xE0) b += 3;
+                    else b += 4;
+                    bounds.push_back(static_cast<uint32_t>(b));
+                }
+                size_t si = rng() % bounds.size();
+                start = bounds[si];
+                size_t ei = si + (rng() % (bounds.size() - si));
+                end = bounds[ei];
+            }
+            std::string rep;
+            if (rng() % 2 == 0) {
+                int c = 1 + (rng() % 3);
+                for (int j = 0; j < c; ++j)
+                    rep += static_cast<char>('a' + (rng() % 26));
+            }
+            return buf.apply_local_edit({{start, end}}, {rep});
+        };
+
+        for (int i = 0; i < 80; ++i) {
+            int action = rng() % 100;
+            if (action < 40) {
+                auto op = random_boundary_edit(bufA);
+                queueB.push_back(op);
+            } else if (action < 80) {
+                auto op = random_boundary_edit(bufB);
+                queueA.push_back(op);
+            } else if (action < 90) {
+                if (!queueA.empty()) {
+                    int n = 1 + (rng() % std::min<int>(3, static_cast<int>(queueA.size())));
+                    std::vector<Operation> batch(queueA.begin(), queueA.begin() + n);
+                    queueA.erase(queueA.begin(), queueA.begin() + n);
+                    bufA.apply_ops(batch);
+                }
+                if (!queueB.empty()) {
+                    int n = 1 + (rng() % std::min<int>(3, static_cast<int>(queueB.size())));
+                    std::vector<Operation> batch(queueB.begin(), queueB.begin() + n);
+                    queueB.erase(queueB.begin(), queueB.begin() + n);
+                    bufB.apply_ops(batch);
+                }
+            } else {
+                if (rng() % 2 == 0) bufA.collect_garbage();
+                else bufB.collect_garbage();
+            }
+
+            if (i % 20 == 0) {
+                check_invariants(bufA, qPrintable(QString("A_step_%1").arg(i)));
+                check_invariants(bufB, qPrintable(QString("B_step_%1").arg(i)));
+            }
+        }
+
+        if (!queueA.empty()) bufA.apply_ops(queueA);
+        if (!queueB.empty()) bufB.apply_ops(queueB);
+        for (int pass = 0; pass < 20; ++pass) {
+            bufA.apply_ops({});
+            bufB.apply_ops({});
+        }
+
+        check_invariants(bufA, "final_A");
+        check_invariants(bufB, "final_B");
+        QCOMPARE(bufA.text(), bufB.text());
+    }
 };
 
 QTEST_MAIN(TestGC)
