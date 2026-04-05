@@ -849,16 +849,38 @@ Operation Buffer::apply_local_edit(
     trim_undo_stack();
 
     // ---- Apply deferred relocations, sort, normalize, rebuild ----
-    if (deferred_relocs.empty() && op.inserted_fragments.empty()) {
-        // Fast path: no relocations. The cursor-built tree preserves correct
-        // (locator, origin) ordering because push_tree/push_item maintain
-        // order and insertions go to unique new locators. Skip O(n) sort.
-        new_tree.for_each_mut([this](Fragment& f) {
-            f.visible = f.compute_visible(m_undo_map);
-        });
-        m_fragment_tree = std::move(new_tree);
-        rebuild_origin_index();
-    } else {
+    bool used_fast_path = false;
+    if (deferred_relocs.empty()) {
+        // Fast path: no relocations. Verify ordering before committing.
+        bool ordering_ok = true;
+        {
+            Locator prev_loc;
+            Lamport prev_origin;
+            bool first = true;
+            new_tree.for_each([&](const Fragment& f) {
+                if (!first) {
+                    if (f.locator < prev_loc ||
+                        (f.locator == prev_loc && f.origin < prev_origin)) {
+                        ordering_ok = false;
+                    }
+                }
+                prev_loc = f.locator;
+                prev_origin = f.origin;
+                first = false;
+            });
+        }
+
+        if (ordering_ok) {
+            new_tree.for_each_mut([this](Fragment& f) {
+                f.visible = f.compute_visible(m_undo_map);
+            });
+            m_fragment_tree = std::move(new_tree);
+            rebuild_origin_index();
+            used_fast_path = true;
+        }
+    }
+
+    if (!used_fast_path) {
         // Full path: extract, relocate, sort, normalize, rebuild
         auto frags = new_tree.items();
 
