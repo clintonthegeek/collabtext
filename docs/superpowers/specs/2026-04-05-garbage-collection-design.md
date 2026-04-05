@@ -65,11 +65,19 @@ deleted-text rope.
 A tombstone fragment F is **GC-eligible** when:
 
 1. `F.visible == false` (it is a tombstone)
-2. For EVERY `D` in `F.deletions`: `D` does not appear as the
-   `deletion_id` of any entry in `m_undo_stack`
+2. For EVERY `D` in `F.deletions`:
+   a. `D.replica_id == m_replica_id` (the deletion is local), AND
+   b. `D` does not appear as the `deletion_id` of any entry in `m_undo_stack`
 
-In other words: every deletion that made F invisible is permanent (not
-undoable through any future sequence of undo/redo operations).
+In other words: every deletion that made F invisible is local AND permanent
+(not undoable through any future sequence of undo/redo operations).
+
+**Why remote deletions block GC:** A tombstone with a remote deletion_id
+could be revived by a remote undo. Additionally, future remote
+SplitRelocations may reference the tombstone's fragment position. Without
+watermark-based coordination (Option D), we cannot know if a remote
+replica might still reference the tombstone. Tombstones with any remote
+deletion are preserved until watermark-based GC confirms they're permanent.
 
 **Why we don't check F.origin:** Undoing the insertion of an already-deleted
 fragment makes it "more invisible" (insertion undone), not visible. The
