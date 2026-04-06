@@ -2,74 +2,63 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMainWindow>
-#include <QPlainTextEdit>
 #include <QStatusBar>
+#include <QTimer>
 #include <QVBoxLayout>
 
+#include "ui/CollabPlainTextEdit.h"
+#include "ui/MultiCursorController.h"
 #include <collabtext/CollabDocument.h>
+
+using namespace CollabText::Ui;
 
 class EditorPane : public QWidget {
     Q_OBJECT
 public:
-    EditorPane(const QString &label, uint16_t replicaId, QWidget *parent = nullptr)
+    EditorPane(const QString &label, uint16_t replicaId,
+               const QColor &cursorColor, QWidget *parent = nullptr)
         : QWidget(parent)
         , m_doc(new CollabText::CollabDocument(replicaId, this))
-        , m_edit(new QPlainTextEdit(this))
+        , m_edit(new CollabPlainTextEdit(this))
+        , m_color(cursorColor)
+        , m_label(label)
     {
         auto *layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
-        layout->addWidget(new QLabel(label, this));
+
+        auto *header = new QLabel(label, this);
+        header->setStyleSheet(QStringLiteral("font-weight: bold; color: %1;")
+                                  .arg(cursorColor.name()));
+        layout->addWidget(header);
         layout->addWidget(m_edit);
 
         m_edit->setDocument(m_doc->qtDocument());
         m_edit->setPlaceholderText(
-            QStringLiteral("Type here (%1)...").arg(label));
+            QStringLiteral("Type here... (Alt+Click for multi-cursor, "
+                           "Ctrl+Alt+Up/Down to add cursors)"));
 
-        connect(m_edit->document(), &QTextDocument::contentsChange,
-                this, &EditorPane::onContentsChange);
+        auto *statusLabel = new QLabel(this);
+        layout->addWidget(statusLabel);
+        connect(m_edit->multiCursorController(),
+                &MultiCursorController::cursorsChanged, this,
+                [this, statusLabel]() {
+                    int n = m_edit->multiCursorController()->cursorCount();
+                    statusLabel->setText(
+                        n > 1 ? QStringLiteral("%1 cursors").arg(n)
+                              : QStringLiteral("1 cursor"));
+                });
     }
 
+    CollabPlainTextEdit *editor() const { return m_edit; }
     CollabText::CollabDocument *collabDoc() const { return m_doc; }
-
-private slots:
-    void onContentsChange(int position, int charsRemoved, int charsAdded)
-    {
-        if (m_applying) return;
-        m_applying = true;
-
-        // Detect format-only changes (e.g. setBlockFormat after Enter)
-        if (charsRemoved > 0 && charsAdded > 0) {
-            QTextCursor cursor(m_edit->document());
-            cursor.setPosition(position);
-            cursor.setPosition(position + charsAdded, QTextCursor::KeepAnchor);
-            QString newContent = cursor.selectedText();
-            newContent.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
-            QString oldContent = QString::fromStdString(
-                m_doc->engine()->text()).mid(position, charsRemoved);
-            if (newContent == oldContent) {
-                m_applying = false;
-                return;
-            }
-        }
-
-        if (charsRemoved > 0)
-            m_doc->engine()->remove(position, charsRemoved);
-        if (charsAdded > 0) {
-            QTextCursor cursor(m_edit->document());
-            cursor.setPosition(position);
-            cursor.setPosition(position + charsAdded, QTextCursor::KeepAnchor);
-            QString inserted = cursor.selectedText();
-            inserted.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
-            m_doc->engine()->insert(position, inserted.toStdString());
-        }
-
-        m_applying = false;
-    }
+    QColor cursorColor() const { return m_color; }
+    QString label() const { return m_label; }
 
 private:
-    bool m_applying = false;
     CollabText::CollabDocument *m_doc;
-    QPlainTextEdit *m_edit;
+    CollabPlainTextEdit *m_edit;
+    QColor m_color;
+    QString m_label;
 };
 
 class MainWindow : public QMainWindow {
@@ -77,21 +66,52 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow()
     {
-        setWindowTitle(QStringLiteral("CollabText Test Harness"));
-        resize(900, 500);
+        setWindowTitle(QStringLiteral("CollabText — Multi-Cursor Demo"));
+        resize(1000, 600);
 
         auto *central = new QWidget(this);
         auto *layout = new QHBoxLayout(central);
 
-        auto *paneA = new EditorPane(QStringLiteral("Editor A"), 0, central);
-        auto *paneB = new EditorPane(QStringLiteral("Editor B"), 1, central);
-        layout->addWidget(paneA);
-        layout->addWidget(paneB);
+        m_paneA = new EditorPane(QStringLiteral("Alice"), 1,
+                                  QColor(65, 105, 225), central);
+        m_paneB = new EditorPane(QStringLiteral("Bob"), 2,
+                                  QColor(220, 20, 60), central);
+        layout->addWidget(m_paneA);
+        layout->addWidget(m_paneB);
         setCentralWidget(central);
 
+        auto *syncTimer = new QTimer(this);
+        connect(syncTimer, &QTimer::timeout, this, &MainWindow::syncRemoteCursors);
+        syncTimer->start(100);
+
         statusBar()->showMessage(
-            QStringLiteral("Native C++ CRDT engine. Sync not yet wired."));
+            QStringLiteral("Alt+Click: add cursor | Ctrl+Alt+Up/Down: column cursor | "
+                           "Escape: clear extra cursors"));
     }
+
+private slots:
+    void syncRemoteCursors() {
+        auto aliceCursor = m_paneA->editor()->textCursor();
+        RemoteCursor aliceRemote;
+        aliceRemote.position = aliceCursor.position();
+        aliceRemote.anchor = aliceCursor.anchor();
+        aliceRemote.color = m_paneA->cursorColor();
+        aliceRemote.label = m_paneA->label();
+
+        auto bobCursor = m_paneB->editor()->textCursor();
+        RemoteCursor bobRemote;
+        bobRemote.position = bobCursor.position();
+        bobRemote.anchor = bobCursor.anchor();
+        bobRemote.color = m_paneB->cursorColor();
+        bobRemote.label = m_paneB->label();
+
+        m_paneA->editor()->multiCursorController()->setRemoteCursors({bobRemote});
+        m_paneB->editor()->multiCursorController()->setRemoteCursors({aliceRemote});
+    }
+
+private:
+    EditorPane *m_paneA;
+    EditorPane *m_paneB;
 };
 
 int main(int argc, char *argv[])

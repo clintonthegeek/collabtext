@@ -7,3 +7,5 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets)
 
 qt_add_executable(collabtext-testapp main.cpp)
 target_link_libraries(collabtext-testapp PRIVATE Qt6::Widgets CollabText::CollabText)
+target_include_directories(collabtext-testapp PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../libs/collabtext/src)
