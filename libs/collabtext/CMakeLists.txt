@@ -13,6 +13,7 @@ add_library(collabtext STATIC
     src/crdt/Locator.cpp
     src/crdt/UndoMap.cpp
     src/crdt/Buffer.cpp
+    src/crdt/Serialization.cpp
     src/crdt/NetworkSim.cpp
     include/collabtext/CollabDocument.h
     include/collabtext/SyncManager.h
@@ -50,4 +51,5 @@ add_crdt_test(tst_rope_integration)
 add_crdt_test(tst_undomap)
 add_crdt_test(tst_benchmark)
 add_crdt_test(tst_gc)
+add_crdt_test(tst_serialization)
 add_crdt_test(tst_realistic)
