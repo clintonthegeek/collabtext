@@ -10,6 +10,7 @@ class CollabPlainTextEdit : public QPlainTextEdit {
 public:
     explicit CollabPlainTextEdit(QWidget *parent = nullptr);
 
+    void setDocument(QTextDocument *document);
     MultiCursorController *multiCursorController() const { return m_controller; }
 
 protected:

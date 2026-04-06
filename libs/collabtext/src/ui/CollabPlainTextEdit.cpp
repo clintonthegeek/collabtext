@@ -23,6 +23,15 @@ CollabPlainTextEdit::CollabPlainTextEdit(QWidget *parent)
     });
 }
 
+void CollabPlainTextEdit::setDocument(QTextDocument *document) {
+    QPlainTextEdit::setDocument(document);
+    // Recreate controller for the new document
+    delete m_controller;
+    m_controller = new MultiCursorController(document, this);
+    connect(m_controller, &MultiCursorController::cursorsChanged,
+            this, &CollabPlainTextEdit::syncExtraSelections);
+}
+
 void CollabPlainTextEdit::paintEvent(QPaintEvent *e) {
     QPlainTextEdit::paintEvent(e);
 
