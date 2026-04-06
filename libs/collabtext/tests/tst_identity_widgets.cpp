@@ -4,6 +4,7 @@
 #include "ui/AvatarWidget.h"
 #include "ui/PresenceIndicator.h"
 #include "ui/IdentityEditor.h"
+#include "ui/ParticipantListWidget.h"
 
 using namespace CollabText::Ui;
 
@@ -124,6 +125,70 @@ private slots:
         editor.setIdentity(id);
 
         QVERIFY(spy.count() >= 0);
+    }
+
+    // --- ParticipantListWidget tests ---
+
+    void participant_list_empty() {
+        ParticipantListWidget plw;
+        plw.updateParticipants({}, {});
+        plw.resize(200, 300);
+        QPixmap pm(200, 300);
+        plw.render(&pm);
+        QVERIFY(!pm.isNull());
+    }
+
+    void participant_list_two_participants() {
+        CollabText::Identity::Identity alice;
+        alice.identity_id = "alice-111111";
+        alice.display_name = "Alice";
+        alice.color = "#22c55e";
+
+        CollabText::Identity::Identity bob;
+        bob.identity_id = "bob-222222";
+        bob.display_name = "Bob";
+        bob.color = "#ef4444";
+
+        CollabText::Identity::Presence pA;
+        pA.replica_id = "rep-a";
+        pA.identity_id = "alice-111111";
+        pA.active = true;
+
+        CollabText::Identity::Presence pB;
+        pB.replica_id = "rep-b";
+        pB.identity_id = "bob-222222";
+        pB.active = true;
+
+        ParticipantListWidget plw;
+        plw.updateParticipants({alice, bob}, {pA, pB});
+        plw.resize(200, 300);
+        QPixmap pm(200, 300);
+        plw.render(&pm);
+        QVERIFY(!pm.isNull());
+    }
+
+    void participant_list_collapses_same_identity() {
+        CollabText::Identity::Identity alice;
+        alice.identity_id = "alice-111111";
+        alice.display_name = "Alice";
+        alice.color = "#22c55e";
+
+        CollabText::Identity::Presence p1;
+        p1.replica_id = "laptop";
+        p1.identity_id = "alice-111111";
+        p1.active = true;
+
+        CollabText::Identity::Presence p2;
+        p2.replica_id = "desktop";
+        p2.identity_id = "alice-111111";
+        p2.active = true;
+
+        ParticipantListWidget plw;
+        plw.updateParticipants({alice}, {p1, p2});
+        plw.resize(200, 300);
+        QPixmap pm(200, 300);
+        plw.render(&pm);
+        QVERIFY(!pm.isNull());
     }
 };
 
