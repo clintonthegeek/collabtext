@@ -7,17 +7,29 @@ namespace CollabText::Crdt {
 static constexpr uint64_t DMIN = 0;
 static constexpr uint64_t DMAX = std::numeric_limits<uint64_t>::max();
 
-// Bias: we want the midpoint to lean toward `hi` so that sequential
-// appends (where lo = last inserted, hi = max) consume space slowly.
-// The >> 48 trick: midpoint = lo + ((hi - lo) >> 48), but at least lo + 1.
-// This gives ~65536 appends per depth level before needing to go deeper.
+// Bias the midpoint to lean toward whichever bound is closer to a boundary.
+// For appends (lo near some value, hi = DMAX): lean toward lo, giving ~65536
+// appends per depth level. For prepends (lo = DMIN, hi near some value):
+// lean toward hi, giving the same ~65536 prepends per depth level.
 static uint64_t biased_mid(uint64_t lo, uint64_t hi) {
     assert(lo < hi);
     uint64_t gap = hi - lo;
     if (gap == 1) return lo;  // No integer strictly between; caller must descend
-    uint64_t step = gap >> 48;
-    if (step == 0) step = 1;
-    return lo + step;
+
+    // Detect prepend pattern: lo is close to DMIN relative to hi.
+    // Use hi-biased allocation (step from hi downward) to prevent
+    // depth explosion for prepend-heavy editing.
+    bool prepend_bias = (lo < (hi >> 1));
+
+    if (prepend_bias) {
+        uint64_t step = gap >> 48;
+        if (step == 0) step = 1;
+        return hi - step;
+    } else {
+        uint64_t step = gap >> 48;
+        if (step == 0) step = 1;
+        return lo + step;
+    }
 }
 
 Locator Locator::min() {

@@ -57,10 +57,9 @@ private slots:
                 maxDepth = next.depth();
             pos = next;
         }
-        // Prepends grow depth roughly every 2 inserts with the
-        // lo-biased allocator (biased for appends, not prepends).
-        // The key invariant: no crash and strict ordering.
-        QVERIFY2(maxDepth <= 600,
+        // With reverse-biased allocation for prepends, depth stays
+        // at 1 for ~65536 prepends (same as appends).
+        QVERIFY2(maxDepth <= 2,
                  qPrintable(QString("maxDepth = %1").arg(maxDepth)));
     }
 
@@ -79,8 +78,8 @@ private slots:
         }
 
         // This pattern is like prepends: inserting next to min each time.
-        // Depth grows roughly every 2 inserts with the lo-biased allocator.
-        QVERIFY2(maxDepth <= 600,
+        // With reverse-biased allocation, depth stays low.
+        QVERIFY2(maxDepth <= 2,
                  qPrintable(QString("maxDepth = %1").arg(maxDepth)));
     }
 
