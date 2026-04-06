@@ -24,6 +24,16 @@ static constexpr std::size_t FRAG_TREE_B = 6;
 
 using FragmentTree = SumTree<Fragment, FRAG_TREE_B>;
 
+/// Describes a change in the visible text between two versions.
+/// In the OLD visible text, the range [old_start, old_end) was replaced
+/// by new_text. An insertion has old_start == old_end. A deletion has
+/// empty new_text. A replacement has both.
+struct TextEdit {
+    uint32_t old_start = 0;   ///< Byte offset in the OLD visible text
+    uint32_t old_end = 0;     ///< Byte offset in the OLD visible text
+    std::string new_text;     ///< Replacement (empty for deletion)
+};
+
 class Buffer {
 public:
     explicit Buffer(uint16_t replica_id);
@@ -38,6 +48,18 @@ public:
 
     /// Apply remote operations (handles causal ordering, deduplication).
     void apply_ops(const std::vector<Operation> &ops);
+
+    /// Compute the edits (insertions, deletions, replacements) that
+    /// transformed the visible text from its state at `since` to the
+    /// current state. Each TextEdit is a surgical change in the old
+    /// text's coordinate space.
+    ///
+    /// Use this after apply_ops() to learn what changed:
+    ///   Global old_version = buf.version();
+    ///   buf.apply_ops(remote_ops);
+    ///   auto edits = buf.edits_since(old_version);
+    ///   // Apply edits surgically to the display
+    std::vector<TextEdit> edits_since(const Global &since) const;
 
     /// Undo the last local edit. Returns the operation to broadcast, or
     /// nullopt if there is nothing to undo.

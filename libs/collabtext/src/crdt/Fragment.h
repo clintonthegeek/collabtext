@@ -160,6 +160,18 @@ struct Fragment {
         return deletions.empty();
     }
 
+    /// Compute visibility at a specific version. Returns true if this
+    /// fragment existed and was visible as of that version.
+    bool was_visible_at(const Global &version, const UndoMap &undo_map) const {
+        if (!version.observed(origin)) return false;
+        if (undo_map.was_undone(origin, version)) return false;
+        for (auto &del : deletions) {
+            if (version.observed(del) && !undo_map.was_undone(del, version))
+                return false;
+        }
+        return true;
+    }
+
     /// Produce a FragmentSummary for this fragment.
     /// Uses the cached `visible` flag for byte accounting.
     FragmentSummary summary() const {

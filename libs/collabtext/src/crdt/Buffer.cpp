@@ -198,6 +198,98 @@ size_t Buffer::compact(const Global& watermark) {
     });
 }
 
+// ---------------------------------------------------------------------------
+// edits_since — compute visible text changes between two versions
+// ---------------------------------------------------------------------------
+
+std::vector<TextEdit> Buffer::edits_since(const Global &since) const {
+    std::vector<TextEdit> edits;
+
+    // Walk every fragment. Track two running byte offsets:
+    // old_pos: position in the visible text as of `since`
+    // new_pos: position in the current visible text
+    uint32_t old_pos = 0;
+    uint32_t new_pos = 0;
+
+    // Accumulator for merging adjacent edits into single TextEdits
+    // (e.g., a deleted fragment immediately followed by an inserted one
+    // is one replacement, not two separate edits)
+    bool in_edit = false;
+    uint32_t edit_old_start = 0;
+    uint32_t edit_old_end = 0;
+    uint32_t edit_new_start = 0;
+
+    auto flush_edit = [&]() {
+        if (!in_edit) return;
+        uint32_t edit_new_end = new_pos;
+        if (edit_old_start != edit_old_end || edit_new_start != edit_new_end) {
+            TextEdit e;
+            e.old_start = edit_old_start;
+            e.old_end = edit_old_end;
+            // Extract the new text from the current visible text
+            // by walking the tree again... OR we can accumulate it.
+            // For efficiency, we'll collect new text during the walk.
+        }
+        in_edit = false;
+    };
+
+    // Better approach: two-pass is complex. Single pass that accumulates
+    // new_text as we go.
+    edits.clear();
+    old_pos = 0;
+    new_pos = 0;
+    in_edit = false;
+    std::string edit_new_text;
+
+    auto flush = [&]() {
+        if (!in_edit) return;
+        if (edit_old_start != edit_old_end || !edit_new_text.empty()) {
+            edits.push_back({edit_old_start, edit_old_end, std::move(edit_new_text)});
+            edit_new_text.clear();
+        }
+        in_edit = false;
+    };
+
+    m_fragment_tree.for_each([&](const Fragment& f) {
+        bool was_vis = f.was_visible_at(since, m_undo_map);
+        bool is_vis = f.visible;
+
+        if (was_vis && is_vis) {
+            // Unchanged visible fragment — flush any pending edit, advance both
+            flush();
+            old_pos += f.byte_length;
+            new_pos += f.byte_length;
+        } else if (was_vis && !is_vis) {
+            // Was visible, now invisible — DELETION
+            if (!in_edit) {
+                in_edit = true;
+                edit_old_start = old_pos;
+                edit_old_end = old_pos;
+                edit_new_text.clear();
+            }
+            edit_old_end += f.byte_length;
+            old_pos += f.byte_length;
+        } else if (!was_vis && is_vis) {
+            // Was invisible (or didn't exist), now visible — INSERTION
+            if (!in_edit) {
+                in_edit = true;
+                edit_old_start = old_pos;
+                edit_old_end = old_pos;
+                edit_new_text.clear();
+            }
+            edit_new_text += f.text;
+            new_pos += f.byte_length;
+        } else {
+            // Invisible in both versions — skip, but don't flush
+            // (could be a tombstone between two changed fragments
+            // that form one logical edit)
+        }
+    });
+
+    flush();
+    return edits;
+}
+
 void Buffer::coalesce_fragments(std::vector<Fragment>& frags) {
     if (frags.size() < 2) return;
     size_t write = 0;
