@@ -18,6 +18,7 @@ add_library(collabtext STATIC
     src/crdt/NetworkSim.cpp
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
+    src/ui/AvatarWidget.cpp
     src/identity/Identity.cpp
     src/identity/PresenceManager.cpp
     src/identity/IdentityStore.cpp
@@ -70,3 +71,4 @@ add_crdt_test(tst_identity_json)
 add_crdt_test(tst_identity_store)
 add_crdt_test(tst_identity_projector)
 add_crdt_test(tst_presence_manager)
+add_crdt_test(tst_identity_widgets)
