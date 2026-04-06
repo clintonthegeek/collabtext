@@ -11,34 +11,59 @@
 #include <QTextCursor>
 #include <QPlainTextDocumentLayout>
 
+#include <chrono>
+#include <ctime>
+
 #include "crdt/Buffer.h"
 #include "crdt/FileSync.h"
 #include "ui/CollabPlainTextEdit.h"
 #include "ui/MultiCursorController.h"
+#include "ui/ParticipantListWidget.h"
+
+#include "collabtext/Identity.h"
+#include "collabtext/IdentityStore.h"
+#include "collabtext/PresenceManager.h"
+#include "collabtext/IdentityProjector.h"
 
 using namespace CollabText::Crdt;
 using namespace CollabText::Ui;
+using namespace CollabText::Identity;
 
-/// A single editor pane with its own CRDT Buffer and FileSync.
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+static std::string now_iso8601() {
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+    gmtime_r(&time_t, &tm);
+    char buf[32];
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm);
+    return buf;
+}
+
+/// A single editor pane with its own CRDT Buffer, FileSync, and identity.
 ///
 /// Integration pattern (following y-codemirror6 binding):
-/// - Local edits: QTextDocument contentsChange → Buffer::apply_local_edit
-/// - Remote edits: Buffer::apply_ops → edits_since() → surgical QTextCursor ops
+/// - Local edits: QTextDocument contentsChange -> Buffer::apply_local_edit
+/// - Remote edits: Buffer::apply_ops -> edits_since() -> surgical QTextCursor ops
 /// - No full document replacement. Ever.
 class EditorPane : public QWidget {
     Q_OBJECT
 public:
-    EditorPane(const QString &label, uint16_t replicaId,
-               const QString &replicaName,
+    EditorPane(const Identity &identity, uint16_t replicaId,
+               const std::string &replicaName,
                const std::filesystem::path &sharedFolder,
-               const QColor &cursorColor, QWidget *parent = nullptr)
+               QWidget *parent = nullptr)
         : QWidget(parent)
+        , m_identity(identity)
+        , m_replicaName(replicaName)
         , m_buffer(replicaId)
-        , m_sync(m_buffer, sharedFolder, replicaName.toStdString())
+        , m_sync(m_buffer, sharedFolder, replicaName)
+        , m_presence(sharedFolder, replicaName, identity.identity_id)
         , m_edit(new CollabPlainTextEdit(this))
         , m_qtDoc(new QTextDocument(this))
-        , m_color(cursorColor)
-        , m_label(label)
     {
         m_qtDoc->setDocumentLayout(new QPlainTextDocumentLayout(m_qtDoc));
         m_qtDoc->setUndoRedoEnabled(false);
@@ -47,9 +72,10 @@ public:
         auto *layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
 
-        auto *header = new QLabel(label, this);
+        QColor headerColor(QString::fromStdString(identity.color));
+        auto *header = new QLabel(QString::fromStdString(identity.display_name), this);
         header->setStyleSheet(QStringLiteral("font-weight: bold; color: %1;")
-                                  .arg(cursorColor.name()));
+                                  .arg(headerColor.name()));
         layout->addWidget(header);
         layout->addWidget(m_edit);
 
@@ -88,7 +114,7 @@ public:
                               : QStringLiteral("1 cursor"));
                 });
 
-        // Local edits: QTextDocument → Buffer → FileSync
+        // Local edits: QTextDocument -> Buffer -> FileSync
         connect(m_qtDoc, &QTextDocument::contentsChange,
                 this, &EditorPane::onContentsChange);
 
@@ -97,8 +123,9 @@ public:
 
     CollabPlainTextEdit *editor() const { return m_edit; }
     Buffer &buffer() { return m_buffer; }
-    QColor cursorColor() const { return m_color; }
-    QString label() const { return m_label; }
+    const Identity &identity() const { return m_identity; }
+    PresenceManager &presenceManager() { return m_presence; }
+    const std::string &replicaName() const { return m_replicaName; }
 
     /// Run one sync cycle. Saves version before polling, then applies
     /// remote edits surgically to the QTextDocument via edits_since().
@@ -110,6 +137,51 @@ public:
         }
     }
 
+    /// Write presence.json for this pane's replica.
+    void writePresence() {
+        Presence p;
+        p.replica_id = m_replicaName;
+        p.identity_id = m_identity.identity_id;
+        p.device_name = m_replicaName;
+        p.active = true;
+        p.last_heartbeat = now_iso8601();
+        p.session_started = m_sessionStarted;
+        p.version_summary = m_buffer.version();
+        m_presence.write_presence(p);
+    }
+
+    /// Write ephemeral.json with cursor anchors.
+    void writeEphemeral(uint64_t seq) {
+        auto cursor = m_edit->textCursor();
+        uint32_t bytePos = qtPosToByteOffset(cursor.position());
+        uint32_t byteAnchor = qtPosToByteOffset(cursor.anchor());
+
+        EphemeralState es;
+        es.seq = seq;
+        es.timestamp = now_iso8601();
+        es.activity = "editing";
+
+        auto posAnchor = m_buffer.anchor_at(bytePos, Bias::Right);
+        auto selAnchor = m_buffer.anchor_at(byteAnchor, Bias::Left);
+        es.cursors.push_back({selAnchor, posAnchor});
+
+        m_presence.write_ephemeral(es);
+    }
+
+    /// Apply a remote EphemeralState, resolving anchors and setting remote cursors.
+    void applyRemoteEphemeral(const EphemeralState &es, const Identity &remoteIdentity) {
+        QList<RemoteCursor> cursors;
+        for (const auto &cp : es.cursors) {
+            RemoteCursor rc;
+            rc.bytePosition = m_buffer.resolve_anchor(cp.head);
+            rc.byteAnchor = m_buffer.resolve_anchor(cp.anchor);
+            rc.color = QColor(QString::fromStdString(remoteIdentity.color));
+            rc.label = QString::fromStdString(remoteIdentity.display_name);
+            cursors.append(rc);
+        }
+        m_edit->multiCursorController()->setRemoteCursors(cursors);
+    }
+
     /// Convert a Qt character position to a byte offset.
     uint32_t qtPosToByteOffset(int qtPos) const {
         QString docText = m_qtDoc->toPlainText();
@@ -118,7 +190,6 @@ public:
 
     /// Convert a byte offset to a Qt character position.
     int byteOffsetToQtPos(uint32_t byteOffset) const {
-        // Use the QTextDocument text (which is in sync with the Buffer)
         QString docText = m_qtDoc->toPlainText();
         QByteArray utf8 = docText.toUtf8();
         uint32_t clamped = qMin(byteOffset, static_cast<uint32_t>(utf8.size()));
@@ -129,9 +200,6 @@ private slots:
     void onContentsChange(int position, int charsRemoved, int charsAdded) {
         if (m_syncing) return;
 
-        // Position conversion uses the Buffer text, which is in sync with
-        // the QTextDocument (guaranteed because applyEditsToQt is synchronous
-        // and surgical, and this signal only fires for local user edits).
         std::string bufText = m_buffer.text();
         QString qBufText = QString::fromStdString(bufText);
 
@@ -169,7 +237,6 @@ private slots:
         uint32_t docLen = m_buffer.visible_length();
         int roll = rng->bounded(50);
 
-        // Save version before the edit so we can get the delta
         Global before = m_buffer.version();
         Operation op;
 
@@ -189,23 +256,14 @@ private slots:
         }
 
         m_sync.push_local_op(op);
-
-        // Apply the gremlin's edit to the QTextDocument surgically
         applyEditsToQt(m_buffer.edits_since(before));
     }
 
 private:
-    /// Apply a list of TextEdits from the engine to the QTextDocument
-    /// as surgical QTextCursor operations. Each edit modifies only the
-    /// changed region; Qt's automatic cursor adjustment handles all
-    /// other cursors (primary, secondary, remote) without manual
-    /// save/restore.
     void applyEditsToQt(const std::vector<TextEdit> &edits) {
         if (edits.empty()) return;
         m_syncing = true;
 
-        // Apply in reverse order so earlier edits don't shift the
-        // positions of later edits (same pattern as multi-cursor dispatch).
         for (auto it = edits.rbegin(); it != edits.rend(); ++it) {
             int qtStart = byteOffsetToQtPos(it->old_start);
             int qtEnd = byteOffsetToQtPos(it->old_end);
@@ -223,12 +281,14 @@ private:
     }
 
     bool m_syncing = false;
+    Identity m_identity;
+    std::string m_replicaName;
+    std::string m_sessionStarted = now_iso8601();
     Buffer m_buffer;
     FileSync m_sync;
+    PresenceManager m_presence;
     CollabPlainTextEdit *m_edit;
     QTextDocument *m_qtDoc;
-    QColor m_color;
-    QString m_label;
     QLabel *m_statusLabel;
     QTimer *m_gremlinTimer = nullptr;
 };
@@ -236,24 +296,31 @@ private:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    explicit MainWindow(const std::filesystem::path &sharedFolder)
+    explicit MainWindow(const std::filesystem::path &sharedFolder,
+                        const Identity &aliceId,
+                        const Identity &bobId)
+        : m_projector(sharedFolder)
     {
-        setWindowTitle(QStringLiteral("CollabText — Full-Stack Demo"));
-        resize(1000, 600);
+        setWindowTitle(QStringLiteral("CollabText \u2014 Full-Stack Demo"));
+        resize(1200, 600);
+
+        // Project identities into the shared folder so each pane can look
+        // up the other's display_name and color.
+        m_projector.project(aliceId);
+        m_projector.project(bobId);
 
         auto *central = new QWidget(this);
         auto *layout = new QHBoxLayout(central);
 
-        m_paneA = new EditorPane(QStringLiteral("Alice"), 1,
-                                  QStringLiteral("alice"),
-                                  sharedFolder,
-                                  QColor(65, 105, 225), central);
-        m_paneB = new EditorPane(QStringLiteral("Bob"), 2,
-                                  QStringLiteral("bob"),
-                                  sharedFolder,
-                                  QColor(220, 20, 60), central);
-        layout->addWidget(m_paneA);
-        layout->addWidget(m_paneB);
+        m_paneA = new EditorPane(aliceId, 1, "alice", sharedFolder, central);
+        m_paneB = new EditorPane(bobId, 2, "bob", sharedFolder, central);
+        layout->addWidget(m_paneA, 1);
+        layout->addWidget(m_paneB, 1);
+
+        m_participantList = new ParticipantListWidget(central);
+        m_participantList->setFixedWidth(200);
+        layout->addWidget(m_participantList);
+
         setCentralWidget(central);
 
         auto *syncTimer = new QTimer(this);
@@ -270,45 +337,99 @@ private slots:
         m_paneA->poll();
         m_paneB->poll();
 
-        syncRemoteCursor(m_paneA, m_paneB);
-        syncRemoteCursor(m_paneB, m_paneA);
-    }
+        // Write presence and ephemeral for both panes
+        m_paneA->writePresence();
+        m_paneB->writePresence();
+        m_paneA->writeEphemeral(m_ephemeralSeq);
+        m_paneB->writeEphemeral(m_ephemeralSeq);
+        ++m_ephemeralSeq;
 
-    void syncRemoteCursor(EditorPane *from, EditorPane *to) {
-        auto fromCursor = from->editor()->textCursor();
+        // Read remote ephemerals and apply cursor overlays
+        syncEphemeralCursors(m_paneA, m_paneB);
+        syncEphemeralCursors(m_paneB, m_paneA);
 
-        uint32_t bytePos = from->qtPosToByteOffset(fromCursor.position());
-        uint32_t byteAnchor = from->qtPosToByteOffset(fromCursor.anchor());
-
-        auto posAnchor = from->buffer().anchor_at(bytePos, Bias::Right);
-        auto selAnchor = from->buffer().anchor_at(byteAnchor, Bias::Left);
-
-        uint32_t resolvedPos = to->buffer().resolve_anchor(posAnchor);
-        uint32_t resolvedAnchor = to->buffer().resolve_anchor(selAnchor);
-
-        RemoteCursor rc;
-        rc.bytePosition = resolvedPos;
-        rc.byteAnchor = resolvedAnchor;
-        rc.color = from->cursorColor();
-        rc.label = from->label();
-
-        to->editor()->multiCursorController()->setRemoteCursors({rc});
+        // Update participant list
+        updateParticipants();
     }
 
 private:
+    void syncEphemeralCursors(EditorPane *local, EditorPane *remote) {
+        auto remoteEphemerals = local->presenceManager().read_remote_ephemerals();
+        for (const auto &[replicaId, es] : remoteEphemerals) {
+            // Look up the identity for this remote replica via presence
+            auto remotePresences = local->presenceManager().read_remote_presences();
+            for (const auto &[presReplicaId, presence] : remotePresences) {
+                if (presReplicaId == replicaId) {
+                    auto maybeId = m_projector.read(presence.identity_id);
+                    if (maybeId) {
+                        local->applyRemoteEphemeral(es, *maybeId);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    void updateParticipants() {
+        auto identities = m_projector.read_all();
+
+        // Gather presences from both panes (they share the same folder,
+        // so either will return the same set of remote presences plus we
+        // need to include the local ones).
+        std::vector<Presence> presences;
+
+        // Add local presences by reading what each pane last wrote.
+        // The simplest approach: read ALL replicas' presence from one
+        // pane's manager (they share the same folder). We read remote
+        // presences from pane A, which gives us B's presence, then add
+        // A's own presence manually.
+        auto remoteFromA = m_paneA->presenceManager().read_remote_presences();
+        for (const auto &[rid, p] : remoteFromA) {
+            presences.push_back(p);
+        }
+        // Build A's own presence
+        Presence pA;
+        pA.replica_id = m_paneA->replicaName();
+        pA.identity_id = m_paneA->identity().identity_id;
+        pA.active = true;
+        pA.last_heartbeat = now_iso8601();
+        presences.push_back(pA);
+
+        m_participantList->updateParticipants(identities, presences);
+    }
+
     EditorPane *m_paneA;
     EditorPane *m_paneB;
+    ParticipantListWidget *m_participantList;
+    IdentityProjector m_projector;
+    uint64_t m_ephemeralSeq = 0;
 };
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
 
+    // Shared CRDT folder
     QTemporaryDir tmpDir;
     tmpDir.setAutoRemove(true);
     std::filesystem::path sharedFolder = tmpDir.path().toStdString();
 
-    MainWindow window(sharedFolder);
+    // Generate identities in temp directories (not ~/.config/collabtext/)
+    QTemporaryDir aliceConfigDir;
+    aliceConfigDir.setAutoRemove(true);
+    IdentityStore aliceStore(aliceConfigDir.path().toStdString());
+    Identity aliceId = aliceStore.generate("Alice");
+    aliceId.color = "#4165E1"; // Royal Blue
+    aliceStore.save(aliceId);
+
+    QTemporaryDir bobConfigDir;
+    bobConfigDir.setAutoRemove(true);
+    IdentityStore bobStore(bobConfigDir.path().toStdString());
+    Identity bobId = bobStore.generate("Bob");
+    bobId.color = "#DC143C"; // Crimson
+    bobStore.save(bobId);
+
+    MainWindow window(sharedFolder, aliceId, bobId);
     window.show();
     return app.exec();
 }
