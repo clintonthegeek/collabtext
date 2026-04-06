@@ -8,6 +8,24 @@ that peers negotiate through the synced folder itself. The system is correct
 at any latency, on any transport, with any number of peers joining and
 leaving at any time.
 
+### Implementation Status (2026-04-05)
+
+| Component | Status |
+|-----------|--------|
+| CRDT Engine (Buffer, SumTree, Anchors, UndoMap, GC) | **Complete** |
+| Operation serialization (encode/decode) | Not implemented |
+| SyncManager file transport | Scaffolded, disabled pending serialization |
+| SQLite operation store | Not implemented (see section 8.8) |
+| Direct channel negotiation | Not implemented |
+| Ephemeral state (cursors/selections) | API exists, not syncing |
+| Side streams (chat) | Not implemented |
+| Qt Editor | Not implemented |
+| Virtual filesystem (KIO/FUSE) | Not implemented |
+
+The CRDT engine is the foundation. Everything above it depends on
+operation serialization, which is the next piece to build. See
+`docs/ARCHITECTURE.md` for the full build order.
+
 ---
 
 ## 1. Design Principles
@@ -82,6 +100,7 @@ collabtext-sync/
 │   └── latest.json                       # Pointer to newest valid snapshot
 └── local/                           # NOT SYNCED (in .stignore)
     └── <own-replica-id>/
+        ├── collabtext.db            # SQLite operation cache + index (§8.8)
         ├── read-sequences/
         │   ├── <replica-id-B>.json  # "I've read up to seq N from B's hash XX"
         │   └── <replica-id-C>.json
@@ -758,7 +777,11 @@ within its own scan interval.
 │  (TCP/WS/  │                    │  File transport is always active.
 │   XMPP)    │  reads/writes to   │
 │            │  replicas/<id>/    │
-└────────────┴────────────────────┘
+├────────────┴────────────────────┤
+│  SQLite Operation Store         │  Local indexed cache (§8.8).
+│  local/<id>/collabtext.db       │  Accelerates catch-up, startup,
+│  (never synced)                 │  and direct channel negotiation.
+└─────────────────────────────────┘
 ```
 
 Both transports feed into the same Operation Router. The router
@@ -925,6 +948,72 @@ The design exploits Syncthing's strengths (reliable, eventually-consistent
 file delivery with great connectivity) while using direct channels for
 what Syncthing cannot do (low-latency bidirectional streaming). The two
 layers are complementary, not competing.
+
+### 8.8 SQLite Local Operation Store
+
+The shared folder's file layout — many small files in hash-bucketed
+directories — is optimized for Syncthing's delta sync. But reading
+hundreds of files for startup catch-up or direct channel negotiation is
+slow. A local SQLite database bridges this gap.
+
+**Location:** `local/<replica-id>/collabtext.db` (inside the non-synced
+`local/` directory). This database is never synced by Syncthing. It is a
+local cache that can be deleted and rebuilt from the operation files at
+any time.
+
+**Schema (conceptual):**
+
+```sql
+CREATE TABLE operations (
+    replica_id   INTEGER NOT NULL,
+    sequence     INTEGER NOT NULL,
+    data         BLOB NOT NULL,       -- Serialized operation
+    PRIMARY KEY (replica_id, sequence)
+);
+
+CREATE TABLE snapshots (
+    id           INTEGER PRIMARY KEY,
+    lamport      INTEGER NOT NULL,
+    replica_id   INTEGER NOT NULL,
+    data         BLOB NOT NULL,       -- Serialized snapshot
+    created      TEXT NOT NULL
+);
+
+CREATE TABLE metadata (
+    key          TEXT PRIMARY KEY,
+    value        TEXT NOT NULL          -- JSON: vector clock, etc.
+);
+```
+
+**Ingestion:** On startup, the SyncManager scans each replica's ops
+directory for files not yet in SQLite (comparing sequence numbers against
+the database). New files are deserialized and inserted. This is a one-time
+catch-up; incremental ingestion via filesystem watcher handles ongoing
+updates.
+
+**Query patterns:**
+- "What ops from replica B after sequence 47?" → indexed range scan.
+- "Give me all ops I need to catch up peer X" → vector clock comparison
+  against the metadata table, then indexed reads.
+- "Load the latest snapshot" → single row lookup.
+
+**Direct channel integration:** When a direct channel is active,
+incoming operations go into SQLite immediately (and are fed to the
+engine). They are flushed to operation files in the background. If the
+channel drops, the file floor picks up from the last flushed sequence.
+The dual-write guarantee (file floor always written) is maintained by
+the background flush — SQLite is a write-ahead buffer, not a
+replacement for the files.
+
+**Why not replace the files entirely?** Because the files are the
+transport. Syncthing syncs files, not SQLite rows. The files must exist
+for other devices to receive operations. SQLite is a local performance
+optimization layered on top of the file transport, not an alternative to
+it.
+
+**Rebuild:** If `collabtext.db` is deleted or corrupted, the SyncManager
+rebuilds it by scanning the operation files. No data is lost because the
+files are the source of truth.
 
 ---
 
