@@ -18,14 +18,17 @@ add_library(collabtext STATIC
     src/crdt/NetworkSim.cpp
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
+    src/identity/Identity.cpp
     include/collabtext/CollabDocument.h
     include/collabtext/SyncManager.h
+    include/collabtext/Identity.h
 )
 set_target_properties(collabtext PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(CollabText::CollabText ALIAS collabtext)
 
 target_include_directories(collabtext
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_link_libraries(collabtext PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
@@ -59,3 +62,4 @@ add_crdt_test(tst_edits_since)
 add_crdt_test(tst_filesync)
 add_crdt_test(tst_multicursor)
 add_crdt_test(tst_realistic)
+add_crdt_test(tst_identity_json)
