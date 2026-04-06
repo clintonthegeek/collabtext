@@ -177,6 +177,7 @@ public:
             rc.byteAnchor = m_buffer.resolve_anchor(cp.anchor);
             rc.color = QColor(QString::fromStdString(remoteIdentity.color));
             rc.label = QString::fromStdString(remoteIdentity.display_name);
+            rc.identityId = QString::fromStdString(remoteIdentity.identity_id);
             cursors.append(rc);
         }
         m_edit->multiCursorController()->setRemoteCursors(cursors);

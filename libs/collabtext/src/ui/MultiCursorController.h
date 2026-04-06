@@ -16,6 +16,7 @@ struct RemoteCursor {
     uint32_t byteAnchor = 0;     // selection anchor (== bytePosition if no selection)
     QColor color;
     QString label;               // participant name
+    QString identityId;          // for cursor label widget keying
 };
 
 class MultiCursorController : public QObject {
