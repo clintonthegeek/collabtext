@@ -16,6 +16,7 @@ add_library(collabtext STATIC
     src/crdt/Serialization.cpp
     src/crdt/FileSync.cpp
     src/crdt/NetworkSim.cpp
+    src/ui/MultiCursorController.cpp
     include/collabtext/CollabDocument.h
     include/collabtext/SyncManager.h
 )
@@ -54,4 +55,5 @@ add_crdt_test(tst_benchmark)
 add_crdt_test(tst_gc)
 add_crdt_test(tst_serialization)
 add_crdt_test(tst_filesync)
+add_crdt_test(tst_multicursor)
 add_crdt_test(tst_realistic)
