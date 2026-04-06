@@ -217,7 +217,7 @@ private slots:
     void cursor_label_show_and_fade() {
         CursorLabelWidget lbl(nullptr);
         lbl.setLabel(QStringLiteral("Carol"), QColor("#22c55e"));
-        lbl.showAtPosition(QPoint(100, 50));
+        lbl.showAtPosition(QPoint(100, 50), 1);
         QVERIFY(lbl.isVisible());
         lbl.cancelFade();
         QVERIFY(lbl.isVisible());

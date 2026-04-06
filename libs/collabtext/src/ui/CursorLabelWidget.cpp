@@ -33,9 +33,10 @@ void CursorLabelWidget::setLabel(const QString &name, const QColor &color) {
     update();
 }
 
-void CursorLabelWidget::showAtPosition(const QPoint &pos, bool flipBelow) {
-    bool moved = (pos != m_lastPos);
-    m_lastPos = pos;
+void CursorLabelWidget::showAtPosition(const QPoint &pos, quint64 cursorVersion,
+                                        bool flipBelow) {
+    bool cursorMoved = (cursorVersion != m_lastCursorVersion);
+    m_lastCursorVersion = cursorVersion;
 
     QSize sz = sizeHint();
     resize(sz);
@@ -50,16 +51,14 @@ void CursorLabelWidget::showAtPosition(const QPoint &pos, bool flipBelow) {
 
     move(x, y);
 
-    if (moved) {
-        // Cursor moved — show at full opacity and restart fade timer
+    if (cursorMoved) {
+        // Remote user actually moved their cursor — show and restart fade
         cancelFade();
         show();
         raise();
         scheduleFade();
-    } else if (!isVisible()) {
-        // Same position but hidden (e.g. after fade completed) — stay hidden
     }
-    // Same position, still visible — don't touch the fade timer
+    // Position shifted due to local edits — reposition but don't reset fade
 }
 
 void CursorLabelWidget::scheduleFade() {

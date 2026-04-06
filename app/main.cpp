@@ -178,6 +178,7 @@ public:
             rc.color = QColor(QString::fromStdString(remoteIdentity.color));
             rc.label = QString::fromStdString(remoteIdentity.display_name);
             rc.identityId = QString::fromStdString(remoteIdentity.identity_id);
+            rc.cursorVersion = (quint64(cp.head.replica_id) << 32) | cp.head.char_value;
             cursors.append(rc);
         }
         m_edit->multiCursorController()->setRemoteCursors(cursors);

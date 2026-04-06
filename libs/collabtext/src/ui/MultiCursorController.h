@@ -17,6 +17,7 @@ struct RemoteCursor {
     QColor color;
     QString label;               // participant name
     QString identityId;          // for cursor label widget keying
+    quint64 cursorVersion = 0;   // stable anchor identity — only changes on real cursor move
 };
 
 class MultiCursorController : public QObject {

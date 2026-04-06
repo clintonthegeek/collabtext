@@ -13,7 +13,7 @@ public:
     explicit CursorLabelWidget(QWidget *viewport);
 
     void setLabel(const QString &name, const QColor &color);
-    void showAtPosition(const QPoint &pos, bool flipBelow = false);
+    void showAtPosition(const QPoint &pos, quint64 cursorVersion, bool flipBelow = false);
     void scheduleFade();
     void cancelFade();
 
@@ -32,7 +32,7 @@ private:
     QString m_name;
     QColor m_color;
     qreal m_opacity = 1.0;
-    QPoint m_lastPos;
+    quint64 m_lastCursorVersion = 0;
     QTimer m_fadeTimer;
     QPropertyAnimation *m_fadeAnim = nullptr;
 };

@@ -210,7 +210,7 @@ void CollabPlainTextEdit::updateCursorLabels() {
         // Position: above the caret, or below if at top edge
         bool flipBelow = (caretRect.top() < lbl->sizeHint().height() + 4);
         QPoint pos(caretRect.left(), flipBelow ? caretRect.bottom() : caretRect.top());
-        lbl->showAtPosition(pos, flipBelow);
+        lbl->showAtPosition(pos, rc.cursorVersion, flipBelow);
     }
 
     // Remove labels for departed participants
