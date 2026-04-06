@@ -32,6 +32,7 @@ private:
     QString m_name;
     QColor m_color;
     qreal m_opacity = 1.0;
+    QPoint m_lastPos;
     QTimer m_fadeTimer;
     QPropertyAnimation *m_fadeAnim = nullptr;
 };

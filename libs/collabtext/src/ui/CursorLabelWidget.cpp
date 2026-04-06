@@ -34,7 +34,9 @@ void CursorLabelWidget::setLabel(const QString &name, const QColor &color) {
 }
 
 void CursorLabelWidget::showAtPosition(const QPoint &pos, bool flipBelow) {
-    cancelFade();
+    bool moved = (pos != m_lastPos);
+    m_lastPos = pos;
+
     QSize sz = sizeHint();
     resize(sz);
 
@@ -47,9 +49,17 @@ void CursorLabelWidget::showAtPosition(const QPoint &pos, bool flipBelow) {
     }
 
     move(x, y);
-    show();
-    raise();
-    scheduleFade();
+
+    if (moved) {
+        // Cursor moved — show at full opacity and restart fade timer
+        cancelFade();
+        show();
+        raise();
+        scheduleFade();
+    } else if (!isVisible()) {
+        // Same position but hidden (e.g. after fade completed) — stay hidden
+    }
+    // Same position, still visible — don't touch the fade timer
 }
 
 void CursorLabelWidget::scheduleFade() {
