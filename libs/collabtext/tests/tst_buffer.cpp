@@ -768,6 +768,76 @@ private slots:
         QCOMPARE(bufA.text(), std::string("hello"));
         QCOMPARE(bufB.text(), std::string("hello"));
     }
+    // -----------------------------------------------------------------------
+    // Regression: sequential inserts at adjacent positions
+    // Two inserts by the same replica: first at position N (middle of
+    // existing fragment), then at position N+1. The second insert should
+    // go between the first inserted char and the next original char.
+    // -----------------------------------------------------------------------
+
+    void sequential_insert_at_adjacent_positions() {
+        // Single-op variant: Alice creates text in one shot
+        Buffer alice(1);
+        auto op = alice.apply_local_edit({{0, 0}}, {"A quick brown fox"});
+
+        Buffer bob(2);
+        bob.apply_ops({op});
+        QCOMPARE(bob.text(), std::string("A quick brown fox"));
+
+        bob.apply_local_edit({{8, 8}}, {"j"});
+        QCOMPARE(bob.text(), std::string("A quick jbrown fox"));
+
+        bob.apply_local_edit({{9, 9}}, {"f"});
+        QCOMPARE(bob.text(), std::string("A quick jfbrown fox"));
+    }
+
+    void sequential_insert_char_by_char_text() {
+        // Reproduce the REAL app scenario: Alice types one char at a time
+        // (each char is a separate op), synced to Bob, then Bob types
+        // in the middle.
+        Buffer alice(1);
+        Buffer bob(2);
+
+        // Alice types "A quick brown fox" one character at a time
+        std::string text = "A quick brown fox";
+        for (size_t i = 0; i < text.size(); ++i) {
+            auto op = alice.apply_local_edit(
+                {{static_cast<uint32_t>(i), static_cast<uint32_t>(i)}},
+                {std::string(1, text[i])});
+            bob.apply_ops({op});
+        }
+        QCOMPARE(bob.text(), std::string("A quick brown fox"));
+
+        // Bob inserts 'j' at byte 8 (between "A quick " and "brown")
+        bob.apply_local_edit({{8, 8}}, {"j"});
+        QCOMPARE(bob.text(), std::string("A quick jbrown fox"));
+
+        // Bob inserts 'f' at byte 9 (between 'j' and 'b')
+        bob.apply_local_edit({{9, 9}}, {"f"});
+        QCOMPARE(bob.text(), std::string("A quick jfbrown fox"));
+    }
+
+    void sequential_insert_single_chars_at_boundary() {
+        // Simpler variant: insert multiple single chars sequentially
+        Buffer alice(1);
+        auto op = alice.apply_local_edit({{0, 0}}, {"hello"});
+
+        Buffer bob(2);
+        bob.apply_ops({op});
+        QCOMPARE(bob.text(), std::string("hello"));
+
+        // Bob inserts 'X' at byte 2 (between "he" and "llo")
+        bob.apply_local_edit({{2, 2}}, {"X"});
+        QCOMPARE(bob.text(), std::string("heXllo"));
+
+        // Bob inserts 'Y' at byte 3 (between 'X' and 'l')
+        bob.apply_local_edit({{3, 3}}, {"Y"});
+        QCOMPARE(bob.text(), std::string("heXYllo"));
+
+        // Bob inserts 'Z' at byte 4 (between 'Y' and 'l')
+        bob.apply_local_edit({{4, 4}}, {"Z"});
+        QCOMPARE(bob.text(), std::string("heXYZllo"));
+    }
 };
 
 QTEST_MAIN(TestBuffer)
