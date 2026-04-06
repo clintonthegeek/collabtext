@@ -19,6 +19,7 @@ add_library(collabtext STATIC
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
     src/identity/Identity.cpp
+    src/identity/IdentityStore.cpp
     src/identity/Signing.cpp
     include/collabtext/CollabDocument.h
     include/collabtext/SyncManager.h
@@ -64,3 +65,4 @@ add_crdt_test(tst_filesync)
 add_crdt_test(tst_multicursor)
 add_crdt_test(tst_realistic)
 add_crdt_test(tst_identity_json)
+add_crdt_test(tst_identity_store)
