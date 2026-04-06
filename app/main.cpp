@@ -2,6 +2,8 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMainWindow>
+#include <QPushButton>
+#include <QRandomGenerator>
 #include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -55,7 +57,26 @@ public:
                            "Ctrl+Alt+Up/Down to add cursors)"));
 
         m_statusLabel = new QLabel(this);
-        layout->addWidget(m_statusLabel);
+        auto *gremlinBtn = new QPushButton(QStringLiteral("Gremlin: OFF"), this);
+        gremlinBtn->setCheckable(true);
+        auto *bottomRow = new QHBoxLayout;
+        bottomRow->addWidget(m_statusLabel);
+        bottomRow->addStretch();
+        bottomRow->addWidget(gremlinBtn);
+        layout->addLayout(bottomRow);
+
+        m_gremlinTimer = new QTimer(this);
+        m_gremlinTimer->setInterval(80); // ~12 chars/sec, fast typist
+        connect(m_gremlinTimer, &QTimer::timeout, this, &EditorPane::gremlinTick);
+        connect(gremlinBtn, &QPushButton::toggled, this, [this, gremlinBtn](bool on) {
+            if (on) {
+                m_gremlinTimer->start();
+                gremlinBtn->setText(QStringLiteral("Gremlin: ON"));
+            } else {
+                m_gremlinTimer->stop();
+                gremlinBtn->setText(QStringLiteral("Gremlin: OFF"));
+            }
+        });
 
         connect(m_edit->multiCursorController(),
                 &MultiCursorController::cursorsChanged, this,
@@ -193,6 +214,45 @@ private slots:
         m_syncing = false;
     }
 
+    void gremlinTick() {
+        static const char *lorem[] = {
+            "lorem ", "ipsum ", "dolor ", "sit ", "amet ", "consectetur ",
+            "adipiscing ", "elit ", "sed ", "do ", "eiusmod ", "tempor ",
+            "incididunt ", "ut ", "labore ", "et ", "dolore ", "magna ",
+            "aliqua ", "enim ", "ad ", "minim ", "veniam ", "quis ",
+            "nostrud ", "exercitation ", "ullamco ", "laboris ", "nisi ",
+        };
+        static constexpr int nwords = sizeof(lorem) / sizeof(lorem[0]);
+
+        auto *rng = QRandomGenerator::global();
+        uint32_t docLen = m_buffer.visible_length();
+        int roll = rng->bounded(50);
+
+        if (roll == 0 && docLen > 10) {
+            // 1/50: backspace a few words (3-8 chars) at a random position
+            uint32_t delLen = qMin(static_cast<uint32_t>(rng->bounded(3, 9)), docLen);
+            uint32_t pos = rng->bounded(docLen - delLen + 1);
+            auto op = m_buffer.apply_local_edit({{pos, pos + delLen}}, {""});
+            m_sync.push_local_op(op);
+        } else if (roll < 3 && docLen > 0) {
+            // 2/50: move cursor to a random position (just insert a newline)
+            uint32_t pos = rng->bounded(docLen + 1);
+            auto op = m_buffer.apply_local_edit({{pos, pos}}, {"\n"});
+            m_sync.push_local_op(op);
+        } else {
+            // 47/50: type a word at the end (or at a random spot 1/5 of the time)
+            uint32_t pos = docLen;
+            if (rng->bounded(5) == 0 && docLen > 0)
+                pos = rng->bounded(docLen + 1);
+            const char *word = lorem[rng->bounded(nwords)];
+            auto op = m_buffer.apply_local_edit({{pos, pos}}, {word});
+            m_sync.push_local_op(op);
+        }
+
+        // Update the QTextDocument to reflect the gremlin's edit
+        syncBufferToQt();
+    }
+
 private:
     bool m_syncing = false;
     Buffer m_buffer;
@@ -202,6 +262,7 @@ private:
     QColor m_color;
     QString m_label;
     QLabel *m_statusLabel;
+    QTimer *m_gremlinTimer = nullptr;
 };
 
 class MainWindow : public QMainWindow {
