@@ -19,6 +19,7 @@ add_library(collabtext STATIC
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
     src/identity/Identity.cpp
+    src/identity/PresenceManager.cpp
     src/identity/IdentityStore.cpp
     src/identity/IdentityProjector.cpp
     src/identity/Signing.cpp
@@ -68,3 +69,4 @@ add_crdt_test(tst_realistic)
 add_crdt_test(tst_identity_json)
 add_crdt_test(tst_identity_store)
 add_crdt_test(tst_identity_projector)
+add_crdt_test(tst_presence_manager)
