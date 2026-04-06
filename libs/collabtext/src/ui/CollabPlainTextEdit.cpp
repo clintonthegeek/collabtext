@@ -1,4 +1,5 @@
 #include "ui/CollabPlainTextEdit.h"
+#include "ui/CursorLabelWidget.h"
 
 #include <QPainter>
 #include <QKeyEvent>
@@ -154,12 +155,73 @@ void CollabPlainTextEdit::drawSecondaryCaret(QPainter &painter, int position,
     painter.fillRect(QRectF(x, y, 2.0, height), color);
 }
 
+void CollabPlainTextEdit::scrollContentsBy(int dx, int dy) {
+    QPlainTextEdit::scrollContentsBy(dx, dy);
+    updateCursorLabels();
+}
+
 void CollabPlainTextEdit::syncExtraSelections() {
     QList<QTextEdit::ExtraSelection> selections;
     selections.append(m_controller->secondarySelections());
     selections.append(m_controller->remoteSelections());
     setExtraSelections(selections);
     viewport()->update();
+    updateCursorLabels();
+}
+
+void CollabPlainTextEdit::updateCursorLabels() {
+    QString docText = document()->toPlainText();
+    QByteArray utf8 = docText.toUtf8();
+    int maxPos = document()->characterCount() - 1;
+    if (maxPos < 0) maxPos = 0;
+
+    QSet<QString> activeIds;
+
+    for (const auto &rc : m_controller->remoteCursors()) {
+        if (rc.identityId.isEmpty()) continue;
+        activeIds.insert(rc.identityId);
+
+        // Resolve byte offset to Qt position
+        uint32_t clamped = qMin(rc.bytePosition, static_cast<uint32_t>(utf8.size()));
+        int qtPos = qMin(QString::fromUtf8(utf8.data(), clamped).length(), maxPos);
+
+        // Get screen coordinates for this position
+        QTextCursor tc(document());
+        tc.setPosition(qtPos);
+        QRect caretRect = cursorRect(tc);
+
+        // Check if cursor is in the visible viewport
+        QRect vpRect = viewport()->rect();
+        if (!vpRect.intersects(caretRect)) {
+            if (auto *lbl = m_cursorLabels.value(rc.identityId))
+                lbl->hide();
+            continue;
+        }
+
+        // Get or create label widget
+        CursorLabelWidget *lbl = m_cursorLabels.value(rc.identityId);
+        if (!lbl) {
+            lbl = new CursorLabelWidget(viewport());
+            m_cursorLabels.insert(rc.identityId, lbl);
+        }
+
+        lbl->setLabel(rc.label, rc.color);
+
+        // Position: above the caret, or below if at top edge
+        bool flipBelow = (caretRect.top() < lbl->sizeHint().height() + 4);
+        QPoint pos(caretRect.left(), flipBelow ? caretRect.bottom() : caretRect.top());
+        lbl->showAtPosition(pos, flipBelow);
+    }
+
+    // Remove labels for departed participants
+    for (auto it = m_cursorLabels.begin(); it != m_cursorLabels.end(); ) {
+        if (!activeIds.contains(it.key())) {
+            delete it.value();
+            it = m_cursorLabels.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 } // namespace CollabText::Ui
