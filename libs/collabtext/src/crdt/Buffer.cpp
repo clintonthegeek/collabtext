@@ -872,11 +872,19 @@ Operation Buffer::apply_local_edit(
         }
 
         if (ordering_ok) {
-            new_tree.for_each_mut([this](Fragment& f) {
-                f.visible = f.compute_visible(m_undo_map);
-            });
+            // Visibility is already correct from the cursor walk:
+            // - Unchanged fragments: copied with original visibility (undo_map unchanged)
+            // - Deleted fragments: mark_deleted set visible=false
+            // - Inserted fragments: set visible=true
+            // No full recompute needed.
             m_fragment_tree = std::move(new_tree);
-            rebuild_origin_index();
+
+            // Incremental origin index update: only inserted fragments
+            // have new origins. Split fragments keep the same locator,
+            // so existing entries remain valid via lower_bound lookup.
+            for (auto& ins : op.inserted_fragments) {
+                m_origin_index[ins.origin.replica_id][ins.origin.value] = ins.locator;
+            }
             used_fast_path = true;
         }
     }
