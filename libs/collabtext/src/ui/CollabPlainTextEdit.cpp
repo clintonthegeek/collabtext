@@ -42,8 +42,15 @@ void CollabPlainTextEdit::paintEvent(QPaintEvent *e) {
         drawSecondaryCaret(painter, pos, QColor(100, 149, 237));
     }
 
+    // Draw remote cursors — resolve byte offsets to Qt positions
+    QString docText = document()->toPlainText();
+    QByteArray utf8 = docText.toUtf8();
+    int maxPos = document()->characterCount() - 1;
+    if (maxPos < 0) maxPos = 0;
     for (auto &rc : m_controller->remoteCursors()) {
-        drawSecondaryCaret(painter, rc.position, rc.color);
+        uint32_t clamped = qMin(rc.bytePosition, static_cast<uint32_t>(utf8.size()));
+        int qtPos = qMin(QString::fromUtf8(utf8.data(), clamped).length(), maxPos);
+        drawSecondaryCaret(painter, qtPos, rc.color);
     }
 }
 

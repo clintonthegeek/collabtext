@@ -9,6 +9,7 @@
 #include <QTextCursor>
 #include <QPlainTextDocumentLayout>
 
+#include "crdt/Anchor.h"
 #include "crdt/Buffer.h"
 #include "crdt/FileSync.h"
 #include "ui/CollabPlainTextEdit.h"
@@ -88,6 +89,19 @@ public:
         m_sync.poll();
     }
 
+    /// Convert a Qt character position to a byte offset in the Buffer's text.
+    uint32_t qtPosToByteOffset(int qtPos) const {
+        QString docText = m_qtDoc->toPlainText();
+        return docText.left(qMin(qtPos, docText.length())).toUtf8().size();
+    }
+
+    /// Convert a byte offset to a Qt character position.
+    int byteOffsetToQtPos(uint32_t byteOffset) const {
+        std::string bufText = m_buffer.text();
+        uint32_t clamped = qMin(byteOffset, static_cast<uint32_t>(bufText.size()));
+        return QString::fromUtf8(bufText.data(), clamped).length();
+    }
+
 private slots:
     void onContentsChange(int position, int charsRemoved, int charsAdded) {
         if (m_syncing) return;
@@ -122,27 +136,59 @@ private slots:
         QString newText = QString::fromStdString(m_buffer.text());
         QString oldText = m_qtDoc->toPlainText();
         if (newText != oldText) {
-            // Save cursor as a CRDT anchor (stable through edits)
-            int qtPos = m_edit->textCursor().position();
-            QString qBufText = QString::fromStdString(m_buffer.text());
-            uint32_t bytePos = qBufText.left(qMin(qtPos, qBufText.length())).toUtf8().size();
-            auto anchor = m_buffer.anchor_at(bytePos, Bias::Right);
+            // Save ALL cursors (primary + secondary) as CRDT anchors
+            auto *ctrl = m_edit->multiCursorController();
+            auto allCursors = ctrl->allCursors();
+
+            struct SavedCursor {
+                Anchor posAnchor;
+                Anchor selAnchor;  // selection anchor (if different from pos)
+                bool hasSelection;
+            };
+            QList<SavedCursor> saved;
+            saved.reserve(allCursors.size());
+            for (auto &c : allCursors) {
+                SavedCursor sc;
+                uint32_t bytePos = qtPosToByteOffset(c.position());
+                sc.posAnchor = m_buffer.anchor_at(bytePos, Bias::Right);
+                sc.hasSelection = c.hasSelection();
+                if (sc.hasSelection) {
+                    uint32_t byteAnchor = qtPosToByteOffset(c.anchor());
+                    sc.selAnchor = m_buffer.anchor_at(byteAnchor, Bias::Left);
+                }
+                saved.append(sc);
+            }
 
             // Replace document content
             QTextCursor cursor(m_qtDoc);
             cursor.select(QTextCursor::Document);
             cursor.insertText(newText);
 
-            // Resolve anchor back to a position in the updated document
-            uint32_t newBytePos = m_buffer.resolve_anchor(anchor);
-            // Convert byte offset back to Qt character position
-            std::string bufText = m_buffer.text();
-            QString prefix = QString::fromUtf8(bufText.data(), newBytePos);
-            int newQtPos = prefix.length();
+            // Restore all cursors from anchors
+            int maxPos = m_qtDoc->characterCount() - 1;
+            if (maxPos < 0) maxPos = 0;
 
-            QTextCursor restored(m_qtDoc);
-            restored.setPosition(qMin(newQtPos, m_qtDoc->characterCount() - 1));
-            m_edit->setTextCursor(restored);
+            // Restore primary
+            if (!saved.isEmpty()) {
+                int newPos = qMin(byteOffsetToQtPos(m_buffer.resolve_anchor(saved[0].posAnchor)), maxPos);
+                QTextCursor primary(m_qtDoc);
+                if (saved[0].hasSelection) {
+                    int newAnchor = qMin(byteOffsetToQtPos(m_buffer.resolve_anchor(saved[0].selAnchor)), maxPos);
+                    primary.setPosition(newAnchor);
+                    primary.setPosition(newPos, QTextCursor::KeepAnchor);
+                } else {
+                    primary.setPosition(newPos);
+                }
+                m_edit->setTextCursor(primary);
+                ctrl->setPrimaryCursor(primary);
+            }
+
+            // Restore secondary cursors
+            ctrl->clearSecondaryCursors();
+            for (int i = 1; i < saved.size(); ++i) {
+                int newPos = qMin(byteOffsetToQtPos(m_buffer.resolve_anchor(saved[i].posAnchor)), maxPos);
+                ctrl->addCursorAt(newPos);
+            }
         }
         m_syncing = false;
     }
@@ -205,16 +251,24 @@ private slots:
 
     void syncRemoteCursor(EditorPane *from, EditorPane *to) {
         auto fromCursor = from->editor()->textCursor();
-        int qtPos = fromCursor.position();
-        int qtAnchor = fromCursor.anchor();
 
-        // Clamp to the target document's length
-        int maxPos = to->editor()->document()->characterCount() - 1;
-        if (maxPos < 0) maxPos = 0;
+        // Convert Qt positions to byte offsets in the sender's Buffer
+        uint32_t bytePos = from->qtPosToByteOffset(fromCursor.position());
+        uint32_t byteAnchor = from->qtPosToByteOffset(fromCursor.anchor());
+
+        // Create CRDT anchors in the sender's Buffer, then resolve them
+        // in the receiver's Buffer. This handles the case where the two
+        // buffers are temporarily out of sync (different ops applied).
+        auto posAnchor = from->buffer().anchor_at(bytePos, Bias::Right);
+        auto selAnchor = from->buffer().anchor_at(byteAnchor, Bias::Left);
+
+        // Resolve in receiver's buffer space
+        uint32_t resolvedPos = to->buffer().resolve_anchor(posAnchor);
+        uint32_t resolvedAnchor = to->buffer().resolve_anchor(selAnchor);
 
         RemoteCursor rc;
-        rc.position = qMin(qtPos, maxPos);
-        rc.anchor = qMin(qtAnchor, maxPos);
+        rc.bytePosition = resolvedPos;
+        rc.byteAnchor = resolvedAnchor;
         rc.color = from->cursorColor();
         rc.label = from->label();
 

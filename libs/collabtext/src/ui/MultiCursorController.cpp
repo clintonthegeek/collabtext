@@ -153,18 +153,34 @@ void MultiCursorController::setRemoteCursors(const QList<RemoteCursor> &cursors)
     emit cursorsChanged();
 }
 
+/// Convert a byte offset in UTF-8 engine space to a Qt character position.
+static int byteOffsetToQtPos(const QString &docText, uint32_t byteOffset) {
+    QByteArray utf8 = docText.toUtf8();
+    uint32_t clamped = qMin(byteOffset, static_cast<uint32_t>(utf8.size()));
+    return QString::fromUtf8(utf8.data(), clamped).length();
+}
+
 QList<QTextEdit::ExtraSelection> MultiCursorController::remoteSelections() const {
     QList<QTextEdit::ExtraSelection> result;
+    if (m_remoteCursors.isEmpty()) return result;
+
+    QString docText = m_document->toPlainText();
+    int maxPos = m_document->characterCount() - 1;
+    if (maxPos < 0) maxPos = 0;
+
     for (auto &rc : m_remoteCursors) {
+        int qtPos = qMin(byteOffsetToQtPos(docText, rc.bytePosition), maxPos);
+        int qtAnchor = qMin(byteOffsetToQtPos(docText, rc.byteAnchor), maxPos);
+
         QTextEdit::ExtraSelection sel;
         sel.cursor = QTextCursor(m_document);
-        if (rc.position != rc.anchor) {
-            sel.cursor.setPosition(rc.anchor);
-            sel.cursor.setPosition(rc.position, QTextCursor::KeepAnchor);
+        if (qtPos != qtAnchor) {
+            sel.cursor.setPosition(qtAnchor);
+            sel.cursor.setPosition(qtPos, QTextCursor::KeepAnchor);
             sel.format.setBackground(QColor(rc.color.red(), rc.color.green(),
                                             rc.color.blue(), 50));
         } else {
-            sel.cursor.setPosition(rc.position);
+            sel.cursor.setPosition(qtPos);
         }
         result.append(sel);
     }

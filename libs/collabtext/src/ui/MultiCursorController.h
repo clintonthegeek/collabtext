@@ -9,11 +9,13 @@ class QTextDocument;
 
 namespace CollabText::Ui {
 
+/// Remote cursor in engine byte-offset space.
+/// The receiving widget resolves these to Qt positions via its Buffer.
 struct RemoteCursor {
-    int position = 0;
-    int anchor = 0;
+    uint32_t bytePosition = 0;   // cursor head (byte offset in Buffer::text())
+    uint32_t byteAnchor = 0;     // selection anchor (== bytePosition if no selection)
     QColor color;
-    QString label;
+    QString label;               // participant name
 };
 
 class MultiCursorController : public QObject {
