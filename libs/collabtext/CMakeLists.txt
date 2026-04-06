@@ -19,6 +19,8 @@ add_library(collabtext STATIC
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
     src/ui/AvatarWidget.cpp
+    src/ui/PresenceIndicator.cpp
+    src/ui/IdentityEditor.cpp
     src/identity/Identity.cpp
     src/identity/PresenceManager.cpp
     src/identity/IdentityStore.cpp

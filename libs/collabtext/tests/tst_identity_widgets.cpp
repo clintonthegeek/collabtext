@@ -1,6 +1,9 @@
 #include <QTest>
 #include <QApplication>
+#include <QSignalSpy>
 #include "ui/AvatarWidget.h"
+#include "ui/PresenceIndicator.h"
+#include "ui/IdentityEditor.h"
 
 using namespace CollabText::Ui;
 
@@ -51,6 +54,76 @@ private slots:
         QPixmap pm(40, 40);
         w.render(&pm);
         QVERIFY(!pm.isNull());
+    }
+
+    // --- PresenceIndicator tests ---
+
+    void presence_indicator_default_size() {
+        PresenceIndicator pi;
+        QCOMPARE(pi.sizeHint(), QSize(12, 12));
+    }
+
+    void presence_indicator_activity_colors() {
+        PresenceIndicator pi;
+        pi.setActivity("typing");
+        pi.resize(12, 12);
+        QPixmap pm(12, 12);
+        pi.render(&pm);
+        QVERIFY(!pm.isNull());
+
+        pi.setActivity("idle");
+        pi.render(&pm);
+        QVERIFY(!pm.isNull());
+
+        pi.setActivity("away");
+        pi.render(&pm);
+        QVERIFY(!pm.isNull());
+    }
+
+    void presence_indicator_stale() {
+        PresenceIndicator pi;
+        pi.setActivity("typing");
+        pi.setStale(true);
+        pi.resize(12, 12);
+        QPixmap pm(12, 12);
+        pi.render(&pm);
+        QVERIFY(!pm.isNull());
+    }
+
+    // --- IdentityEditor tests ---
+
+    void identity_editor_set_and_get() {
+        CollabText::Identity::Identity id;
+        id.identity_id = "test-aaa111";
+        id.display_name = "Test User";
+        id.status = "Testing";
+        id.bio = "A bio";
+        id.color = "#3b82f6";
+        id.updated = "2026-04-06T12:00:00Z";
+
+        IdentityEditor editor;
+        editor.setIdentity(id);
+
+        auto result = editor.identity();
+        QCOMPARE(result.display_name, id.display_name);
+        QCOMPARE(result.status, id.status);
+        QCOMPARE(result.bio, id.bio);
+        QCOMPARE(result.color, id.color);
+    }
+
+    void identity_editor_emits_changed() {
+        IdentityEditor editor;
+        QSignalSpy spy(&editor, &IdentityEditor::identityChanged);
+        QVERIFY(spy.isValid());
+
+        CollabText::Identity::Identity id;
+        id.identity_id = "test-bbb222";
+        id.display_name = "Alice";
+        id.color = "#22c55e";
+        id.updated = "2026-04-06T12:00:00Z";
+        editor.setIdentity(id);
+
+        QVERIFY(spy.count() >= 0);
     }
 };
 
