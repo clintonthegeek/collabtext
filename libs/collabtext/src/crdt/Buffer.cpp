@@ -851,13 +851,14 @@ Operation Buffer::apply_local_edit(
     // ---- Apply deferred relocations, sort, normalize, rebuild ----
     bool used_fast_path = false;
     if (deferred_relocs.empty()) {
-        // Fast path: no relocations. Verify ordering before committing.
+        // No relocations needed. Verify ordering and commit directly if OK.
         bool ordering_ok = true;
         {
             Locator prev_loc;
             Lamport prev_origin;
             bool first = true;
             new_tree.for_each([&](const Fragment& f) {
+                if (!ordering_ok) return;  // Early exit
                 if (!first) {
                     if (f.locator < prev_loc ||
                         (f.locator == prev_loc && f.origin < prev_origin)) {
