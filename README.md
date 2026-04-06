@@ -4,17 +4,26 @@ A conflict-free plain text engine for offline-first collaborative editing.
 
 collabtext is a CRDT text engine designed for a world where collaborators aren't always online at the same time. Instead of requiring a server or real-time connection, it produces compact operations that can travel over any file transport — Syncthing, Dropbox, a shared drive, a USB stick. Edits merge automatically. Documents converge. No conflicts, no "conflicted copy" files, no manual resolution.
 
+## The problem
+
+You use Syncthing to keep your files in sync across your desktop and laptop. You're out with your laptop, editing a document. That same document is still open on your desktop at home. Maybe you made changes on both machines. Maybe you forgot to save before you left. When Syncthing connects, one of two things happens: one version silently overwrites the other, or you get a `.sync-conflict` file and have to manually figure out what changed where.
+
+This is the reality of every file-sync tool — Syncthing, Dropbox, Nextcloud, shared drives. They sync *files*, not *edits*. If the same file changed in two places, someone loses work or gets a conflict to resolve by hand.
+
+collabtext solves this. Instead of syncing the file, it syncs the *edits*. Every keystroke, every deletion, every undo is captured as an operation with a unique timestamp and causal context. When your machines reconnect, the operations merge automatically and deterministically. Both sets of changes survive. No conflicts. No overwrites. No lost work. Ever.
+
 ## Why offline-first matters
 
 Most collaborative editing engines assume a WebSocket. They're built for Google Docs: everyone online, a server in the middle, real-time cursors. That's great when it works, but it excludes a lot of real-world workflows:
 
+- Editing the same document across your own machines that sync via Syncthing — and never worrying about which version "wins"
 - Writers working on a shared manuscript across time zones, syncing via Dropbox
 - Field researchers editing shared notes with intermittent connectivity
-- Teams using Syncthing or NAS-based file sharing instead of cloud services
+- Teams using NAS-based file sharing instead of cloud services
 - Air-gapped environments where real-time collaboration isn't an option
 - Any situation where "just open a browser tab" isn't the answer
 
-collabtext treats the network as unreliable and optional. Every replica is fully independent. Edits are captured as operations, synced whenever a transport is available, and merged deterministically. Two people can edit the same paragraph on a plane and merge when they land.
+collabtext treats the network as unreliable and optional. Every replica is fully independent. Edits are captured as operations, synced whenever a transport is available, and merged deterministically. Two people can edit the same paragraph on a plane and merge when they land. Or one person can edit the same document on two machines and never think about sync again.
 
 ## What it is
 
