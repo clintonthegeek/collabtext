@@ -1,10 +1,14 @@
 #include <QTest>
 #include <QApplication>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include "ui/AvatarWidget.h"
 #include "ui/PresenceIndicator.h"
 #include "ui/IdentityEditor.h"
 #include "ui/ParticipantListWidget.h"
+#include "ui/IdentitySetupDialog.h"
+#include "ui/IdentityPreferencesPage.h"
+#include "collabtext/IdentityStore.h"
 
 using namespace CollabText::Ui;
 
@@ -166,6 +170,30 @@ private slots:
         plw.render(&pm);
         QVERIFY(!pm.isNull());
     }
+
+    // --- IdentitySetupDialog tests ---
+
+    void setup_dialog_creates_identity_on_accept() {
+        QTemporaryDir tmp;
+        CollabText::Identity::IdentityStore store(tmp.path().toStdString());
+        IdentitySetupDialog dlg(store);
+        QVERIFY(dlg.windowTitle().contains(QStringLiteral("CollabText")));
+    }
+
+    void preferences_page_loads_identity() {
+        QTemporaryDir tmp;
+        CollabText::Identity::IdentityStore store(tmp.path().toStdString());
+        auto id = store.generate("Test");
+        store.save(id);
+
+        IdentityPreferencesPage page(store);
+        page.resize(300, 400);
+        QPixmap pm(300, 400);
+        page.render(&pm);
+        QVERIFY(!pm.isNull());
+    }
+
+    // --- ParticipantListWidget tests ---
 
     void participant_list_collapses_same_identity() {
         CollabText::Identity::Identity alice;
