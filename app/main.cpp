@@ -11,7 +11,6 @@
 #include <QTextCursor>
 #include <QPlainTextDocumentLayout>
 
-#include "crdt/Anchor.h"
 #include "crdt/Buffer.h"
 #include "crdt/FileSync.h"
 #include "ui/CollabPlainTextEdit.h"
@@ -21,9 +20,11 @@ using namespace CollabText::Crdt;
 using namespace CollabText::Ui;
 
 /// A single editor pane with its own CRDT Buffer and FileSync.
-/// Edits in the QTextDocument are intercepted and fed to the Buffer,
-/// which produces Operations for FileSync. Remote ops arriving via
-/// FileSync update the Buffer, which updates the QTextDocument.
+///
+/// Integration pattern (following y-codemirror6 binding):
+/// - Local edits: QTextDocument contentsChange → Buffer::apply_local_edit
+/// - Remote edits: Buffer::apply_ops → edits_since() → surgical QTextCursor ops
+/// - No full document replacement. Ever.
 class EditorPane : public QWidget {
     Q_OBJECT
 public:
@@ -66,7 +67,7 @@ public:
         layout->addLayout(bottomRow);
 
         m_gremlinTimer = new QTimer(this);
-        m_gremlinTimer->setInterval(80); // ~12 chars/sec, fast typist
+        m_gremlinTimer->setInterval(80);
         connect(m_gremlinTimer, &QTimer::timeout, this, &EditorPane::gremlinTick);
         connect(gremlinBtn, &QPushButton::toggled, this, [this, gremlinBtn](bool on) {
             if (on) {
@@ -87,31 +88,29 @@ public:
                               : QStringLiteral("1 cursor"));
                 });
 
+        // Local edits: QTextDocument → Buffer → FileSync
         connect(m_qtDoc, &QTextDocument::contentsChange,
                 this, &EditorPane::onContentsChange);
 
         m_sync.start();
-        m_sync.set_on_remote_ops([this](size_t) {
-            // Sync Buffer → QTextDocument immediately. Must be synchronous
-            // so the two models never diverge — if the user types between
-            // apply_ops and syncBufferToQt, onContentsChange would compute
-            // wrong byte offsets from the stale QTextDocument.
-            syncBufferToQt();
-        });
     }
 
     CollabPlainTextEdit *editor() const { return m_edit; }
     Buffer &buffer() { return m_buffer; }
-    FileSync &fileSync() { return m_sync; }
     QColor cursorColor() const { return m_color; }
     QString label() const { return m_label; }
 
-    /// Called by the main window's sync timer.
+    /// Run one sync cycle. Saves version before polling, then applies
+    /// remote edits surgically to the QTextDocument via edits_since().
     void poll() {
-        m_sync.poll();
+        Global before = m_buffer.version();
+        size_t applied = m_sync.poll();
+        if (applied > 0) {
+            applyEditsToQt(m_buffer.edits_since(before));
+        }
     }
 
-    /// Convert a Qt character position to a byte offset in the Buffer's text.
+    /// Convert a Qt character position to a byte offset.
     uint32_t qtPosToByteOffset(int qtPos) const {
         QString docText = m_qtDoc->toPlainText();
         return docText.left(qMin(qtPos, docText.length())).toUtf8().size();
@@ -119,18 +118,20 @@ public:
 
     /// Convert a byte offset to a Qt character position.
     int byteOffsetToQtPos(uint32_t byteOffset) const {
-        std::string bufText = m_buffer.text();
-        uint32_t clamped = qMin(byteOffset, static_cast<uint32_t>(bufText.size()));
-        return QString::fromUtf8(bufText.data(), clamped).length();
+        // Use the QTextDocument text (which is in sync with the Buffer)
+        QString docText = m_qtDoc->toPlainText();
+        QByteArray utf8 = docText.toUtf8();
+        uint32_t clamped = qMin(byteOffset, static_cast<uint32_t>(utf8.size()));
+        return QString::fromUtf8(utf8.data(), clamped).length();
     }
 
 private slots:
     void onContentsChange(int position, int charsRemoved, int charsAdded) {
         if (m_syncing) return;
 
-        // Convert UTF-16 positions to byte offsets in the Buffer's text.
-        // Safe because syncBufferToQt is synchronous — the Buffer and
-        // QTextDocument are always in sync when this fires for user edits.
+        // Position conversion uses the Buffer text, which is in sync with
+        // the QTextDocument (guaranteed because applyEditsToQt is synchronous
+        // and surgical, and this signal only fires for local user edits).
         std::string bufText = m_buffer.text();
         QString qBufText = QString::fromStdString(bufText);
 
@@ -154,38 +155,6 @@ private slots:
         m_sync.push_local_op(op);
     }
 
-    void syncBufferToQt() {
-        m_syncing = true;
-        QString newText = QString::fromStdString(m_buffer.text());
-        QString oldText = m_qtDoc->toPlainText();
-        if (newText != oldText) {
-            // Compute minimal diff: find common prefix and suffix.
-            // Only the changed region is modified in the QTextDocument,
-            // leaving all cursors outside the changed region undisturbed.
-            int prefix = 0;
-            int minLen = qMin(oldText.size(), newText.size());
-            while (prefix < minLen && oldText[prefix] == newText[prefix])
-                ++prefix;
-
-            int oldSuffix = oldText.size();
-            int newSuffix = newText.size();
-            while (oldSuffix > prefix && newSuffix > prefix &&
-                   oldText[oldSuffix - 1] == newText[newSuffix - 1]) {
-                --oldSuffix;
-                --newSuffix;
-            }
-
-            // Apply surgical edit: remove old[prefix..oldSuffix), insert new[prefix..newSuffix)
-            QTextCursor cursor(m_qtDoc);
-            cursor.setPosition(prefix);
-            if (oldSuffix > prefix)
-                cursor.setPosition(oldSuffix, QTextCursor::KeepAnchor);
-            QString replacement = newText.mid(prefix, newSuffix - prefix);
-            cursor.insertText(replacement);
-        }
-        m_syncing = false;
-    }
-
     void gremlinTick() {
         static const char *lorem[] = {
             "lorem ", "ipsum ", "dolor ", "sit ", "amet ", "consectetur ",
@@ -200,32 +169,59 @@ private slots:
         uint32_t docLen = m_buffer.visible_length();
         int roll = rng->bounded(50);
 
+        // Save version before the edit so we can get the delta
+        Global before = m_buffer.version();
+        Operation op;
+
         if (roll == 0 && docLen > 10) {
-            // 1/50: backspace a few words (3-8 chars) at a random position
             uint32_t delLen = qMin(static_cast<uint32_t>(rng->bounded(3, 9)), docLen);
             uint32_t pos = rng->bounded(docLen - delLen + 1);
-            auto op = m_buffer.apply_local_edit({{pos, pos + delLen}}, {""});
-            m_sync.push_local_op(op);
+            op = m_buffer.apply_local_edit({{pos, pos + delLen}}, {""});
         } else if (roll < 3 && docLen > 0) {
-            // 2/50: move cursor to a random position (just insert a newline)
             uint32_t pos = rng->bounded(docLen + 1);
-            auto op = m_buffer.apply_local_edit({{pos, pos}}, {"\n"});
-            m_sync.push_local_op(op);
+            op = m_buffer.apply_local_edit({{pos, pos}}, {"\n"});
         } else {
-            // 47/50: type a word at the end (or at a random spot 1/5 of the time)
             uint32_t pos = docLen;
             if (rng->bounded(5) == 0 && docLen > 0)
                 pos = rng->bounded(docLen + 1);
             const char *word = lorem[rng->bounded(nwords)];
-            auto op = m_buffer.apply_local_edit({{pos, pos}}, {word});
-            m_sync.push_local_op(op);
+            op = m_buffer.apply_local_edit({{pos, pos}}, {word});
         }
 
-        // Update the QTextDocument to reflect the gremlin's edit
-        syncBufferToQt();
+        m_sync.push_local_op(op);
+
+        // Apply the gremlin's edit to the QTextDocument surgically
+        applyEditsToQt(m_buffer.edits_since(before));
     }
 
 private:
+    /// Apply a list of TextEdits from the engine to the QTextDocument
+    /// as surgical QTextCursor operations. Each edit modifies only the
+    /// changed region; Qt's automatic cursor adjustment handles all
+    /// other cursors (primary, secondary, remote) without manual
+    /// save/restore.
+    void applyEditsToQt(const std::vector<TextEdit> &edits) {
+        if (edits.empty()) return;
+        m_syncing = true;
+
+        // Apply in reverse order so earlier edits don't shift the
+        // positions of later edits (same pattern as multi-cursor dispatch).
+        for (auto it = edits.rbegin(); it != edits.rend(); ++it) {
+            int qtStart = byteOffsetToQtPos(it->old_start);
+            int qtEnd = byteOffsetToQtPos(it->old_end);
+            QTextCursor cursor(m_qtDoc);
+            cursor.setPosition(qtStart);
+            if (qtEnd > qtStart)
+                cursor.setPosition(qtEnd, QTextCursor::KeepAnchor);
+            QString replacement = QString::fromUtf8(
+                it->new_text.data(),
+                static_cast<int>(it->new_text.size()));
+            cursor.insertText(replacement);
+        }
+
+        m_syncing = false;
+    }
+
     bool m_syncing = false;
     Buffer m_buffer;
     FileSync m_sync;
@@ -260,7 +256,6 @@ public:
         layout->addWidget(m_paneB);
         setCentralWidget(central);
 
-        // Sync timer: polls FileSync for both editors + exchanges cursor positions
         auto *syncTimer = new QTimer(this);
         connect(syncTimer, &QTimer::timeout, this, &MainWindow::syncCycle);
         syncTimer->start(100);
@@ -272,12 +267,9 @@ public:
 
 private slots:
     void syncCycle() {
-        // Poll both FileSyncs (flush local ops, read remote ops)
         m_paneA->poll();
         m_paneB->poll();
 
-        // Exchange cursor positions as remote cursors.
-        // Positions are in the Buffer's byte space — convert to Qt positions.
         syncRemoteCursor(m_paneA, m_paneB);
         syncRemoteCursor(m_paneB, m_paneA);
     }
@@ -285,17 +277,12 @@ private slots:
     void syncRemoteCursor(EditorPane *from, EditorPane *to) {
         auto fromCursor = from->editor()->textCursor();
 
-        // Convert Qt positions to byte offsets in the sender's Buffer
         uint32_t bytePos = from->qtPosToByteOffset(fromCursor.position());
         uint32_t byteAnchor = from->qtPosToByteOffset(fromCursor.anchor());
 
-        // Create CRDT anchors in the sender's Buffer, then resolve them
-        // in the receiver's Buffer. This handles the case where the two
-        // buffers are temporarily out of sync (different ops applied).
         auto posAnchor = from->buffer().anchor_at(bytePos, Bias::Right);
         auto selAnchor = from->buffer().anchor_at(byteAnchor, Bias::Left);
 
-        // Resolve in receiver's buffer space
         uint32_t resolvedPos = to->buffer().resolve_anchor(posAnchor);
         uint32_t resolvedAnchor = to->buffer().resolve_anchor(selAnchor);
 
@@ -317,7 +304,6 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
 
-    // Shared folder for FileSync (temporary for this demo)
     QTemporaryDir tmpDir;
     tmpDir.setAutoRemove(true);
     std::filesystem::path sharedFolder = tmpDir.path().toStdString();
