@@ -122,16 +122,26 @@ private slots:
         QString newText = QString::fromStdString(m_buffer.text());
         QString oldText = m_qtDoc->toPlainText();
         if (newText != oldText) {
-            // Save cursor position
-            int cursorPos = m_edit->textCursor().position();
+            // Save cursor as a CRDT anchor (stable through edits)
+            int qtPos = m_edit->textCursor().position();
+            QString qBufText = QString::fromStdString(m_buffer.text());
+            uint32_t bytePos = qBufText.left(qMin(qtPos, qBufText.length())).toUtf8().size();
+            auto anchor = m_buffer.anchor_at(bytePos, Bias::Right);
 
+            // Replace document content
             QTextCursor cursor(m_qtDoc);
             cursor.select(QTextCursor::Document);
             cursor.insertText(newText);
 
-            // Restore cursor (clamped to new length)
+            // Resolve anchor back to a position in the updated document
+            uint32_t newBytePos = m_buffer.resolve_anchor(anchor);
+            // Convert byte offset back to Qt character position
+            std::string bufText = m_buffer.text();
+            QString prefix = QString::fromUtf8(bufText.data(), newBytePos);
+            int newQtPos = prefix.length();
+
             QTextCursor restored(m_qtDoc);
-            restored.setPosition(qMin(cursorPos, m_qtDoc->characterCount() - 1));
+            restored.setPosition(qMin(newQtPos, m_qtDoc->characterCount() - 1));
             m_edit->setTextCursor(restored);
         }
         m_syncing = false;
