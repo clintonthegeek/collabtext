@@ -159,59 +159,29 @@ private slots:
         QString newText = QString::fromStdString(m_buffer.text());
         QString oldText = m_qtDoc->toPlainText();
         if (newText != oldText) {
-            // Save ALL cursors (primary + secondary) as CRDT anchors
-            auto *ctrl = m_edit->multiCursorController();
-            auto allCursors = ctrl->allCursors();
+            // Compute minimal diff: find common prefix and suffix.
+            // Only the changed region is modified in the QTextDocument,
+            // leaving all cursors outside the changed region undisturbed.
+            int prefix = 0;
+            int minLen = qMin(oldText.size(), newText.size());
+            while (prefix < minLen && oldText[prefix] == newText[prefix])
+                ++prefix;
 
-            struct SavedCursor {
-                Anchor posAnchor;
-                Anchor selAnchor;  // selection anchor (if different from pos)
-                bool hasSelection;
-            };
-            QList<SavedCursor> saved;
-            saved.reserve(allCursors.size());
-            for (auto &c : allCursors) {
-                SavedCursor sc;
-                uint32_t bytePos = qtPosToByteOffset(c.position());
-                sc.posAnchor = m_buffer.anchor_at(bytePos, Bias::Right);
-                sc.hasSelection = c.hasSelection();
-                if (sc.hasSelection) {
-                    uint32_t byteAnchor = qtPosToByteOffset(c.anchor());
-                    sc.selAnchor = m_buffer.anchor_at(byteAnchor, Bias::Left);
-                }
-                saved.append(sc);
+            int oldSuffix = oldText.size();
+            int newSuffix = newText.size();
+            while (oldSuffix > prefix && newSuffix > prefix &&
+                   oldText[oldSuffix - 1] == newText[newSuffix - 1]) {
+                --oldSuffix;
+                --newSuffix;
             }
 
-            // Replace document content
+            // Apply surgical edit: remove old[prefix..oldSuffix), insert new[prefix..newSuffix)
             QTextCursor cursor(m_qtDoc);
-            cursor.select(QTextCursor::Document);
-            cursor.insertText(newText);
-
-            // Restore all cursors from anchors
-            int maxPos = m_qtDoc->characterCount() - 1;
-            if (maxPos < 0) maxPos = 0;
-
-            // Restore primary
-            if (!saved.isEmpty()) {
-                int newPos = qMin(byteOffsetToQtPos(m_buffer.resolve_anchor(saved[0].posAnchor)), maxPos);
-                QTextCursor primary(m_qtDoc);
-                if (saved[0].hasSelection) {
-                    int newAnchor = qMin(byteOffsetToQtPos(m_buffer.resolve_anchor(saved[0].selAnchor)), maxPos);
-                    primary.setPosition(newAnchor);
-                    primary.setPosition(newPos, QTextCursor::KeepAnchor);
-                } else {
-                    primary.setPosition(newPos);
-                }
-                m_edit->setTextCursor(primary);
-                ctrl->setPrimaryCursor(primary);
-            }
-
-            // Restore secondary cursors
-            ctrl->clearSecondaryCursors();
-            for (int i = 1; i < saved.size(); ++i) {
-                int newPos = qMin(byteOffsetToQtPos(m_buffer.resolve_anchor(saved[i].posAnchor)), maxPos);
-                ctrl->addCursorAt(newPos);
-            }
+            cursor.setPosition(prefix);
+            if (oldSuffix > prefix)
+                cursor.setPosition(oldSuffix, QTextCursor::KeepAnchor);
+            QString replacement = newText.mid(prefix, newSuffix - prefix);
+            cursor.insertText(replacement);
         }
         m_syncing = false;
     }
