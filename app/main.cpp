@@ -87,15 +87,16 @@ public:
                               : QStringLiteral("1 cursor"));
                 });
 
-        // Intercept QTextDocument changes → feed to CRDT Buffer → push to FileSync
         connect(m_qtDoc, &QTextDocument::contentsChange,
                 this, &EditorPane::onContentsChange);
 
         m_sync.start();
         m_sync.set_on_remote_ops([this](size_t) {
-            // Remote ops applied to Buffer — sync Buffer text back to QTextDocument
-            QMetaObject::invokeMethod(this, &EditorPane::syncBufferToQt,
-                                      Qt::QueuedConnection);
+            // Sync Buffer → QTextDocument immediately. Must be synchronous
+            // so the two models never diverge — if the user types between
+            // apply_ops and syncBufferToQt, onContentsChange would compute
+            // wrong byte offsets from the stale QTextDocument.
+            syncBufferToQt();
         });
     }
 
@@ -127,11 +128,12 @@ private slots:
     void onContentsChange(int position, int charsRemoved, int charsAdded) {
         if (m_syncing) return;
 
-        // Convert UTF-16 positions to byte offsets in the Buffer's text
+        // Convert UTF-16 positions to byte offsets in the Buffer's text.
+        // Safe because syncBufferToQt is synchronous — the Buffer and
+        // QTextDocument are always in sync when this fires for user edits.
         std::string bufText = m_buffer.text();
         QString qBufText = QString::fromStdString(bufText);
 
-        // Qt positions are in UTF-16 code units
         uint32_t byteStart = qBufText.left(position).toUtf8().size();
         uint32_t byteEnd = byteStart;
         if (charsRemoved > 0) {
