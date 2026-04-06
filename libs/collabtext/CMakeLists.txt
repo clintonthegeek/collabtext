@@ -19,6 +19,7 @@ add_library(collabtext STATIC
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
     src/identity/Identity.cpp
+    src/identity/Signing.cpp
     include/collabtext/CollabDocument.h
     include/collabtext/SyncManager.h
     include/collabtext/Identity.h
