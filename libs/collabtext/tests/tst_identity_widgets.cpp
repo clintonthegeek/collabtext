@@ -8,6 +8,7 @@
 #include "ui/ParticipantListWidget.h"
 #include "ui/IdentitySetupDialog.h"
 #include "ui/IdentityPreferencesPage.h"
+#include "ui/CursorLabelWidget.h"
 #include "collabtext/IdentityStore.h"
 
 using namespace CollabText::Ui;
@@ -191,6 +192,35 @@ private slots:
         QPixmap pm(300, 400);
         page.render(&pm);
         QVERIFY(!pm.isNull());
+    }
+
+    // --- CursorLabelWidget tests ---
+
+    void cursor_label_size_hint() {
+        CursorLabelWidget lbl(nullptr);
+        lbl.setLabel(QStringLiteral("Alice"), QColor("#3b82f6"));
+        QSize hint = lbl.sizeHint();
+        QVERIFY(hint.width() > 10);
+        QVERIFY(hint.height() > 10);
+        QVERIFY(hint.width() < 200);
+    }
+
+    void cursor_label_renders() {
+        CursorLabelWidget lbl(nullptr);
+        lbl.setLabel(QStringLiteral("Bob"), QColor("#ef4444"));
+        lbl.resize(lbl.sizeHint());
+        QPixmap pm(lbl.size());
+        lbl.render(&pm);
+        QVERIFY(!pm.isNull());
+    }
+
+    void cursor_label_show_and_fade() {
+        CursorLabelWidget lbl(nullptr);
+        lbl.setLabel(QStringLiteral("Carol"), QColor("#22c55e"));
+        lbl.showAtPosition(QPoint(100, 50));
+        QVERIFY(lbl.isVisible());
+        lbl.cancelFade();
+        QVERIFY(lbl.isVisible());
     }
 
     // --- ParticipantListWidget tests ---
