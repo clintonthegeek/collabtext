@@ -36,7 +36,7 @@ A C++20 library (no framework dependencies) that provides:
 
 - Not a rich text engine (plain text only — no bold, no links, no attributes)
 - Not a general-purpose CRDT framework (no maps, arrays, counters, or JSON)
-- Not a real-time presence system (no live cursors, though ephemeral state is supported via file sync)
+- Not a real-time presence system out of the box (though the anchor system provides the primitives — over a low-latency transport, live cursors work naturally)
 - Not the fastest CRDT engine (see [Performance](#performance))
 
 ## Building
