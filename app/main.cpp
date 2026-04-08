@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <ctime>
+#include <optional>
 
 #include "crdt/Buffer.h"
 #include "crdt/FileSync.h"
@@ -145,7 +146,7 @@ public:
         size_t applied = m_sync.poll();
         if (applied > 0) {
             auto edits = m_buffer.edits_since(before);
-            applyEditsToQt(edits);
+            applyEditsPreservingScroll(edits);
             // Remote edits break any in-progress local coalescing run:
             // the user's tracked Qt cursor position may have shifted, and
             // their next keystroke is conceptually a new action even if
@@ -355,7 +356,7 @@ private slots:
         }
 
         m_sync.push_local_op(op);
-        applyEditsToQt(m_buffer.edits_since(before));
+        applyEditsPreservingScroll(m_buffer.edits_since(before));
 
         // Move the widget's text cursor to where the gremlin just typed so
         // that the next writeEphemeral() broadcasts this position. Without
@@ -374,7 +375,7 @@ private slots:
             return;
         }
         m_sync.push_local_op(*op);
-        applyEditsToQt(m_buffer.edits_since(before));
+        applyEditsPreservingScroll(m_buffer.edits_since(before));
         // Hard boundary: subsequent typing must not coalesce across an
         // undo press, even if the cursor returns to the same place.
         m_lastEditKind = EditKind::None;
@@ -390,7 +391,7 @@ private slots:
             return;
         }
         m_sync.push_local_op(*op);
-        applyEditsToQt(m_buffer.edits_since(before));
+        applyEditsPreservingScroll(m_buffer.edits_since(before));
         m_lastEditKind = EditKind::None;
         m_lastUndoDepth = m_buffer.undo_depth();
         checkDivergence("after redo");
@@ -422,6 +423,33 @@ private:
                 qWarning("  Lengths differ: buffer=%zu qt=%zu", bufText.size(), qtUtf8.size());
             }
         }
+    }
+
+    /// Apply remote edits while preserving the local viewport scroll
+    /// and the local cursor visibility. Capture a CRDT anchor at the
+    /// top-visible byte offset before mutating, restore it after.
+    /// This is the public entry point for any remote-edit path; the
+    /// private applyEditsToQt is the raw UTF-16 mutation helper.
+    void applyEditsPreservingScroll(const std::vector<TextEdit> &edits) {
+        if (edits.empty()) return;
+
+        // Capture viewport anchors before the tree mutates.
+        uint32_t topByteOff = m_edit->topVisibleByteOffset();
+        Anchor topAnchor = m_buffer.anchor_at(topByteOff, Bias::Left);
+
+        uint32_t bottomByteOff = m_edit->bottomVisibleByteOffset();
+        Anchor bottomAnchor = m_buffer.anchor_at(bottomByteOff, Bias::Left);
+
+        applyEditsToQt(edits);
+
+        // Restore scroll.
+        uint32_t newTopByteOff = m_buffer.resolve_anchor(topAnchor);
+        m_edit->scrollByteOffsetToTop(newTopByteOff,
+                                      /*keepCursorVisible=*/true);
+
+        // Cache the anchors for the next EphemeralState flush.
+        m_viewportTopAnchor = topAnchor;
+        m_viewportBottomAnchor = bottomAnchor;
     }
 
     void applyEditsToQt(const std::vector<TextEdit> &edits) {
@@ -469,6 +497,14 @@ private:
     int m_lastEditEndQt = -1;            // Insert: post-insertion pos. Backspace: cursor pos after delete.
     bool m_lastInsertEndsOnWordBoundary = false;
     size_t m_lastUndoDepth = 0;          // Buffer's undo_depth() right after the last user edit
+
+    // -------- Cached viewport anchors for ephemeral broadcast --------
+    // Refreshed whenever a remote edit cycle runs (via
+    // applyEditsPreservingScroll) or the local user scrolls the widget
+    // (via onViewportScrolled). writeEphemeral reads these into
+    // EphemeralState.viewport_top / viewport_bottom on each flush.
+    std::optional<Anchor> m_viewportTopAnchor;
+    std::optional<Anchor> m_viewportBottomAnchor;
 };
 
 class MainWindow : public QMainWindow {
