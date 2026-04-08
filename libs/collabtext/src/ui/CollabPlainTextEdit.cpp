@@ -282,6 +282,11 @@ uint32_t CollabPlainTextEdit::topVisibleByteOffset() const {
 
 uint32_t CollabPlainTextEdit::bottomVisibleByteOffset() const {
     if (document()->isEmpty()) return 0;
+    // Degenerate case: a zero-sized viewport has no visible content, so
+    // bottom == top == 0. Without this guard we'd pass QPoint(-1, -1)
+    // to cursorForPosition, which clamps to position 0 anyway but
+    // reading the code would obscure the intent.
+    if (viewport()->width() <= 0 || viewport()->height() <= 0) return 0;
     QPoint bottomRight(viewport()->width() - 1, viewport()->height() - 1);
     QTextCursor c = cursorForPosition(bottomRight);
     // If the bottom-right falls past the end of the document,
