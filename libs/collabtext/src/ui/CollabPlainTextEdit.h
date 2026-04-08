@@ -37,6 +37,13 @@ public:
     /// end of the document.
     uint32_t bottomVisibleByteOffset() const;
 
+    /// Scroll so that the visual line containing `byteOff` is at the top
+    /// of the viewport. If `keepCursorVisible` is true and the
+    /// restoration would put the local cursor off-screen, the viewport
+    /// is adjusted to keep the cursor visible (Qt's ensureCursorVisible
+    /// semantics).
+    void scrollByteOffsetToTop(uint32_t byteOff, bool keepCursorVisible);
+
 protected:
     bool event(QEvent *e) override;
     void paintEvent(QPaintEvent *e) override;

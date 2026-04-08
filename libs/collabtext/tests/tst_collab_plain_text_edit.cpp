@@ -87,6 +87,30 @@ private slots:
         uint32_t expected = static_cast<uint32_t>(edit.toPlainText().toUtf8().size());
         QCOMPARE(edit.bottomVisibleByteOffset(), expected);
     }
+
+    void scroll_byte_offset_to_top_roundtrip() {
+        CollabPlainTextEdit edit;
+        QString text;
+        for (int i = 0; i < 50; ++i) text += QString("Line%1\n").arg(i);
+        edit.setPlainText(text);
+        edit.resize(200, 80);
+        edit.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&edit));
+
+        // Scroll to somewhere in the middle, capture the top byte offset.
+        auto *bar = edit.verticalScrollBar();
+        bar->setValue(bar->maximum() / 2);
+        QApplication::processEvents();
+        uint32_t captured = edit.topVisibleByteOffset();
+
+        // Scroll away from that position, then restore.
+        bar->setValue(0);
+        QApplication::processEvents();
+        edit.scrollByteOffsetToTop(captured, /*keepCursorVisible=*/false);
+        QApplication::processEvents();
+
+        QCOMPARE(edit.topVisibleByteOffset(), captured);
+    }
 };
 
 QTEST_MAIN(TestCollabPlainTextEdit)

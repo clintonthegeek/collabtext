@@ -299,4 +299,28 @@ uint32_t CollabPlainTextEdit::bottomVisibleByteOffset() const {
     return qtPosToByteOffset(c.position());
 }
 
+void CollabPlainTextEdit::scrollByteOffsetToTop(uint32_t byteOff,
+                                                 bool keepCursorVisible) {
+    int qtPos = byteOffsetToQtPos(byteOff);
+    QTextCursor target(document());
+    target.setPosition(qtPos);
+
+    auto *bar = verticalScrollBar();
+    if (!bar) return;
+    int lineHeight = qMax(1, fontMetrics().height());
+
+    // Iterate a small number of times to converge: the cursorRect after
+    // each scroll reflects the new viewport, and we want rect.top() ≈ 0.
+    for (int iter = 0; iter < 4; ++iter) {
+        QRect rect = cursorRect(target);
+        int delta = rect.top() / lineHeight;
+        if (delta == 0) break;
+        bar->setValue(bar->value() + delta);
+    }
+
+    if (keepCursorVisible) {
+        ensureCursorVisible();
+    }
+}
+
 } // namespace CollabText::Ui
