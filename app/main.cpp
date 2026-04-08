@@ -128,6 +128,8 @@ public:
                 this, &EditorPane::undoLocal);
         connect(m_edit, &CollabPlainTextEdit::redoRequested,
                 this, &EditorPane::redoLocal);
+        connect(m_edit, &CollabPlainTextEdit::viewportScrolled,
+                this, &EditorPane::onViewportScrolled);
 
         m_sync.start();
     }
@@ -170,7 +172,7 @@ public:
         m_presence.write_presence(p);
     }
 
-    /// Write ephemeral.json with cursor anchors.
+    /// Write ephemeral.json with cursor and viewport anchors.
     void writeEphemeral(uint64_t seq) {
         auto cursor = m_edit->textCursor();
         uint32_t bytePos = qtPosToByteOffset(cursor.position());
@@ -184,6 +186,11 @@ public:
         auto posAnchor = m_buffer.anchor_at(bytePos, Bias::Right);
         auto selAnchor = m_buffer.anchor_at(byteAnchor, Bias::Left);
         es.cursors.push_back({selAnchor, posAnchor});
+
+        // Viewport anchors (populated by applyEditsPreservingScroll and
+        // onViewportScrolled). nullopt before the first scroll event.
+        es.viewport_top = m_viewportTopAnchor;
+        es.viewport_bottom = m_viewportBottomAnchor;
 
         m_presence.write_ephemeral(es);
     }
@@ -395,6 +402,15 @@ private slots:
         m_lastEditKind = EditKind::None;
         m_lastUndoDepth = m_buffer.undo_depth();
         checkDivergence("after redo");
+    }
+
+    /// Refresh cached viewport anchors after a local scroll event.
+    /// Called from the CollabPlainTextEdit::viewportScrolled signal.
+    void onViewportScrolled() {
+        uint32_t topByteOff = m_edit->topVisibleByteOffset();
+        uint32_t bottomByteOff = m_edit->bottomVisibleByteOffset();
+        m_viewportTopAnchor = m_buffer.anchor_at(topByteOff, Bias::Left);
+        m_viewportBottomAnchor = m_buffer.anchor_at(bottomByteOff, Bias::Left);
     }
 
 private:
