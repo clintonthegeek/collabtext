@@ -280,4 +280,18 @@ uint32_t CollabPlainTextEdit::topVisibleByteOffset() const {
     return qtPosToByteOffset(c.position());
 }
 
+uint32_t CollabPlainTextEdit::bottomVisibleByteOffset() const {
+    if (document()->isEmpty()) return 0;
+    QPoint bottomRight(viewport()->width() - 1, viewport()->height() - 1);
+    QTextCursor c = cursorForPosition(bottomRight);
+    // If the bottom-right falls past the end of the document,
+    // cursorForPosition clamps to the last valid position, but we want
+    // the total document byte length in that case.
+    int lastPos = document()->characterCount() - 1;
+    if (c.position() >= lastPos) {
+        return static_cast<uint32_t>(document()->toPlainText().toUtf8().size());
+    }
+    return qtPosToByteOffset(c.position());
+}
+
 } // namespace CollabText::Ui

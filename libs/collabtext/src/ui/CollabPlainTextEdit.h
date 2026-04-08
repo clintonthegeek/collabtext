@@ -31,6 +31,12 @@ public:
     /// of the visual line at the top, not the containing paragraph.
     uint32_t topVisibleByteOffset() const;
 
+    /// Byte offset (UTF-8) of the character just past the bottom-right
+    /// of the viewport. Returns 0 for an empty document and returns the
+    /// document's full UTF-8 byte length when the viewport shows the
+    /// end of the document.
+    uint32_t bottomVisibleByteOffset() const;
+
 protected:
     bool event(QEvent *e) override;
     void paintEvent(QPaintEvent *e) override;

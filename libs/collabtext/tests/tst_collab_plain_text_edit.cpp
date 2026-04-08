@@ -47,6 +47,46 @@ private slots:
 
         QCOMPARE(edit.topVisibleByteOffset(), expected);
     }
+
+    void bottom_visible_byte_offset_empty_doc() {
+        CollabPlainTextEdit edit;
+        edit.resize(200, 100);
+        edit.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&edit));
+        QCOMPARE(edit.bottomVisibleByteOffset(), 0u);
+    }
+
+    void bottom_visible_byte_offset_greater_than_top_in_nonempty_doc() {
+        CollabPlainTextEdit edit;
+        QString text;
+        for (int i = 0; i < 30; ++i) text += QString("L%1\n").arg(i);
+        edit.setPlainText(text);
+        edit.resize(200, 80);
+        edit.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&edit));
+
+        uint32_t top = edit.topVisibleByteOffset();
+        uint32_t bottom = edit.bottomVisibleByteOffset();
+        QVERIFY(bottom > top);
+        QVERIFY(bottom <= static_cast<uint32_t>(edit.toPlainText().toUtf8().size()));
+    }
+
+    void bottom_visible_byte_offset_end_of_doc_when_scrolled_to_bottom() {
+        CollabPlainTextEdit edit;
+        QString text;
+        for (int i = 0; i < 30; ++i) text += QString("L%1\n").arg(i);
+        edit.setPlainText(text);
+        edit.resize(200, 80);
+        edit.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&edit));
+
+        auto *bar = edit.verticalScrollBar();
+        bar->setValue(bar->maximum());
+        QApplication::processEvents();
+
+        uint32_t expected = static_cast<uint32_t>(edit.toPlainText().toUtf8().size());
+        QCOMPARE(edit.bottomVisibleByteOffset(), expected);
+    }
 };
 
 QTEST_MAIN(TestCollabPlainTextEdit)
