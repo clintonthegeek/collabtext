@@ -111,6 +111,62 @@ private slots:
 
         QCOMPARE(edit.topVisibleByteOffset(), captured);
     }
+
+    void scroll_byte_offset_to_top_keeps_cursor_visible() {
+        CollabPlainTextEdit edit;
+        QString text;
+        for (int i = 0; i < 50; ++i) text += QString("Line%1\n").arg(i);
+        edit.setPlainText(text);
+        edit.resize(200, 80);
+        edit.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&edit));
+
+        // Put the local cursor at the end of the document (far below).
+        QTextCursor tc = edit.textCursor();
+        tc.movePosition(QTextCursor::End);
+        edit.setTextCursor(tc);
+        QApplication::processEvents();
+
+        // Try to anchor the viewport at byte offset 0 (document start).
+        // Without the safety net, the cursor would be scrolled off-screen.
+        edit.scrollByteOffsetToTop(0, /*keepCursorVisible=*/true);
+        QApplication::processEvents();
+
+        // The cursor must be inside the viewport rectangle.
+        QRect cursorR = edit.cursorRect(edit.textCursor());
+        QRect viewR = edit.viewport()->rect();
+        QVERIFY2(viewR.intersects(cursorR),
+                 "cursor must remain visible when keepCursorVisible=true");
+    }
+
+    void scroll_byte_offset_to_top_ignores_cursor_when_flag_false() {
+        CollabPlainTextEdit edit;
+        QString text;
+        for (int i = 0; i < 50; ++i) text += QString("Line%1\n").arg(i);
+        edit.setPlainText(text);
+        edit.resize(200, 80);
+        edit.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&edit));
+
+        // Cursor at end (far below).
+        QTextCursor tc = edit.textCursor();
+        tc.movePosition(QTextCursor::End);
+        edit.setTextCursor(tc);
+        QApplication::processEvents();
+
+        // Scroll to a middle position first to have a baseline.
+        auto *bar = edit.verticalScrollBar();
+        bar->setValue(bar->maximum() / 2);
+        QApplication::processEvents();
+
+        // Anchor viewport at byte offset 0 with the safety net disabled.
+        edit.scrollByteOffsetToTop(0, /*keepCursorVisible=*/false);
+        QApplication::processEvents();
+
+        // The top of the document must be what's shown, regardless of
+        // where the cursor is.
+        QCOMPARE(edit.topVisibleByteOffset(), 0u);
+    }
 };
 
 QTEST_MAIN(TestCollabPlainTextEdit)
