@@ -258,4 +258,23 @@ void CollabPlainTextEdit::updateCursorLabels() {
     }
 }
 
+int CollabPlainTextEdit::byteOffsetToQtPos(uint32_t byteOff) const {
+    QByteArray utf8 = document()->toPlainText().toUtf8();
+    uint32_t clamped = qMin(byteOff, static_cast<uint32_t>(utf8.size()));
+    return QString::fromUtf8(utf8.data(), static_cast<int>(clamped)).length();
+}
+
+uint32_t CollabPlainTextEdit::qtPosToByteOffset(int qtPos) const {
+    QString docText = document()->toPlainText();
+    if (qtPos <= 0) return 0;
+    if (qtPos >= docText.length()) return static_cast<uint32_t>(docText.toUtf8().size());
+    return static_cast<uint32_t>(docText.left(qtPos).toUtf8().size());
+}
+
+uint32_t CollabPlainTextEdit::topVisibleByteOffset() const {
+    if (document()->isEmpty()) return 0;
+    QTextCursor c = cursorForPosition(QPoint(0, 0));
+    return qtPosToByteOffset(c.position());
+}
+
 } // namespace CollabText::Ui
