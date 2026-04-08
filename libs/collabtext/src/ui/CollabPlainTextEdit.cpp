@@ -192,6 +192,7 @@ void CollabPlainTextEdit::drawSecondaryCaret(QPainter &painter, int position,
 void CollabPlainTextEdit::scrollContentsBy(int dx, int dy) {
     QPlainTextEdit::scrollContentsBy(dx, dy);
     updateCursorLabels();
+    emit viewportScrolled();
 }
 
 void CollabPlainTextEdit::syncExtraSelections() {

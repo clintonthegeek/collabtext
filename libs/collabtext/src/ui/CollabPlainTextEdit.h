@@ -25,6 +25,11 @@ signals:
     /// Emitted when the user presses the platform's standard redo shortcut.
     void redoRequested();
 
+    /// Emitted from scrollContentsBy after the base class has processed
+    /// a local scroll event. The embedding app listens for this so it
+    /// can refresh cached viewport anchors for ephemeral presence.
+    void viewportScrolled();
+
 public:
     /// Byte offset (UTF-8) of the character at the top-left of the viewport.
     /// Returns 0 for an empty document. Wrap-aware: returns the byte offset

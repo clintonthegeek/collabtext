@@ -167,6 +167,25 @@ private slots:
         // where the cursor is.
         QCOMPARE(edit.topVisibleByteOffset(), 0u);
     }
+
+    void viewport_scrolled_signal_fires_on_scroll() {
+        CollabPlainTextEdit edit;
+        QString text;
+        for (int i = 0; i < 30; ++i) text += QString("L%1\n").arg(i);
+        edit.setPlainText(text);
+        edit.resize(200, 80);
+        edit.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&edit));
+
+        QSignalSpy spy(&edit, &CollabPlainTextEdit::viewportScrolled);
+        QVERIFY(spy.isValid());
+
+        auto *bar = edit.verticalScrollBar();
+        bar->setValue(bar->maximum() / 2);
+        QApplication::processEvents();
+
+        QVERIFY(spy.count() >= 1);
+    }
 };
 
 QTEST_MAIN(TestCollabPlainTextEdit)
