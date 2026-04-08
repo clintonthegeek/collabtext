@@ -273,6 +273,9 @@ uint32_t CollabPlainTextEdit::qtPosToByteOffset(int qtPos) const {
 
 uint32_t CollabPlainTextEdit::topVisibleByteOffset() const {
     if (document()->isEmpty()) return 0;
+    // cursorForPosition respects visual line wrapping, not logical blocks,
+    // so (0, 0) gives us the first visible WRAPPED line, which is what we
+    // want for stable scroll restoration after remote edits.
     QTextCursor c = cursorForPosition(QPoint(0, 0));
     return qtPosToByteOffset(c.position());
 }

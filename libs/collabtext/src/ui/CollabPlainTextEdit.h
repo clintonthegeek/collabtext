@@ -44,6 +44,10 @@ private:
     void updateCursorLabels();
 
     /// Convert a UTF-8 byte offset into a UTF-16 QTextDocument position.
+    /// Precondition: byteOff must fall on a UTF-8 character boundary.
+    /// All callers in the scroll-stability pipeline satisfy this (offsets
+    /// come from either cursor positions or Buffer::resolve_anchor, both
+    /// of which are boundary-aligned by construction).
     int byteOffsetToQtPos(uint32_t byteOff) const;
 
     /// Convert a UTF-16 QTextDocument position into a UTF-8 byte offset.
