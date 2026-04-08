@@ -161,8 +161,8 @@ size_t Buffer::collect_garbage() {
     // Build protected set: deletion IDs still in the undo stack
     std::unordered_set<uint64_t> protected_ids;
     for (const auto& entry : m_undo_stack) {
-        if (entry.had_deletions)
-            protected_ids.insert(origin_key(entry.deletion_id));
+        for (const auto& del_id : entry.deletion_ids)
+            protected_ids.insert(origin_key(del_id));
     }
 
     return sweep_and_coalesce([&](const Fragment& f) {
@@ -181,8 +181,8 @@ size_t Buffer::compact(const Global& watermark) {
     // Build local undo protection set
     std::unordered_set<uint64_t> protected_ids;
     for (const auto& entry : m_undo_stack) {
-        if (entry.had_deletions)
-            protected_ids.insert(origin_key(entry.deletion_id));
+        for (const auto& del_id : entry.deletion_ids)
+            protected_ids.insert(origin_key(del_id));
     }
 
     return sweep_and_coalesce([&](const Fragment& f) {
@@ -616,7 +616,7 @@ Operation Buffer::apply_local_edit(
     op.version = m_version;
     UndoEntry undo_entry;
     Lamport deletion_ts = m_clock.tick();
-    undo_entry.deletion_id = deletion_ts;
+    bool had_deletions = false;
 
     // Track actually-deleted character timestamps for building deletion_runs.
     std::vector<Lamport> deleted_timestamps;
@@ -654,7 +654,7 @@ Operation Buffer::apply_local_edit(
     auto mark_deleted = [&](Fragment& f) {
         f.deletions.push_back(deletion_ts);
         f.visible = false;
-        undo_entry.had_deletions = true;
+        had_deletions = true;
         for (uint32_t c = 0; c < f.length; ++c) {
             deleted_timestamps.push_back(f.timestamp_at(c));
         }
@@ -935,6 +935,8 @@ Operation Buffer::apply_local_edit(
     m_version.observe(op.timestamp);
 
     // ---- Undo entry ----
+    if (had_deletions)
+        undo_entry.deletion_ids.push_back(deletion_ts);
     m_undo_stack.resize(m_undo_cursor);
     m_undo_stack.push_back(std::move(undo_entry));
     m_undo_cursor = m_undo_stack.size();
@@ -1432,6 +1434,25 @@ void Buffer::enqueue_deferred(OperationEntry entry) {
 // Undo / Redo
 // ---------------------------------------------------------------------------
 
+bool Buffer::coalesce_last_undo() {
+    if (m_undo_cursor < 2) return false;
+
+    auto& latest = m_undo_stack[m_undo_cursor - 1];
+    auto& previous = m_undo_stack[m_undo_cursor - 2];
+
+    previous.inserted_keys.insert(previous.inserted_keys.end(),
+                                  latest.inserted_keys.begin(),
+                                  latest.inserted_keys.end());
+    previous.deletion_ids.insert(previous.deletion_ids.end(),
+                                 latest.deletion_ids.begin(),
+                                 latest.deletion_ids.end());
+
+    m_undo_stack.erase(m_undo_stack.begin()
+                       + static_cast<ptrdiff_t>(m_undo_cursor - 1));
+    m_undo_cursor--;
+    return true;
+}
+
 std::optional<Operation> Buffer::undo() {
     if (m_undo_cursor == 0)
         return std::nullopt;
@@ -1450,11 +1471,11 @@ std::optional<Operation> Buffer::undo() {
         op.counts.push_back({edit_id, current + 1});
     }
 
-    if (entry.had_deletions) {
-        uint32_t current = m_undo_map.undo_count(entry.deletion_id);
+    for (auto &deletion_id : entry.deletion_ids) {
+        uint32_t current = m_undo_map.undo_count(deletion_id);
         m_undo_map.insert(
-            UndoMapEntry{{entry.deletion_id, op.timestamp}, current + 1});
-        op.counts.push_back({entry.deletion_id, current + 1});
+            UndoMapEntry{{deletion_id, op.timestamp}, current + 1});
+        op.counts.push_back({deletion_id, current + 1});
     }
 
     m_fragment_tree.for_each_mut([this](Fragment& f) {
@@ -1483,11 +1504,11 @@ std::optional<Operation> Buffer::redo() {
         op.counts.push_back({edit_id, current + 1});
     }
 
-    if (entry.had_deletions) {
-        uint32_t current = m_undo_map.undo_count(entry.deletion_id);
+    for (auto &deletion_id : entry.deletion_ids) {
+        uint32_t current = m_undo_map.undo_count(deletion_id);
         m_undo_map.insert(
-            UndoMapEntry{{entry.deletion_id, op.timestamp}, current + 1});
-        op.counts.push_back({entry.deletion_id, current + 1});
+            UndoMapEntry{{deletion_id, op.timestamp}, current + 1});
+        op.counts.push_back({deletion_id, current + 1});
     }
 
     m_fragment_tree.for_each_mut([this](Fragment& f) {

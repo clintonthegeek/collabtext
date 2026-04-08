@@ -69,6 +69,25 @@ public:
     /// or nullopt if there is nothing to redo.
     std::optional<Operation> redo();
 
+    /// Number of entries on the undo stack that can currently be undone.
+    /// (Increases by one per local edit; decreases by one per undo; restored
+    /// by redo.) Used by editor UIs to detect whether the previous entry on
+    /// the stack is still the one they expect — important for time-based
+    /// coalescing when other code paths (e.g. background tasks) may also
+    /// push edits.
+    size_t undo_depth() const { return m_undo_cursor; }
+
+    /// Merge the most recent undo entry into the one before it. The two
+    /// entries become a single Ctrl+Z step: their inserted characters and
+    /// deletion ids are concatenated. Returns true if a merge happened, or
+    /// false if there are fewer than two undoable entries on the stack.
+    ///
+    /// This is a purely local operation — it does not modify any CRDT state
+    /// and produces no operation to broadcast. Editor UIs call it after a
+    /// new local edit when they want that edit to be grouped with the
+    /// previous one (e.g., consecutive keystrokes inside a word).
+    bool coalesce_last_undo();
+
     /// Returns the full visible text of the document.
     std::string text() const;
 
@@ -210,12 +229,14 @@ private:
     OperationQueue m_deferred_queue;
     std::set<uint16_t> m_deferred_replicas;
 
-    /// Undo history: each entry is a list of UndoMapKeys for the characters
-    /// created by that edit, plus keys for characters deleted.
+    /// Undo history: each entry tracks the inserted characters and the
+    /// deletion-operation IDs that this entry should undo. A normal,
+    /// uncoalesced entry has at most one deletion id; coalesced entries
+    /// (created by `coalesce_last_undo`) may carry several so that one
+    /// Ctrl+Z reverses every grouped local edit at once.
     struct UndoEntry {
-        std::vector<UndoMapKey> inserted_keys;  // Characters we inserted
-        Lamport deletion_id;                     // Edit timestamp (for undoing deletions)
-        bool had_deletions = false;              // Whether this edit deleted characters
+        std::vector<UndoMapKey> inserted_keys;
+        std::vector<Lamport> deletion_ids;
     };
     std::vector<UndoEntry> m_undo_stack;
     size_t m_undo_cursor = 0;  // Points past the last undoable entry

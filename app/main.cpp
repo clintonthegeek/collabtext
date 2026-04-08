@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QDateTime>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMainWindow>
@@ -118,6 +119,15 @@ public:
         connect(m_qtDoc, &QTextDocument::contentsChange,
                 this, &EditorPane::onContentsChange);
 
+        // Undo/redo: routed from the editor widget. CollabPlainTextEdit
+        // intercepts the platform's standard undo/redo shortcuts (which
+        // QPlainTextEdit would otherwise swallow internally) and emits
+        // these signals.
+        connect(m_edit, &CollabPlainTextEdit::undoRequested,
+                this, &EditorPane::undoLocal);
+        connect(m_edit, &CollabPlainTextEdit::redoRequested,
+                this, &EditorPane::redoLocal);
+
         m_sync.start();
     }
 
@@ -130,11 +140,20 @@ public:
     /// Run one sync cycle. Saves version before polling, then applies
     /// remote edits surgically to the QTextDocument via edits_since().
     void poll() {
+        checkDivergence("before poll");
         Global before = m_buffer.version();
         size_t applied = m_sync.poll();
         if (applied > 0) {
-            applyEditsToQt(m_buffer.edits_since(before));
+            auto edits = m_buffer.edits_since(before);
+            applyEditsToQt(edits);
+            // Remote edits break any in-progress local coalescing run:
+            // the user's tracked Qt cursor position may have shifted, and
+            // their next keystroke is conceptually a new action even if
+            // it lands at the same coordinates.
+            m_lastEditKind = EditKind::None;
+            checkDivergence("after poll");
         }
+        checkDivergence("end of poll");
     }
 
     /// Write presence.json for this pane's replica.
@@ -205,24 +224,98 @@ private slots:
         std::string bufText = m_buffer.text();
         QString qBufText = QString::fromStdString(bufText);
 
+        // Pre-edit divergence check: buffer text should match Qt text BEFORE this edit.
+        // Qt doc is already modified, so reconstruct the old Qt text from the change.
+        // Simpler: just check lengths match (buf hasn't been touched yet).
+        QString qtNow = m_qtDoc->toPlainText();
+        auto expectedQtOldLen = qtNow.length() - charsAdded + charsRemoved;
+        if (static_cast<decltype(expectedQtOldLen)>(bufText.size()) != expectedQtOldLen) {
+            qWarning("[%s] PRE-EDIT MISMATCH: bufLen=%zu expectedOldQtLen=%lld "
+                     "(qtNow=%lld - added=%d + removed=%d)",
+                     m_replicaName.c_str(), bufText.size(),
+                     static_cast<long long>(expectedQtOldLen),
+                     static_cast<long long>(qtNow.length()), charsAdded, charsRemoved);
+        }
+
         uint32_t byteStart = qBufText.left(position).toUtf8().size();
         uint32_t byteEnd = byteStart;
         if (charsRemoved > 0) {
             byteEnd = qBufText.left(position + charsRemoved).toUtf8().size();
         }
 
+        QString insertedQt;
         std::string inserted;
         if (charsAdded > 0) {
             QTextCursor cursor(m_qtDoc);
             cursor.setPosition(position);
             cursor.setPosition(position + charsAdded, QTextCursor::KeepAnchor);
-            QString sel = cursor.selectedText();
-            sel.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
-            inserted = sel.toStdString();
+            insertedQt = cursor.selectedText();
+            insertedQt.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
+            inserted = insertedQt.toStdString();
+        }
+
+        // ---- Coalescing decision (made BEFORE applying the edit) ----
+        // We classify this edit, then check whether it can be merged with
+        // the previous one to give the user word-level (rather than
+        // character-level) Ctrl+Z granularity.
+        EditKind thisKind = EditKind::Other;
+        if (charsRemoved == 0 && charsAdded == 1) {
+            thisKind = EditKind::Insert;
+        } else if (charsRemoved == 1 && charsAdded == 0) {
+            thisKind = EditKind::Backspace;
+        }
+
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        const bool inWindow = (nowMs - m_lastEditTimeMs) < kCoalesceWindowMs;
+        // Continuity guard: if anything else (gremlin, programmatic edit)
+        // pushed an entry onto the stack between the previous user edit
+        // and this one, we MUST NOT coalesce — the previous undo entry
+        // is no longer ours.
+        const bool stackContinuous = (m_buffer.undo_depth() == m_lastUndoDepth);
+
+        bool shouldCoalesce = false;
+        if (inWindow && stackContinuous && m_lastEditKind == thisKind) {
+            if (thisKind == EditKind::Insert
+                && !m_lastInsertEndsOnWordBoundary
+                && position == m_lastEditEndQt) {
+                // Continuous typing — same caret position as the end of
+                // the previous insert, and the previous run was still
+                // mid-word.
+                shouldCoalesce = true;
+            } else if (thisKind == EditKind::Backspace
+                       && position == m_lastEditEndQt - 1) {
+                // Continuous backspace — each press deletes the char one
+                // position to the left of the previous deletion target.
+                shouldCoalesce = true;
+            }
         }
 
         auto op = m_buffer.apply_local_edit({{byteStart, byteEnd}}, {inserted});
         m_sync.push_local_op(op);
+
+        if (shouldCoalesce)
+            m_buffer.coalesce_last_undo();
+
+        // ---- Update tracking for the next call ----
+        m_lastEditTimeMs = nowMs;
+        m_lastUndoDepth = m_buffer.undo_depth();
+        m_lastEditKind = thisKind;
+        if (thisKind == EditKind::Insert) {
+            m_lastEditEndQt = position + charsAdded;
+            // A whitespace/newline character joins the current undo group
+            // but blocks the NEXT keystroke from joining it.
+            QChar lastCh = insertedQt.isEmpty() ? QChar()
+                                                 : insertedQt.at(insertedQt.size() - 1);
+            m_lastInsertEndsOnWordBoundary = lastCh.isSpace();
+        } else if (thisKind == EditKind::Backspace) {
+            m_lastEditEndQt = position;
+            m_lastInsertEndsOnWordBoundary = false;
+        } else {
+            m_lastEditEndQt = -1;
+            m_lastInsertEndsOnWordBoundary = false;
+        }
+
+        checkDivergence("after local edit");
     }
 
     void gremlinTick() {
@@ -241,27 +334,96 @@ private slots:
 
         Global before = m_buffer.version();
         Operation op;
+        uint32_t newCursorByte = 0;
 
         if (roll == 0 && docLen > 10) {
             uint32_t delLen = qMin(static_cast<uint32_t>(rng->bounded(3, 9)), docLen);
             uint32_t pos = rng->bounded(docLen - delLen + 1);
             op = m_buffer.apply_local_edit({{pos, pos + delLen}}, {""});
+            newCursorByte = pos;
         } else if (roll < 3 && docLen > 0) {
             uint32_t pos = rng->bounded(docLen + 1);
             op = m_buffer.apply_local_edit({{pos, pos}}, {"\n"});
+            newCursorByte = pos + 1;
         } else {
             uint32_t pos = docLen;
             if (rng->bounded(5) == 0 && docLen > 0)
                 pos = rng->bounded(docLen + 1);
             const char *word = lorem[rng->bounded(nwords)];
             op = m_buffer.apply_local_edit({{pos, pos}}, {word});
+            newCursorByte = pos + static_cast<uint32_t>(strlen(word));
         }
 
         m_sync.push_local_op(op);
         applyEditsToQt(m_buffer.edits_since(before));
+
+        // Move the widget's text cursor to where the gremlin just typed so
+        // that the next writeEphemeral() broadcasts this position. Without
+        // this, Bob's cursor would appear stuck in both panes while the
+        // gremlin is editing.
+        QTextCursor c = m_edit->textCursor();
+        c.setPosition(byteOffsetToQtPos(newCursorByte));
+        m_edit->setTextCursor(c);
+    }
+
+    void undoLocal() {
+        Global before = m_buffer.version();
+        auto op = m_buffer.undo();
+        if (!op) {
+            qDebug("[%s] undo: nothing to undo", m_replicaName.c_str());
+            return;
+        }
+        m_sync.push_local_op(*op);
+        applyEditsToQt(m_buffer.edits_since(before));
+        // Hard boundary: subsequent typing must not coalesce across an
+        // undo press, even if the cursor returns to the same place.
+        m_lastEditKind = EditKind::None;
+        m_lastUndoDepth = m_buffer.undo_depth();
+        checkDivergence("after undo");
+    }
+
+    void redoLocal() {
+        Global before = m_buffer.version();
+        auto op = m_buffer.redo();
+        if (!op) {
+            qDebug("[%s] redo: nothing to redo", m_replicaName.c_str());
+            return;
+        }
+        m_sync.push_local_op(*op);
+        applyEditsToQt(m_buffer.edits_since(before));
+        m_lastEditKind = EditKind::None;
+        m_lastUndoDepth = m_buffer.undo_depth();
+        checkDivergence("after redo");
     }
 
 private:
+    void checkDivergence(const char *context) {
+        std::string bufText = m_buffer.text();
+        QString qtText = m_qtDoc->toPlainText();
+        std::string qtUtf8 = qtText.toStdString();
+        if (bufText != qtUtf8) {
+            qWarning("DIVERGENCE [%s] in %s! Buffer(%zu bytes) != Qt(%zu bytes)",
+                     m_replicaName.c_str(), context,
+                     bufText.size(), qtUtf8.size());
+            // Show first difference
+            size_t minLen = std::min(bufText.size(), qtUtf8.size());
+            for (size_t i = 0; i < minLen; ++i) {
+                if (bufText[i] != qtUtf8[i]) {
+                    qWarning("  First diff at byte %zu: buffer=0x%02x qt=0x%02x",
+                             i, (unsigned char)bufText[i], (unsigned char)qtUtf8[i]);
+                    qWarning("  Buffer around diff: ...%.40s...",
+                             bufText.substr(i > 20 ? i - 20 : 0, 60).c_str());
+                    qWarning("  Qt around diff:     ...%.40s...",
+                             qtUtf8.substr(i > 20 ? i - 20 : 0, 60).c_str());
+                    break;
+                }
+            }
+            if (bufText.size() != qtUtf8.size() && minLen == std::min(bufText.size(), qtUtf8.size())) {
+                qWarning("  Lengths differ: buffer=%zu qt=%zu", bufText.size(), qtUtf8.size());
+            }
+        }
+    }
+
     void applyEditsToQt(const std::vector<TextEdit> &edits) {
         if (edits.empty()) return;
         m_syncing = true;
@@ -293,6 +455,20 @@ private:
     QTextDocument *m_qtDoc;
     QLabel *m_statusLabel;
     QTimer *m_gremlinTimer = nullptr;
+
+    // -------- Undo coalescing state --------
+    // Used by onContentsChange to decide whether the new edit should be
+    // grouped with the previous one (consecutive typing within a word, or
+    // a run of backspaces). All "Qt position" values are character offsets
+    // in the QTextDocument's coordinate space.
+    enum class EditKind { None, Insert, Backspace, Other };
+    static constexpr qint64 kCoalesceWindowMs = 500;
+
+    EditKind m_lastEditKind = EditKind::None;
+    qint64 m_lastEditTimeMs = 0;
+    int m_lastEditEndQt = -1;            // Insert: post-insertion pos. Backspace: cursor pos after delete.
+    bool m_lastInsertEndsOnWordBoundary = false;
+    size_t m_lastUndoDepth = 0;          // Buffer's undo_depth() right after the last user edit
 };
 
 class MainWindow : public QMainWindow {

@@ -1,11 +1,14 @@
 #include "ui/CollabPlainTextEdit.h"
 #include "ui/CursorLabelWidget.h"
 
-#include <QPainter>
+#include <QEvent>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QMouseEvent>
-#include <QTextBlock>
+#include <QPainter>
 #include <QScrollBar>
+#include <QShortcutEvent>
+#include <QTextBlock>
 #include <QAbstractTextDocumentLayout>
 
 namespace CollabText::Ui {
@@ -55,7 +58,38 @@ void CollabPlainTextEdit::paintEvent(QPaintEvent *e) {
     }
 }
 
+bool CollabPlainTextEdit::event(QEvent *e) {
+    // QPlainTextEdit accepts ShortcutOverride for the standard editing
+    // shortcuts (including Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y), which prevents
+    // the normal QAction/QShortcut routing from firing. We DON'T want that
+    // for undo/redo, since the CRDT owns the undo stack — Qt's built-in
+    // undo is disabled. Let those keys fall through to keyPressEvent below
+    // so we can emit our own signals.
+    if (e->type() == QEvent::ShortcutOverride) {
+        auto *ke = static_cast<QKeyEvent *>(e);
+        if (ke == QKeySequence::Undo || ke == QKeySequence::Redo) {
+            ke->ignore();
+            return true;
+        }
+    }
+    return QPlainTextEdit::event(e);
+}
+
 void CollabPlainTextEdit::keyPressEvent(QKeyEvent *e) {
+    // Undo/redo: route to the embedding app via signals so it can drive
+    // the CRDT undo stack. Must be checked before delegating to the base
+    // QPlainTextEdit, which would otherwise swallow these keys.
+    if (e == QKeySequence::Undo) {
+        emit undoRequested();
+        e->accept();
+        return;
+    }
+    if (e == QKeySequence::Redo) {
+        emit redoRequested();
+        e->accept();
+        return;
+    }
+
     if (e->key() == Qt::Key_Escape && m_controller->cursorCount() > 1) {
         m_controller->clearSecondaryCursors();
         e->accept();

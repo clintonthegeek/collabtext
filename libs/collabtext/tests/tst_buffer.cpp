@@ -130,6 +130,114 @@ private slots:
     }
 
     // -----------------------------------------------------------------------
+    // Coalesce undo
+    // -----------------------------------------------------------------------
+
+    void coalesce_undo_returns_false_below_two_entries() {
+        Buffer buf(1);
+        QVERIFY(!buf.coalesce_last_undo());
+        buf.apply_local_edit({{0, 0}}, {"a"});
+        QVERIFY(!buf.coalesce_last_undo());
+    }
+
+    void coalesce_undo_merges_two_inserts() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+        buf.apply_local_edit({{5, 5}}, {" world"});
+        QCOMPARE(buf.undo_depth(), size_t(2));
+
+        QVERIFY(buf.coalesce_last_undo());
+        QCOMPARE(buf.undo_depth(), size_t(1));
+
+        // One undo now reverses both inserts
+        buf.undo();
+        QCOMPARE(buf.text(), std::string(""));
+        QCOMPARE(buf.undo_depth(), size_t(0));
+    }
+
+    void coalesce_undo_redo_restores_both() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+        buf.apply_local_edit({{5, 5}}, {" world"});
+        QVERIFY(buf.coalesce_last_undo());
+
+        buf.undo();
+        QCOMPARE(buf.text(), std::string(""));
+        buf.redo();
+        QCOMPARE(buf.text(), std::string("hello world"));
+    }
+
+    void coalesce_undo_merges_insert_then_delete() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"hello"});
+        buf.apply_local_edit({{0, 5}}, {""});  // delete "hello"
+        QCOMPARE(buf.text(), std::string(""));
+
+        QVERIFY(buf.coalesce_last_undo());
+        QCOMPARE(buf.undo_depth(), size_t(1));
+
+        // One undo reverses both: the delete is undone (text comes back),
+        // and the insert is also undone (text goes away again).
+        buf.undo();
+        QCOMPARE(buf.text(), std::string(""));
+    }
+
+    void coalesce_undo_merges_two_deletes() {
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        buf.apply_local_edit({{4, 6}}, {""});  // delete "ef" -> "abcd"
+        buf.apply_local_edit({{2, 4}}, {""});  // delete "cd" -> "ab"
+        QCOMPARE(buf.text(), std::string("ab"));
+
+        // Coalesce the two deletes into one undo step
+        QVERIFY(buf.coalesce_last_undo());
+        QCOMPARE(buf.undo_depth(), size_t(2));
+
+        buf.undo();  // undoes the coalesced delete pair
+        QCOMPARE(buf.text(), std::string("abcdef"));
+    }
+
+    void coalesce_undo_then_new_edit_replaces_redoable() {
+        // Standard undo-stack invariant: editing after an undo throws away
+        // the redoable tail. Coalescing should not break this.
+        Buffer buf(1);
+        buf.apply_local_edit({{0, 0}}, {"a"});
+        buf.apply_local_edit({{1, 1}}, {"b"});
+        QVERIFY(buf.coalesce_last_undo());
+        QCOMPARE(buf.undo_depth(), size_t(1));
+
+        buf.undo();
+        QCOMPARE(buf.text(), std::string(""));
+        QCOMPARE(buf.undo_depth(), size_t(0));
+
+        buf.apply_local_edit({{0, 0}}, {"x"});
+        QCOMPARE(buf.text(), std::string("x"));
+
+        // Redo of the original coalesced entry must be unreachable now
+        auto redoOp = buf.redo();
+        QVERIFY(!redoOp.has_value());
+    }
+
+    void coalesce_undo_remote_sees_single_op() {
+        // A coalesced undo broadcasts as ONE op carrying multiple counts.
+        Buffer alice(1);
+        Buffer bob(2);
+
+        auto op1 = alice.apply_local_edit({{0, 0}}, {"hello"});
+        auto op2 = alice.apply_local_edit({{5, 5}}, {" world"});
+        bob.apply_ops({op1, op2});
+        QCOMPARE(bob.text(), std::string("hello world"));
+
+        QVERIFY(alice.coalesce_last_undo());
+        auto undoOp = alice.undo();
+        QVERIFY(undoOp.has_value());
+        QCOMPARE(alice.text(), std::string(""));
+
+        bob.apply_ops({*undoOp});
+        QCOMPARE(bob.text(), std::string(""));
+    }
+
+    // -----------------------------------------------------------------------
     // Remote edit
     // -----------------------------------------------------------------------
 

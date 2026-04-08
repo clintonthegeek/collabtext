@@ -16,7 +16,17 @@ public:
     void setDocument(QTextDocument *document);
     MultiCursorController *multiCursorController() const { return m_controller; }
 
+signals:
+    /// Emitted when the user presses the platform's standard undo shortcut.
+    /// QPlainTextEdit normally consumes this internally; we re-route it so
+    /// that the embedding app can drive the CRDT undo stack.
+    void undoRequested();
+
+    /// Emitted when the user presses the platform's standard redo shortcut.
+    void redoRequested();
+
 protected:
+    bool event(QEvent *e) override;
     void paintEvent(QPaintEvent *e) override;
     void keyPressEvent(QKeyEvent *e) override;
     void mousePressEvent(QMouseEvent *e) override;
