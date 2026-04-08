@@ -165,6 +165,13 @@ public:
                 }
             }
 
+            // Settle: if cursor ended up at an internal node (happens when
+            // the last extracted item was the final item in its leaf — ascend
+            // moved to the parent, then the loop broke because position >=
+            // target), descend into the next child's leftmost leaf so that
+            // item() returns the correct next item.
+            settle_at_leaf();
+
             return result;
         }
 
@@ -334,6 +341,33 @@ public:
             }
             if (node->leaf().count > 0) {
                 m_stack.push_back({node, 0});
+            }
+        }
+
+        /// If the cursor is at an internal node, descend to the leftmost
+        /// leaf of the current child so that item() works. No-op when
+        /// already at a leaf or at end.
+        void settle_at_leaf() {
+            while (!m_stack.empty() && !m_stack.back().node->is_leaf()) {
+                auto& level = m_stack.back();
+                auto& in = level.node->internal();
+                if (level.index < in.count) {
+                    const Node* node = in.children[level.index].get();
+                    while (!node->is_leaf()) {
+                        auto& cin = node->internal();
+                        if (cin.count == 0) { m_stack.clear(); return; }
+                        m_stack.push_back({node, 0});
+                        node = cin.children[0].get();
+                    }
+                    if (node->leaf().count > 0) {
+                        m_stack.push_back({node, 0});
+                    } else {
+                        m_stack.clear();
+                    }
+                    return;
+                }
+                // This internal node is exhausted, ascend
+                ascend();
             }
         }
 
