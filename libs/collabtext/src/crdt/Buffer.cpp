@@ -1101,6 +1101,21 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
         if (ins.length != 1) return false;
     }
 
+    // Locator-collision check: if any incoming insert lands on a locator that
+    // already has a fragment in the tree, fall back to the slow path so
+    // normalize_fragments can atomize multi-character fragments at the shared
+    // locator.  Without this, an existing multi-char fragment from one replica
+    // would coexist with the incoming single-char fragment from another
+    // replica, producing a tree that reads in the wrong order versus replicas
+    // that received the multi-char insert via the slow path.
+    for (auto &ins : op.inserted_fragments) {
+        auto check_cursor = m_fragment_tree.cursor<FragmentOrderDim>();
+        check_cursor.seek(
+            FragmentOrderDim{ins.locator, Lamport::min()}, Bias::Right);
+        if (check_cursor.item() && check_cursor.item()->locator == ins.locator)
+            return false;
+    }
+
     // Apply deletion runs via origin index + in-place tree mutations.
     // Handles partial deletions by splitting fragments in place.
     for (auto& run : op.deletion_runs) {
