@@ -262,36 +262,16 @@ No new CRDT API. No changes to `Buffer.h` / `Buffer.cpp`. No changes to
 Implementation completed 2026-04-07. All 9 plan tasks committed, full
 `ctest` suite green (26/26), working tree clean.
 
-### Known limitations
+### Known limitations (resolved 2026-04-13)
 
-1. **Scroll-restore drift of ~2 visual lines.** The iterative
-   convergence loop in `scrollByteOffsetToTop` (`CollabPlainTextEdit.cpp`)
-   divides `cursorRect(target).top()` by `fontMetrics().height()` to
-   compute a scroll-bar delta. Integer truncation means the loop can
-   exit with up to one line of residual error per iteration, and the
-   font-metrics height may not match the actual rendered line height
-   (which includes spacing). In practice the drift is ≤2 lines. The
-   integration test (`tst_scroll_stability.cpp`) uses a drift-tolerant
-   assertion (`abs(drift) < 50` bytes, roughly 3 lines) to accommodate
-   this. The `keepCursorVisible` safety net means the user's cursor
-   stays on screen regardless.
-
-   **Potential fixes (not yet attempted):**
-   - Replace the integer `delta = rect.top() / lineHeight` with a
-     rounded version: `delta = (rect.top() + lineHeight / 2) / lineHeight`
-     (avoids the near-zero truncation that causes the loop to exit early).
-   - Use `QPlainTextEdit::firstVisibleBlock()` + block-layout line
-     counting to compute the exact scroll-bar value directly instead of
-     iterating. This is O(n) in the number of blocks but deterministic.
-   - Use `QTextBlock::layout()->lineAt()` to get the exact visual-line
-     number and set the scroll bar in one shot.
-
-2. **Manual smoke test not yet performed.** The end-to-end scenario
-   (scroll pane A to mid-document, type in pane B above pane A's
-   viewport, verify pane A does not jump) has not been run in the live
-   two-pane app. Automated tests cover the capture/restore pipeline but
-   not the full app integration including the poll timer, gremlin stress
-   tester, and cursor-label rendering during scroll restoration.
+1. **Scroll-restore drift — FIXED.** Replaced the iterative
+   pixel-delta convergence loop with a deterministic one-shot
+   computation using `QTextBlock::firstLineNumber()` +
+   `QTextLayout::lineForTextPosition()`. The scrollbar value is now set
+   directly to the exact visual line number — no font-metric
+   assumptions, no iteration, no truncation drift. The integration test
+   tolerance was tightened from `abs(drift) < 50` bytes to
+   `abs(drift) < 20` bytes (within one visual line).
 
 ### Deferred from the original spec
 

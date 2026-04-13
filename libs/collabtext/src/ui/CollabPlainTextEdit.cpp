@@ -308,16 +308,28 @@ void CollabPlainTextEdit::scrollByteOffsetToTop(uint32_t byteOff,
 
     auto *bar = verticalScrollBar();
     if (!bar) return;
-    int lineHeight = qMax(1, fontMetrics().height());
 
-    // Iterate a small number of times to converge: the cursorRect after
-    // each scroll reflects the new viewport, and we want rect.top() ≈ 0.
-    for (int iter = 0; iter < 4; ++iter) {
-        QRect rect = cursorRect(target);
-        int delta = rect.top() / lineHeight;
-        if (delta == 0) break;
-        bar->setValue(bar->value() + delta);
+    QTextBlock targetBlock = target.block();
+    if (!targetBlock.isValid()) return;
+
+    // Compute the exact visual line number. firstLineNumber() gives the
+    // absolute visual line of the block's start (accounts for word-wrap
+    // in all preceding blocks). We add the visual line index within the
+    // block for positions past the block start.
+    int visualLine = targetBlock.firstLineNumber();
+
+    int posInBlock = qtPos - targetBlock.position();
+    if (posInBlock > 0) {
+        QTextLayout *layout = targetBlock.layout();
+        if (layout && layout->lineCount() > 0) {
+            QTextLine line = layout->lineForTextPosition(posInBlock);
+            if (line.isValid()) {
+                visualLine += line.lineNumber();
+            }
+        }
     }
+
+    bar->setValue(visualLine);
 
     if (keepCursorVisible) {
         ensureCursorVisible();

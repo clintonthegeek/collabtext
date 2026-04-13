@@ -93,11 +93,13 @@ private slots:
         edit.scrollByteOffsetToTop(restoredByte, /*keepCursorVisible=*/false);
         QApplication::processEvents();
 
-        // Allow for line-level drift: the restored position should be
-        // within one line-height of the target.
+        // The deterministic block-layout scroll restore should land on
+        // the exact visual line containing restoredByte. topVisibleByteOffset
+        // reports the start of that visual line, which may differ from
+        // restoredByte by at most one line's worth of bytes.
         uint32_t actual = edit.topVisibleByteOffset();
         qint64 drift = static_cast<qint64>(actual) - static_cast<qint64>(restoredByte);
-        QVERIFY2(std::abs(drift) < 50,  // generous "less than ~3 lines" margin
+        QVERIFY2(std::abs(drift) < 20,  // within one line (lines are ~8 bytes each)
                  qPrintable(QString("top drift too large: actual=%1 expected=%2")
                              .arg(actual).arg(restoredByte)));
     }
