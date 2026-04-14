@@ -11,6 +11,8 @@
 #include <QTextBlock>
 #include <QAbstractTextDocumentLayout>
 
+#include <algorithm>
+
 namespace CollabText::Ui {
 
 CollabPlainTextEdit::CollabPlainTextEdit(QWidget *parent)
@@ -255,6 +257,31 @@ void CollabPlainTextEdit::updateCursorLabels() {
             it = m_cursorLabels.erase(it);
         } else {
             ++it;
+        }
+    }
+
+    // Resolve label collisions: nudge overlapping labels downward so
+    // they stack instead of rendering on top of each other.
+    QList<CursorLabelWidget*> visibleLabels;
+    for (auto it = m_cursorLabels.cbegin(); it != m_cursorLabels.cend(); ++it) {
+        if (it.value()->isVisible())
+            visibleLabels.append(it.value());
+    }
+    if (visibleLabels.size() > 1) {
+        std::sort(visibleLabels.begin(), visibleLabels.end(),
+            [](const CursorLabelWidget *a, const CursorLabelWidget *b) {
+                return a->y() < b->y()
+                    || (a->y() == b->y() && a->x() < b->x());
+            });
+        for (int i = 0; i < visibleLabels.size(); ++i) {
+            for (int j = i + 1; j < visibleLabels.size(); ++j) {
+                if (visibleLabels[i]->geometry().intersects(
+                        visibleLabels[j]->geometry())) {
+                    visibleLabels[j]->move(
+                        visibleLabels[j]->x(),
+                        visibleLabels[i]->geometry().bottom() + 2);
+                }
+            }
         }
     }
 }

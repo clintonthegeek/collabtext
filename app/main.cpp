@@ -86,11 +86,14 @@ public:
                            "Ctrl+Alt+Up/Down to add cursors)"));
 
         m_statusLabel = new QLabel(this);
+        m_followBtn = new QPushButton(QStringLiteral("Follow"), this);
+        m_followBtn->setCheckable(true);
         auto *gremlinBtn = new QPushButton(QStringLiteral("Gremlin: OFF"), this);
         gremlinBtn->setCheckable(true);
         auto *bottomRow = new QHBoxLayout;
         bottomRow->addWidget(m_statusLabel);
         bottomRow->addStretch();
+        bottomRow->addWidget(m_followBtn);
         bottomRow->addWidget(gremlinBtn);
         layout->addLayout(bottomRow);
 
@@ -105,6 +108,12 @@ public:
                 m_gremlinTimer->stop();
                 gremlinBtn->setText(QStringLiteral("Gremlin: OFF"));
             }
+        });
+        connect(m_followBtn, &QPushButton::toggled, this, [this](bool on) {
+            m_following = on;
+            m_followBtn->setText(on
+                ? QStringLiteral("Following %1").arg(m_followTargetName)
+                : QStringLiteral("Follow %1").arg(m_followTargetName));
         });
 
         connect(m_edit->multiCursorController(),
@@ -139,6 +148,11 @@ public:
     const Identity &identity() const { return m_identity; }
     PresenceManager &presenceManager() { return m_presence; }
     const std::string &replicaName() const { return m_replicaName; }
+
+    void setFollowTargetName(const QString &name) {
+        m_followTargetName = name;
+        m_followBtn->setText(QStringLiteral("Follow %1").arg(name));
+    }
 
     /// Run one sync cycle. Saves version before polling, then applies
     /// remote edits surgically to the QTextDocument via edits_since().
@@ -196,6 +210,7 @@ public:
     }
 
     /// Apply a remote EphemeralState, resolving anchors and setting remote cursors.
+    /// If follow-mode is active, also scroll to the remote user's viewport.
     void applyRemoteEphemeral(const EphemeralState &es, const Identity &remoteIdentity) {
         QList<RemoteCursor> cursors;
         for (const auto &cp : es.cursors) {
@@ -209,6 +224,14 @@ public:
             cursors.append(rc);
         }
         m_edit->multiCursorController()->setRemoteCursors(cursors);
+
+        // Follow mode: scroll to the remote user's viewport position.
+        if (m_following && es.viewport_top) {
+            uint32_t remoteTopByte = m_buffer.resolve_anchor(*es.viewport_top);
+            m_followScrolling = true;
+            m_edit->scrollByteOffsetToTop(remoteTopByte, /*keepCursorVisible=*/false);
+            m_followScrolling = false;
+        }
     }
 
     /// Convert a Qt character position to a byte offset.
@@ -234,13 +257,14 @@ private slots:
 
         // Pre-edit divergence check: buffer text should match Qt text BEFORE this edit.
         // Qt doc is already modified, so reconstruct the old Qt text from the change.
-        // Simpler: just check lengths match (buf hasn't been touched yet).
+        // Compare Qt character counts (not byte counts — the buffer stores UTF-8
+        // and multi-byte characters would make a byte comparison spuriously fail).
         QString qtNow = m_qtDoc->toPlainText();
         auto expectedQtOldLen = qtNow.length() - charsAdded + charsRemoved;
-        if (static_cast<decltype(expectedQtOldLen)>(bufText.size()) != expectedQtOldLen) {
-            qWarning("[%s] PRE-EDIT MISMATCH: bufLen=%zu expectedOldQtLen=%lld "
+        if (qBufText.length() != expectedQtOldLen) {
+            qWarning("[%s] PRE-EDIT MISMATCH: bufChars=%lld expectedOldQtLen=%lld "
                      "(qtNow=%lld - added=%d + removed=%d)",
-                     m_replicaName.c_str(), bufText.size(),
+                     m_replicaName.c_str(), static_cast<long long>(qBufText.length()),
                      static_cast<long long>(expectedQtOldLen),
                      static_cast<long long>(qtNow.length()), charsAdded, charsRemoved);
         }
@@ -254,11 +278,12 @@ private slots:
         QString insertedQt;
         std::string inserted;
         if (charsAdded > 0) {
-            QTextCursor cursor(m_qtDoc);
-            cursor.setPosition(position);
-            cursor.setPosition(position + charsAdded, QTextCursor::KeepAnchor);
-            insertedQt = cursor.selectedText();
-            insertedQt.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
+            // Extract the inserted text from the already-fetched toPlainText()
+            // rather than constructing a QTextCursor. During contentsChange
+            // the document may be in an inconsistent state, and
+            // QTextCursor::setPosition can fail for large insertions (e.g.
+            // paste), leaving selectedText() empty and the buffer out of sync.
+            insertedQt = qtNow.mid(position, charsAdded);
             inserted = insertedQt.toStdString();
         }
 
@@ -411,6 +436,13 @@ private slots:
         uint32_t bottomByteOff = m_edit->bottomVisibleByteOffset();
         m_viewportTopAnchor = m_buffer.anchor_at(topByteOff, Bias::Left);
         m_viewportBottomAnchor = m_buffer.anchor_at(bottomByteOff, Bias::Left);
+
+        // Manual scroll disables follow mode. The guard prevents
+        // follow-driven scrolls (from applyRemoteEphemeral) from
+        // triggering this — those set m_followScrolling = true.
+        if (m_following && !m_followScrolling) {
+            m_followBtn->setChecked(false);
+        }
     }
 
 private:
@@ -498,7 +530,13 @@ private:
     CollabPlainTextEdit *m_edit;
     QTextDocument *m_qtDoc;
     QLabel *m_statusLabel;
+    QPushButton *m_followBtn;
     QTimer *m_gremlinTimer = nullptr;
+
+    // -------- Follow mode --------
+    QString m_followTargetName;
+    bool m_following = false;
+    bool m_followScrolling = false;  // guard: true during programmatic follow scroll
 
     // -------- Undo coalescing state --------
     // Used by onContentsChange to decide whether the new edit should be
@@ -544,6 +582,8 @@ public:
 
         m_paneA = new EditorPane(aliceId, 1, "alice", sharedFolder, central);
         m_paneB = new EditorPane(bobId, 2, "bob", sharedFolder, central);
+        m_paneA->setFollowTargetName(QString::fromStdString(bobId.display_name));
+        m_paneB->setFollowTargetName(QString::fromStdString(aliceId.display_name));
         layout->addWidget(m_paneA, 1);
         layout->addWidget(m_paneB, 1);
 
