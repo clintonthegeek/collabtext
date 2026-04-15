@@ -16,6 +16,7 @@ add_library(collabtext STATIC
     src/crdt/Serialization.cpp
     src/crdt/FileSync.cpp
     src/crdt/SyncUtils.cpp
+    src/crdt/StreamSerialization.cpp
     src/crdt/NetworkSim.cpp
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
@@ -81,3 +82,4 @@ add_crdt_test(tst_presence_manager)
 add_crdt_test(tst_identity_widgets)
 add_crdt_test(tst_collab_plain_text_edit)
 add_crdt_test(tst_scroll_stability)
+add_crdt_test(tst_stream_sync)
