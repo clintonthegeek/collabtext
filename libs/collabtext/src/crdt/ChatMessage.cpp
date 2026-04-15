@@ -55,6 +55,15 @@ struct ChatPayloadParser {
         return false;
     }
 
+    std::optional<uint64_t> parse_uint() {
+        skip_ws();
+        if (at_end() || peek() < '0' || peek() > '9') return std::nullopt;
+        uint64_t val = 0;
+        while (!at_end() && peek() >= '0' && peek() <= '9')
+            val = val * 10 + (advance() - '0');
+        return val;
+    }
+
     std::optional<std::string> parse_string() {
         skip_ws();
         if (!expect('"')) return std::nullopt;
@@ -168,6 +177,15 @@ StreamEntry chat_message_to_entry(const ChatMessage& msg) {
     payload += "\"author\":"      + escape_json(msg.author);
     payload += ",\"author_name\":" + escape_json(msg.author_name);
     payload += ",\"body\":"        + escape_json(msg.body);
+    if (msg.anchor) {
+        payload += ",\"anchor\":{\"r\":";
+        payload += std::to_string(msg.anchor->replica_id);
+        payload += ",\"s\":";
+        payload += std::to_string(msg.anchor->char_value);
+        payload += ",\"b\":";
+        payload += (msg.anchor->bias == Bias::Left) ? "\"left\"" : "\"right\"";
+        payload += "}";
+    }
     payload += "}";
     entry.payload = std::move(payload);
 
@@ -184,6 +202,8 @@ std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
     std::string body;
     bool has_author = false;
     bool has_body   = false;
+    Anchor anchor_val;
+    bool has_anchor = false;
 
     while (auto key = p.next_key()) {
         if (*key == "author") {
@@ -200,6 +220,28 @@ std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
             if (!v) return std::nullopt;
             body     = std::move(*v);
             has_body = true;
+        } else if (*key == "anchor") {
+            if (!p.expect('{')) { p.skip_value(); continue; }
+            uint16_t a_rid = 0;
+            uint32_t a_cv = 0;
+            Bias a_bias = Bias::Left;
+            while (auto akey = p.next_key()) {
+                if (*akey == "r") {
+                    auto v = p.parse_uint();
+                    if (v) a_rid = static_cast<uint16_t>(*v);
+                } else if (*akey == "s") {
+                    auto v = p.parse_uint();
+                    if (v) a_cv = static_cast<uint32_t>(*v);
+                } else if (*akey == "b") {
+                    auto v = p.parse_string();
+                    if (v && *v == "right") a_bias = Bias::Right;
+                } else {
+                    p.skip_value();
+                }
+            }
+            p.expect('}');
+            anchor_val = Anchor(a_rid, a_cv, a_bias);
+            has_anchor = true;
         } else {
             if (!p.skip_value()) return std::nullopt;
         }
@@ -216,6 +258,8 @@ std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
     msg.author      = std::move(author);
     msg.author_name = std::move(author_name);
     msg.body        = std::move(body);
+    if (has_anchor)
+        msg.anchor = anchor_val;
     return msg;
 }
 

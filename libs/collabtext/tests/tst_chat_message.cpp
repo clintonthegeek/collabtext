@@ -1,5 +1,6 @@
 #include <QTest>
 #include "crdt/ChatMessage.h"
+#include "crdt/Anchor.h"
 
 using namespace CollabText::Crdt;
 
@@ -74,6 +75,49 @@ private slots:
 
         auto result = chat_message_from_entry(entry);
         QVERIFY(!result.has_value());
+    }
+
+    void round_trip_with_anchor() {
+        ChatMessage msg;
+        msg.id = "1-10";
+        msg.replica_id = 1;
+        msg.seq = 10;
+        msg.timestamp = "2026-04-15T10:00:00Z";
+        msg.author = "alice-a1b2c3";
+        msg.author_name = "Alice";
+        msg.body = "Check this paragraph";
+        msg.anchor = Anchor(3, 200, Bias::Left);
+
+        StreamEntry entry = chat_message_to_entry(msg);
+        QVERIFY(entry.payload.find("anchor") != std::string::npos);
+
+        auto decoded = chat_message_from_entry(entry);
+        QVERIFY(decoded.has_value());
+        QVERIFY(decoded->anchor.has_value());
+        QCOMPARE(decoded->anchor->replica_id, uint16_t(3));
+        QCOMPARE(decoded->anchor->char_value, uint32_t(200));
+        QCOMPARE(decoded->anchor->bias, Bias::Left);
+        QCOMPARE(decoded->body, msg.body);
+        QCOMPARE(decoded->author, msg.author);
+    }
+
+    void round_trip_without_anchor_still_works() {
+        ChatMessage msg;
+        msg.id = "1-1";
+        msg.replica_id = 1;
+        msg.seq = 1;
+        msg.timestamp = "2026-04-15T10:00:00Z";
+        msg.author = "bob-x1y2z3";
+        msg.author_name = "Bob";
+        msg.body = "Plain message, no position attached";
+
+        StreamEntry entry = chat_message_to_entry(msg);
+        QVERIFY(entry.payload.find("anchor") == std::string::npos);
+
+        auto decoded = chat_message_from_entry(entry);
+        QVERIFY(decoded.has_value());
+        QVERIFY(!decoded->anchor.has_value());
+        QCOMPARE(decoded->body, msg.body);
     }
 };
 

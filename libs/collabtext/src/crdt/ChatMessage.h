@@ -1,5 +1,6 @@
 #pragma once
 #include "crdt/StreamSync.h"
+#include "crdt/Anchor.h"
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -14,6 +15,7 @@ struct ChatMessage {
     std::string author;
     std::string author_name;
     std::string body;
+    std::optional<Anchor> anchor;
 };
 
 StreamEntry              chat_message_to_entry(const ChatMessage& msg);
