@@ -17,6 +17,7 @@ add_library(collabtext STATIC
     src/crdt/FileSync.cpp
     src/crdt/SyncUtils.cpp
     src/crdt/StreamSerialization.cpp
+    src/crdt/StreamSync.cpp
     src/crdt/NetworkSim.cpp
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
