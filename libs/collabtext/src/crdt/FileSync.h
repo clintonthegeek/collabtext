@@ -71,24 +71,6 @@ private:
     void flush_local_ops();
     size_t read_remote_ops();
 
-    /// Compute hash bucket (0-255) for a Lamport timestamp.
-    static uint8_t hash_bucket(const Lamport& ts);
-    /// Format a bucket number as 2-char hex.
-    static std::string bucket_hex(uint8_t bucket);
-
-    /// Read sequences.json for a replica. Returns {bucket_hex -> sequence}.
-    static std::unordered_map<std::string, uint64_t>
-    read_sequences(const std::filesystem::path& path);
-
-    /// Write sequences.json atomically.
-    static void write_sequences(const std::filesystem::path& path,
-                                const std::unordered_map<std::string, uint64_t>& seqs);
-
-    /// Read operations from a bucket file starting after byte offset.
-    /// Returns {operations, new_byte_offset}.
-    static std::pair<std::vector<Operation>, std::streamsize>
-    read_bucket_file(const std::filesystem::path& path, std::streamsize after_byte);
-
     Buffer& m_buffer;
     std::filesystem::path m_shared_folder;
     std::string m_replica_name;
