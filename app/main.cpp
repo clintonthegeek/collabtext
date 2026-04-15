@@ -5,6 +5,7 @@
 #include <QMainWindow>
 #include <QPushButton>
 #include <QRandomGenerator>
+#include <QSplitter>
 #include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -17,7 +18,10 @@
 #include <optional>
 
 #include "crdt/Buffer.h"
+#include "crdt/ChatMessage.h"
 #include "crdt/FileSync.h"
+#include "crdt/StreamSync.h"
+#include "ui/ChatPanelWidget.h"
 #include "ui/CollabPlainTextEdit.h"
 #include "ui/MultiCursorController.h"
 #include "ui/ParticipantListWidget.h"
@@ -564,6 +568,8 @@ private:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
+    ~MainWindow() override { delete m_streamSync; }
+
     explicit MainWindow(const std::filesystem::path &sharedFolder,
                         const Identity &aliceId,
                         const Identity &bobId)
@@ -587,9 +593,35 @@ public:
         layout->addWidget(m_paneA, 1);
         layout->addWidget(m_paneB, 1);
 
-        m_participantList = new ParticipantListWidget(central);
-        m_participantList->setFixedWidth(200);
-        layout->addWidget(m_participantList);
+        // Right sidebar: participant list + chat panel in a vertical splitter
+        auto *sidebar = new QSplitter(Qt::Vertical, central);
+        sidebar->setFixedWidth(250);
+
+        m_participantList = new ParticipantListWidget(sidebar);
+        sidebar->addWidget(m_participantList);
+
+        m_chatPanel = new ChatPanelWidget(sidebar);
+        sidebar->addWidget(m_chatPanel);
+
+        sidebar->setStretchFactor(0, 1);
+        sidebar->setStretchFactor(1, 3);
+
+        layout->addWidget(sidebar);
+
+        // Stream sync for chat
+        m_streamSync = new StreamSync(sharedFolder, "main");
+        m_streamSync->register_stream("chat", StreamSync::StreamType::AppendOnly);
+        m_streamSync->start();
+
+        // Track which editor was last focused for chat authorship
+        m_activeIdentity = &aliceId;
+        connect(m_paneA->editor(), &QPlainTextEdit::cursorPositionChanged,
+                this, [this]() { m_activeIdentity = &m_paneA->identity(); });
+        connect(m_paneB->editor(), &QPlainTextEdit::cursorPositionChanged,
+                this, [this]() { m_activeIdentity = &m_paneB->identity(); });
+
+        connect(m_chatPanel, &ChatPanelWidget::messageSent,
+                this, &MainWindow::onChatMessageSent);
 
         setCentralWidget(central);
 
@@ -603,6 +635,20 @@ public:
     }
 
 private slots:
+    void onChatMessageSent(const QString &body) {
+        ++m_chatSeq;
+        ChatMessage msg;
+        msg.replica_id = 0;
+        msg.seq = m_chatSeq;
+        msg.id = "0-" + std::to_string(m_chatSeq);
+        msg.timestamp = now_iso8601();
+        msg.author = m_activeIdentity->identity_id;
+        msg.author_name = m_activeIdentity->display_name;
+        msg.body = body.toStdString();
+
+        m_streamSync->push("chat", chat_message_to_entry(msg));
+    }
+
     void syncCycle() {
         m_paneA->poll();
         m_paneB->poll();
@@ -620,6 +666,25 @@ private slots:
 
         // Update participant list
         updateParticipants();
+
+        // Sync chat
+        m_streamSync->poll();
+        auto chatEntries = m_streamSync->entries("chat");
+        size_t chatCount = chatEntries.size();
+        for (size_t i = m_lastChatCount; i < chatCount; ++i) {
+            auto msg = chat_message_from_entry(chatEntries[i]);
+            if (!msg) continue;
+            QColor color(Qt::gray);
+            auto maybeId = m_projector.read(msg->author);
+            if (maybeId)
+                color = QColor(QString::fromStdString(maybeId->color));
+            m_chatPanel->addMessage(
+                QString::fromStdString(msg->author_name),
+                QString::fromStdString(msg->body),
+                QString::fromStdString(msg->timestamp),
+                color);
+        }
+        m_lastChatCount = chatCount;
     }
 
 private:
@@ -671,6 +736,11 @@ private:
     EditorPane *m_paneA;
     EditorPane *m_paneB;
     ParticipantListWidget *m_participantList;
+    ChatPanelWidget *m_chatPanel;
+    StreamSync *m_streamSync = nullptr;
+    const Identity *m_activeIdentity = nullptr;
+    uint64_t m_chatSeq = 0;
+    size_t m_lastChatCount = 0;
     IdentityProjector m_projector;
     uint64_t m_ephemeralSeq = 0;
 };
