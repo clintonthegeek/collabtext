@@ -613,13 +613,6 @@ public:
         m_streamSync->register_stream("chat", StreamSync::StreamType::AppendOnly);
         m_streamSync->start();
 
-        // Track which editor was last focused for chat authorship
-        m_activeIdentity = &aliceId;
-        connect(m_paneA->editor(), &QPlainTextEdit::cursorPositionChanged,
-                this, [this]() { m_activeIdentity = &m_paneA->identity(); });
-        connect(m_paneB->editor(), &QPlainTextEdit::cursorPositionChanged,
-                this, [this]() { m_activeIdentity = &m_paneB->identity(); });
-
         connect(m_chatPanel, &ChatPanelWidget::messageSent,
                 this, &MainWindow::onChatMessageSent);
 
@@ -636,14 +629,18 @@ public:
 
 private slots:
     void onChatMessageSent(const QString &body) {
+        // Determine author by which editor has focus
+        const auto &id = m_paneB->editor()->hasFocus()
+            ? m_paneB->identity() : m_paneA->identity();
+
         ++m_chatSeq;
         ChatMessage msg;
         msg.replica_id = 0;
         msg.seq = m_chatSeq;
         msg.id = "0-" + std::to_string(m_chatSeq);
         msg.timestamp = now_iso8601();
-        msg.author = m_activeIdentity->identity_id;
-        msg.author_name = m_activeIdentity->display_name;
+        msg.author = id.identity_id;
+        msg.author_name = id.display_name;
         msg.body = body.toStdString();
 
         m_streamSync->push("chat", chat_message_to_entry(msg));
@@ -738,7 +735,7 @@ private:
     ParticipantListWidget *m_participantList;
     ChatPanelWidget *m_chatPanel;
     StreamSync *m_streamSync = nullptr;
-    const Identity *m_activeIdentity = nullptr;
+
     uint64_t m_chatSeq = 0;
     size_t m_lastChatCount = 0;
     IdentityProjector m_projector;
