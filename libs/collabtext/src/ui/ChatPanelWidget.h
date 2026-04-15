@@ -11,11 +11,15 @@ class ChatPanelWidget : public QWidget {
 public:
     explicit ChatPanelWidget(QWidget *parent = nullptr);
 
+    /// Append a message. If anchorLine >= 1, show a clickable "(line N)" link.
     void addMessage(const QString &authorName, const QString &body,
-                    const QString &timestamp, const QColor &authorColor);
+                    const QString &timestamp, const QColor &authorColor,
+                    int anchorLine = -1);
 
 signals:
     void messageSent(const QString &body);
+    /// Emitted when the user clicks a "(line N)" link in a chat message.
+    void anchorClicked(int line);
 
 private:
     QListWidget *m_list;

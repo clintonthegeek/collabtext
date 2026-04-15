@@ -32,20 +32,37 @@ ChatPanelWidget::ChatPanelWidget(QWidget *parent)
 }
 
 void ChatPanelWidget::addMessage(const QString &authorName, const QString &body,
-                                  const QString &timestamp, const QColor &authorColor)
+                                  const QString &timestamp, const QColor &authorColor,
+                                  int anchorLine)
 {
     QScrollBar *bar = m_list->verticalScrollBar();
     const bool atBottom = bar->value() >= bar->maximum();
 
     auto *item = new QListWidgetItem(m_list);
 
+    QString html = QString("<b style=\"color:%1\">%2:</b> %3")
+        .arg(authorColor.name(), authorName.toHtmlEscaped(), body.toHtmlEscaped());
+
+    if (anchorLine >= 1) {
+        html += QString(" <a href=\"line:%1\" style=\"color:#888; font-size:small\">(line %1)</a>")
+            .arg(anchorLine);
+    }
+
     auto *label = new QLabel(this);
     label->setTextFormat(Qt::RichText);
-    label->setText(
-        QString("<b style=\"color:%1\">%2:</b> %3")
-            .arg(authorColor.name(), authorName.toHtmlEscaped(), body.toHtmlEscaped()));
+    label->setText(html);
     label->setWordWrap(true);
     label->setToolTip(timestamp);
+
+    if (anchorLine >= 1) {
+        connect(label, &QLabel::linkActivated, this, [this](const QString &link) {
+            if (link.startsWith("line:")) {
+                bool ok = false;
+                int line = link.mid(5).toInt(&ok);
+                if (ok) emit anchorClicked(line);
+            }
+        });
+    }
 
     item->setSizeHint(label->sizeHint());
     m_list->setItemWidget(item, label);
