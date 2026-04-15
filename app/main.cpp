@@ -17,6 +17,7 @@
 #include <ctime>
 #include <optional>
 
+#include "crdt/Anchor.h"
 #include "crdt/Buffer.h"
 #include "crdt/ChatMessage.h"
 #include "crdt/FileSync.h"
@@ -616,6 +617,19 @@ public:
         connect(m_chatPanel, &ChatPanelWidget::messageSent,
                 this, &MainWindow::onChatMessageSent);
 
+        connect(m_chatPanel, &ChatPanelWidget::anchorClicked,
+                this, [this](int line) {
+            std::string text = m_paneA->buffer().text();
+            uint32_t byteOff = 0;
+            int currentLine = 1;
+            for (size_t i = 0; i < text.size() && currentLine < line; ++i) {
+                if (text[i] == '\n') ++currentLine;
+                byteOff = static_cast<uint32_t>(i + 1);
+            }
+            EditorPane *pane = m_paneB->editor()->hasFocus() ? m_paneB : m_paneA;
+            pane->editor()->scrollByteOffsetToTop(byteOff, /*keepCursorVisible=*/false);
+        });
+
         setCentralWidget(central);
 
         auto *syncTimer = new QTimer(this);
@@ -642,6 +656,13 @@ private slots:
         msg.author = id.identity_id;
         msg.author_name = id.display_name;
         msg.body = body.toStdString();
+
+        // Capture document anchor from the active editor's cursor
+        EditorPane *activePane = m_paneB->editor()->hasFocus() ? m_paneB : m_paneA;
+        auto cursor = activePane->editor()->textCursor();
+        int qtPos = cursor.hasSelection() ? cursor.selectionStart() : cursor.position();
+        uint32_t byteOff = activePane->qtPosToByteOffset(qtPos);
+        msg.anchor = activePane->buffer().anchor_at(byteOff, Bias::Left);
 
         m_streamSync->push("chat", chat_message_to_entry(msg));
     }
@@ -675,11 +696,22 @@ private slots:
             auto maybeId = m_projector.read(msg->author);
             if (maybeId)
                 color = QColor(QString::fromStdString(maybeId->color));
+            int anchorLine = -1;
+            if (msg->anchor) {
+                uint32_t byteOff = m_paneA->buffer().resolve_anchor(*msg->anchor);
+                std::string text = m_paneA->buffer().text();
+                int line = 1;
+                for (uint32_t i = 0; i < byteOff && i < text.size(); ++i) {
+                    if (text[i] == '\n') ++line;
+                }
+                anchorLine = line;
+            }
             m_chatPanel->addMessage(
                 QString::fromStdString(msg->author_name),
                 QString::fromStdString(msg->body),
                 QString::fromStdString(msg->timestamp),
-                color);
+                color,
+                anchorLine);
         }
         m_lastChatCount = chatCount;
     }
