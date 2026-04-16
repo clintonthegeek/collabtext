@@ -49,6 +49,10 @@ public:
     /// semantics).
     void scrollByteOffsetToTop(uint32_t byteOff, bool keepCursorVisible);
 
+    /// Set comment highlight ranges. Each tuple: (startByteOff, endByteOff, color).
+    void setCommentHighlights(
+        const QList<std::tuple<uint32_t, uint32_t, QColor>> &highlights);
+
 protected:
     bool event(QEvent *e) override;
     void paintEvent(QPaintEvent *e) override;
@@ -74,6 +78,7 @@ private:
     MultiCursorController *m_controller;
     bool m_handlingKey = false;
     QHash<QString, CursorLabelWidget*> m_cursorLabels;
+    QList<QTextEdit::ExtraSelection> m_commentSelections;
 };
 
 } // namespace CollabText::Ui

@@ -197,10 +197,32 @@ void CollabPlainTextEdit::scrollContentsBy(int dx, int dy) {
     emit viewportScrolled();
 }
 
+void CollabPlainTextEdit::setCommentHighlights(
+        const QList<std::tuple<uint32_t, uint32_t, QColor>> &highlights) {
+    m_commentSelections.clear();
+    for (const auto &[startByte, endByte, color] : highlights) {
+        int qtStart = byteOffsetToQtPos(startByte);
+        int qtEnd = byteOffsetToQtPos(endByte);
+        if (qtStart == qtEnd) continue;
+
+        QTextEdit::ExtraSelection sel;
+        QColor bg = color;
+        bg.setAlpha(50);
+        sel.format.setBackground(bg);
+        QTextCursor cursor(document());
+        cursor.setPosition(qtStart);
+        cursor.setPosition(qtEnd, QTextCursor::KeepAnchor);
+        sel.cursor = cursor;
+        m_commentSelections.append(sel);
+    }
+    syncExtraSelections();
+}
+
 void CollabPlainTextEdit::syncExtraSelections() {
     QList<QTextEdit::ExtraSelection> selections;
     selections.append(m_controller->secondarySelections());
     selections.append(m_controller->remoteSelections());
+    selections.append(m_commentSelections);
     setExtraSelections(selections);
     viewport()->update();
     updateCursorLabels();
