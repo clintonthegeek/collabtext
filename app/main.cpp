@@ -20,10 +20,12 @@
 #include "crdt/Anchor.h"
 #include "crdt/Buffer.h"
 #include "crdt/ChatMessage.h"
+#include "crdt/Comment.h"
 #include "crdt/FileSync.h"
 #include "crdt/StreamSync.h"
 #include "ui/ChatPanelWidget.h"
 #include "ui/CollabPlainTextEdit.h"
+#include "ui/CommentsPanelWidget.h"
 #include "ui/MultiCursorController.h"
 #include "ui/ParticipantListWidget.h"
 
@@ -604,18 +606,41 @@ public:
         m_chatPanel = new ChatPanelWidget(sidebar);
         sidebar->addWidget(m_chatPanel);
 
-        sidebar->setStretchFactor(0, 1);
-        sidebar->setStretchFactor(1, 3);
+        m_commentsPanel = new CommentsPanelWidget(sidebar);
+        sidebar->addWidget(m_commentsPanel);
+
+        sidebar->setStretchFactor(0, 1);  // participants
+        sidebar->setStretchFactor(1, 2);  // chat
+        sidebar->setStretchFactor(2, 2);  // comments
 
         layout->addWidget(sidebar);
 
-        // Stream sync for chat
+        // Stream sync for chat and comments
         m_streamSync = new StreamSync(sharedFolder, "main");
         m_streamSync->register_stream("chat", StreamSync::StreamType::AppendOnly);
+        m_streamSync->register_stream("comments", StreamSync::StreamType::AnchorKeyed);
         m_streamSync->start();
 
         connect(m_chatPanel, &ChatPanelWidget::messageSent,
                 this, &MainWindow::onChatMessageSent);
+
+        connect(m_commentsPanel, &CommentsPanelWidget::addCommentRequested,
+                this, &MainWindow::onAddComment);
+
+        connect(m_commentsPanel, &CommentsPanelWidget::commentClicked,
+                this, [this](const QString &commentId) {
+            auto entries = m_streamSync->entries("comments");
+            for (const auto &entry : entries) {
+                if (entry.id == commentId.toStdString()) {
+                    auto c = comment_from_entry(entry);
+                    if (!c) break;
+                    uint32_t byteOff = m_paneA->buffer().resolve_anchor(c->range_start);
+                    EditorPane *pane = m_paneB->editor()->hasFocus() ? m_paneB : m_paneA;
+                    pane->editor()->scrollByteOffsetToTop(byteOff, false);
+                    break;
+                }
+            }
+        });
 
         connect(m_chatPanel, &ChatPanelWidget::anchorClicked,
                 this, [this](int line) {
@@ -642,6 +667,33 @@ public:
     }
 
 private slots:
+    void onAddComment(const QString &body) {
+        EditorPane *pane = m_paneB->editor()->hasFocus() ? m_paneB : m_paneA;
+        auto cursor = pane->editor()->textCursor();
+        if (!cursor.hasSelection()) return;
+
+        int qtStart = cursor.selectionStart();
+        int qtEnd = cursor.selectionEnd();
+        uint32_t byteStart = pane->qtPosToByteOffset(qtStart);
+        uint32_t byteEnd = pane->qtPosToByteOffset(qtEnd);
+
+        const auto &id = pane->identity();
+
+        ++m_commentSeq;
+        Comment c;
+        c.id = "c-" + std::to_string(m_commentSeq);
+        c.replica_id = 0;
+        c.seq = m_commentSeq;
+        c.timestamp = now_iso8601();
+        c.author = id.identity_id;
+        c.author_name = id.display_name;
+        c.body = body.toStdString();
+        c.range_start = pane->buffer().anchor_at(byteStart, Bias::Left);
+        c.range_end = pane->buffer().anchor_at(byteEnd, Bias::Right);
+
+        m_streamSync->push("comments", comment_to_entry(c));
+    }
+
     void onChatMessageSent(const QString &body) {
         // Determine author by which editor has focus
         const auto &id = m_paneB->editor()->hasFocus()
@@ -714,6 +766,47 @@ private slots:
                 anchorLine);
         }
         m_lastChatCount = chatCount;
+
+        // Sync comments
+        auto commentEntries = m_streamSync->entries("comments");
+        QList<std::tuple<uint32_t, uint32_t, QColor>> highlightsA, highlightsB;
+        QList<CommentDisplayInfo> commentDisplayList;
+
+        for (const auto &entry : commentEntries) {
+            auto c = comment_from_entry(entry);
+            if (!c) continue;
+
+            uint32_t startByte = m_paneA->buffer().resolve_anchor(c->range_start);
+            uint32_t endByte = m_paneA->buffer().resolve_anchor(c->range_end);
+
+            QColor color(Qt::yellow);
+            auto maybeId = m_projector.read(c->author);
+            if (maybeId)
+                color = QColor(QString::fromStdString(maybeId->color));
+
+            highlightsA.append({startByte, endByte, color});
+            highlightsB.append({startByte, endByte, color});
+
+            std::string text = m_paneA->buffer().text();
+            std::string snippet;
+            if (startByte < text.size()) {
+                uint32_t len = std::min(endByte - startByte, uint32_t(40));
+                snippet = text.substr(startByte, len);
+                if (endByte - startByte > 40) snippet += "...";
+            }
+
+            CommentDisplayInfo info;
+            info.id = QString::fromStdString(c->id);
+            info.authorName = QString::fromStdString(c->author_name);
+            info.body = QString::fromStdString(c->body);
+            info.contextSnippet = QString::fromStdString(snippet);
+            info.authorColor = color;
+            commentDisplayList.append(info);
+        }
+
+        m_paneA->editor()->setCommentHighlights(highlightsA);
+        m_paneB->editor()->setCommentHighlights(highlightsB);
+        m_commentsPanel->setComments(commentDisplayList);
     }
 
 private:
@@ -766,12 +859,14 @@ private:
     EditorPane *m_paneB;
     ParticipantListWidget *m_participantList;
     ChatPanelWidget *m_chatPanel;
+    CommentsPanelWidget *m_commentsPanel;
     StreamSync *m_streamSync = nullptr;
 
     uint64_t m_chatSeq = 0;
     size_t m_lastChatCount = 0;
     IdentityProjector m_projector;
     uint64_t m_ephemeralSeq = 0;
+    uint64_t m_commentSeq = 0;
 };
 
 int main(int argc, char *argv[])
