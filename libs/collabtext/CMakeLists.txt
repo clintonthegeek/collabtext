@@ -19,6 +19,7 @@ add_library(collabtext STATIC
     src/crdt/StreamSerialization.cpp
     src/crdt/StreamSync.cpp
     src/crdt/ChatMessage.cpp
+    src/crdt/Comment.cpp
     src/crdt/NetworkSim.cpp
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
@@ -29,6 +30,7 @@ add_library(collabtext STATIC
     src/ui/IdentityPreferencesPage.cpp
     src/ui/ParticipantListWidget.cpp
     src/ui/ChatPanelWidget.cpp
+    src/ui/CommentsPanelWidget.cpp
     src/ui/CursorLabelWidget.cpp
     src/identity/Identity.cpp
     src/identity/PresenceManager.cpp
