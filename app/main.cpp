@@ -642,6 +642,15 @@ public:
             }
         });
 
+        connect(m_commentsPanel, &CommentsPanelWidget::resolveRequested,
+                this, [this](const QString &id) { setCommentResolved(id, true); });
+
+        connect(m_commentsPanel, &CommentsPanelWidget::unresolveRequested,
+                this, [this](const QString &id) { setCommentResolved(id, false); });
+
+        connect(m_commentsPanel, &CommentsPanelWidget::deleteRequested,
+                this, &MainWindow::deleteComment);
+
         connect(m_chatPanel, &ChatPanelWidget::anchorClicked,
                 this, [this](int line) {
             std::string text = m_paneA->buffer().text();
@@ -692,6 +701,27 @@ private slots:
         c.range_end = pane->buffer().anchor_at(byteEnd, Bias::Right);
 
         m_streamSync->push("comments", comment_to_entry(c));
+    }
+
+    void setCommentResolved(const QString &id, bool resolved) {
+        auto entries = m_streamSync->entries("comments");
+        for (const auto &entry : entries) {
+            if (entry.id != id.toStdString()) continue;
+            auto c = comment_from_entry(entry);
+            if (!c) return;
+            c->resolved  = resolved;
+            c->timestamp = now_iso8601();
+            m_streamSync->push("comments", comment_to_entry(*c));
+            return;
+        }
+    }
+
+    void deleteComment(const QString &id) {
+        StreamEntry tomb;
+        tomb.id        = id.toStdString();
+        tomb.timestamp = now_iso8601();
+        tomb.tombstone = true;
+        m_streamSync->push("comments", tomb);
     }
 
     void onChatMessageSent(const QString &body) {
@@ -784,8 +814,10 @@ private slots:
             if (maybeId)
                 color = QColor(QString::fromStdString(maybeId->color));
 
-            highlightsA.append({startByte, endByte, color});
-            highlightsB.append({startByte, endByte, color});
+            if (!c->resolved) {
+                highlightsA.append({startByte, endByte, color});
+                highlightsB.append({startByte, endByte, color});
+            }
 
             std::string text = m_paneA->buffer().text();
             std::string snippet;
@@ -801,6 +833,7 @@ private slots:
             info.body = QString::fromStdString(c->body);
             info.contextSnippet = QString::fromStdString(snippet);
             info.authorColor = color;
+            info.resolved = c->resolved;
             commentDisplayList.append(info);
         }
 
