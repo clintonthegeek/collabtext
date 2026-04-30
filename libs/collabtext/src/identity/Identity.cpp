@@ -50,14 +50,13 @@ static std::string encode_anchor(const Crdt::Anchor &a) {
 static std::string encode_version_summary(const Crdt::Global &g) {
     std::string out = "{";
     bool first = true;
-    const auto &vals = g.values();
-    for (size_t i = 0; i < vals.size(); ++i) {
-        if (vals[i] == 0) continue;
+    for (size_t i = 0; i < g.size(); ++i) {
+        if (g[i] == 0) continue;
         if (!first) out += ',';
         out += '"';
         out += std::to_string(i);
         out += "\":";
-        out += std::to_string(vals[i]);
+        out += std::to_string(g[i]);
         first = false;
     }
     out += '}';

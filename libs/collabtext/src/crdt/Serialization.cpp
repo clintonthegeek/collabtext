@@ -50,9 +50,9 @@ static std::string encode_locator(const Locator& loc) {
 
 std::string encode_global(const Global& g) {
     std::string out = "[";
-    for (size_t i = 0; i < g.values().size(); ++i) {
+    for (size_t i = 0; i < g.size(); ++i) {
         if (i > 0) out += ',';
-        out += std::to_string(g.values()[i]);
+        out += std::to_string(g[i]);
     }
     out += ']';
     return out;
