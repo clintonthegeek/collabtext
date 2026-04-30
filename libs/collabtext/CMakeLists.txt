@@ -21,6 +21,8 @@ add_library(collabtext STATIC
     src/crdt/ChatMessage.cpp
     src/crdt/Comment.cpp
     src/crdt/NetworkSim.cpp
+    src/crdt/SeedOp.cpp
+    src/crdt/SidecarManifest.cpp
     src/ui/MultiCursorController.cpp
     src/ui/CollabPlainTextEdit.cpp
     src/ui/AvatarWidget.cpp
@@ -90,3 +92,5 @@ add_crdt_test(tst_scroll_stability)
 add_crdt_test(tst_stream_sync)
 add_crdt_test(tst_chat_message)
 add_crdt_test(tst_comment)
+add_crdt_test(tst_seed_op)
+add_crdt_test(tst_sidecar_manifest)
