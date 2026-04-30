@@ -11,10 +11,15 @@
 #include <QTextDocument>
 #include <QTimer>
 
+#include <QRandomGenerator>
+
 #include <chrono>
 #include <ctime>
+#include <fstream>
 #include <functional>
 #include <optional>
+#include <set>
+#include <sstream>
 
 using namespace CollabText;
 using namespace CollabText::Crdt;
@@ -35,10 +40,70 @@ std::string now_iso8601() {
     return buf;
 }
 
-uint16_t replicaIdFromName(const std::string &replica_name) {
-    std::hash<std::string> h;
-    uint64_t v = h(replica_name);
-    return static_cast<uint16_t>(v % 65535) + 1;  // avoid 0 (seed replica)
+/// Small replica ids matter: the CRDT's `Global` version vector is a
+/// dense array indexed by replica_id, and every op serializes the full
+/// vector. A replica_id of 38041 produces ~100KB ops; 1..250 keeps
+/// ops at ~1KB.
+///
+/// We persist a per-sidecar small id under the stignored
+/// `local/<replica_name>/replica_id` so the same replica is stable
+/// across runs. On first encounter we sniff peers' presence files for
+/// already-used ids (read out of the version_summary), and pick a
+/// random small id that doesn't collide.
+uint16_t loadOrAssignReplicaId(const std::filesystem::path &sidecar,
+                               const std::string &replica_name) {
+    namespace fs = std::filesystem;
+    auto local_dir = sidecar / "local" / replica_name;
+    fs::create_directories(local_dir);
+    auto rid_path = local_dir / "replica_id";
+
+    if (fs::exists(rid_path)) {
+        std::ifstream f(rid_path);
+        unsigned int x = 0;
+        f >> x;
+        if (x >= 1 && x <= 65535) return static_cast<uint16_t>(x);
+    }
+
+    // Sniff peers' presence.json files for replica_ids already in use.
+    std::set<uint16_t> taken;
+    auto replicas_dir = sidecar / "replicas";
+    if (fs::exists(replicas_dir)) {
+        for (const auto &entry : fs::directory_iterator(replicas_dir)) {
+            if (!entry.is_directory()) continue;
+            auto pres = entry.path() / "presence.json";
+            if (!fs::exists(pres)) continue;
+            std::ifstream pf(pres);
+            std::string content((std::istreambuf_iterator<char>(pf)),
+                                std::istreambuf_iterator<char>());
+            auto vpos = content.find("\"v\":[");
+            if (vpos == std::string::npos) continue;
+            auto end = content.find(']', vpos);
+            if (end == std::string::npos) continue;
+            std::string nums = content.substr(vpos + 5, end - vpos - 5);
+            std::stringstream ss(nums);
+            std::string num;
+            uint16_t idx = 0;
+            while (std::getline(ss, num, ',')) {
+                try {
+                    if (std::stoul(num) > 0) taken.insert(idx);
+                } catch (...) {}
+                ++idx;
+            }
+        }
+    }
+
+    // Pick a random small id (range 1..250) that isn't taken.
+    uint16_t chosen = 0;
+    auto *rng = QRandomGenerator::global();
+    for (int attempt = 0; attempt < 500; ++attempt) {
+        uint16_t candidate = static_cast<uint16_t>(rng->bounded(250) + 1);
+        if (taken.count(candidate) == 0) { chosen = candidate; break; }
+    }
+    if (chosen == 0) chosen = 1;  // fallback; means we collide
+
+    std::ofstream out(rid_path);
+    out << chosen;
+    return chosen;
 }
 
 } // namespace
@@ -51,7 +116,7 @@ CollabPane::CollabPane(CollabText::Identity::Identity identity,
     : QWidget(parent)
     , m_identity(std::move(identity))
     , m_replicaName(std::move(replica_name))
-    , m_buffer(replicaIdFromName(m_replicaName))
+    , m_buffer(loadOrAssignReplicaId(sidecar_dir, m_replicaName))
     , m_sync(m_buffer, sidecar_dir, m_replicaName)
     , m_presence(sidecar_dir, m_replicaName, m_identity.identity_id)
     , m_projector(sidecar_dir)
