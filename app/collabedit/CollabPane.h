@@ -65,6 +65,12 @@ private:
     uint64_t m_ephemeralSeq = 0;
     bool m_syncing = false;
     bool m_shutdown = false;
+
+    // Throttling state
+    qint64 m_lastPresenceMs = 0;        // last presence.json write (epoch ms)
+    qint64 m_lastEphemeralMs = 0;       // last ephemeral.json write (epoch ms)
+    int    m_lastEphemeralBytePos = -1; // last cursor byte pos written
+    int    m_lastEphemeralByteAnchor = -1;
 };
 
 } // namespace CollabEdit

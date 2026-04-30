@@ -5,6 +5,7 @@
 #include "ui/MultiCursorController.h"
 #include "ui/ParticipantListWidget.h"
 
+#include <QDateTime>
 #include <QHBoxLayout>
 #include <QPlainTextDocumentLayout>
 #include <QTextCursor>
@@ -155,7 +156,7 @@ CollabPane::CollabPane(CollabText::Identity::Identity identity,
             this, &CollabPane::onContentsChange);
 
     m_syncTimer = new QTimer(this);
-    m_syncTimer->setInterval(100);
+    m_syncTimer->setInterval(250);  // op poll cadence; presence/ephemeral throttled separately
     connect(m_syncTimer, &QTimer::timeout, this, &CollabPane::syncCycle);
     m_syncTimer->start();
 }
@@ -219,7 +220,18 @@ void CollabPane::syncCycle() {
     applyRemoteCursors();
 }
 
+namespace {
+constexpr qint64 kPresenceIntervalMs  = 5000;   // heartbeat every 5s (live threshold is 30s)
+constexpr qint64 kEphemeralMinIntervalMs = 250; // at most 4 cursor writes/sec
+constexpr qint64 kEphemeralMaxIntervalMs = 5000;// also a slow heartbeat for cursor staleness
+}
+
 void CollabPane::writePresence() {
+    qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (m_lastPresenceMs != 0
+        && (nowMs - m_lastPresenceMs) < kPresenceIntervalMs) {
+        return;
+    }
     Presence p;
     p.replica_id = m_replicaName;
     p.identity_id = m_identity.identity_id;
@@ -229,22 +241,36 @@ void CollabPane::writePresence() {
     p.session_started = m_sessionStarted;
     p.version_summary = m_buffer.version();
     m_presence.write_presence(p);
+    m_lastPresenceMs = nowMs;
 }
 
 void CollabPane::writeEphemeral() {
     auto cursor = m_edit->textCursor();
-    uint32_t bytePos = qtPosToByteOffset(cursor.position());
-    uint32_t byteAnchor = qtPosToByteOffset(cursor.anchor());
+    int bytePos = static_cast<int>(qtPosToByteOffset(cursor.position()));
+    int byteAnchor = static_cast<int>(qtPosToByteOffset(cursor.anchor()));
+
+    qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    qint64 sinceLast = nowMs - m_lastEphemeralMs;
+    bool cursorChanged = (bytePos != m_lastEphemeralBytePos)
+                      || (byteAnchor != m_lastEphemeralByteAnchor);
+    bool changedAndCooledDown = cursorChanged && sinceLast >= kEphemeralMinIntervalMs;
+    bool slowHeartbeat       = !cursorChanged && sinceLast >= kEphemeralMaxIntervalMs;
+    if (m_lastEphemeralMs != 0 && !changedAndCooledDown && !slowHeartbeat) {
+        return;
+    }
 
     EphemeralState es;
     es.seq = ++m_ephemeralSeq;
     es.timestamp = now_iso8601();
     es.activity = "editing";
-    auto posAnchor = m_buffer.anchor_at(bytePos, Bias::Right);
-    auto selAnchor = m_buffer.anchor_at(byteAnchor, Bias::Left);
+    auto posAnchor = m_buffer.anchor_at(static_cast<uint32_t>(bytePos), Bias::Right);
+    auto selAnchor = m_buffer.anchor_at(static_cast<uint32_t>(byteAnchor), Bias::Left);
     es.cursors.push_back({selAnchor, posAnchor});
 
     m_presence.write_ephemeral(es);
+    m_lastEphemeralMs = nowMs;
+    m_lastEphemeralBytePos = bytePos;
+    m_lastEphemeralByteAnchor = byteAnchor;
 }
 
 void CollabPane::applyRemoteCursors() {
