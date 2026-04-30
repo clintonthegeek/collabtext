@@ -179,8 +179,8 @@ Concretely:
 
 | `seed.txt` files match? | Outcome |
 |--|--|
-| Identical bytes (both peers had the same file content before enrollment) | Syncthing sees one file. Both `manifest.json` files differ by `doc_id` and `enrolled_at`; **the lexicographically-smaller `doc_id` wins.** The losing peer detects this on first poll (sees a `manifest.json` with a different, smaller `doc_id`), discards their local manifest+sequences, re-loads the sidecar with the winner's `doc_id`, and continues. Their unflushed ops are flushed as they would have been; their already-flushed ops in `replicas/<self>/ops/...` are valid and remain authoritative for their replica. |
-| Different bytes (peer enrolled stale content) | Syncthing conflict-renames. The client detects extra `seed.sync-conflict-*.txt` files at startup, refuses to enter Collab mode, surfaces a clear error: *"Enrollment conflict: peers enrolled this document with different starting content. Resolve by deleting the sidecar on the wrong machine and re-syncing."* |
+| Identical `seed.txt` bytes (peers had the same file content) | Syncthing sees one `seed.txt` file. Both peers wrote a `manifest.json` to the same path with different `doc_id`s; Syncthing conflict-renames one (e.g. `manifest.sync-conflict-*.json`). **v1 behavior:** the client detects the conflict file at open and surfaces a clear error: *"Manifest conflict: two peers enrolled the same document. Delete the conflicting sidecar on one machine."* The user picks a winner manually. The smaller-`doc_id` automatic tiebreaker is a future enhancement; the comparison helper `doc_id_less` is implemented and unit-tested so the runtime logic can be added without a library change. |
+| Different `seed.txt` bytes (peer enrolled stale content) | Syncthing conflict-renames `seed.txt`. The client detects extra `seed.sync-conflict-*.txt` files, refuses to enter Collab mode, surfaces: *"Enrollment conflict: peers enrolled this document with different starting content. Delete the sidecar on the wrong machine and re-sync."* |
 
 The `doc_id` tiebreaker requires a new tiny module (~30 LOC)
 `SidecarManifest` (read/write/compare). Manifests are written
@@ -346,7 +346,7 @@ from the participant list. CRDT state is unchanged on their leave.
 | Open file whose sidecar has invalid `manifest.json` (parse fail or schema mismatch) | Show error: *"Sidecar exists but couldn't be loaded: <reason>. Open in Plain mode (read-only)?"* with read-only fallback. |
 | `seed.txt` SHA mismatch with manifest | Same fallback |
 | `seed.sync-conflict-*.txt` file present | Show enrollment-conflict error (§6); read-only |
-| Two manifests visible (race seen on first poll) | Smaller `doc_id` wins; loser silently rebases (§6) |
+| Manifest sync-conflict file visible at open | Refuse to open in Collab mode; surface a clear error (§6, "Identical seed bytes" row). Automatic doc_id-tiebreaker rebase is a future enhancement. |
 | FileSync I/O failure mid-poll | Log warning, continue; next poll retries. Documented best-effort. |
 | Window closed during Enable Collab | Sidecar may be partially created. We make `manifest.json` the LAST file written; absence of `manifest.json` means "not enrolled," and a partial sidecar is recovered by re-running Enable Collab (idempotent: skip steps whose outputs already exist). |
 
