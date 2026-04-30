@@ -161,7 +161,7 @@ QString Document::openInCollabMode(const QString &path) {
 
     m_collab = true;
     m_collabPane = new CollabPane(m_identity, m_replicaName,
-                                  sidecar, seed);
+                                  sidecar, manifest->doc_id, seed);
     m_currentWidget = m_collabPane;
     emit changed();
     return {};

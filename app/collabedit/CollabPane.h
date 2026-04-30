@@ -27,6 +27,7 @@ public:
     CollabPane(CollabText::Identity::Identity identity,
                std::string replica_name,
                std::filesystem::path sidecar_dir,
+               std::string doc_id,
                const std::string &seed_text,
                QWidget *parent = nullptr);
     ~CollabPane() override;

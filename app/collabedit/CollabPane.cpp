@@ -6,7 +6,9 @@
 #include "ui/ParticipantListWidget.h"
 
 #include <QDateTime>
+#include <QDir>
 #include <QHBoxLayout>
+#include <QStandardPaths>
 #include <QPlainTextDocumentLayout>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -46,17 +48,24 @@ std::string now_iso8601() {
 /// vector. A replica_id of 38041 produces ~100KB ops; 1..250 keeps
 /// ops at ~1KB.
 ///
-/// We persist a per-sidecar small id under the stignored
-/// `local/<replica_name>/replica_id` so the same replica is stable
-/// across runs. On first encounter we sniff peers' presence files for
-/// already-used ids (read out of the version_summary), and pick a
-/// random small id that doesn't collide.
+/// We persist a per-doc small id in the USER'S CONFIG DIR (not the
+/// synced sidecar) so two peers don't share a state file via Syncthing
+/// — which previously caused Syncthing to "reconcile" divergent
+/// per-peer state by deleting things, with collateral damage to other
+/// files in the sidecar.
+///
+/// On first encounter we sniff peers' presence files for already-used
+/// ids (read out of the version_summary), and pick a random small id
+/// that doesn't collide.
 uint16_t loadOrAssignReplicaId(const std::filesystem::path &sidecar,
-                               const std::string &replica_name) {
+                               const std::string &doc_id) {
     namespace fs = std::filesystem;
-    auto local_dir = sidecar / "local" / replica_name;
-    fs::create_directories(local_dir);
-    auto rid_path = local_dir / "replica_id";
+
+    QString configRoot = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QDir().mkpath(configRoot + "/replica-state");
+    auto rid_path = fs::path(configRoot.toStdString())
+                  / "replica-state"
+                  / (doc_id + ".replica_id");
 
     if (fs::exists(rid_path)) {
         std::ifstream f(rid_path);
@@ -112,12 +121,13 @@ uint16_t loadOrAssignReplicaId(const std::filesystem::path &sidecar,
 CollabPane::CollabPane(CollabText::Identity::Identity identity,
                        std::string replica_name,
                        std::filesystem::path sidecar_dir,
+                       std::string doc_id,
                        const std::string &seed_text,
                        QWidget *parent)
     : QWidget(parent)
     , m_identity(std::move(identity))
     , m_replicaName(std::move(replica_name))
-    , m_buffer(loadOrAssignReplicaId(sidecar_dir, m_replicaName))
+    , m_buffer(loadOrAssignReplicaId(sidecar_dir, doc_id))
     , m_sync(m_buffer, sidecar_dir, m_replicaName)
     , m_presence(sidecar_dir, m_replicaName, m_identity.identity_id)
     , m_projector(sidecar_dir)
