@@ -66,7 +66,7 @@ Global::~Global() {
     if (on_heap()) std::free(m_heap_data);
 }
 
-void Global::resize_zero(uint16_t new_size) {
+void Global::resize_zero(uint32_t new_size) {
     if (new_size <= m_size) {
         m_size = new_size;
         return;
@@ -80,7 +80,7 @@ void Global::resize_zero(uint16_t new_size) {
         std::memset(new_data + m_size, 0, (new_cap - m_size) * sizeof(uint32_t));
         if (on_heap()) std::free(m_heap_data);
         m_heap_data = new_data;
-        m_capacity = static_cast<uint16_t>(new_cap);
+        m_capacity = new_cap;
     } else {
         std::memset(data_mut() + m_size, 0, (new_size - m_size) * sizeof(uint32_t));
     }
@@ -107,7 +107,7 @@ bool Global::observed_all(const Global &other) const {
     if (m_size < other.m_size) return false;
     const uint32_t *a = data();
     const uint32_t *b = other.data();
-    for (uint16_t i = 0; i < other.m_size; ++i)
+    for (uint32_t i = 0; i < other.m_size; ++i)
         if (a[i] < b[i]) return false;
     return true;
 }
@@ -117,15 +117,15 @@ void Global::join(const Global &other) {
     if (other.m_size > m_size) resize_zero(other.m_size);
     uint32_t *a = data_mut();
     const uint32_t *b = other.data();
-    for (uint16_t i = 0; i < other.m_size; ++i)
+    for (uint32_t i = 0; i < other.m_size; ++i)
         if (b[i] > a[i]) a[i] = b[i];
 }
 
 void Global::meet(const Global &other) {
-    uint16_t minLen = std::min(m_size, other.m_size);
+    uint32_t minLen = std::min(m_size, other.m_size);
     uint32_t *a = data_mut();
     const uint32_t *b = other.data();
-    for (uint16_t i = 0; i < minLen; ++i) {
+    for (uint32_t i = 0; i < minLen; ++i) {
         if (a[i] > 0 && b[i] > 0)
             a[i] = std::min(a[i], b[i]);
     }
@@ -137,7 +137,7 @@ bool Global::operator==(const Global &other) const {
     if (m_size != other.m_size) return false;
     const uint32_t *a = data();
     const uint32_t *b = other.data();
-    for (uint16_t i = 0; i < m_size; ++i)
+    for (uint32_t i = 0; i < m_size; ++i)
         if (a[i] != b[i]) return false;
     return true;
 }

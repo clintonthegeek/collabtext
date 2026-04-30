@@ -76,6 +76,30 @@ private slots:
         QCOMPARE(a.get(0), 5u);
         QCOMPARE(a.get(1), 20u);
     }
+    // Regression: SBO heap-promotion with replica_id forcing capacity past
+    // UINT16_MAX truncated m_capacity to 0, corrupting the Global. Reproduces
+    // for any replica_id ≥ 32768 (so doubled growth from 4 reaches 65536).
+    void global_observe_large_replica_id_does_not_corrupt() {
+        Global g;
+        g.observe(Lamport(47372, 16384));
+        QCOMPARE(g.get(47372), 16384u);
+        QVERIFY(g.size() >= 47373);
+    }
+    void global_observe_replica_id_at_uint16_max() {
+        Global g;
+        g.observe(Lamport(65535, 1));
+        QCOMPARE(g.get(65535), 1u);
+        QVERIFY(g.size() >= 65536);
+    }
+    void global_copy_after_large_replica_id() {
+        Global a;
+        a.observe(Lamport(47372, 16384));
+        Global b = a;             // copy ctor through heap path
+        QCOMPARE(b.get(47372), 16384u);
+        Global c;
+        c = a;                    // copy assignment through heap path
+        QCOMPARE(c.get(47372), 16384u);
+    }
 };
 
 QTEST_MAIN(TestClock)

@@ -66,10 +66,10 @@ private:
     bool on_heap() const noexcept { return m_capacity > SBO_CAP; }
     uint32_t *data_mut() noexcept { return on_heap() ? m_heap_data : m_inline; }
     const uint32_t *data() const noexcept { return on_heap() ? m_heap_data : m_inline; }
-    void resize_zero(uint16_t new_size);
+    void resize_zero(uint32_t new_size);
 
-    uint16_t m_size = 0;
-    uint16_t m_capacity = SBO_CAP;
+    uint32_t m_size = 0;
+    uint32_t m_capacity = SBO_CAP;
     union {
         uint32_t m_inline[SBO_CAP];
         uint32_t *m_heap_data;
