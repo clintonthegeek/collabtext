@@ -200,6 +200,8 @@ StreamEntry comment_to_entry(const Comment& comment) {
     payload += "\"author\":"       + escape_json(comment.author);
     payload += ",\"author_name\":" + escape_json(comment.author_name);
     payload += ",\"body\":"        + escape_json(comment.body);
+    payload += ",\"resolved\":";
+    payload += (comment.resolved ? "true" : "false");
     payload += ",\"range\":{";
     payload += "\"start\":{\"r\":";
     payload += std::to_string(comment.range_start.replica_id);
@@ -233,6 +235,7 @@ std::optional<Comment> comment_from_entry(const StreamEntry& entry) {
     Anchor range_start_val;
     Anchor range_end_val;
     bool has_range  = false;
+    bool resolved   = false;
 
     while (auto key = p.next_key()) {
         if (*key == "author") {
@@ -268,6 +271,21 @@ std::optional<Comment> comment_from_entry(const StreamEntry& entry) {
             }
             if (!p.expect('}')) return std::nullopt;
             if (has_start && has_end) has_range = true;
+        } else if (*key == "resolved") {
+            p.skip_ws();
+            if (p.peek() == 't') {
+                if (p.pos + 4 > p.src.size()) return std::nullopt;
+                if (p.src.substr(p.pos, 4) != "true") return std::nullopt;
+                p.pos += 4;
+                resolved = true;
+            } else if (p.peek() == 'f') {
+                if (p.pos + 5 > p.src.size()) return std::nullopt;
+                if (p.src.substr(p.pos, 5) != "false") return std::nullopt;
+                p.pos += 5;
+                resolved = false;
+            } else {
+                return std::nullopt;
+            }
         } else {
             if (!p.skip_value()) return std::nullopt;
         }
@@ -286,6 +304,7 @@ std::optional<Comment> comment_from_entry(const StreamEntry& entry) {
     comment.body        = std::move(body);
     comment.range_start = range_start_val;
     comment.range_end   = range_end_val;
+    comment.resolved    = resolved;
     return comment;
 }
 

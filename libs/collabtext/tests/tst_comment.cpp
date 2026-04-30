@@ -69,6 +69,43 @@ private slots:
         auto result = comment_from_entry(entry);
         QVERIFY(!result.has_value());
     }
+
+    void resolved_round_trip() {
+        Comment comment;
+        comment.id          = "4-1";
+        comment.replica_id  = 4;
+        comment.seq         = 1;
+        comment.timestamp   = "2026-04-30T09:00:00Z";
+        comment.author      = "dave@example.com";
+        comment.author_name = "Dave";
+        comment.body        = "Looks good now";
+        comment.range_start = Anchor(1, 10, Bias::Left);
+        comment.range_end   = Anchor(1, 20, Bias::Right);
+        comment.resolved    = true;
+
+        StreamEntry entry = comment_to_entry(comment);
+        auto result       = comment_from_entry(entry);
+
+        QVERIFY(result.has_value());
+        QCOMPARE(result->resolved, true);
+    }
+
+    void resolved_defaults_false_when_missing() {
+        StreamEntry entry;
+        entry.id         = "5-1";
+        entry.replica_id = 5;
+        entry.seq        = 1;
+        entry.timestamp  = "2026-04-30T10:00:00Z";
+        entry.payload =
+            "{\"author\":\"e@example.com\",\"author_name\":\"Eve\","
+            "\"body\":\"old comment\","
+            "\"range\":{\"start\":{\"r\":1,\"s\":5,\"b\":\"left\"},"
+            "\"end\":{\"r\":1,\"s\":7,\"b\":\"right\"}}}";
+
+        auto result = comment_from_entry(entry);
+        QVERIFY(result.has_value());
+        QCOMPARE(result->resolved, false);
+    }
 };
 
 QTEST_APPLESS_MAIN(TestComment)

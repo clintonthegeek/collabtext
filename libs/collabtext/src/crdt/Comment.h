@@ -17,6 +17,7 @@ struct Comment {
     std::string body;
     Anchor      range_start;
     Anchor      range_end;
+    bool        resolved    = false;
 };
 
 StreamEntry              comment_to_entry(const Comment& comment);
