@@ -224,7 +224,7 @@ QString Document::enableCollab() {
     }
 
     SidecarManifest manifest;
-    manifest.schema_version = 1;
+    manifest.schema_version = 2;
     manifest.doc_id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     manifest.enrolled_at = now_iso8601_utc();
     manifest.original_filename = QFileInfo(m_path).fileName().toStdString();

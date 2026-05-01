@@ -189,7 +189,7 @@ std::optional<SidecarManifest> manifest_from_json(const std::string& json) {
         }
     }
 
-    if (m.schema_version != 1) return std::nullopt;
+    if (m.schema_version != 2) return std::nullopt;
     return m;
 }
 
