@@ -33,6 +33,7 @@ add_library(collabtext STATIC
     src/crdt/Serialization.cpp
     src/crdt/ZstdUtil.cpp
     src/crdt/SegmentFormat.cpp
+    src/crdt/SegmentWriter.cpp
     src/crdt/FileSync.cpp
     src/crdt/SyncUtils.cpp
     src/crdt/StreamSerialization.cpp
@@ -116,3 +117,4 @@ add_crdt_test(tst_seed_op)
 add_crdt_test(tst_sidecar_manifest)
 add_crdt_test(tst_zstd_util)
 add_crdt_test(tst_segment_format)
+add_crdt_test(tst_segment_writer)
