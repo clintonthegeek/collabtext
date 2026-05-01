@@ -5,6 +5,23 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Test)
 
+find_package(zstd CONFIG QUIET)
+if(zstd_FOUND)
+    if(TARGET zstd::libzstd)
+        set(COLLABTEXT_ZSTD_TARGET zstd::libzstd)
+    elseif(TARGET zstd::libzstd_shared)
+        set(COLLABTEXT_ZSTD_TARGET zstd::libzstd_shared)
+    elseif(TARGET zstd::libzstd_static)
+        set(COLLABTEXT_ZSTD_TARGET zstd::libzstd_static)
+    else()
+        message(FATAL_ERROR "zstd CMake config found but no usable target")
+    endif()
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(ZSTD REQUIRED IMPORTED_TARGET libzstd)
+    set(COLLABTEXT_ZSTD_TARGET PkgConfig::ZSTD)
+endif()
+
 add_library(collabtext STATIC
     src/CrdtEngine.cpp
     src/CollabDocument.cpp
@@ -14,6 +31,7 @@ add_library(collabtext STATIC
     src/crdt/UndoMap.cpp
     src/crdt/Buffer.cpp
     src/crdt/Serialization.cpp
+    src/crdt/ZstdUtil.cpp
     src/crdt/FileSync.cpp
     src/crdt/SyncUtils.cpp
     src/crdt/StreamSerialization.cpp
@@ -52,6 +70,7 @@ target_include_directories(collabtext
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_link_libraries(collabtext PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+target_link_libraries(collabtext PRIVATE ${COLLABTEXT_ZSTD_TARGET})
 
 # Tests
 enable_testing()
@@ -94,3 +113,4 @@ add_crdt_test(tst_chat_message)
 add_crdt_test(tst_comment)
 add_crdt_test(tst_seed_op)
 add_crdt_test(tst_sidecar_manifest)
+add_crdt_test(tst_zstd_util)
