@@ -80,6 +80,7 @@ private slots:
             syncA.push("chat", e);
         }
         syncA.poll();
+        syncA.flush();
 
         size_t applied = syncB.poll();
         QCOMPARE(applied, size_t(5));
@@ -117,6 +118,7 @@ private slots:
         syncA.push("chat", e);
         syncA.push("chat", e);
         syncA.poll();
+        syncA.flush();
 
         syncB.poll();
         auto entries = syncB.entries("chat");
@@ -143,6 +145,7 @@ private slots:
         e1.payload = "{\"body\":\"first version\"}";
         syncA.push("comments", e1);
         syncA.poll();
+        syncA.flush();
 
         StreamEntry e2;
         e2.id = "comment-1";
@@ -152,6 +155,7 @@ private slots:
         e2.payload = "{\"body\":\"updated version\"}";
         syncB.push("comments", e2);
         syncB.poll();
+        syncB.flush();
 
         syncA.poll();
         auto entries = syncA.entries("comments");
@@ -179,6 +183,7 @@ private slots:
         e.payload = "{\"body\":\"to be deleted\"}";
         syncA.push("comments", e);
         syncA.poll();
+        syncA.flush();
 
         syncB.poll();
         QCOMPARE(syncB.entries("comments").size(), size_t(1));
@@ -191,6 +196,7 @@ private slots:
         tomb.tombstone = true;
         syncA.push("comments", tomb);
         syncA.poll();
+        syncA.flush();
 
         syncB.poll();
         QCOMPARE(syncB.entries("comments").size(), size_t(0));
@@ -227,6 +233,7 @@ private slots:
         syncA.push("comments", comment_entry);
 
         syncA.poll();
+        syncA.flush();
         syncB.poll();
 
         auto chat_entries = syncB.entries("chat");
