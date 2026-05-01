@@ -74,6 +74,7 @@ public:
         , m_edit(new CollabPlainTextEdit(this))
         , m_qtDoc(new QTextDocument(this))
     {
+        m_presence.start();
         m_qtDoc->setDocumentLayout(new QPlainTextDocumentLayout(m_qtDoc));
         m_qtDoc->setUndoRedoEnabled(false);
         m_edit->setDocument(m_qtDoc);
@@ -190,7 +191,8 @@ public:
         p.last_heartbeat = now_iso8601();
         p.session_started = m_sessionStarted;
         p.version_summary = m_buffer.version();
-        m_presence.write_presence(p);
+        m_presence.update_presence(p);
+        m_presence.tick(std::chrono::steady_clock::now());
     }
 
     /// Write ephemeral.json with cursor and viewport anchors.
@@ -213,7 +215,8 @@ public:
         es.viewport_top = m_viewportTopAnchor;
         es.viewport_bottom = m_viewportBottomAnchor;
 
-        m_presence.write_ephemeral(es);
+        m_presence.update_ephemeral(es);
+        m_presence.tick(std::chrono::steady_clock::now());
     }
 
     /// Apply a remote EphemeralState, resolving anchors and setting remote cursors.

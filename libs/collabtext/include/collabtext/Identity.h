@@ -70,4 +70,16 @@ std::optional<Presence> presence_from_json(const std::string &json);
 std::string to_json(const EphemeralState &es);
 std::optional<EphemeralState> ephemeral_from_json(const std::string &json);
 
+// ============================================================================
+// CombinedState — what `replicas/<id>/state.json` actually holds
+// ============================================================================
+
+struct CombinedState {
+    Presence presence;
+    EphemeralState ephemeral;
+};
+
+std::string to_json(const CombinedState &s);
+std::optional<CombinedState> combined_state_from_json(const std::string &json);
+
 } // namespace CollabText::Identity

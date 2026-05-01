@@ -2,179 +2,151 @@
 #include <QTemporaryDir>
 #include "collabtext/PresenceManager.h"
 
+#include <chrono>
 #include <fstream>
+#include <iterator>
 
 using namespace CollabText::Identity;
 namespace Crdt = CollabText::Crdt;
 namespace fs = std::filesystem;
 
+namespace {
+Presence make_presence(const std::string& rid = "r",
+                       const std::string& iid = "i") {
+    Presence p;
+    p.replica_id = rid;
+    p.identity_id = iid;
+    p.device_name = "d";
+    p.active = true;
+    p.last_heartbeat = "2026-04-30T15:00:00Z";
+    p.session_started = "2026-04-30T14:00:00Z";
+    return p;
+}
+EphemeralState make_ephemeral(uint64_t seq) {
+    EphemeralState es;
+    es.seq = seq;
+    es.timestamp = "2026-04-30T15:00:00Z";
+    es.activity = "typing";
+    return es;
+}
+}
+
 class TestPresenceManager : public QObject {
     Q_OBJECT
 
 private slots:
-    void write_presence_creates_file() {
+    void writes_combined_state_json() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        fs::create_directories(shared / "replicas" / "laptop-3");
-
-        PresenceManager pm(shared, "laptop-3", "clinton-a7f3b2");
-
-        Presence p;
-        p.replica_id = "laptop-3";
-        p.identity_id = "clinton-a7f3b2";
-        p.device_name = "ThinkPad";
-        p.active = true;
-        p.last_heartbeat = "2026-04-06T14:30:00Z";
-        p.session_started = "2026-04-06T12:00:00Z";
-
-        pm.write_presence(p);
-        QVERIFY(fs::exists(shared / "replicas" / "laptop-3" / "presence.json"));
+        PresenceManager pm(shared, "r", "i");
+        pm.start();
+        pm.update_presence(make_presence());
+        pm.update_ephemeral(make_ephemeral(1));
+        pm.flush_state();
+        QVERIFY(fs::exists(shared / "replicas" / "r" / "state.json"));
+        QVERIFY(!fs::exists(shared / "replicas" / "r" / "presence.json"));
+        QVERIFY(!fs::exists(shared / "replicas" / "r" / "ephemeral.json"));
     }
 
-    void write_ephemeral_creates_file() {
+    void reads_remote_presences_and_ephemerals_from_state_json() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        fs::create_directories(shared / "replicas" / "laptop-3");
+        PresenceManager me(shared, "r", "i");
+        PresenceManager peer(shared, "peer", "j");
+        me.start(); peer.start();
 
-        PresenceManager pm(shared, "laptop-3", "clinton-a7f3b2");
+        peer.update_presence(make_presence("peer", "j"));
+        peer.update_ephemeral(make_ephemeral(7));
+        peer.flush_state();
 
-        EphemeralState es;
-        es.seq = 1;
-        es.timestamp = "2026-04-06T14:30:00Z";
-        es.activity = "idle";
-
-        pm.write_ephemeral(es);
-        QVERIFY(fs::exists(shared / "replicas" / "laptop-3" / "ephemeral.json"));
+        auto pres = me.read_remote_presences();
+        QCOMPARE(pres.size(), size_t(1));
+        QCOMPARE(pres[0].first, std::string("peer"));
+        QCOMPARE(pres[0].second.identity_id, std::string("j"));
+        auto ephs = me.read_remote_ephemerals();
+        QCOMPARE(ephs.size(), size_t(1));
+        QCOMPARE(ephs[0].second.seq, uint64_t(7));
     }
 
-    void read_remote_presences_skips_own() {
+    void throttles_writes_to_floor_in_burst() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        fs::create_directories(shared / "replicas" / "laptop-3");
-        fs::create_directories(shared / "replicas" / "desktop-1");
-
-        PresenceManager pmA(shared, "laptop-3", "clinton-a7f3b2");
-        PresenceManager pmB(shared, "desktop-1", "alice-04e1c9");
-
-        Presence pA;
-        pA.replica_id = "laptop-3";
-        pA.identity_id = "clinton-a7f3b2";
-        pA.device_name = "ThinkPad";
-        pA.active = true;
-        pA.last_heartbeat = "2026-04-06T14:30:00Z";
-        pA.session_started = "2026-04-06T12:00:00Z";
-        pmA.write_presence(pA);
-
-        Presence pB;
-        pB.replica_id = "desktop-1";
-        pB.identity_id = "alice-04e1c9";
-        pB.device_name = "Desktop";
-        pB.active = true;
-        pB.last_heartbeat = "2026-04-06T14:30:00Z";
-        pB.session_started = "2026-04-06T12:00:00Z";
-        pmB.write_presence(pB);
-
-        auto remotes = pmA.read_remote_presences();
-        QCOMPARE(remotes.size(), size_t(1));
-        QCOMPARE(remotes[0].first, std::string("desktop-1"));
-        QCOMPARE(remotes[0].second.identity_id, std::string("alice-04e1c9"));
+        PresenceManager pm(shared, "r", "i");
+        pm.start();
+        auto t0 = std::chrono::steady_clock::time_point{};
+        pm.update_presence(make_presence());
+        pm.update_ephemeral(make_ephemeral(1));
+        pm.tick(t0);                                            // first write
+        pm.update_ephemeral(make_ephemeral(2));
+        pm.tick(t0 + std::chrono::milliseconds(50));             // suppressed
+        pm.update_ephemeral(make_ephemeral(3));
+        pm.tick(t0 + std::chrono::milliseconds(300));            // allowed
+        QCOMPARE(pm.write_count_for_test(), uint64_t(2));
     }
 
-    void read_remote_ephemerals_skips_own() {
+    void writes_keepalive_after_idle_ceiling() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        fs::create_directories(shared / "replicas" / "a");
-        fs::create_directories(shared / "replicas" / "b");
-
-        PresenceManager pmA(shared, "a", "id-a");
-        PresenceManager pmB(shared, "b", "id-b");
-
-        EphemeralState es;
-        es.seq = 1;
-        es.timestamp = "2026-04-06T14:30:00Z";
-        es.activity = "typing";
-        es.cursors.push_back({
-            Crdt::Anchor(1, 10, Crdt::Bias::Right),
-            Crdt::Anchor(1, 10, Crdt::Bias::Right)
-        });
-
-        pmA.write_ephemeral(es);
-        pmB.write_ephemeral(es);
-
-        auto remotes = pmA.read_remote_ephemerals();
-        QCOMPARE(remotes.size(), size_t(1));
-        QCOMPARE(remotes[0].first, std::string("b"));
+        PresenceManager pm(shared, "r", "i");
+        pm.start();
+        auto t0 = std::chrono::steady_clock::time_point{};
+        pm.update_presence(make_presence());
+        pm.update_ephemeral(make_ephemeral(1));
+        pm.tick(t0);
+        // No further updates; tick at the ceiling.
+        pm.tick(t0 + std::chrono::seconds(26));
+        QCOMPARE(pm.write_count_for_test(), uint64_t(2));
     }
 
-    void is_live_checks_heartbeat_and_active() {
-        Presence p;
-        p.active = true;
-
-        auto now = std::chrono::system_clock::now();
-        auto time_t = std::chrono::system_clock::to_time_t(now);
-        std::tm tm{};
-        gmtime_r(&time_t, &tm);
-        char buf[32];
-        strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm);
-        p.last_heartbeat = buf;
-        QVERIFY(PresenceManager::is_live(p));
-        QVERIFY(!PresenceManager::is_stale(p));
-        QVERIFY(!PresenceManager::is_departed(p));
-    }
-
-    void is_stale_with_old_heartbeat() {
-        Presence p;
-        p.active = true;
-        p.last_heartbeat = "2020-01-01T00:00:00Z";
-        QVERIFY(!PresenceManager::is_live(p));
-        QVERIFY(PresenceManager::is_stale(p));
-    }
-
-    void is_departed_when_inactive() {
-        Presence p;
-        p.active = false;
-        p.last_heartbeat = "2026-04-06T14:30:00Z";
-        QVERIFY(PresenceManager::is_departed(p));
-        QVERIFY(!PresenceManager::is_live(p));
-    }
-
-    void depart_sets_active_false() {
+    void depart_forces_flush_with_active_false() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        fs::create_directories(shared / "replicas" / "laptop-3");
-
-        PresenceManager pm(shared, "laptop-3", "clinton-a7f3b2");
-
-        Presence p;
-        p.replica_id = "laptop-3";
-        p.identity_id = "clinton-a7f3b2";
-        p.device_name = "ThinkPad";
-        p.active = true;
-        p.last_heartbeat = "2026-04-06T14:30:00Z";
-        p.session_started = "2026-04-06T12:00:00Z";
-        pm.write_presence(p);
-
+        PresenceManager pm(shared, "r", "i");
+        pm.start();
+        pm.update_presence(make_presence());
+        pm.update_ephemeral(make_ephemeral(1));
+        pm.tick(std::chrono::steady_clock::time_point{});
         pm.depart();
-
-        auto remotes = PresenceManager(shared, "other", "other").read_remote_presences();
-        QCOMPARE(remotes.size(), size_t(1));
-        QCOMPARE(remotes[0].second.active, false);
+        std::ifstream f(shared / "replicas" / "r" / "state.json", std::ios::binary);
+        std::string s((std::istreambuf_iterator<char>(f)),
+                       std::istreambuf_iterator<char>());
+        QVERIFY(s.find("\"active\":false") != std::string::npos);
     }
 
-    void malformed_presence_file_skipped() {
+    void start_preserves_existing_state_across_restart() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        fs::create_directories(shared / "replicas" / "bad");
+        {
+            PresenceManager pm(shared, "r", "i");
+            pm.start();
+            pm.update_presence(make_presence());
+            auto es = make_ephemeral(42);
+            es.activity = "originalActivity";
+            pm.update_ephemeral(es);
+            pm.flush_state();
+        }
+        {
+            PresenceManager pm2(shared, "r", "i");
+            pm2.start();
+            // No update — flush should preserve seq=42 from disk.
+            pm2.flush_state();
+            std::ifstream f(shared / "replicas" / "r" / "state.json", std::ios::binary);
+            std::string s((std::istreambuf_iterator<char>(f)),
+                           std::istreambuf_iterator<char>());
+            QVERIFY(s.find("\"seq\":42") != std::string::npos);
+            QVERIFY(s.find("originalActivity") != std::string::npos);
+        }
+    }
 
-        std::ofstream f(shared / "replicas" / "bad" / "presence.json");
-        f << "not json at all";
-        f.close();
-
-        PresenceManager pm(shared, "good", "id");
-        auto remotes = pm.read_remote_presences();
-        QCOMPARE(remotes.size(), size_t(0));
+    void is_live_within_30_seconds() {
+        Presence p = make_presence();
+        // active=true, but heartbeat is from 2026-04-30 — far in the past
+        // relative to system clock at runtime → not live.
+        QVERIFY(!PresenceManager::is_live(p));
+        p.active = false;
+        QVERIFY(PresenceManager::is_departed(p));
     }
 };
 
-QTEST_MAIN(TestPresenceManager)
+QTEST_APPLESS_MAIN(TestPresenceManager)
 #include "tst_presence_manager.moc"

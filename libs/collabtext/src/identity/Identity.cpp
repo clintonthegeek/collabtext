@@ -578,4 +578,59 @@ std::optional<EphemeralState> ephemeral_from_json(const std::string &json) {
     return es;
 }
 
+// ============================================================================
+// CombinedState — replicas/<id>/state.json
+// ============================================================================
+
+std::string to_json(const CombinedState &s) {
+    std::string out = "{\"schema\":1,\"presence\":";
+    out += to_json(s.presence);
+    out += ",\"ephemeral\":";
+    out += to_json(s.ephemeral);
+    out += "}";
+    return out;
+}
+
+std::optional<CombinedState> combined_state_from_json(const std::string &json) {
+    auto extract_object = [&](size_t key_pos) -> std::optional<std::string> {
+        size_t colon = json.find(':', key_pos);
+        if (colon == std::string::npos) return std::nullopt;
+        size_t i = json.find('{', colon);
+        if (i == std::string::npos) return std::nullopt;
+        int depth = 0;
+        bool in_string = false;
+        bool escape = false;
+        for (size_t j = i; j < json.size(); ++j) {
+            char c = json[j];
+            if (escape) { escape = false; continue; }
+            if (in_string) {
+                if (c == '\\') escape = true;
+                else if (c == '"') in_string = false;
+                continue;
+            }
+            if (c == '"') in_string = true;
+            else if (c == '{') ++depth;
+            else if (c == '}') {
+                --depth;
+                if (depth == 0) return json.substr(i, j - i + 1);
+            }
+        }
+        return std::nullopt;
+    };
+
+    auto pres_key = json.find("\"presence\"");
+    auto ephem_key = json.find("\"ephemeral\"");
+    if (pres_key == std::string::npos || ephem_key == std::string::npos)
+        return std::nullopt;
+
+    auto pres_str = extract_object(pres_key);
+    auto ephem_str = extract_object(ephem_key);
+    if (!pres_str || !ephem_str) return std::nullopt;
+
+    auto pres = presence_from_json(*pres_str);
+    auto ephem = ephemeral_from_json(*ephem_str);
+    if (!pres || !ephem) return std::nullopt;
+    return CombinedState{*pres, *ephem};
+}
+
 } // namespace CollabText::Identity

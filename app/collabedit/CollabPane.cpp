@@ -191,6 +191,7 @@ CollabPane::CollabPane(CollabText::Identity::Identity identity,
     //    once to ingest any existing remote ops in the sidecar.
     m_sync.start();
     m_sync.poll();
+    m_presence.start();
 
     // 3) Render the resulting text into the QTextDocument as the
     //    initial content, then connect the change signal so future
@@ -452,7 +453,8 @@ void CollabPane::writePresence() {
     p.last_heartbeat = now_iso8601();
     p.session_started = m_sessionStarted;
     p.version_summary = m_buffer.version();
-    m_presence.write_presence(p);
+    m_presence.update_presence(p);
+    m_presence.tick(std::chrono::steady_clock::now());
     m_lastPresenceMs = nowMs;
 }
 
@@ -481,7 +483,8 @@ void CollabPane::writeEphemeral() {
     es.viewport_top = m_viewportTopAnchor;
     es.viewport_bottom = m_viewportBottomAnchor;
 
-    m_presence.write_ephemeral(es);
+    m_presence.update_ephemeral(es);
+    m_presence.tick(std::chrono::steady_clock::now());
     m_lastEphemeralMs = nowMs;
     m_lastEphemeralBytePos = bytePos;
     m_lastEphemeralByteAnchor = byteAnchor;

@@ -67,6 +67,7 @@ void SyncManager::start(const QString &sharedFolder)
 
     m_presence = std::make_unique<Identity::PresenceManager>(
         folder, m_replicaId, m_identity.identity_id);
+    m_presence->start();
 
     m_projector = std::make_unique<Identity::IdentityProjector>(folder);
 
@@ -108,12 +109,13 @@ void SyncManager::syncCycle()
     myPresence.device_name = m_deviceName;
     myPresence.active = true;
     myPresence.last_heartbeat = now_iso8601();
-    m_presence->write_presence(myPresence);
+    m_presence->update_presence(myPresence);
 
     // 3. Write our ephemeral state (bump sequence number + timestamp)
     m_ephemeralState.seq = ++m_ephemeralSeq;
     m_ephemeralState.timestamp = now_iso8601();
-    m_presence->write_ephemeral(m_ephemeralState);
+    m_presence->update_ephemeral(m_ephemeralState);
+    m_presence->tick(std::chrono::steady_clock::now());
 
     // 4. Read remote presences — collect live peers
     const auto remotePrescences = m_presence->read_remote_presences();
