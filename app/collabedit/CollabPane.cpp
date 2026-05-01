@@ -271,6 +271,8 @@ void CollabPane::shutdown() {
     if (m_syncTimer) m_syncTimer->stop();
     if (m_gremlinTimer) m_gremlinTimer->stop();
     m_sync.poll();
+    m_sync.flush();
+    if (m_streamSync) m_streamSync->flush();
     m_presence.depart();
 }
 
