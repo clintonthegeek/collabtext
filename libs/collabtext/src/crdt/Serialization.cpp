@@ -150,6 +150,44 @@ std::string encode_operation(const Operation& op) {
     return "{}";
 }
 
+std::string encode_idlist_operation(const IdListOperation& op) {
+    return std::visit([](const auto& o) -> std::string {
+        using T = std::decay_t<decltype(o)>;
+        if constexpr (std::is_same_v<T, IdListInsertOp>) {
+            std::string out = "{\"t\":\"il-i\"";
+            out += ",\"ts\":" + encode_lamport(o.timestamp);
+            out += ",\"v\":" + encode_global(o.version);
+            out += ",\"id\":" + std::to_string(o.id);
+            out += ",\"loc\":" + encode_locator(o.locator);
+            out += '}';
+            return out;
+        } else if constexpr (std::is_same_v<T, IdListRemoveOp>) {
+            std::string out = "{\"t\":\"il-r\"";
+            out += ",\"ts\":" + encode_lamport(o.timestamp);
+            out += ",\"v\":" + encode_global(o.version);
+            out += ",\"to\":" + encode_lamport(o.target_origin);
+            out += '}';
+            return out;
+        } else {
+            // IdListUndoOpVariant
+            std::string out = "{\"t\":\"il-u\"";
+            out += ",\"ts\":" + encode_lamport(o.timestamp);
+            out += ",\"v\":" + encode_global(o.version);
+            out += ",\"c\":[";
+            for (size_t i = 0; i < o.counts.size(); ++i) {
+                if (i > 0) out += ',';
+                out += '[';
+                out += encode_lamport(o.counts[i].first);
+                out += ',';
+                out += std::to_string(o.counts[i].second);
+                out += ']';
+            }
+            out += "]}";
+            return out;
+        }
+    }, op);
+}
+
 // ---- JSON Decoder (minimal recursive-descent for our fixed schema) ----
 
 namespace {
@@ -554,6 +592,90 @@ struct Parser {
         }
         return std::nullopt;
     }
+
+    std::optional<IdListInsertOp> parse_idlist_insert_body() {
+        IdListInsertOp op;
+        while (auto key = next_key()) {
+            if (*key == "ts") {
+                auto v = parse_lamport(); if (!v) return std::nullopt; op.timestamp = *v;
+            } else if (*key == "v") {
+                auto v = parse_global(); if (!v) return std::nullopt; op.version = *v;
+            } else if (*key == "id") {
+                auto v = parse_uint64(); if (!v) return std::nullopt; op.id = *v;
+            } else if (*key == "loc") {
+                auto v = parse_locator(); if (!v) return std::nullopt; op.locator = *v;
+            } else {
+                if (!skip_value()) return std::nullopt;
+            }
+        }
+        return op;
+    }
+
+    std::optional<IdListRemoveOp> parse_idlist_remove_body() {
+        IdListRemoveOp op;
+        while (auto key = next_key()) {
+            if (*key == "ts") {
+                auto v = parse_lamport(); if (!v) return std::nullopt; op.timestamp = *v;
+            } else if (*key == "v") {
+                auto v = parse_global(); if (!v) return std::nullopt; op.version = *v;
+            } else if (*key == "to") {
+                auto v = parse_lamport(); if (!v) return std::nullopt; op.target_origin = *v;
+            } else {
+                if (!skip_value()) return std::nullopt;
+            }
+        }
+        return op;
+    }
+
+    std::optional<IdListUndoOpVariant> parse_idlist_undo_body() {
+        IdListUndoOpVariant op;
+        while (auto key = next_key()) {
+            if (*key == "ts") {
+                auto v = parse_lamport(); if (!v) return std::nullopt; op.timestamp = *v;
+            } else if (*key == "v") {
+                auto v = parse_global(); if (!v) return std::nullopt; op.version = *v;
+            } else if (*key == "c") {
+                if (!expect('[')) return std::nullopt;
+                skip_ws();
+                if (peek() != ']') {
+                    do {
+                        if (!expect('[')) return std::nullopt;
+                        auto l = parse_lamport(); if (!l || !expect(',')) return std::nullopt;
+                        auto cnt = parse_uint32(); if (!cnt || !expect(']')) return std::nullopt;
+                        op.counts.push_back({*l, *cnt});
+                    } while (expect(','));
+                }
+                if (!expect(']')) return std::nullopt;
+            } else {
+                if (!skip_value()) return std::nullopt;
+            }
+        }
+        return op;
+    }
+
+    std::optional<IdListOperation> parse_idlist_operation() {
+        skip_ws();
+        if (!expect('{')) return std::nullopt;
+        auto key = next_key();
+        if (!key || *key != "t") return std::nullopt;
+        auto type_str = parse_string();
+        if (!type_str) return std::nullopt;
+
+        if (*type_str == "il-i") {
+            auto op = parse_idlist_insert_body();
+            if (!op || !expect('}')) return std::nullopt;
+            return IdListOperation{*op};
+        } else if (*type_str == "il-r") {
+            auto op = parse_idlist_remove_body();
+            if (!op || !expect('}')) return std::nullopt;
+            return IdListOperation{*op};
+        } else if (*type_str == "il-u") {
+            auto op = parse_idlist_undo_body();
+            if (!op || !expect('}')) return std::nullopt;
+            return IdListOperation{*op};
+        }
+        return std::nullopt;
+    }
 };
 
 } // anonymous namespace
@@ -561,6 +683,11 @@ struct Parser {
 std::optional<Operation> decode_operation(std::string_view json) {
     Parser p{json};
     return p.parse_operation();
+}
+
+std::optional<IdListOperation> decode_idlist_operation(std::string_view json) {
+    Parser p{json};
+    return p.parse_idlist_operation();
 }
 
 std::optional<Global> decode_global(std::string_view json) {

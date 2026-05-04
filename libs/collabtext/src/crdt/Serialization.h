@@ -1,6 +1,7 @@
 #pragma once
 
 #include "crdt/Operations.h"
+#include "crdt/IdListOperations.h"
 
 #include <optional>
 #include <string>
@@ -20,5 +21,11 @@ std::string encode_global(const Global& g);
 
 /// Deserialize a Global from JSON.
 std::optional<Global> decode_global(std::string_view json);
+
+/// Serialize an IdListOperation to JSON.
+std::string encode_idlist_operation(const IdListOperation& op);
+
+/// Deserialize JSON to an IdListOperation.
+std::optional<IdListOperation> decode_idlist_operation(std::string_view json);
 
 } // namespace CollabText::Crdt
