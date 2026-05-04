@@ -66,7 +66,7 @@ struct IdListEntry {
 
     bool compute_visible(const UndoMap& undo_map) const {
         if (undo_map.is_undone(origin)) return false;
-        for (auto& del : deletions)
+        for (const auto& del : deletions)
             if (!undo_map.is_undone(del)) return false;
         return true;
     }
@@ -76,7 +76,7 @@ struct IdListEntry {
     bool was_visible_at(const Global& version, const UndoMap& undo_map) const {
         if (!version.observed(origin)) return false;
         if (undo_map.was_undone(origin, version)) return false;
-        for (auto& del : deletions) {
+        for (const auto& del : deletions) {
             if (version.observed(del) && !undo_map.was_undone(del, version))
                 return false;
         }
