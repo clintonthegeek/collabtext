@@ -131,7 +131,7 @@ repository; the editor (or virtual filesystem) gives you the text file.
 **Location:** `libs/collabtext/src/crdt/`
 **Dependencies:** C++20 standard library only
 **Status:** Implemented, tested, optimized (15-31x improvement over
-initial version)
+initial version). `IdList` primitive added in β (schema version 3).
 
 The engine is a pure algorithmic core. It takes operations in and
 produces operations out. It does not know about files, networks, Qt, or
@@ -149,7 +149,15 @@ Key properties:
 - Sub-millisecond per-edit latency for documents up to 10K characters.
 - Garbage collection reclaims tombstones while respecting undo stacks.
 
-See `docs/CRDT_ENGINE_SPEC.md` for the full specification.
+As of schema version 3, the engine provides a second primitive alongside `Buffer`:
+**`IdList`** — an ordered-list CRDT over opaque `uint64` elements. It uses the same
+`SumTree`/`Locator`/`Anchor`/`UndoMap` machinery as `Buffer` but operates on atomic
+elements rather than UTF-16 code units. No text splitting, no multi-char fragments.
+Applications that need a structural list (e.g. block ordering in a document) can
+compose `IdList` + `Buffer` directly without any changes to the transport layer —
+`StreamSync` already handles multiple independent CRDT streams with opaque payloads.
+
+See `docs/CRDT_IDLIST_SPEC.md` for the full specification.
 
 ### 3.2 SyncManager — NOT YET IMPLEMENTED
 
