@@ -128,12 +128,11 @@ IdListOperation IdList::remove_at(const Anchor& target) {
 void IdList::apply_ops(const std::vector<IdListOperation>& ops) {
     for (const auto& op : ops) {
         if (m_version.observed(get_idlist_op_timestamp(op))) continue; // already applied
-        if (try_apply(op)) {
-            retry_deferred();
-        } else {
+        if (!try_apply(op)) {
             enqueue_deferred(IdListOpEntry{get_idlist_op_timestamp(op), op});
         }
     }
+    retry_deferred();
 }
 
 std::optional<IdListOperation> IdList::undo() { return std::nullopt; }
@@ -314,13 +313,16 @@ bool IdList::apply_concrete(const IdListInsertOp& op) {
 
 bool IdList::apply_concrete(const IdListRemoveOp& op) {
     auto entries = get_entries();
+    bool found = false;
     for (auto& e : entries) {
         if (e.origin.replica_id == op.target_origin.replica_id &&
             e.origin.value == op.target_origin.value) {
             e.deletions.push_back(op.timestamp);
+            found = true;
             break;
         }
     }
+    assert(found && "apply_concrete(remove): target_origin not in tree — causal gate should have prevented this");
     m_clock.observe(op.timestamp);
     m_version.observe(op.timestamp);
     m_version.join(op.version);
