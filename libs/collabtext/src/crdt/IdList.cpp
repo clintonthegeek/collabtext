@@ -125,8 +125,15 @@ IdListOperation IdList::remove_at(const Anchor& target) {
     return IdListRemoveOp{ del_id, version_before, target_origin };
 }
 
-void IdList::apply_ops(const std::vector<IdListOperation>&) {
-    assert(false && "IdList::apply_ops not yet implemented");
+void IdList::apply_ops(const std::vector<IdListOperation>& ops) {
+    for (const auto& op : ops) {
+        if (m_version.observed(get_idlist_op_timestamp(op))) continue; // already applied
+        if (try_apply(op)) {
+            retry_deferred();
+        } else {
+            enqueue_deferred(IdListOpEntry{get_idlist_op_timestamp(op), op});
+        }
+    }
 }
 
 std::optional<IdListOperation> IdList::undo() { return std::nullopt; }
@@ -262,26 +269,64 @@ void IdList::insert_entry(std::vector<IdListEntry>& entries, IdListEntry entry) 
 }
 
 bool IdList::try_apply(const IdListOperation& op) {
-    assert(false && "IdList::try_apply not yet implemented");
-    return false;
+    // Check causal dependencies satisfied
+    if (!m_version.observed_all(get_idlist_op_version(op))) return false;
+    return std::visit([&](const auto& concrete) -> bool {
+        return apply_concrete(concrete);
+    }, op);
 }
 
 void IdList::retry_deferred() {
-    // stub — implemented in β5
+    bool progress = true;
+    while (progress) {
+        progress = false;
+        IdListOperationQueue remaining;
+        m_deferred_queue.for_each([&](const IdListOpEntry& entry) {
+            if (m_version.observed(get_idlist_op_timestamp(entry.op))) {
+                progress = true;
+                return;
+            }
+            if (try_apply(entry.op)) {
+                progress = true;
+            } else {
+                remaining.push_item(entry);
+            }
+        });
+        m_deferred_queue = std::move(remaining);
+    }
 }
 
 void IdList::enqueue_deferred(IdListOpEntry entry) {
     m_deferred_queue.push_item(std::move(entry));
 }
 
-bool IdList::apply_concrete(const IdListInsertOp&) {
-    assert(false && "IdList::apply_concrete(insert) not yet implemented");
-    return false;
+bool IdList::apply_concrete(const IdListInsertOp& op) {
+    auto entries = get_entries();
+    IdListEntry e(op.timestamp, op.locator, op.id);
+    insert_entry(entries, std::move(e));
+    m_clock.observe(op.timestamp);
+    m_version.observe(op.timestamp);
+    m_version.join(op.version);
+    set_entries(std::move(entries));
+    if (m_on_change) m_on_change();
+    return true;
 }
 
-bool IdList::apply_concrete(const IdListRemoveOp&) {
-    assert(false && "IdList::apply_concrete(remove) not yet implemented");
-    return false;
+bool IdList::apply_concrete(const IdListRemoveOp& op) {
+    auto entries = get_entries();
+    for (auto& e : entries) {
+        if (e.origin.replica_id == op.target_origin.replica_id &&
+            e.origin.value == op.target_origin.value) {
+            e.deletions.push_back(op.timestamp);
+            break;
+        }
+    }
+    m_clock.observe(op.timestamp);
+    m_version.observe(op.timestamp);
+    m_version.join(op.version);
+    set_entries(std::move(entries));
+    if (m_on_change) m_on_change();
+    return true;
 }
 
 bool IdList::apply_concrete(const IdListUndoOpVariant&) {
