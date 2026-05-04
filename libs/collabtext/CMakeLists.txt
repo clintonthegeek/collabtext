@@ -36,7 +36,6 @@ add_library(collabtext STATIC
     src/crdt/SegmentWriter.cpp
     src/crdt/SegmentReader.cpp
     src/crdt/FileSync.cpp
-    src/crdt/SyncUtils.cpp
     src/crdt/StreamSerialization.cpp
     src/crdt/StreamSync.cpp
     src/crdt/ChatMessage.cpp
