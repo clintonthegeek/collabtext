@@ -55,6 +55,23 @@ private slots:
         list.set_max_undo_depth(1000);
         QCOMPARE(list.collect_garbage(), size_t{1});  // now reclaimable
     }
+
+    void gc_protects_undone_insertion_with_no_deletions() {
+        // Entry was inserted then undone (no deletion tombstone), only visible=false
+        // because its origin is flagged in undo_map. GC must not collect it while
+        // the insertion is still in the undo stack (redo would break otherwise).
+        IdList list(1);
+        list.insert_after(Anchor::min(), 0xAA);  // origin (1,1), undo entry: inserted_keys={(1,1)}
+        list.undo();                              // invisible now, no deletion, but insertion protected
+        QCOMPARE(list.size(), size_t{0});
+        QCOMPARE(list.tombstone_count(), size_t{1});
+        QCOMPARE(list.collect_garbage(), size_t{0});  // must NOT collect — redo still possible
+
+        // After dropping the undo stack, GC can reclaim it.
+        list.set_max_undo_depth(0);
+        list.set_max_undo_depth(1000);
+        QCOMPARE(list.collect_garbage(), size_t{1});
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIdListGc)

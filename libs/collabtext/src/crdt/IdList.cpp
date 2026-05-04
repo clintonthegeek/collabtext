@@ -298,11 +298,17 @@ int IdList::compare_anchors(const Anchor& a, const Anchor& b) const {
 }
 
 size_t IdList::collect_garbage() {
-    // Build set of deletion IDs protected by the undo stack.
-    auto is_protected = [&](Lamport del_id) {
+    auto is_deletion_protected = [&](Lamport del_id) {
         for (const auto& entry : m_undo_stack)
             for (const auto& uid : entry.deletion_ids)
                 if (uid == del_id) return true;
+        return false;
+    };
+    auto is_origin_protected = [&](Lamport origin) {
+        for (const auto& entry : m_undo_stack)
+            for (const auto& key : entry.inserted_keys)
+                if (key.replica_id == origin.replica_id && key.lamport_value == origin.value)
+                    return true;
         return false;
     };
 
@@ -311,9 +317,10 @@ size_t IdList::collect_garbage() {
     entries.erase(
         std::remove_if(entries.begin(), entries.end(), [&](const IdListEntry& e) {
             if (e.visible) return false;
+            if (is_origin_protected(e.origin)) return false;      // insertion undone — redo must work
             for (const auto& del : e.deletions) {
                 if (del.replica_id != m_replica_id) return false;  // remote deletion — needs watermark
-                if (is_protected(del)) return false;               // undo-protected
+                if (is_deletion_protected(del)) return false;      // undo-protected
             }
             return true;
         }),
@@ -324,10 +331,17 @@ size_t IdList::collect_garbage() {
 }
 
 size_t IdList::compact(const Global& watermark) {
-    auto is_protected = [&](Lamport del_id) {
+    auto is_deletion_protected = [&](Lamport del_id) {
         for (const auto& entry : m_undo_stack)
             for (const auto& uid : entry.deletion_ids)
                 if (uid == del_id) return true;
+        return false;
+    };
+    auto is_origin_protected = [&](Lamport origin) {
+        for (const auto& entry : m_undo_stack)
+            for (const auto& key : entry.inserted_keys)
+                if (key.replica_id == origin.replica_id && key.lamport_value == origin.value)
+                    return true;
         return false;
     };
 
@@ -336,9 +350,10 @@ size_t IdList::compact(const Global& watermark) {
     entries.erase(
         std::remove_if(entries.begin(), entries.end(), [&](const IdListEntry& e) {
             if (e.visible) return false;
+            if (is_origin_protected(e.origin)) return false;      // insertion undone — redo must work
             for (const auto& del : e.deletions) {
-                if (!watermark.observed(del)) return false;  // not globally acknowledged
-                if (is_protected(del)) return false;         // undo-protected
+                if (!watermark.observed(del)) return false;         // not globally acknowledged
+                if (is_deletion_protected(del)) return false;      // undo-protected
             }
             return true;
         }),
