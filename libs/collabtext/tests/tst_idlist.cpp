@@ -34,6 +34,30 @@ private slots:
         QCOMPARE(list.size(), 1u);
         QCOMPARE(list.ids(), std::vector<uint64_t>{0xAA});
     }
+
+    void insert_at_start_pushes_existing_back() {
+        IdList list(1);
+        list.insert_after(Anchor::min(), 0xAA);  // list: [0xAA]
+        list.insert_after(Anchor::min(), 0xBB);  // list: [0xBB, 0xAA]
+        QCOMPARE(list.size(), 2u);
+        QCOMPARE(list.ids(), (std::vector<uint64_t>{0xBB, 0xAA}));
+    }
+
+    void multiple_inserts_at_start_reverse_order() {
+        IdList list(1);
+        list.insert_after(Anchor::min(), 1);
+        list.insert_after(Anchor::min(), 2);
+        list.insert_after(Anchor::min(), 3);
+        QCOMPARE(list.ids(), (std::vector<uint64_t>{3, 2, 1}));
+    }
+
+    void same_id_value_can_appear_twice() {
+        IdList list(1);
+        list.insert_after(Anchor::min(), 0xAA);
+        list.insert_after(Anchor::min(), 0xAA);
+        QCOMPARE(list.size(), 2u);
+        QCOMPARE(list.ids(), (std::vector<uint64_t>{0xAA, 0xAA}));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIdList)
