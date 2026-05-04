@@ -27,6 +27,13 @@ private slots:
         }
         QVERIFY(all_zero || v.size() == 0);
     }
+
+    void insert_into_empty_list() {
+        IdList list(1);
+        list.insert_after(Anchor::min(), 0xAA);
+        QCOMPARE(list.size(), 1u);
+        QCOMPARE(list.ids(), std::vector<uint64_t>{0xAA});
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIdList)

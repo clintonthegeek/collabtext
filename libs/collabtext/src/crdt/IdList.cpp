@@ -8,9 +8,72 @@ IdList::IdList(uint16_t replica_id)
     , m_clock(replica_id, 1)
 {}
 
-IdListOperation IdList::insert_after(const Anchor&, uint64_t) {
-    assert(false && "IdList::insert_after not yet implemented");
-    return IdListInsertOp{};
+IdListOperation IdList::insert_after(const Anchor& after, uint64_t id) {
+    // a. Get entries vector
+    auto entries = get_entries();
+
+    // b. Find predecessor and successor locators
+    Locator predecessor;
+    Locator successor;
+
+    if (after.is_min()) {
+        predecessor = Locator::min();
+        if (entries.empty()) {
+            successor = Locator::max();
+        } else {
+            successor = entries.front().locator;
+        }
+    } else {
+        // Find the entry matching (after.replica_id, after.char_value)
+        bool found = false;
+        for (size_t i = 0; i < entries.size(); ++i) {
+            if (entries[i].origin.replica_id == after.replica_id &&
+                entries[i].origin.value == after.char_value) {
+                predecessor = entries[i].locator;
+                successor = (i + 1 < entries.size())
+                    ? entries[i + 1].locator
+                    : Locator::max();
+                found = true;
+                break;
+            }
+        }
+        assert(found && "insert_after: anchor not found in entries");
+    }
+
+    // c. Allocate new locator between predecessor and successor
+    Locator new_loc = Locator::between(predecessor, successor);
+
+    // d. Capture origin before bumping clock
+    Lamport origin(m_replica_id, m_clock.value);
+
+    // e. Capture version before observing this op
+    Global version_before = m_version;
+
+    // f. Bump clock
+    m_clock = Lamport(m_replica_id, m_clock.value + 1);
+
+    // g. Record this op in the version vector
+    m_version.observe(origin);
+
+    // h. Create and insert the entry
+    IdListEntry e(origin, new_loc, id);
+
+    // i. Insert into sorted entries vector
+    insert_entry(entries, std::move(e));
+
+    // j. Rebuild the tree from entries
+    set_entries(std::move(entries));
+
+    // k. Push undo entry
+    m_undo_stack.push_back(UndoEntry{ {UndoMapKey(origin)}, {} });
+    m_undo_cursor = m_undo_stack.size();
+    trim_undo_stack();
+
+    // l. Notify change
+    if (m_on_change) m_on_change();
+
+    // m. Return the operation
+    return IdListInsertOp{ origin, version_before, id, new_loc };
 }
 
 IdListOperation IdList::remove_at(const Anchor&) {
@@ -40,7 +103,14 @@ void IdList::trim_undo_stack() {
     else m_undo_cursor -= excess;
 }
 
-std::vector<uint64_t> IdList::ids() const { return {}; }
+std::vector<uint64_t> IdList::ids() const {
+    std::vector<uint64_t> result;
+    result.reserve(m_entry_tree.summary().visible_count);
+    m_entry_tree.for_each([&](const IdListEntry& e) {
+        if (e.visible) result.push_back(e.id);
+    });
+    return result;
+}
 
 uint32_t IdList::size() const {
     return m_entry_tree.summary().visible_count;
