@@ -65,6 +65,7 @@ IdListOperation IdList::insert_after(const Anchor& after, uint64_t id) {
     set_entries(std::move(entries));
 
     // k. Push undo entry
+    m_undo_stack.resize(m_undo_cursor);  // truncate redo tail
     m_undo_stack.push_back(UndoEntry{ {UndoMapKey(origin)}, {} });
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
@@ -135,9 +136,79 @@ void IdList::apply_ops(const std::vector<IdListOperation>& ops) {
     retry_deferred();
 }
 
-std::optional<IdListOperation> IdList::undo() { return std::nullopt; }
-std::optional<IdListOperation> IdList::redo() { return std::nullopt; }
-bool IdList::coalesce_last_undo() { return false; }
+std::optional<IdListOperation> IdList::undo() {
+    if (m_undo_cursor == 0) return std::nullopt;
+    m_undo_cursor--;
+    auto& entry = m_undo_stack[m_undo_cursor];
+
+    IdListUndoOpVariant op;
+    op.version = m_version;
+    op.timestamp = m_clock.tick();
+
+    for (auto& key : entry.inserted_keys) {
+        Lamport edit_id(key.replica_id, key.lamport_value);
+        uint32_t current = m_undo_map.undo_count(edit_id);
+        m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
+        op.counts.push_back({edit_id, current + 1});
+    }
+    for (auto& del_id : entry.deletion_ids) {
+        uint32_t current = m_undo_map.undo_count(del_id);
+        m_undo_map.insert(UndoMapEntry{{del_id, op.timestamp}, current + 1});
+        op.counts.push_back({del_id, current + 1});
+    }
+
+    auto entries = get_entries();
+    set_entries(std::move(entries));
+
+    m_version.observe(op.timestamp);
+    if (m_on_change) m_on_change();
+    return op;
+}
+
+std::optional<IdListOperation> IdList::redo() {
+    if (m_undo_cursor >= m_undo_stack.size()) return std::nullopt;
+    auto& entry = m_undo_stack[m_undo_cursor];
+    m_undo_cursor++;
+
+    IdListUndoOpVariant op;
+    op.version = m_version;
+    op.timestamp = m_clock.tick();
+
+    for (auto& key : entry.inserted_keys) {
+        Lamport edit_id(key.replica_id, key.lamport_value);
+        uint32_t current = m_undo_map.undo_count(edit_id);
+        m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
+        op.counts.push_back({edit_id, current + 1});
+    }
+    for (auto& del_id : entry.deletion_ids) {
+        uint32_t current = m_undo_map.undo_count(del_id);
+        m_undo_map.insert(UndoMapEntry{{del_id, op.timestamp}, current + 1});
+        op.counts.push_back({del_id, current + 1});
+    }
+
+    auto entries = get_entries();
+    set_entries(std::move(entries));
+
+    m_version.observe(op.timestamp);
+    if (m_on_change) m_on_change();
+    return op;
+}
+
+bool IdList::coalesce_last_undo() {
+    if (m_undo_cursor < 2) return false;
+    auto& latest   = m_undo_stack[m_undo_cursor - 1];
+    auto& previous = m_undo_stack[m_undo_cursor - 2];
+    previous.inserted_keys.insert(previous.inserted_keys.end(),
+                                  latest.inserted_keys.begin(),
+                                  latest.inserted_keys.end());
+    previous.deletion_ids.insert(previous.deletion_ids.end(),
+                                 latest.deletion_ids.begin(),
+                                 latest.deletion_ids.end());
+    m_undo_stack.erase(m_undo_stack.begin()
+                       + static_cast<ptrdiff_t>(m_undo_cursor - 1));
+    m_undo_cursor--;
+    return true;
+}
 
 void IdList::set_max_undo_depth(size_t depth) {
     m_max_undo_depth = depth;
@@ -331,9 +402,17 @@ bool IdList::apply_concrete(const IdListRemoveOp& op) {
     return true;
 }
 
-bool IdList::apply_concrete(const IdListUndoOpVariant&) {
-    assert(false && "IdList::apply_concrete(undo) not yet implemented");
-    return false;
+bool IdList::apply_concrete(const IdListUndoOpVariant& op) {
+    for (auto& [edit_id, count] : op.counts) {
+        m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
+    }
+    m_clock.observe(op.timestamp);
+    m_version.observe(op.timestamp);
+    m_version.join(op.version);
+    auto entries = get_entries();
+    set_entries(std::move(entries));
+    if (m_on_change) m_on_change();
+    return true;
 }
 
 } // namespace CollabText::Crdt
