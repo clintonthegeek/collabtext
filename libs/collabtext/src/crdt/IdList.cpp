@@ -76,9 +76,53 @@ IdListOperation IdList::insert_after(const Anchor& after, uint64_t id) {
     return IdListInsertOp{ origin, version_before, id, new_loc };
 }
 
-IdListOperation IdList::remove_at(const Anchor&) {
-    assert(false && "IdList::remove_at not yet implemented");
-    return IdListRemoveOp{};
+IdListOperation IdList::remove_at(const Anchor& target) {
+    // a. Get entries
+    auto entries = get_entries();
+
+    // b. Find entry where origin matches target
+    size_t idx = entries.size();
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (entries[i].origin.replica_id == target.replica_id &&
+            entries[i].origin.value == target.char_value) {
+            idx = i;
+            break;
+        }
+    }
+    assert(idx < entries.size() && "remove_at: target anchor not found in entries");
+
+    // c. Capture target_origin before any moves
+    Lamport target_origin = entries[idx].origin;
+
+    // d. Allocate deletion Lamport from current clock value
+    Lamport del_id(m_replica_id, m_clock.value);
+
+    // e. Bump clock
+    m_clock = Lamport(m_replica_id, m_clock.value + 1);
+
+    // f. Capture version before observing this op
+    Global version_before = m_version;
+
+    // g. Observe the deletion op in version vector
+    m_version.observe(del_id);
+
+    // h. Tombstone the entry
+    entries[idx].deletions.push_back(del_id);
+
+    // i. Rebuild tree (recomputes visible for all entries)
+    set_entries(std::move(entries));
+
+    // j. Push undo entry: empty inserted_keys, del_id in deletion_ids
+    m_undo_stack.resize(m_undo_cursor);
+    m_undo_stack.push_back(UndoEntry{ {}, {del_id} });
+    m_undo_cursor = m_undo_stack.size();
+    trim_undo_stack();
+
+    // k. Notify change
+    if (m_on_change) m_on_change();
+
+    // l. Return operation
+    return IdListRemoveOp{ del_id, version_before, target_origin };
 }
 
 void IdList::apply_ops(const std::vector<IdListOperation>&) {

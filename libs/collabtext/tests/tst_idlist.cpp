@@ -58,6 +58,16 @@ private slots:
         QCOMPARE(list.size(), 2u);
         QCOMPARE(list.ids(), (std::vector<uint64_t>{0xAA, 0xAA}));
     }
+
+    void remove_only_element() {
+        IdList list(1);
+        list.insert_after(Anchor::min(), 0xAA);  // origin=(1,1)
+        Anchor at_aa(1, 1, Bias::Left);
+        list.remove_at(at_aa);
+        QCOMPARE(list.size(), 0u);
+        QCOMPARE(list.ids().size(), size_t{0});
+        QCOMPARE(list.tombstone_count(), size_t{1});
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIdList)
