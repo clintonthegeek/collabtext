@@ -7,7 +7,7 @@
 namespace CollabText::Crdt {
 
 struct SidecarManifest {
-    int         schema_version = 2;
+    int         schema_version = 3;
     std::string doc_id;
     std::string enrolled_at;        // ISO 8601 UTC
     std::string original_filename;
@@ -21,7 +21,7 @@ std::string sha256_hex(const std::string& data);
 std::string manifest_to_json(const SidecarManifest& m);
 
 /// Parse a manifest. Returns nullopt for malformed JSON or
-/// schema_version != 2 (clean break from v1, see segmented-sync spec).
+/// schema_version != 3 (schema_version 3 adds IdList operations).
 std::optional<SidecarManifest> manifest_from_json(const std::string& json);
 
 /// Atomically write the manifest to a path (write-temp + rename).

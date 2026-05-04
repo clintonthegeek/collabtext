@@ -189,7 +189,8 @@ std::optional<SidecarManifest> manifest_from_json(const std::string& json) {
         }
     }
 
-    if (m.schema_version != 2) return std::nullopt;
+    // schema_version 3: IdList operations (il-i, il-r, il-u) may appear in op streams
+    if (m.schema_version != 3) return std::nullopt;
     return m;
 }
 

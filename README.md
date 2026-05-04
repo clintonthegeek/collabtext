@@ -39,12 +39,14 @@ A C++20 library (no framework dependencies) that provides:
 
 - **Causal ordering** — Operations carry version vectors. Out-of-order delivery is handled automatically via a deferred queue. No application-level ordering logic required.
 
+- **Structural list CRDT** — An ordered-list CRDT over opaque `uint64` elements (`IdList`), for applications that need a structural list separate from text content. Designed for composing block-ordered documents where each block is its own `Buffer`. Uses the same causality, anchor, undo, and GC machinery as the text engine.
+
 - **Transport agnostic** — The engine produces and consumes operations. How they travel is your problem. File sync, message queue, REST API, carrier pigeon — the engine doesn't care. Over a low-latency transport like WebSockets, real-time presence features (live cursors, remote selections, concurrent editing feedback) emerge naturally from the existing primitives — no additional protocol required.
 
 ## What it isn't
 
 - Not a rich text engine (plain text only — no bold, no links, no attributes)
-- Not a general-purpose CRDT framework (no maps, arrays, counters, or JSON)
+- Not a general-purpose CRDT framework — `IdList` is the only non-text primitive and it exists precisely because it's the same algorithm as `Buffer` with a different element type. No maps, counters, registers, or JSON CRDTs.
 - Not a real-time presence system out of the box (though the anchor system provides the primitives — over a low-latency transport, live cursors work naturally)
 - Not the fastest CRDT engine (see [Performance](#performance))
 

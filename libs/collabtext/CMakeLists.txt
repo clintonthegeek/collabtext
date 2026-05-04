@@ -36,7 +36,7 @@ add_library(collabtext STATIC
     src/crdt/SegmentWriter.cpp
     src/crdt/SegmentReader.cpp
     src/crdt/FileSync.cpp
-    src/crdt/SyncUtils.cpp
+    src/crdt/IdList.cpp
     src/crdt/StreamSerialization.cpp
     src/crdt/StreamSync.cpp
     src/crdt/ChatMessage.cpp
@@ -112,6 +112,13 @@ add_crdt_test(tst_identity_widgets)
 add_crdt_test(tst_collab_plain_text_edit)
 add_crdt_test(tst_scroll_stability)
 add_crdt_test(tst_stream_sync)
+add_crdt_test(tst_idlist)
+add_crdt_test(tst_idlist_anchor)
+add_crdt_test(tst_idlist_convergence)
+add_crdt_test(tst_idlist_undo)
+add_crdt_test(tst_idlist_gc)
+add_crdt_test(tst_idlist_fuzz)
+add_crdt_test(tst_idlist_serialization)
 add_crdt_test(tst_chat_message)
 add_crdt_test(tst_comment)
 add_crdt_test(tst_seed_op)
