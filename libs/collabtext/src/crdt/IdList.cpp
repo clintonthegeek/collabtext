@@ -160,10 +160,65 @@ uint32_t IdList::size() const {
     return m_entry_tree.summary().visible_count;
 }
 
-Anchor IdList::anchor_of(uint64_t, Bias) const { return Anchor::min(); }
-Anchor IdList::anchor_at_index(uint32_t, Bias) const { return Anchor::min(); }
-uint32_t IdList::resolve_anchor(const Anchor&) const { return 0; }
-int IdList::compare_anchors(const Anchor&, const Anchor&) const { return 0; }
+Anchor IdList::anchor_at_index(uint32_t index, Bias bias) const {
+    uint32_t visible_seen = 0;
+    Anchor result = Anchor::max();
+    bool found = false;
+    m_entry_tree.for_each([&](const IdListEntry& e) {
+        if (found) return;
+        if (!e.visible) return;
+        if (visible_seen == index) {
+            result = Anchor(e.origin.replica_id, e.origin.value, bias);
+            found = true;
+            return;
+        }
+        ++visible_seen;
+    });
+    return result;
+}
+
+Anchor IdList::anchor_of(uint64_t id, Bias bias) const {
+    Anchor result = Anchor::max();
+    bool found = false;
+    m_entry_tree.for_each([&](const IdListEntry& e) {
+        if (found) return;
+        if (!e.visible) return;
+        if (e.id == id) {
+            result = Anchor(e.origin.replica_id, e.origin.value, bias);
+            found = true;
+        }
+    });
+    return result;
+}
+
+uint32_t IdList::resolve_anchor(const Anchor& a) const {
+    if (a.is_min()) return 0;
+    if (a.is_max()) return size();
+    uint32_t accumulated = 0;
+    uint32_t result = size();
+    bool found = false;
+    m_entry_tree.for_each([&](const IdListEntry& e) {
+        if (found) return;
+        if (e.origin.replica_id == a.replica_id &&
+            e.origin.value == a.char_value) {
+            result = accumulated;
+            found = true;
+            return;
+        }
+        if (e.visible) ++accumulated;
+    });
+    return result;
+}
+
+int IdList::compare_anchors(const Anchor& a, const Anchor& b) const {
+    uint32_t pa = resolve_anchor(a);
+    uint32_t pb = resolve_anchor(b);
+    if (pa < pb) return -1;
+    if (pa > pb) return 1;
+    if (a.bias != b.bias)
+        return (a.bias == Bias::Left) ? -1 : 1;
+    return 0;
+}
 
 size_t IdList::collect_garbage() { return 0; }
 size_t IdList::compact(const Global&) { return 0; }
