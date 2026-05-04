@@ -18,10 +18,10 @@ static void check_invariants(const IdList& list, const char* context) {
             .arg(context).arg(list.size()).arg(visible_count)));
     }
 
-    // INV-2: visible_count + deleted_count == total entries
-    size_t deleted_count = entries.size() - visible_count;
-    if (visible_count + deleted_count != entries.size()) {
-        QFAIL(qPrintable(QString("INV-2 violated at %1").arg(context)));
+    // INV-2: entries() count matches entry_count() (tree bookkeeping consistent)
+    if (entries.size() != list.entry_count()) {
+        QFAIL(qPrintable(QString("INV-2 violated at %1: entries()=%2 but entry_count()=%3")
+            .arg(context).arg(entries.size()).arg(list.entry_count())));
     }
 
     // INV-3: entries sorted strictly by (locator, origin)
