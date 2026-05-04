@@ -297,8 +297,56 @@ int IdList::compare_anchors(const Anchor& a, const Anchor& b) const {
     return 0;
 }
 
-size_t IdList::collect_garbage() { return 0; }
-size_t IdList::compact(const Global&) { return 0; }
+size_t IdList::collect_garbage() {
+    // Build set of deletion IDs protected by the undo stack.
+    auto is_protected = [&](Lamport del_id) {
+        for (const auto& entry : m_undo_stack)
+            for (const auto& uid : entry.deletion_ids)
+                if (uid == del_id) return true;
+        return false;
+    };
+
+    auto entries = get_entries();
+    size_t original = entries.size();
+    entries.erase(
+        std::remove_if(entries.begin(), entries.end(), [&](const IdListEntry& e) {
+            if (e.visible) return false;
+            for (const auto& del : e.deletions) {
+                if (del.replica_id != m_replica_id) return false;  // remote deletion — needs watermark
+                if (is_protected(del)) return false;               // undo-protected
+            }
+            return true;
+        }),
+        entries.end());
+    size_t removed = original - entries.size();
+    if (removed > 0) set_entries(std::move(entries));
+    return removed;
+}
+
+size_t IdList::compact(const Global& watermark) {
+    auto is_protected = [&](Lamport del_id) {
+        for (const auto& entry : m_undo_stack)
+            for (const auto& uid : entry.deletion_ids)
+                if (uid == del_id) return true;
+        return false;
+    };
+
+    auto entries = get_entries();
+    size_t original = entries.size();
+    entries.erase(
+        std::remove_if(entries.begin(), entries.end(), [&](const IdListEntry& e) {
+            if (e.visible) return false;
+            for (const auto& del : e.deletions) {
+                if (!watermark.observed(del)) return false;  // not globally acknowledged
+                if (is_protected(del)) return false;         // undo-protected
+            }
+            return true;
+        }),
+        entries.end());
+    size_t removed = original - entries.size();
+    if (removed > 0) set_entries(std::move(entries));
+    return removed;
+}
 
 std::vector<IdListEntry> IdList::entries() const {
     return m_entry_tree.items();
