@@ -9,7 +9,8 @@
 - New public header `include/collabtext/OpStream.h` defines the four-method interface (`push` / `set_on_inbound` / `lowest_peer_acked_lamport` / `set_on_ack_update`).
 - `StreamSync` is promoted from `src/crdt/` to `include/collabtext/`, implements `OpStream`, gains per-entry/producer-aware inbound callbacks and per-peer ack-frontier publication.
 - `CrdtEngine` and `IdList` gain public `setOnLocalOp(callback<Operation>)` and `applyRemoteOp(Operation)` methods. Internals already exist inside `Buffer`; this is pImpl plumbing for `Buffer` and a new public surface for `IdList`.
-- `Serialization.h` promotes from `src/crdt/` to `include/collabtext/`. `Operation`, `IdListOperation`, `Lamport`, `Anchor`, `Global`, `Fragment` types become publicly-visible declarations.
+- `Serialization.h` promotes from `src/crdt/` to `include/collabtext/`. `Operation`, `IdListOperation`, `Lamport` types become public **with a narrow written contract** (Form 2 per joint-design): only `lamport()` accessors and round-trip via `encode_*`/`decode_*` are stable. Field layout is evolution-reserved. Internal types (`Fragment`, `Anchor`, `Locator`, `Global`, op-variant tags) stay in `src/crdt/` and are not part of the public contract even where transitively included.
+- Per-peer ack-frontier lives in `replicas/{replica}/acks.json` (sibling to presence, not extending it). Format and four hard requirements per joint-design outcomes §2.
 - `SyncManager` is **not** modified beyond what's needed to keep its existing tests green. It continues to exist as a convenience facade.
 - `app/collabedit/` and `app/testapp/` continue to compile via a typedef shim if needed; deeper migration deferred until widget lab resumes.
 
@@ -17,9 +18,11 @@
 
 **Binding spec:** `docs/specs/2026-05-08-d5-negotiation-response.md`. The "What we won't do" section is load-bearing — do not expand the work beyond what's listed there.
 
-**Companion / consumer-side reference:** Markoff `docs/specs/2026-05-07-d5-collab-activation-design.md` §4.1 (the `ITransport` shape we mirror) and §4.3 (the wiring diagram).
+**Joint-design outcomes:** `docs/handoff/2026-05-08-d5-joint-design-outcomes.md`. The two design calls (public type-surface form, ack-frontier file format) are resolved there. **Read it before starting Phase 1.** The plan below references its decisions concretely; the outcomes doc carries the reasoning.
 
-**Sequencing constraint:** This plan starts after IdList β (`docs/superpowers/plans/2026-05-04-idlist-implementation.md`) reaches its acceptance gate. IdList work appears in the public surface here (`applyRemoteOp` for `IdList`, `encode_idlist_operation`); landing this plan before β finishes would fragment both.
+**Companion / consumer-side reference (in the Markoff repo, not this one):** `~/dev/Markoff/.worktrees/foundation-exploration/docs/specs/2026-05-07-d5-collab-activation-design.md` §4.1 (the `ITransport` shape we mirror) and §4.3 (the wiring diagram). Markoff's incoming positions on the joint-design calls: `~/dev/Markoff/.worktrees/foundation-exploration/docs/handoff/2026-05-08-collabtext-joint-design-positions.md`. Both are required reading for Phase 1; if the Markoff repo isn't available locally, request it before starting.
+
+**Sequencing constraint:** This plan starts after IdList β (`docs/superpowers/plans/2026-05-04-idlist-implementation.md`) reaches its acceptance gate. **β was accepted on 2026-05-08** (commit `3ead04b`); this plan is now ready to execute.
 
 ---
 
@@ -79,15 +82,27 @@ Goal: `CrdtEngine` (Buffer-side) and `IdList` emit local ops to a callback and a
 - Modified: `libs/collabtext/src/crdt/IdListOperations.h`
 - Modified: `libs/collabtext/CMakeLists.txt`
 
-- [ ] **Step 1: Identify the minimal public type surface.** Walk `Operation`, `EditOperation`, `UndoOperation`, `Fragment`, `Lamport`, `Anchor`, `Global`, `IdListOperation`, `IdListInsert`, `IdListRemove`, `IdListUndoOp`. Determine which fields are exposed by the JSON encoders today (those are de-facto public already) and which are internal helpers. Write the result as a comment block in the new public `Operations.h`.
+**Form 2 contract (per joint-design outcomes §1):** `Operation`, `IdListOperation`, and `Lamport` types become publicly visible as full structs. **Stable contract = `lamport()` accessors + round-trip via `encode_*`/`decode_*` only.** Field layout, op-variant tags, and any transitively-included internal types (`Fragment`, `Anchor`, `Locator`, `Global`) are evolution-reserved and must NOT be relied on by consumers. The narrow contract is enforced by documentation, not by language-level access control.
 
-- [ ] **Step 2: Move declarations.** Move type declarations into the public headers; keep method definitions and any internal-only helper structs in the internal headers (which the public ones include). Goal: a consumer can include `<collabtext/Operations.h>` and `<collabtext/Serialization.h>` and round-trip via `encode_operation`/`decode_operation` without seeing internal implementation guts.
+- [ ] **Step 1: Decide the header partitioning.** One of: (a) `Operations.h` exposes `Operation` + `Lamport`, `IdListOperations.h` exposes `IdListOperation`; (b) all in `Operations.h`; (c) `Lamport.h` separate, op headers separate. Choose during the joint-design header-draft pass with Markoff. Default: (a), mirroring the existing internal split. Capture the decision in the header doc-comment.
 
-- [ ] **Step 3: Update CMakeLists.** Add `install(FILES ... DESTINATION include/collabtext)` for the new public headers.
+- [ ] **Step 2: Move type declarations.** Promote the existing `src/crdt/Operations.h` and `src/crdt/IdListOperations.h` to `include/collabtext/`. Keep internal-only helper structs (anything not directly named in `Operation` / `IdListOperation` member types that the encoders touch) in `src/crdt/` and have the public headers `#include` them as needed. Goal: a consumer can include `<collabtext/Operations.h>` + `<collabtext/IdListOperations.h>` + `<collabtext/Serialization.h>` and round-trip ops without seeing internals beyond what the type definitions transitively pull in.
 
-- [ ] **Step 4: Write `tst_serialization_public.cpp`** (or extend `tst_serialization.cpp`) that includes ONLY `<collabtext/Serialization.h>` + `<collabtext/Operations.h>` + `<collabtext/IdListOperations.h>` and verifies round-trip on representative ops. This proves the public surface is sufficient.
+- [ ] **Step 3: Write the contract doc-comment.** At the top of the public `Operations.h`, write a contract block with this content, in this order:
+  - **Stable across `schema_version` bumps:** `lamport()`, `Lamport::counter()`, `Lamport::replica_id()`, round-trip via `encode_*` / `decode_*`.
+  - **Evolution-reserved (DO NOT depend on):** field layout, member ordering, op-variant discriminator values, internal types (`Fragment`, `Anchor`, `Locator`, `Global`) where transitively visible, public construction APIs (none provided).
+  - **`decode_*` returns `std::nullopt` on schema mismatch; consumers warn-and-skip.**
+  - Cross-link to `docs/handoff/2026-05-08-d5-joint-design-outcomes.md`.
 
-- [ ] **Step 5: `cmake --build build-dev -j` + `ctest --test-dir build-dev --output-on-failure` clean.** Commit: `refactor(crdt): promote op serialization to public API`.
+- [ ] **Step 4: Add `Lamport::counter()` and `Lamport::replica_id()` accessors** if not already present. These are part of the stable contract per Markoff's bundle-meta requirement.
+
+- [ ] **Step 5: Suppress public construction APIs.** No public constructors on `Operation` / `IdListOperation` beyond move/copy/default. Mark explicit-from-fields constructors `private` (with `friend` for the engine internals that need to construct them); consumers obtain them only via decode or via callbacks.
+
+- [ ] **Step 6: Update CMakeLists.** Add `install(FILES ... DESTINATION include/collabtext)` for the new public headers.
+
+- [ ] **Step 7: Write `tst_serialization_public.cpp`** that includes ONLY `<collabtext/Serialization.h>` + `<collabtext/Operations.h>` + `<collabtext/IdListOperations.h>` and verifies round-trip on representative ops AND that `Operation::lamport()` returns the expected value. This proves the public surface is sufficient for Markoff's bundle-meta use case.
+
+- [ ] **Step 8: `cmake --build build-dev -j` + `ctest --test-dir build-dev --output-on-failure` clean.** Commit: `refactor(crdt): promote op serialization to public API with narrow contract`.
 
 ### Task 1.2: Add `setOnLocalOp` and `applyRemoteOp` to `CrdtEngine`
 
@@ -103,7 +118,9 @@ Goal: `CrdtEngine` (Buffer-side) and `IdList` emit local ops to a callback and a
   void setOnLocalOp(LocalOpCallback cb);
   bool applyRemoteOp(const Crdt::Operation& op);
   ```
-  Note: `Crdt::Operation` is now public via Task 1.1. Decide: should the engine emit raw `Operation` or already-encoded bytes? Recommendation: raw `Operation` (caller decides whether to encode). Document this choice in the header doc-comment.
+  - The callback receives the raw `Operation`; the caller decides whether to encode (consistent with consumers like Markoff's `MarkoffSerializer` wrapping the encode call themselves).
+  - `applyRemoteOp` returns `bool` per joint-design outcomes §3.3: `true` on success, `false` if the op cannot be applied (dependency unmet — caller may retry / buffer). Never throws on in-domain ops. Asserts only on programming errors (e.g., null engine).
+  - Document both points in the header doc-comment, cross-linking to the outcomes doc.
 
 - [ ] **Step 3: Plumb through pImpl.** `Impl` already has `Buffer m_buffer`; wire `apply_local_edit` to fire the callback after committing local edits, and route `applyRemoteOp` to `m_buffer.apply_remote_edit` / `apply_remote_undo` based on op variant.
 
@@ -115,7 +132,7 @@ Goal: `CrdtEngine` (Buffer-side) and `IdList` emit local ops to a callback and a
 - Modified: `libs/collabtext/src/crdt/IdList.h`
 - Modified: `libs/collabtext/src/crdt/IdList.cpp`
 
-- [ ] **Step 1: Confirm the IdList β plan landed `apply_remote(IdListOperation)`.** Block this task until `IdList` has internal remote-apply (it should, per the β plan). If the β plan emits ops via a method already, surface it as `setOnLocalOp` — same pattern as 1.2.
+- [ ] **Step 1: Confirm IdList β state.** β was accepted on 2026-05-08 (`docs/superpowers/plans/2026-05-04-idlist-implementation.md` acceptance footer). `IdList::apply_ops(const std::vector<IdListOperation>&)` exists and is tested. Local-op emission is via the existing `set_on_change` (callback fires after local ops; ops are returned from `insert_after` / `remove_at` / `undo` / `redo` directly). For Markoff's path we need a `set_on_local_op` analogue that hands back the produced `IdListOperation`. Surface that without breaking existing `set_on_change`.
 
 - [ ] **Step 2: Write the failing convergence test.** Two `IdList`s, divergent local insertions, route ops between them via the public callback/method, assert `ids()` converge.
 
@@ -203,18 +220,36 @@ Goal: `StreamSync` becomes the file-backed reference implementation of `OpStream
 
 Goal: `lowest_peer_acked_lamport()` returns a real number; `set_on_ack_update` fires when it advances.
 
-### Task 4.1: Design and document the ack-frontier file format
+### Task 4.1: Document the ack-frontier file format
+
+**Decision settled (joint-design outcomes §2):** sibling `acks.json`, not extending presence. Format and four hard requirements specified in the outcomes doc; this task writes them into our spec.
 
 **Files:**
-- Modified: `docs/CRDT_TRANSPORT_SPEC.md` (or new file)
+- Modified or new: `docs/CRDT_TRANSPORT_SPEC.md`
 
-- [ ] **Step 1: Decide the file shape.** Each replica writes `replicas/{replica}/acks.json` containing `{ peer_replica_id: max_lamport_observed_from_them }`. Update on every `read_remote_stream_` cycle. Alternative: extend presence; rejected because acks change more frequently than presence and we don't want to thrash the presence file.
+- [ ] **Step 1: Write the spec section.** Concrete content:
+  - **File path:** `replicas/{replica_id}/acks.json` (sibling to `presence.json`, not extending it).
+  - **Schema:**
+    ```json
+    {
+      "schema_version": 1,
+      "acks": {
+        "<peer_replica_id>": {
+          "max_lamport_observed": <uint64>,
+          "last_observed_at": "<ISO 8601 UTC>"
+        }
+      }
+    }
+    ```
+  - **Write semantics:** each replica writes its own `acks.json` describing its observations of every peer it has read from. Atomic write via temp-file-rename. Update on every poll cycle, skip if no changes.
+  - **Read semantics:** `lowest_peer_acked_lamport()` scans `replicas/*/acks.json`, looks up `acks[me]` in each (i.e., what each peer has observed FROM us), takes `min`, caches the result. Recomputed once per poll cycle; cheap to query.
+  - **Monotonicity:** `max_lamport_observed` per (publisher, peer) pair must never decrease across writes. Enforce on the write path: read the current file, take `max(existing, fresh_observation)`, then write.
+  - **Disconnect handling:** ack-frontier values persist across peer disconnects — a peer that goes offline keeps its last-observed frontier in the publisher's `acks.json`. The consumer drives eviction by inspecting `last_observed_at` (silent-peer policy per Markoff D5 §3.5).
+  - **Cross-link:** reference `docs/handoff/2026-05-08-d5-joint-design-outcomes.md` §2 for the four hard requirements rationale.
 
-- [ ] **Step 2: Define the read semantics.** `lowest_peer_acked_lamport()`: for each enrolled peer P, read `replicas/P/acks.json`, look up `acks[me]` (what they've observed of mine). The result is `min` over all enrolled peers. If a peer has no acks file or hasn't acknowledged any of mine, treat as 0.
+- [ ] **Step 2: Define the enrolled-peer-set boundary.** The "enrolled peer set" for aggregation is the set of replicas we've successfully read from at least once (i.e., peers that have an `acks.json` we can read). We do not maintain an explicit registry — consumer policy per Markoff D5 §3.5. Document this in the same spec section.
 
-- [ ] **Step 3: Define the enrolled-peer-set boundary.** The peer set is what we discover by scanning `replicas/*/`. We do not maintain an enrollment registry — that's consumer policy per Markoff D5 §3.5. Document this.
-
-- [ ] **Step 4: Write the spec section.** Commit: `docs(transport): ack-frontier file format spec`.
+- [ ] **Step 3: Commit.** `docs(transport): ack-frontier file format spec`.
 
 ### Task 4.2: Implement ack publication
 
@@ -223,13 +258,15 @@ Goal: `lowest_peer_acked_lamport()` returns a real number; `set_on_ack_update` f
 - Modified: `libs/collabtext/src/crdt/StreamSync.cpp`
 - New: `libs/collabtext/tests/tst_opstream_acks.cpp`
 
-- [ ] **Step 1: Write the failing test.** Two `StreamSync` instances. Replica 1 pushes 5 ops on a stream with monotonic Lamports. Replica 2 polls; its acks file is written; replica 1 reads replica 2's acks file and sees `acks[1] == 5`.
+- [ ] **Step 1: Write the failing test.** Two `StreamSync` instances. Replica 1 pushes 5 ops on a stream with monotonic Lamports. Replica 2 polls; its `acks.json` is written with `acks[1].max_lamport_observed == 5` and a non-empty `last_observed_at`. Replica 1 then reads replica 2's `acks.json` directly (filesystem) to confirm the format.
 
-- [ ] **Step 2: Track max-observed-Lamport per peer.** When `read_remote_stream_` reads new entries, update an in-memory `max_lamport_seen_per_peer` map. (The per-CRDT Lamport is encoded inside the op payload bytes; for ack purposes we need the entry's `seq` or a Lamport-like monotonic scalar — decide which during implementation. Likely the entry's `seq` is sufficient since within a stream-from-a-producer, seq is monotonic.)
+- [ ] **Step 2: Track max-observed-Lamport per peer.** When `read_remote_stream_` reads new entries, update an in-memory `max_lamport_seen_per_peer` map. The Lamport value is the per-op `Lamport::counter()` from the decoded op payload — NOT the `StreamEntry::seq`. Reason: Markoff's bundle-meta + GC contract is in Lamport space; using `seq` would mean per-stream local sequence numbers, which don't compose across streams. If a stream's entries are not all decodable as `Operation` (e.g., chat messages), skip ack-tracking for that stream — ack-frontier is meaningful only for op streams.
 
-- [ ] **Step 3: Write `acks.json` on every poll cycle.** Atomic write via temp-file-rename. Skip if no changes.
+- [ ] **Step 3: Enforce monotonicity on write.** Read existing `acks.json` (if present); for each peer, take `max(existing.max_lamport_observed, in_memory.max_lamport_seen)`; write the result. This survives concurrent-reader scenarios where in-memory state was reset (e.g., process restart) but the file has higher values.
 
-- [ ] **Step 4: Test passes.** Commit: `feat(streamsync): publish per-peer ack frontier`.
+- [ ] **Step 4: Write `acks.json` on every poll cycle.** Atomic write via temp-file-rename. Skip if no changes since last write. Include `last_observed_at` ISO 8601 UTC timestamp per peer (refreshed only when `max_lamport_observed` advances — not on every poll cycle, to avoid spurious updates).
+
+- [ ] **Step 5: Test passes.** Commit: `feat(streamsync): publish per-peer ack frontier (acks.json)`.
 
 ### Task 4.3: Implement aggregate read and `lowest_peer_acked_lamport`
 
@@ -351,15 +388,21 @@ Goal: external docs reflect the new public surface.
 
 ---
 
-## Phase 7 — Joint-design pass + acceptance
+## Phase 7 — Joint-design header-draft pass + acceptance
 
-Goal: hand the public headers to Markoff for a week of back-and-forth, incorporate feedback, then call it done.
+Goal: hand the public headers to Markoff for a header-draft review (narrower than the original "joint-design pass" — the two big design calls are already settled in `docs/handoff/2026-05-08-d5-joint-design-outcomes.md`), incorporate feedback, then call it done.
+
+**Reduced scope:** the two pre-resolved questions (Form 2 type contract, sibling `acks.json`) are NOT on the table for re-litigation. This pass covers:
+- Header partitioning details (one `Operations.h` vs split, `Lamport.h` separate or folded)
+- Naming spelling / doc-comment precision
+- Constructor visibility and friend-list correctness
+- `decode_*` `optional` semantics (parse failure vs schema mismatch differentiation, if any)
 
 ### Task 7.1: Hand off public headers for review
 
-- [ ] **Step 1: Send Markoff a tag / branch reference** at the end of Phase 6 with the four new public headers (`OpStream.h`, `Serialization.h`, `StreamSync.h`, `Operations.h`) and the new spec docs.
+- [ ] **Step 1: Notify Markoff** at the end of Phase 6 with a tag or branch reference and a short note enumerating the four new public headers (`OpStream.h`, `Serialization.h`, `StreamSync.h`, `Operations.h` + `IdListOperations.h`), the new spec docs (`CRDT_TRANSPORT_SPEC.md`), and the joint-design outcomes doc. Cross-link Markoff's positions doc.
 
-- [ ] **Step 2: Reserve up to 1 week for back-and-forth** on header shape, naming, doc-comment precision, and ack-frontier file format details. Adjustments land as small follow-up commits, not as new phases.
+- [ ] **Step 2: Reserve up to 1 week for back-and-forth.** Mirroring the IdList β header pass. Adjustments land as small follow-up commits, not as new phases. Markoff's expected output (per their §4): a brief outcomes doc on their side recording any decisions that differ from this plan.
 
 ### Task 7.2: Acceptance gate
 
@@ -368,9 +411,12 @@ Goal: hand the public headers to Markoff for a week of back-and-forth, incorpora
   - All existing tests still green (`ctest --test-dir build-dev` is fully passing).
   - Markoff-side has signed off on the public header shape.
   - `app/collabedit/` and `app/testapp/` compile without modification beyond include-path fixes.
-  - Public headers documented with contract-bearing doc-comments.
+  - Public headers documented with contract-bearing doc-comments cross-linking the outcomes doc.
+  - `Operation::lamport()` and `IdListOperation::lamport()` exposed and tested via `tst_serialization_public.cpp`.
+  - `lowest_peer_acked_lamport()` cached and recomputed once per poll (not on every call).
+  - `last_observed_at` ISO 8601 timestamp present in `acks.json` per peer.
 
-- [ ] **Step 2: Tag.** `opstream-v1`. Note in the response doc that this commitment is fulfilled.
+- [ ] **Step 2: Tag.** `opstream-v1`. Note in `docs/specs/2026-05-08-d5-negotiation-response.md` that this commitment is fulfilled.
 
 ---
 
