@@ -37,8 +37,8 @@
 ///
 #pragma once
 
-#include "crdt/Clock.h"
-#include "crdt/Locator.h"
+#include <crdt/Clock.h>
+#include <crdt/Locator.h>
 
 #include <cstdint>
 #include <variant>
