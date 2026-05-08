@@ -63,6 +63,9 @@ add_library(collabtext STATIC
     include/collabtext/CollabDocument.h
     include/collabtext/SyncManager.h
     include/collabtext/Identity.h
+    include/collabtext/Operations.h
+    include/collabtext/IdListOperations.h
+    include/collabtext/Serialization.h
 )
 set_target_properties(collabtext PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(CollabText::CollabText ALIAS collabtext)
@@ -127,3 +130,10 @@ add_crdt_test(tst_zstd_util)
 add_crdt_test(tst_segment_format)
 add_crdt_test(tst_segment_writer)
 add_crdt_test(tst_segment_reader)
+
+# Public surface test — deliberately excludes the internal src/ include path
+# to prove that <collabtext/Serialization.h>, <collabtext/Operations.h>, and
+# <collabtext/IdListOperations.h> are self-sufficient.
+add_executable(tst_serialization_public tests/tst_serialization_public.cpp)
+target_link_libraries(tst_serialization_public PRIVATE collabtext Qt6::Test)
+add_test(NAME tst_serialization_public COMMAND tst_serialization_public)

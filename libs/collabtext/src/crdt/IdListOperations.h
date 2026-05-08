@@ -1,52 +1,20 @@
+/// src/crdt/IdListOperations.h — internal shim after Task 1.1 promotion
+///
+/// Public op types (IdListInsertOp, IdListRemoveOp, IdListUndoOpVariant,
+/// IdListOperation, idlist_op_lamport, get_idlist_op_timestamp,
+/// get_idlist_op_version) now live in <collabtext/IdListOperations.h>.
+/// This file re-exports them and adds the SumTree-backed deferred queue
+/// types that are internal to IdList.
 #pragma once
 
-#include "crdt/Clock.h"
-#include "crdt/Locator.h"
-#include "crdt/SumTree.h"
+#include <collabtext/IdListOperations.h>
 
-#include <cstdint>
-#include <variant>
-#include <vector>
+#include "crdt/SumTree.h"
 
 namespace CollabText::Crdt {
 
-/// Insert a new element with the given opaque id at the pre-computed locator.
-/// The receiver places the element using (locator, origin/timestamp) tiebreak.
-struct IdListInsertOp {
-    Lamport timestamp;     ///< Origin of the new element (== insertion Lamport)
-    Global version;        ///< Causal dependencies at time of insertion
-    uint64_t id = 0;       ///< Opaque application-owned element value
-    Locator locator;       ///< Pre-computed fractional position
-};
-
-/// Remove the element identified by target_origin.
-/// The receiver finds the entry by its origin Lamport and tombstones it.
-struct IdListRemoveOp {
-    Lamport timestamp;      ///< Lamport of this deletion op (the deletion_id)
-    Global version;         ///< Causal dependencies
-    Lamport target_origin;  ///< Origin of the entry being removed
-};
-
-/// Undo/redo operation; mirrors Buffer's UndoOperation exactly.
-struct IdListUndoOpVariant {
-    Lamport timestamp;
-    Global version;
-    std::vector<std::pair<Lamport, uint32_t>> counts;  ///< (edit_id, new_parity_count)
-};
-
-using IdListOperation =
-    std::variant<IdListInsertOp, IdListRemoveOp, IdListUndoOpVariant>;
-
-inline Lamport get_idlist_op_timestamp(const IdListOperation& op) {
-    return std::visit([](const auto& o) -> Lamport { return o.timestamp; }, op);
-}
-
-inline const Global& get_idlist_op_version(const IdListOperation& op) {
-    return std::visit([](const auto& o) -> const Global& { return o.version; }, op);
-}
-
 // ============================================================================
-// SumTree-backed deferred queue for IdList operations
+// SumTree-backed deferred queue for IdList operations (INTERNAL — not public)
 // ============================================================================
 
 struct IdListOpSummary {
