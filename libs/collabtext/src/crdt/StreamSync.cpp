@@ -3,15 +3,19 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 
 namespace fs = std::filesystem;
 
 namespace CollabText::Crdt {
 
 StreamSync::StreamSync(const fs::path& shared_folder,
-                       const std::string& replica_name, WriterConfig cfg)
+                       const std::string& replica_name,
+                       uint16_t replica_id,
+                       WriterConfig cfg)
     : m_shared_folder(shared_folder)
     , m_replica_name(replica_name)
+    , m_replica_id(replica_id)
     , m_writer_cfg(cfg) {}
 
 void StreamSync::start() {
@@ -154,6 +158,35 @@ void StreamSync::set_on_new_entries(NewEntriesCallback cb) {
 
 void StreamSync::set_on_inbound(InboundCallback cb) {
     m_on_inbound = std::move(cb);
+}
+
+void StreamSync::push(const std::string& stream_name, const std::string& payload) {
+    auto it = m_streams.find(stream_name);
+    if (it == m_streams.end()) return;
+    auto& s = it->second;
+    uint64_t seq = s.next_seq++;
+    StreamEntry entry;
+    entry.replica_id = m_replica_id;
+    entry.seq = seq;
+    entry.id = m_replica_name + "-" + std::to_string(seq);
+    auto now = std::chrono::system_clock::now();
+    auto now_t = std::chrono::system_clock::to_time_t(now);
+    std::tm utc{};
+    gmtime_r(&now_t, &utc);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &utc);
+    entry.timestamp = buf;
+    entry.payload = payload;
+    push(stream_name, entry);
+}
+
+uint64_t StreamSync::lowest_peer_acked_lamport() const {
+    // Phase 4 stub
+    return 0;
+}
+
+void StreamSync::set_on_ack_update(std::function<void(uint64_t)> cb) {
+    m_ack_update_cb = std::move(cb);
 }
 
 } // namespace CollabText::Crdt

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <collabtext/OpStream.h>
 #include <crdt/SegmentReader.h>
 #include <crdt/SegmentWriter.h>
 
@@ -22,17 +23,24 @@ struct StreamEntry {
     bool tombstone = false;
 };
 
-class StreamSync {
+class StreamSync : public CollabText::OpStream {
 public:
     enum class StreamType { AppendOnly, AnchorKeyed };
 
     StreamSync(const std::filesystem::path& shared_folder,
                const std::string& replica_name,
+               uint16_t replica_id = 0,
                WriterConfig writer_cfg = WriterConfig{});
 
     void start();
     void register_stream(const std::string& name, StreamType type);
+
+    // OpStream::push override — constructs StreamEntry internally
+    void push(const std::string& stream_name, const std::string& payload) override;
+
+    // Existing low-level push — takes a fully populated StreamEntry
     void push(const std::string& stream, const StreamEntry& entry);
+
     size_t poll();
 
     /// Force-fsync all open tails. Used by save/shutdown paths.
@@ -48,7 +56,10 @@ public:
         std::function<void(const std::string& stream_name,
                            uint16_t           producer_replica_id,
                            const std::string& payload)>;
-    void set_on_inbound(InboundCallback cb);
+    void set_on_inbound(InboundCallback cb) override;
+
+    uint64_t lowest_peer_acked_lamport() const override;
+    void set_on_ack_update(std::function<void(uint64_t)> cb) override;
 
 private:
     struct StreamState {
@@ -56,6 +67,7 @@ private:
         std::unique_ptr<SegmentWriter> writer;
         std::unordered_map<std::string, std::unique_ptr<SegmentReader>> readers;
         std::unordered_map<std::string, StreamEntry> merged;
+        uint64_t next_seq = 1;
     };
 
     StreamState& ensure_started_(const std::string& name);
@@ -65,10 +77,12 @@ private:
 
     std::filesystem::path m_shared_folder;
     std::string m_replica_name;
+    uint16_t m_replica_id = 0;
     WriterConfig m_writer_cfg;
     std::unordered_map<std::string, StreamState> m_streams;
     NewEntriesCallback m_on_new_entries;
     InboundCallback m_on_inbound;
+    std::function<void(uint64_t)> m_ack_update_cb;
     bool m_started = false;
 };
 
