@@ -7,11 +7,16 @@ namespace CollabText {
 struct CrdtEngine::Impl {
     Crdt::Buffer buffer;
     ChangeCallback on_change;
+    LocalOpCallback on_local_op;
 
     explicit Impl(uint16_t rid) : buffer(rid) {}
 
     void notify() {
         if (on_change) on_change();
+    }
+
+    void emit_op(const Crdt::Operation &op) {
+        if (on_local_op) on_local_op(op);
     }
 };
 
@@ -26,7 +31,8 @@ void CrdtEngine::insert(int position, const std::string &text)
 {
     uint32_t byte_offset = static_cast<uint32_t>(
         Crdt::utf16_to_byte_offset(m_impl->buffer.text(), position));
-    m_impl->buffer.apply_local_edit({{byte_offset, byte_offset}}, {text});
+    auto op = m_impl->buffer.apply_local_edit({{byte_offset, byte_offset}}, {text});
+    m_impl->emit_op(op);
     m_impl->notify();
 }
 
@@ -37,7 +43,8 @@ void CrdtEngine::remove(int position, int length)
         Crdt::utf16_to_byte_offset(current, position));
     uint32_t byte_end = static_cast<uint32_t>(
         Crdt::utf16_to_byte_offset(current, position + length));
-    m_impl->buffer.apply_local_edit({{byte_start, byte_end}}, {""});
+    auto op = m_impl->buffer.apply_local_edit({{byte_start, byte_end}}, {""});
+    m_impl->emit_op(op);
     m_impl->notify();
 }
 
@@ -55,6 +62,7 @@ bool CrdtEngine::undo()
 {
     auto op = m_impl->buffer.undo();
     if (!op) return false;
+    m_impl->emit_op(*op);
     m_impl->notify();
     return true;
 }
@@ -63,6 +71,7 @@ bool CrdtEngine::redo()
 {
     auto op = m_impl->buffer.redo();
     if (!op) return false;
+    m_impl->emit_op(*op);
     m_impl->notify();
     return true;
 }
@@ -70,6 +79,18 @@ bool CrdtEngine::redo()
 void CrdtEngine::setOnChange(ChangeCallback cb)
 {
     m_impl->on_change = std::move(cb);
+}
+
+void CrdtEngine::setOnLocalOp(LocalOpCallback cb)
+{
+    m_impl->on_local_op = std::move(cb);
+}
+
+bool CrdtEngine::applyRemoteOp(const Crdt::Operation &op)
+{
+    m_impl->buffer.apply_ops({op});
+    m_impl->notify();
+    return true;
 }
 
 } // namespace CollabText

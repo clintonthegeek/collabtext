@@ -137,3 +137,10 @@ add_crdt_test(tst_segment_reader)
 add_executable(tst_serialization_public tests/tst_serialization_public.cpp)
 target_link_libraries(tst_serialization_public PRIVATE collabtext Qt6::Test)
 add_test(NAME tst_serialization_public COMMAND tst_serialization_public)
+
+# CrdtEngine public op-API test — excludes internal src/ include path to
+# prove that <collabtext/CrdtEngine.h>, <collabtext/Operations.h>, and
+# <collabtext/Serialization.h> are self-sufficient.
+add_executable(tst_crdtengine_op_api tests/tst_crdtengine_op_api.cpp)
+target_link_libraries(tst_crdtengine_op_api PRIVATE collabtext Qt6::Test)
+add_test(NAME tst_crdtengine_op_api COMMAND tst_crdtengine_op_api)
