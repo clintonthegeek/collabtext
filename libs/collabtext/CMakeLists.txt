@@ -66,6 +66,7 @@ add_library(collabtext STATIC
     include/collabtext/Operations.h
     include/collabtext/IdListOperations.h
     include/collabtext/Serialization.h
+    include/collabtext/OpStream.h
 )
 set_target_properties(collabtext PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(CollabText::CollabText ALIAS collabtext)
@@ -145,3 +146,10 @@ add_test(NAME tst_serialization_public COMMAND tst_serialization_public)
 add_executable(tst_crdtengine_op_api tests/tst_crdtengine_op_api.cpp)
 target_link_libraries(tst_crdtengine_op_api PRIVATE collabtext Qt6::Test)
 add_test(NAME tst_crdtengine_op_api COMMAND tst_crdtengine_op_api)
+
+# OpStream interface smoke test — excludes internal src/ include path to
+# prove that <collabtext/OpStream.h> is self-sufficient with no Qt or internal
+# dependencies.
+add_executable(tst_opstream_interface tests/tst_opstream_interface.cpp)
+target_link_libraries(tst_opstream_interface PRIVATE collabtext Qt6::Test)
+add_test(NAME tst_opstream_interface COMMAND tst_opstream_interface)
