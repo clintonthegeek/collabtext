@@ -134,6 +134,16 @@ public:
     using ChangeCallback = std::function<void()>;
     void set_on_change(ChangeCallback cb) { m_on_change = std::move(cb); }
 
+    /// Callback fired after every successful local op (insert_after, remove_at,
+    /// undo, redo). Not fired when apply_remote_op is called.
+    using LocalOpCallback = std::function<void(const IdListOperation&)>;
+    void set_on_local_op(LocalOpCallback cb) { m_on_local_op = std::move(cb); }
+
+    /// Apply a single remote op. Returns true (false reserved for future use;
+    /// deferred ops are handled internally by apply_ops).
+    /// Fires set_on_change; does NOT fire set_on_local_op.
+    bool apply_remote_op(const IdListOperation& op);
+
 private:
     uint16_t m_replica_id;
     Lamport m_clock;
@@ -150,6 +160,11 @@ private:
     size_t m_max_undo_depth = 1000;
 
     ChangeCallback m_on_change;
+    LocalOpCallback m_on_local_op;
+
+    void emit_local_op(const IdListOperation& op) {
+        if (m_on_local_op) m_on_local_op(op);
+    }
 
     std::vector<IdListEntry> get_entries() const;
     void set_entries(std::vector<IdListEntry>&& entries);

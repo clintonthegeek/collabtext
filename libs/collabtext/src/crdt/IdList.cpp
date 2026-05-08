@@ -73,8 +73,11 @@ IdListOperation IdList::insert_after(const Anchor& after, uint64_t id) {
     // l. Notify change
     if (m_on_change) m_on_change();
 
-    // m. Return the operation
-    return IdListInsertOp{ origin, version_before, id, new_loc };
+    // m. Build and emit the operation
+    IdListOperation op = IdListInsertOp{ origin, version_before, id, new_loc };
+    emit_local_op(op);
+
+    return op;
 }
 
 IdListOperation IdList::remove_at(const Anchor& target) {
@@ -122,8 +125,11 @@ IdListOperation IdList::remove_at(const Anchor& target) {
     // k. Notify change
     if (m_on_change) m_on_change();
 
-    // l. Return operation
-    return IdListRemoveOp{ del_id, version_before, target_origin };
+    // l. Build and emit the operation
+    IdListOperation op = IdListRemoveOp{ del_id, version_before, target_origin };
+    emit_local_op(op);
+
+    return op;
 }
 
 void IdList::apply_ops(const std::vector<IdListOperation>& ops) {
@@ -162,6 +168,7 @@ std::optional<IdListOperation> IdList::undo() {
 
     m_version.observe(op.timestamp);
     if (m_on_change) m_on_change();
+    emit_local_op(op);
     return op;
 }
 
@@ -191,6 +198,7 @@ std::optional<IdListOperation> IdList::redo() {
 
     m_version.observe(op.timestamp);
     if (m_on_change) m_on_change();
+    emit_local_op(op);
     return op;
 }
 
@@ -475,6 +483,13 @@ bool IdList::apply_concrete(const IdListUndoOpVariant& op) {
     auto entries = get_entries();
     set_entries(std::move(entries));
     if (m_on_change) m_on_change();
+    return true;
+}
+
+bool IdList::apply_remote_op(const IdListOperation& op) {
+    apply_ops({op});
+    // Note: apply_ops already fires m_on_change via apply_concrete for each op.
+    // No need to fire it again; and we must NOT fire m_on_local_op (remote op).
     return true;
 }
 
