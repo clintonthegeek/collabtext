@@ -22,7 +22,7 @@
 #include "crdt/ChatMessage.h"
 #include "crdt/Comment.h"
 #include "crdt/FileSync.h"
-#include "crdt/StreamSync.h"
+#include <collabtext/StreamSync.h>
 #include "ui/ChatPanelWidget.h"
 #include "ui/CollabPlainTextEdit.h"
 #include "ui/CommentsPanelWidget.h"

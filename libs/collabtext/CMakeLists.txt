@@ -67,6 +67,7 @@ add_library(collabtext STATIC
     include/collabtext/IdListOperations.h
     include/collabtext/Serialization.h
     include/collabtext/OpStream.h
+    include/collabtext/StreamSync.h
 )
 set_target_properties(collabtext PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(CollabText::CollabText ALIAS collabtext)

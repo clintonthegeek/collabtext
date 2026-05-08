@@ -1,4 +1,4 @@
-#include "crdt/StreamSync.h"
+#include <collabtext/StreamSync.h>
 #include "crdt/StreamSerialization.h"
 
 #include <algorithm>

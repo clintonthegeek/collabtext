@@ -6,7 +6,7 @@
 #include "crdt/Anchor.h"
 #include "crdt/Buffer.h"
 #include "crdt/FileSync.h"
-#include "crdt/StreamSync.h"
+#include <collabtext/StreamSync.h>
 
 #include <QWidget>
 
