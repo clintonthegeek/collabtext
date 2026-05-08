@@ -8,6 +8,10 @@ that peers negotiate through the synced folder itself. The system is correct
 at any latency, on any transport, with any number of peers joining and
 leaving at any time.
 
+**Note:** This spec covers the file-floor sync details specific to `StreamSync`.
+For the public transport boundary contract (`OpStream`) and the complete `StreamSync`
+API specification, see [`docs/CRDT_TRANSPORT_SPEC.md`](CRDT_TRANSPORT_SPEC.md).
+
 ### Implementation Status (2026-04-05)
 
 | Component | Status |

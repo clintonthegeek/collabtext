@@ -41,6 +41,8 @@ A C++20 library (no framework dependencies) that provides:
 
 - **Structural list CRDT** — An ordered-list CRDT over opaque `uint64` elements (`IdList`), for applications that need a structural list separate from text content. Designed for composing block-ordered documents where each block is its own `Buffer`. Uses the same causality, anchor, undo, and GC machinery as the text engine.
 
+- **Transport-agnostic `OpStream` boundary** — collabtext exposes a four-method interface (`push`, `set_on_inbound`, `lowest_peer_acked_lamport`, `set_on_ack_update`) that decouples op delivery from transport. `StreamSync` (file-backed, Syncthing-compatible) ships as the reference implementation. Consumers that need direct-channel transports (TCP, WebRTC) provide their own `OpStream` implementations. See [`docs/CRDT_TRANSPORT_SPEC.md`](docs/CRDT_TRANSPORT_SPEC.md) for the full contract.
+
 - **Transport agnostic** — The engine produces and consumes operations. How they travel is your problem. File sync, message queue, REST API, carrier pigeon — the engine doesn't care. Over a low-latency transport like WebSockets, real-time presence features (live cursors, remote selections, concurrent editing feedback) emerge naturally from the existing primitives — no additional protocol required.
 
 ## What it isn't

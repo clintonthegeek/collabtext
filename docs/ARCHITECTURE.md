@@ -159,7 +159,20 @@ compose `IdList` + `Buffer` directly without any changes to the transport layer 
 
 See `docs/CRDT_IDLIST_SPEC.md` for the full specification.
 
-### 3.2 SyncManager — NOT YET IMPLEMENTED
+### 3.2 OpStream — Public Transport Boundary
+
+**Specified in:** `docs/CRDT_TRANSPORT_SPEC.md`
+**Status:** Specified
+
+`OpStream` is collabtext's public transport-agnostic interface. Any class that
+delivers CRDT operations between replicas implements this four-method contract:
+`push`, `set_on_inbound`, `lowest_peer_acked_lamport`, `set_on_ack_update`. This
+decouples CRDT logic from transport details. `StreamSync` (file-backed, Syncthing-compatible)
+ships as the reference implementation. Consumers that need direct-channel transports
+(TCP, WebRTC) provide their own `OpStream` implementations; see
+`docs/specs/transport-elevation-roadmap.md` for that roadmap track.
+
+### 3.3 SyncManager — NOT YET IMPLEMENTED
 
 **Specified in:** `docs/CRDT_SYNC_SPEC.md`
 **Dependencies:** Filesystem watcher, SQLite, optional socket library
@@ -220,7 +233,7 @@ files for transport, SQLite for local performance.
   and wire transmission.
 - Not yet implemented — this is the first thing to build.
 
-### 3.3 Virtual Filesystem — NOT YET IMPLEMENTED
+### 3.4 Virtual Filesystem — NOT YET IMPLEMENTED
 
 **New component.** See `docs/specs/virtual-filesystem-design.md` (to be
 written).
@@ -242,7 +255,7 @@ Write support (creating operations from external file modifications) is a
 future extension that would enable editing collabtext documents from any
 text editor.
 
-### 3.4 Qt Editor — NOT YET IMPLEMENTED
+### 3.5 Qt Editor — NOT YET IMPLEMENTED
 
 **Specified in:** `docs/superpowers/specs/2026-04-01-file-sync-and-remote-cursors-design.md`,
 `docs/LOW_LATENCY_INPUT.md`, `docs/GPU_AND_VSYNC_OPTIONS.md`
