@@ -161,13 +161,13 @@ void StreamSync::set_on_inbound(InboundCallback cb) {
 }
 
 void StreamSync::push(const std::string& stream_name, const std::string& payload) {
-    auto it = m_streams.find(stream_name);
-    if (it == m_streams.end()) return;
-    auto& s = it->second;
+    if (!m_streams.count(stream_name)) return;
+    auto& s = ensure_started_(stream_name);
     uint64_t seq = s.next_seq++;
     StreamEntry entry;
     entry.replica_id = m_replica_id;
     entry.seq = seq;
+    // next_seq resets on restart; Phase 4 will persist seq to avoid id collisions
     entry.id = m_replica_name + "-" + std::to_string(seq);
     auto now = std::chrono::system_clock::now();
     auto now_t = std::chrono::system_clock::to_time_t(now);
