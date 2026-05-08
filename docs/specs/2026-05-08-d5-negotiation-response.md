@@ -91,3 +91,7 @@ Your framing is sharper than ours was. The three-layer model is the right model,
 ---
 
 *— collabtext maintainers*
+
+---
+
+**Status update — 2026-05-08:** Commitment fulfilled. Tagged `opstream-v1` on commit `1a1a894`. All deliverables landed: public `OpStream` interface, `StreamSync` as the file-backed reference impl, per-peer ack-frontier, full end-to-end convergence test coverage. Markoff acceptance recorded in `~/dev/Markoff/.worktrees/foundation-exploration/docs/handoff/2026-05-08-collabtext-d5-acceptance.md`. One post-acceptance cleanup (Lamport::replica_id contract clarification) landed in the same tag.
