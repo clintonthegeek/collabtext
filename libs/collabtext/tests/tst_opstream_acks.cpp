@@ -15,6 +15,8 @@ class TestOpStreamAcks : public QObject {
 private slots:
     void acks_json_written_after_poll();
     void acks_json_monotone_across_restarts();
+    void lowest_peer_acked_lamport_returns_min_across_peers();
+    void lowest_peer_acked_lamport_callback_fires_on_advance();
 };
 
 void TestOpStreamAcks::acks_json_written_after_poll() {
@@ -170,6 +172,129 @@ void TestOpStreamAcks::acks_json_monotone_across_restarts() {
                      "second session acks.json (expect max=" +
                      std::to_string(max_lamport_session1) + "): " + content)));
     }
+}
+
+void TestOpStreamAcks::lowest_peer_acked_lamport_returns_min_across_peers() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    std::filesystem::path shared = tmp.path().toStdString();
+
+    StreamSync R1(shared, "replica-1", 1);
+    StreamSync R2(shared, "replica-2", 2);
+    StreamSync R3(shared, "replica-3", 3);
+
+    R1.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R3.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R1.start();
+    R2.start();
+    R3.start();
+
+    // Collect encoded op payloads from engine1 and track max Lamport
+    CrdtEngine engine1(1);
+    std::vector<std::string> payloads;
+    uint64_t max_lamport = 0;
+    engine1.setOnLocalOp([&](const Operation& op) {
+        payloads.push_back(encode_operation(op));
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > max_lamport) max_lamport = lc;
+    });
+
+    for (int i = 0; i < 4; ++i) {
+        engine1.insert(i, "a");
+    }
+    QVERIFY(!payloads.empty());
+    QVERIFY(max_lamport > 0);
+
+    for (const auto& payload : payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+
+    // R2 and R3 observe R1's ops and write acks.json with entry for "1"
+    R2.poll();
+    R3.poll();
+
+    // R1 scans R2 and R3's acks.json and computes fence
+    R1.poll();
+
+    uint64_t fence = R1.lowest_peer_acked_lamport();
+    QVERIFY2(fence > 0,
+             qPrintable(QString("Expected fence > 0, got %1").arg(fence)));
+    // Both R2 and R3 observed all ops from R1, so the fence equals max_lamport
+    QCOMPARE(fence, max_lamport);
+}
+
+void TestOpStreamAcks::lowest_peer_acked_lamport_callback_fires_on_advance() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    std::filesystem::path shared = tmp.path().toStdString();
+
+    StreamSync R1(shared, "replica-1", 1);
+    StreamSync R2(shared, "replica-2", 2);
+
+    R1.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R1.start();
+    R2.start();
+
+    std::vector<uint64_t> cb_values;
+    R1.set_on_ack_update([&](uint64_t v) { cb_values.push_back(v); });
+
+    CrdtEngine engine1(1);
+    std::vector<std::string> payloads;
+    uint64_t max_lamport_1 = 0;
+    engine1.setOnLocalOp([&](const Operation& op) {
+        payloads.push_back(encode_operation(op));
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > max_lamport_1) max_lamport_1 = lc;
+    });
+
+    // First batch of inserts
+    for (int i = 0; i < 3; ++i) {
+        engine1.insert(i, "b");
+    }
+    QVERIFY(!payloads.empty());
+
+    for (const auto& payload : payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+    R2.poll();
+    R1.poll();  // R1 reads R2's acks, fence advances → callback fires
+
+    QVERIFY2(!cb_values.empty(),
+             "Expected ack_update callback to fire after first batch");
+    QVERIFY(cb_values.back() > 0);
+    uint64_t first_fence = cb_values.back();
+
+    // Second batch of inserts
+    payloads.clear();
+    uint64_t max_lamport_2 = 0;
+    engine1.setOnLocalOp([&](const Operation& op) {
+        payloads.push_back(encode_operation(op));
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > max_lamport_2) max_lamport_2 = lc;
+    });
+
+    for (int i = 3; i < 6; ++i) {
+        engine1.insert(i, "c");
+    }
+    QVERIFY(!payloads.empty());
+
+    for (const auto& payload : payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+    R2.poll();   // R2 observes second batch, updates acks.json
+    R1.poll();   // R1 reads R2's updated acks, fence advances again → callback fires again
+
+    size_t cb_count_before = cb_values.size();
+    QVERIFY2(cb_count_before >= 2,
+             qPrintable(QString("Expected at least 2 callback invocations, got %1").arg((int)cb_count_before)));
+    QVERIFY2(cb_values.back() > first_fence,
+             qPrintable(QString("Expected second fence %1 > first fence %2")
+                 .arg(cb_values.back()).arg(first_fence)));
 }
 
 QTEST_MAIN(TestOpStreamAcks)

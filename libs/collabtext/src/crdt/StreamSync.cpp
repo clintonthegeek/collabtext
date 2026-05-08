@@ -79,6 +79,7 @@ size_t StreamSync::poll() {
         }
     }
     write_acks_();
+    recompute_fence_();
     return total;
 }
 
@@ -331,12 +332,84 @@ void StreamSync::write_acks_() {
 }
 
 uint64_t StreamSync::lowest_peer_acked_lamport() const {
-    // Phase 4 stub
-    return 0;
+    return m_cached_fence;
 }
 
 void StreamSync::set_on_ack_update(std::function<void(uint64_t)> cb) {
     m_ack_update_cb = std::move(cb);
+}
+
+uint64_t StreamSync::read_peer_ack_(const fs::path& acks_path) const {
+    if (!fs::exists(acks_path)) return UINT64_MAX;
+
+    std::ifstream f(acks_path);
+    if (!f) return UINT64_MAX;
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+
+    // Look for our replica_id key inside the "acks" object and extract
+    // max_lamport_observed. We need to find:
+    //   "<our_id>": { "max_lamport_observed": <N>, ... }
+    std::string our_key = "\"" + std::to_string(m_replica_id) + "\"";
+    auto key_pos = content.find(our_key);
+    if (key_pos == std::string::npos) return UINT64_MAX;
+
+    // Find max_lamport_observed after our key position
+    auto ml_tag = content.find("\"max_lamport_observed\"", key_pos);
+    if (ml_tag == std::string::npos) return UINT64_MAX;
+
+    // Make sure there's no other top-level quoted key between our key and the tag
+    // (i.e., we're still inside our key's object). A simple heuristic: the next
+    // occurrence of a decimal-only quoted string after key_pos should not come
+    // before ml_tag.
+    auto colon = content.find(':', ml_tag + 22);
+    if (colon == std::string::npos) return UINT64_MAX;
+
+    size_t num_start = content.find_first_not_of(" \t\n\r", colon + 1);
+    if (num_start == std::string::npos) return UINT64_MAX;
+
+    size_t num_end = num_start;
+    while (num_end < content.size() && content[num_end] >= '0' && content[num_end] <= '9')
+        ++num_end;
+    if (num_end == num_start) return UINT64_MAX;
+
+    uint64_t value = 0;
+    for (size_t i = num_start; i < num_end; ++i)
+        value = value * 10 + (content[i] - '0');
+
+    return value;
+}
+
+void StreamSync::recompute_fence_() {
+    auto replicas_dir = m_shared_folder / "replicas";
+    if (!fs::exists(replicas_dir)) return;
+
+    uint64_t new_fence = 0;
+    bool any_peer = false;
+
+    for (auto& dir_entry : fs::directory_iterator(replicas_dir)) {
+        if (!dir_entry.is_directory()) continue;
+        std::string peer = dir_entry.path().filename().string();
+        if (peer == m_replica_name) continue;  // skip our own directory
+
+        auto acks_path = dir_entry.path() / "acks.json";
+        uint64_t peer_val = read_peer_ack_(acks_path);
+        if (peer_val == UINT64_MAX) continue;  // no entry for us — excluded
+
+        if (!any_peer) {
+            new_fence = peer_val;
+            any_peer = true;
+        } else {
+            new_fence = std::min(new_fence, peer_val);
+        }
+    }
+
+    if (!any_peer) return;  // no enrolled peers yet — leave fence at current value
+
+    if (new_fence > m_cached_fence) {
+        m_cached_fence = new_fence;
+        if (m_ack_update_cb) m_ack_update_cb(m_cached_fence);
+    }
 }
 
 } // namespace CollabText::Crdt

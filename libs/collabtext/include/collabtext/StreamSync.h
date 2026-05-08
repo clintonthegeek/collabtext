@@ -80,6 +80,8 @@ private:
                                const std::string& peer);
     size_t read_remote_stream_(const std::string& name, StreamState& s);
     void write_acks_();
+    void recompute_fence_();
+    uint64_t read_peer_ack_(const std::filesystem::path& acks_path) const;
     std::string current_iso_utc_() const;
 
     std::filesystem::path m_shared_folder;
@@ -91,6 +93,7 @@ private:
     InboundCallback m_on_inbound;
     std::function<void(uint64_t)> m_ack_update_cb;
     std::unordered_map<uint16_t, AckState> m_ack_state;  // peer replica_id → state
+    mutable uint64_t m_cached_fence = 0;
     bool m_started = false;
 };
 
