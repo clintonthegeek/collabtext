@@ -18,6 +18,11 @@ private slots:
     void lowest_peer_acked_lamport_returns_min_across_peers();
     void lowest_peer_acked_lamport_callback_fires_on_advance();
     void lowest_peer_acked_lamport_bounded_by_lagging_peer();
+    // Partition and silent-peer scenarios (Task 4.4)
+    void silent_peer_never_writes_acks_fence_stays_zero();
+    void peer_acks_file_deleted_fence_persists();
+    void peer_reconnects_fence_advances();
+    void three_peer_partition_totally_silent_peer_excluded();
 };
 
 void TestOpStreamAcks::acks_json_written_after_poll() {
@@ -380,6 +385,266 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_bounded_by_lagging_peer() {
     QVERIFY2(fence < batch2_max,
              qPrintable(QString("Expected fence < batch2_max (%1), got %2")
                  .arg(batch2_max).arg(fence)));
+}
+
+// ---------------------------------------------------------------------------
+// Task 4.4: Partition and silent-peer scenario tests
+// ---------------------------------------------------------------------------
+
+// A peer whose replica directory was created (start() called) but which never
+// polls has no acks.json entry for R1's replica id.  recompute_fence_() skips
+// peers that return UINT64_MAX from read_peer_ack_(), so with no enrolled peers
+// the fence stays at 0.
+void TestOpStreamAcks::silent_peer_never_writes_acks_fence_stays_zero() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    std::filesystem::path shared = tmp.path().toStdString();
+
+    StreamSync R1(shared, "replica-1", 1);
+    StreamSync R2(shared, "replica-2", 2);
+
+    R1.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R1.start();
+    R2.start();  // creates replicas/replica-2/ directory but R2 never polls
+
+    CrdtEngine engine1(1);
+    std::vector<std::string> payloads;
+    engine1.setOnLocalOp([&](const Operation& op) {
+        payloads.push_back(encode_operation(op));
+    });
+
+    for (int i = 0; i < 5; ++i) {
+        engine1.insert(i, "x");
+    }
+    QVERIFY(!payloads.empty());
+
+    for (const auto& payload : payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+
+    // R2 never polls — it has a replica directory but no acks.json for replica-1.
+    // R1 polls and tries to compute the fence.  read_peer_ack_() returns UINT64_MAX
+    // for R2 (no entry for us), so R2 is excluded.  No enrolled peers → fence stays 0.
+    R1.poll();
+
+    QCOMPARE(R1.lowest_peer_acked_lamport(), uint64_t{0});
+
+    // Confirm R2's acks.json does not exist (it never polled).
+    auto r2_acks = shared / "replicas" / "replica-2" / "acks.json";
+    QVERIFY(!std::filesystem::exists(r2_acks));
+}
+
+// After a peer polls and its acks.json is established, deleting that file
+// simulates peer eviction.  On R1's next poll, read_peer_ack_() returns
+// UINT64_MAX for the evicted peer (file gone), so the peer is excluded from
+// the aggregate.  With no remaining enrolled peers recompute_fence_() returns
+// early without updating m_cached_fence — the fence persists at its last value
+// rather than retreating to 0.  This is the correct "fence persists" behaviour:
+// an advancing-only fence cannot retreat just because a peer's acks file
+// disappears.
+void TestOpStreamAcks::peer_acks_file_deleted_fence_persists() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    std::filesystem::path shared = tmp.path().toStdString();
+
+    StreamSync R1(shared, "replica-1", 1);
+    StreamSync R2(shared, "replica-2", 2);
+
+    R1.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R1.start();
+    R2.start();
+
+    CrdtEngine engine1(1);
+    std::vector<std::string> payloads;
+    uint64_t max_lamport = 0;
+    engine1.setOnLocalOp([&](const Operation& op) {
+        payloads.push_back(encode_operation(op));
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > max_lamport) max_lamport = lc;
+    });
+
+    for (int i = 0; i < 4; ++i) {
+        engine1.insert(i, "a");
+    }
+    QVERIFY(!payloads.empty());
+    QVERIFY(max_lamport > 0);
+
+    for (const auto& payload : payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+    R2.poll();   // R2 reads ops, writes acks.json
+    R1.poll();   // R1 reads R2's acks.json, fence advances
+
+    uint64_t fence_before_delete = R1.lowest_peer_acked_lamport();
+    QVERIFY2(fence_before_delete > 0,
+             qPrintable(QString("Expected fence > 0 before delete, got %1")
+                        .arg(fence_before_delete)));
+
+    // Delete R2's acks.json — simulates peer eviction / file removal.
+    auto r2_acks = shared / "replicas" / "replica-2" / "acks.json";
+    QVERIFY(std::filesystem::exists(r2_acks));
+    std::filesystem::remove(r2_acks);
+    QVERIFY(!std::filesystem::exists(r2_acks));
+
+    // R1 polls again.  read_peer_ack_() returns UINT64_MAX for R2 (file gone),
+    // so R2 is excluded from the aggregate.  No enrolled peers remain →
+    // recompute_fence_() returns early → fence stays at fence_before_delete.
+    R1.poll();
+
+    uint64_t fence_after_delete = R1.lowest_peer_acked_lamport();
+    QCOMPARE(fence_after_delete, fence_before_delete);
+}
+
+// R1 pushes two batches.  R2 is "offline" for batch 1 (doesn't poll).
+// After batch 2 is pushed, R2 reconnects and polls — it reads all of R1's ops
+// (both batches) and writes a single acks.json covering the combined max Lamport.
+// R1's next poll advances the fence to cover both batches at once.
+void TestOpStreamAcks::peer_reconnects_fence_advances() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    std::filesystem::path shared = tmp.path().toStdString();
+
+    StreamSync R1(shared, "replica-1", 1);
+    StreamSync R2(shared, "replica-2", 2);
+
+    R1.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R1.start();
+    R2.start();
+
+    CrdtEngine engine1(1);
+    uint64_t batch1_max = 0;
+
+    engine1.setOnLocalOp([&](const Operation& op) {
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > batch1_max) batch1_max = lc;
+    });
+
+    // Batch 1: 3 inserts — R2 does not poll.
+    std::vector<std::string> batch1_payloads;
+    engine1.setOnLocalOp([&](const Operation& op) {
+        batch1_payloads.push_back(encode_operation(op));
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > batch1_max) batch1_max = lc;
+    });
+
+    for (int i = 0; i < 3; ++i) {
+        engine1.insert(i, "x");
+    }
+    QVERIFY(!batch1_payloads.empty());
+    QVERIFY(batch1_max > 0);
+
+    for (const auto& payload : batch1_payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+
+    // R1 polls with no enrolled peers — fence stays 0.
+    R1.poll();
+    QCOMPARE(R1.lowest_peer_acked_lamport(), uint64_t{0});
+
+    // Batch 2: 3 more inserts — still no R2 poll yet.
+    std::vector<std::string> batch2_payloads;
+    uint64_t batch2_max = 0;
+    engine1.setOnLocalOp([&](const Operation& op) {
+        batch2_payloads.push_back(encode_operation(op));
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > batch2_max) batch2_max = lc;
+    });
+
+    for (int i = 3; i < 6; ++i) {
+        engine1.insert(i, "y");
+    }
+    QVERIFY(!batch2_payloads.empty());
+    QVERIFY(batch2_max > batch1_max);
+
+    for (const auto& payload : batch2_payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+
+    // R2 "reconnects": polls and reads ALL of R1's ops (both batches combined).
+    // Its acks.json will record max_lamport_observed = batch2_max.
+    R2.poll();
+
+    // R1 polls — reads R2's acks.json; fence advances to batch2_max.
+    R1.poll();
+
+    uint64_t fence = R1.lowest_peer_acked_lamport();
+    QVERIFY2(fence > 0,
+             qPrintable(QString("Expected fence > 0 after reconnect, got %1").arg(fence)));
+    QVERIFY2(fence == batch2_max,
+             qPrintable(QString("Expected fence == batch2_max (%1), got %2")
+                        .arg(batch2_max).arg(fence)));
+}
+
+// Three replicas: R2 polls everything; R3 never polls (total silence from start).
+// R3 has a replica directory but no acks.json for replica-1 → it is excluded
+// from the aggregate.  Only R2 is enrolled.  The fence advances based on R2 alone.
+//
+// Contrast with silent_peer_never_writes_acks_fence_stays_zero (two peers, R2
+// silent → no enrolled peers at all → fence stays 0).  Here R2 is enrolled and
+// healthy; R3's total silence does not hold the fence down.  Silent/absent peers
+// that have never written an acks.json entry for us are excluded, not treated as
+// zero-acknowledged.
+void TestOpStreamAcks::three_peer_partition_totally_silent_peer_excluded() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    std::filesystem::path shared = tmp.path().toStdString();
+
+    StreamSync R1(shared, "replica-1", 1);
+    StreamSync R2(shared, "replica-2", 2);
+    StreamSync R3(shared, "replica-3", 3);
+
+    R1.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R3.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R1.start();
+    R2.start();
+    R3.start();  // creates replicas/replica-3/ but R3 never polls
+
+    CrdtEngine engine1(1);
+    std::vector<std::string> payloads;
+    uint64_t max_lamport = 0;
+    engine1.setOnLocalOp([&](const Operation& op) {
+        payloads.push_back(encode_operation(op));
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > max_lamport) max_lamport = lc;
+    });
+
+    for (int i = 0; i < 4; ++i) {
+        engine1.insert(i, "z");
+    }
+    QVERIFY(!payloads.empty());
+    QVERIFY(max_lamport > 0);
+
+    for (const auto& payload : payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+
+    // R2 polls — reads all of R1's ops, writes acks.json with max_lamport.
+    R2.poll();
+    // R3 never polls — its acks.json does not exist.
+
+    R1.poll();  // reads R2 (enrolled) and R3 (excluded: no acks.json for us)
+
+    uint64_t fence = R1.lowest_peer_acked_lamport();
+
+    // R3 is excluded from the min computation; only R2 is enrolled.
+    // Fence advances to R2's ack value = max_lamport.
+    QVERIFY2(fence > 0,
+             qPrintable(QString("Expected fence > 0 (R3 excluded, R2 enrolled), got %1")
+                        .arg(fence)));
+    QCOMPARE(fence, max_lamport);
+
+    // Confirm R3 never wrote acks.json.
+    auto r3_acks = shared / "replicas" / "replica-3" / "acks.json";
+    QVERIFY(!std::filesystem::exists(r3_acks));
 }
 
 QTEST_MAIN(TestOpStreamAcks)
