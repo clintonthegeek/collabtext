@@ -70,10 +70,17 @@ private:
         uint64_t next_seq = 1;
     };
 
+    struct AckState {
+        uint64_t max_lamport = 0;
+        std::string last_observed_at;  // ISO 8601 UTC, refreshed only when max_lamport advances
+    };
+
     StreamState& ensure_started_(const std::string& name);
     SegmentReader& reader_for_(StreamState& s, const std::string& stream,
                                const std::string& peer);
     size_t read_remote_stream_(const std::string& name, StreamState& s);
+    void write_acks_();
+    std::string current_iso_utc_() const;
 
     std::filesystem::path m_shared_folder;
     std::string m_replica_name;
@@ -83,6 +90,7 @@ private:
     NewEntriesCallback m_on_new_entries;
     InboundCallback m_on_inbound;
     std::function<void(uint64_t)> m_ack_update_cb;
+    std::unordered_map<uint16_t, AckState> m_ack_state;  // peer replica_id → state
     bool m_started = false;
 };
 
