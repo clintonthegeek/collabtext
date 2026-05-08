@@ -44,6 +44,12 @@ public:
         std::function<void(const std::string& stream, size_t count)>;
     void set_on_new_entries(NewEntriesCallback cb);
 
+    using InboundCallback =
+        std::function<void(const std::string& stream_name,
+                           uint16_t           producer_replica_id,
+                           const std::string& payload)>;
+    void set_on_inbound(InboundCallback cb);
+
 private:
     struct StreamState {
         StreamType type = StreamType::AppendOnly;
@@ -62,6 +68,7 @@ private:
     WriterConfig m_writer_cfg;
     std::unordered_map<std::string, StreamState> m_streams;
     NewEntriesCallback m_on_new_entries;
+    InboundCallback m_on_inbound;
     bool m_started = false;
 };
 

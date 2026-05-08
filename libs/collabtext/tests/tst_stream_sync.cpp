@@ -202,6 +202,45 @@ private slots:
         QCOMPARE(syncB.entries("comments").size(), size_t(0));
     }
 
+    void per_entry_inbound_callback() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        std::filesystem::path shared = tmp.path().toStdString();
+
+        StreamSync syncA(shared, "replica-A");
+        StreamSync syncB(shared, "replica-B");
+        syncA.register_stream("chat", StreamSync::StreamType::AppendOnly);
+        syncB.register_stream("chat", StreamSync::StreamType::AppendOnly);
+        syncA.start();
+        syncB.start();
+
+        StreamEntry e;
+        e.id = "1-42";
+        e.replica_id = 7;
+        e.seq = 42;
+        e.timestamp = "2026-05-08T10:00:00Z";
+        e.payload = "{\"body\":\"hello inbound\"}";
+        syncA.push("chat", e);
+        syncA.poll();
+        syncA.flush();
+
+        std::vector<std::string> fired_streams;
+        std::vector<uint16_t> fired_replicas;
+        std::vector<std::string> fired_payloads;
+        syncB.set_on_inbound([&](const std::string& sn, uint16_t rid, const std::string& pl) {
+            fired_streams.push_back(sn);
+            fired_replicas.push_back(rid);
+            fired_payloads.push_back(pl);
+        });
+
+        syncB.poll();
+
+        QCOMPARE(fired_streams.size(), size_t(1));
+        QCOMPARE(fired_streams[0], std::string("chat"));
+        QCOMPARE(fired_replicas[0], uint16_t(7));
+        QCOMPARE(fired_payloads[0], std::string("{\"body\":\"hello inbound\"}"));
+    }
+
     void multi_stream_isolation() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());

@@ -107,15 +107,20 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
             auto e = decode_stream_entry(r);
             if (!e) continue;
             if (s.type == StreamType::AppendOnly) {
-                if (s.merged.try_emplace(e->id, *e).second) ++count;
+                if (s.merged.try_emplace(e->id, *e).second) {
+                    ++count;
+                    if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
+                }
             } else {
                 auto existing = s.merged.find(e->id);
                 if (existing == s.merged.end()) {
                     s.merged[e->id] = *e;
                     ++count;
+                    if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
                 } else if (e->timestamp > existing->second.timestamp) {
                     existing->second = *e;
                     ++count;
+                    if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
                 }
             }
         }
@@ -145,6 +150,10 @@ std::vector<StreamEntry> StreamSync::entries(const std::string& stream) const {
 
 void StreamSync::set_on_new_entries(NewEntriesCallback cb) {
     m_on_new_entries = std::move(cb);
+}
+
+void StreamSync::set_on_inbound(InboundCallback cb) {
+    m_on_inbound = std::move(cb);
 }
 
 } // namespace CollabText::Crdt
