@@ -54,11 +54,12 @@ public:
     /// The op is applied with causal ordering: if a dependency is not yet
     /// satisfied, Buffer will defer it internally.
     ///
-    /// Returns true on successful acceptance (the op was handed to Buffer).
-    /// Returns false for ops that cannot be applied (e.g., dependency unmet —
-    /// caller may retry or buffer for replay).  Never throws on in-domain ops;
-    /// malformed ops should be caught at decode_operation() before reaching
-    /// here.
+    /// Returns true once the op has been handed to Buffer.  Buffer handles
+    /// causal ordering internally: out-of-order ops are deferred and retried
+    /// when their dependencies arrive, so the caller does not need to re-queue.
+    /// Returns false only for programming errors (e.g., null engine).  Never
+    /// throws on in-domain ops; malformed ops should be caught at
+    /// decode_operation() before reaching here.
     ///
     /// See docs/handoff/2026-05-08-d5-joint-design-outcomes.md §3.3 for the
     /// error-path contract agreed with the Markoff side.
