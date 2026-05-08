@@ -358,10 +358,8 @@ uint64_t StreamSync::read_peer_ack_(const fs::path& acks_path) const {
     auto ml_tag = content.find("\"max_lamport_observed\"", key_pos);
     if (ml_tag == std::string::npos) return UINT64_MAX;
 
-    // Make sure there's no other top-level quoted key between our key and the tag
-    // (i.e., we're still inside our key's object). A simple heuristic: the next
-    // occurrence of a decimal-only quoted string after key_pos should not come
-    // before ml_tag.
+    // write_acks_() always emits max_lamport_observed immediately inside each peer
+    // object, so a simple scan for the tag is sufficient; no cross-key guard needed.
     auto colon = content.find(':', ml_tag + 22);
     if (colon == std::string::npos) return UINT64_MAX;
 

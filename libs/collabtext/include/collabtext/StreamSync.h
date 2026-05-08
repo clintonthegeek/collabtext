@@ -93,7 +93,7 @@ private:
     InboundCallback m_on_inbound;
     std::function<void(uint64_t)> m_ack_update_cb;
     std::unordered_map<uint16_t, AckState> m_ack_state;  // peer replica_id → state
-    mutable uint64_t m_cached_fence = 0;
+    uint64_t m_cached_fence = 0;
     bool m_started = false;
 };
 

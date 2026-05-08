@@ -1,0 +1,95 @@
+Test project /home/clinton/dev/collabtext/build-dev
+      Start 13: tst_benchmark
+      Start 19: tst_realistic
+      Start 10: tst_fuzz
+      Start  4: tst_convergence
+ 1/48 Test  #4: tst_convergence ..................   Passed    2.66 sec
+      Start 29: tst_opstream_acks
+ 2/48 Test #10: tst_fuzz .........................   Passed    2.68 sec
+      Start 28: tst_opstream_streamsync
+ 3/48 Test #29: tst_opstream_acks ................   Passed    0.23 sec
+ 4/48 Test #28: tst_opstream_streamsync ..........   Passed    0.21 sec
+      Start 14: tst_gc
+      Start 25: tst_collab_plain_text_edit
+ 5/48 Test #14: tst_gc ...........................   Passed    0.34 sec
+ 6/48 Test #25: tst_collab_plain_text_edit .......   Passed    0.34 sec
+      Start  7: tst_opqueue
+      Start 26: tst_scroll_stability
+ 7/48 Test #26: tst_scroll_stability .............   Passed    0.28 sec
+      Start 24: tst_identity_widgets
+ 8/48 Test  #7: tst_opqueue ......................   Passed    0.31 sec
+      Start 20: tst_identity_json
+ 9/48 Test #20: tst_identity_json ................   Passed    0.21 sec
+      Start  2: tst_locator
+10/48 Test #24: tst_identity_widgets .............   Passed    0.24 sec
+      Start 16: tst_edits_since
+11/48 Test #16: tst_edits_since ..................   Passed    0.20 sec
+      Start 12: tst_undomap
+12/48 Test  #2: tst_locator ......................   Passed    0.24 sec
+      Start 11: tst_rope_integration
+13/48 Test #12: tst_undomap ......................   Passed    0.21 sec
+      Start  1: tst_clock
+14/48 Test #11: tst_rope_integration .............   Passed    0.21 sec
+      Start  3: tst_buffer
+15/48 Test  #3: tst_buffer .......................   Passed    0.21 sec
+      Start  5: tst_sumtree
+16/48 Test  #1: tst_clock ........................   Passed    0.24 sec
+      Start 27: tst_stream_sync
+17/48 Test  #5: tst_sumtree ......................   Passed    0.25 sec
+18/48 Test #27: tst_stream_sync ..................   Passed    0.25 sec
+      Start 18: tst_multicursor
+      Start 21: tst_identity_store
+19/48 Test #21: tst_identity_store ...............   Passed    0.23 sec
+      Start 22: tst_identity_projector
+20/48 Test #18: tst_multicursor ..................   Passed    0.23 sec
+      Start  6: tst_anchor
+21/48 Test #22: tst_identity_projector ...........   Passed    0.19 sec
+      Start 15: tst_serialization
+22/48 Test  #6: tst_anchor .......................   Passed    0.23 sec
+      Start  8: tst_utf8
+23/48 Test #15: tst_serialization ................   Passed    0.18 sec
+      Start  9: tst_rope
+24/48 Test  #8: tst_utf8 .........................   Passed    0.18 sec
+      Start 35: tst_idlist_fuzz
+25/48 Test #35: tst_idlist_fuzz ..................   Passed    0.10 sec
+      Start 48: tst_opstream_interface
+26/48 Test  #9: tst_rope .........................   Passed    0.16 sec
+      Start 47: tst_crdtengine_op_api
+27/48 Test #48: tst_opstream_interface ...........   Passed    0.01 sec
+      Start 17: tst_filesync
+28/48 Test #47: tst_crdtengine_op_api ............   Passed    0.01 sec
+      Start 37: tst_idlist_op_api
+29/48 Test #37: tst_idlist_op_api ................   Passed    0.01 sec
+      Start 23: tst_presence_manager
+30/48 Test #17: tst_filesync .....................   Passed    0.01 sec
+      Start 46: tst_serialization_public
+31/48 Test #23: tst_presence_manager .............   Passed    0.01 sec
+      Start 44: tst_segment_writer
+32/48 Test #46: tst_serialization_public .........   Passed    0.01 sec
+      Start 45: tst_segment_reader
+33/48 Test #44: tst_segment_writer ...............   Passed    0.01 sec
+      Start 43: tst_segment_format
+34/48 Test #45: tst_segment_reader ...............   Passed    0.01 sec
+      Start 38: tst_chat_message
+35/48 Test #38: tst_chat_message .................   Passed    0.01 sec
+      Start 39: tst_comment
+36/48 Test #43: tst_segment_format ...............   Passed    0.01 sec
+      Start 40: tst_seed_op
+37/48 Test #39: tst_comment ......................   Passed    0.01 sec
+      Start 42: tst_zstd_util
+38/48 Test #40: tst_seed_op ......................   Passed    0.01 sec
+      Start 41: tst_sidecar_manifest
+39/48 Test #42: tst_zstd_util ....................   Passed    0.01 sec
+      Start 36: tst_idlist_serialization
+40/48 Test #41: tst_sidecar_manifest .............   Passed    0.01 sec
+      Start 33: tst_idlist_undo
+41/48 Test #36: tst_idlist_serialization .........   Passed    0.01 sec
+      Start 34: tst_idlist_gc
+42/48 Test #33: tst_idlist_undo ..................   Passed    0.01 sec
+      Start 32: tst_idlist_convergence
+43/48 Test #34: tst_idlist_gc ....................   Passed    0.01 sec
+      Start 31: tst_idlist_anchor
+44/48 Test #32: tst_idlist_convergence ...........   Passed    0.01 sec
+      Start 30: tst_idlist
+45/48 Test #31: tst_idlist_anchor ................   Passed    0.01 sec
+46/48 Test #30: tst_idlist .......................   Passed    0.01 sec

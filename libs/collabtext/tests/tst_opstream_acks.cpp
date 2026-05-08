@@ -291,8 +291,7 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_callback_fires_on_advance() {
     R1.poll();   // R1 reads R2's updated acks, fence advances again → callback fires again
 
     size_t cb_count_before = cb_values.size();
-    QVERIFY2(cb_count_before >= 2,
-             qPrintable(QString("Expected at least 2 callback invocations, got %1").arg((int)cb_count_before)));
+    QCOMPARE(cb_count_before, size_t{2});
     QVERIFY2(cb_values.back() > first_fence,
              qPrintable(QString("Expected second fence %1 > first fence %2")
                  .arg(cb_values.back()).arg(first_fence)));
