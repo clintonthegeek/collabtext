@@ -9,8 +9,12 @@
 ///   • Lamport::counter() const -> uint64_t
 ///       Returns the logical clock value for this timestamp.
 ///
-///   • Lamport::replica_id (field, uint16_t)
-///       The replica that produced this timestamp.  Directly accessible.
+///   • Lamport::replica_id  (public field, uint16_t)
+///       The replica that produced this timestamp.  Directly accessible as a
+///       field.  This is a deliberate carve-out: Lamport's two members
+///       (value / replica_id) are both stable despite the general rule below
+///       that field layout is evolution-reserved.  Only Lamport is carved out;
+///       EditOperation and UndoOperation fields remain evolution-reserved.
 ///
 ///   • op_lamport(const Operation& op) -> Lamport
 ///       Free function returning the Lamport timestamp of any Operation.
@@ -22,13 +26,13 @@
 ///
 /// ─── Evolution-reserved (DO NOT depend on) ──────────────────────────────────
 ///
-///   • Field layout and member ordering of EditOperation / UndoOperation.
+///   • Field layout of EditOperation / UndoOperation (not carved out above).
 ///   • Op-variant discriminator values (std::variant index).
 ///   • Internal types transitively visible through this header:
 ///       Fragment, Anchor, Locator, Global — their fields are NOT stable.
 ///   • Public construction APIs.  Consumers obtain ops only via decode_* or
-///     via setOnLocalOp callbacks (Task 1.2).  No stable constructors are
-///     provided; construct ops only inside the engine.
+///     via setOnLocalOp callbacks.  No stable constructors are provided;
+///     construct ops only inside the engine.
 ///
 /// ─── Usage ───────────────────────────────────────────────────────────────────
 ///

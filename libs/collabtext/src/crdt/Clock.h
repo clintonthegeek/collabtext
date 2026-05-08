@@ -29,7 +29,8 @@ struct Lamport {
 
     /// Stable public accessor: returns the logical clock value as uint64_t.
     /// Part of the OpStream narrow contract; safe to depend on.
-    /// replica_id is the companion stable field (directly accessible).
+    /// `replica_id` (the field below) is the companion stable surface —
+    /// see Operations.h contract block for the explicit carve-out.
     uint64_t counter() const { return value; }
 
     auto operator<=>(const Lamport &other) const {
