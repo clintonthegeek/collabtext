@@ -17,6 +17,7 @@ private slots:
     void acks_json_monotone_across_restarts();
     void lowest_peer_acked_lamport_returns_min_across_peers();
     void lowest_peer_acked_lamport_callback_fires_on_advance();
+    void lowest_peer_acked_lamport_bounded_by_lagging_peer();
 };
 
 void TestOpStreamAcks::acks_json_written_after_poll() {
@@ -295,6 +296,91 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_callback_fires_on_advance() {
     QVERIFY2(cb_values.back() > first_fence,
              qPrintable(QString("Expected second fence %1 > first fence %2")
                  .arg(cb_values.back()).arg(first_fence)));
+}
+
+void TestOpStreamAcks::lowest_peer_acked_lamport_bounded_by_lagging_peer() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    std::filesystem::path shared = tmp.path().toStdString();
+
+    StreamSync R1(shared, "replica-1", 1);
+    StreamSync R2(shared, "replica-2", 2);
+    StreamSync R3(shared, "replica-3", 3);
+
+    R1.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R3.register_stream("ops", StreamSync::StreamType::AppendOnly);
+    R1.start();
+    R2.start();
+    R3.start();
+
+    CrdtEngine engine1(1);
+    std::vector<std::string> batch1_payloads;
+    uint64_t batch1_max = 0;
+
+    engine1.setOnLocalOp([&](const Operation& op) {
+        batch1_payloads.push_back(encode_operation(op));
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > batch1_max) batch1_max = lc;
+    });
+
+    // Batch 1: 3 inserts
+    for (int i = 0; i < 3; ++i) {
+        engine1.insert(i, "x");
+    }
+    QVERIFY(!batch1_payloads.empty());
+    QVERIFY(batch1_max > 0);
+
+    for (const auto& payload : batch1_payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+
+    // R3 polls — sees only batch 1; writes acks.json with batch1_max
+    R3.poll();
+
+    // Batch 2: 3 more inserts
+    std::vector<std::string> batch2_payloads;
+    uint64_t batch2_max = 0;
+
+    engine1.setOnLocalOp([&](const Operation& op) {
+        batch2_payloads.push_back(encode_operation(op));
+        uint64_t lc = op_lamport(op).counter();
+        if (lc > batch2_max) batch2_max = lc;
+    });
+
+    for (int i = 3; i < 6; ++i) {
+        engine1.insert(i, "y");
+    }
+    QVERIFY(!batch2_payloads.empty());
+    QVERIFY(batch2_max > batch1_max);
+
+    for (const auto& payload : batch2_payloads) {
+        R1.push("ops", payload);
+    }
+    R1.flush();
+
+    // R2 polls — sees both batches; writes acks.json with batch2_max
+    R2.poll();
+
+    // R1 polls — reads R2 and R3 acks, computes min across peers
+    R1.poll();
+
+    uint64_t fence = R1.lowest_peer_acked_lamport();
+
+    // fence must be positive: R3 did observe batch 1
+    QVERIFY2(fence > 0,
+             qPrintable(QString("Expected fence > 0, got %1").arg(fence)));
+
+    // fence must equal batch1_max: R3 is the lagging peer and caps the min
+    QVERIFY2(fence == batch1_max,
+             qPrintable(QString("Expected fence == batch1_max (%1), got %2")
+                 .arg(batch1_max).arg(fence)));
+
+    // fence must be strictly less than batch2_max: R3 hasn't caught up
+    QVERIFY2(fence < batch2_max,
+             qPrintable(QString("Expected fence < batch2_max (%1), got %2")
+                 .arg(batch2_max).arg(fence)));
 }
 
 QTEST_MAIN(TestOpStreamAcks)
