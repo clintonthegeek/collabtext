@@ -399,9 +399,9 @@ void IdList::set_entries(std::vector<IdListEntry>&& entries) {
     m_entry_tree = std::move(tree);
 }
 
-void IdList::local_clear() {
+void IdList::local_clear() noexcept {
     m_entry_tree = IdListTree{};
-    m_undo_map = UndoMap{};
+    m_undo_map.clear();
     m_undo_stack.clear();
     m_undo_cursor = 0;
     m_deferred_queue = IdListOperationQueue{};

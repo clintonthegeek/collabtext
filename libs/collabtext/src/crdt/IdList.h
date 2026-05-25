@@ -153,7 +153,14 @@ public:
     /// programmatic content swap); calling on a connected collab
     /// session is allowed but remote peers will not see the clear —
     /// that's a higher-layer concern.
-    void local_clear();
+    ///
+    /// Note: m_version is preserved, so calling apply_ops() or
+    /// apply_remote_op() with previously-seen timestamps after a
+    /// local_clear() will be silent no-ops. Rebuild must supply
+    /// fresh ops with new timestamps (e.g. via a re-parse + insert
+    /// pass), not a raw replay of the original CRDT log.
+    ///
+    void local_clear() noexcept;
 
 private:
     uint16_t m_replica_id;

@@ -91,6 +91,7 @@ private slots:
         QCOMPARE(list.tombstone_count(), size_t{0});
         QCOMPARE(list.entry_count(), size_t{0});
         QCOMPARE(list.undo_depth(), size_t{0});
+        QCOMPARE(list.replica_id(), quint16(1));
     }
 
     void local_clear_preserves_clock_monotonicity() {
@@ -121,6 +122,25 @@ private slots:
 
         QCOMPARE(changeCalls, 0);
         QCOMPARE(localOpCalls, 0);
+
+        // Callbacks survive the clear: a subsequent local op fires them.
+        list.insert_after(Anchor::min(), 200);
+        QCOMPARE(changeCalls, 1);
+        QCOMPARE(localOpCalls, 1);
+    }
+
+    void local_clear_then_insert_chain_works() {
+        IdList list(1);
+        list.insert_after(Anchor::min(), 100);
+        list.insert_after(list.anchor_of(100, Bias::Right), 200);
+
+        list.local_clear();
+
+        list.insert_after(Anchor::min(), 300);
+        list.insert_after(list.anchor_of(300, Bias::Right), 400);
+
+        QCOMPARE(list.size(), 2u);
+        QCOMPARE(list.ids(), (std::vector<uint64_t>{300, 400}));
     }
 };
 
