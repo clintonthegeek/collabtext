@@ -144,6 +144,17 @@ public:
     /// Fires set_on_change; does NOT fire set_on_local_op.
     bool apply_remote_op(const IdListOperation& op);
 
+    /// Single-replica reset primitive. Drops all entries (visible +
+    /// tombstones), the undo stack, and the deferred-op queue.
+    /// Preserves replica_id, clock, version, max_undo_depth, and
+    /// registered callbacks. Does NOT fire set_on_change or
+    /// set_on_local_op. For use when the canonical content is
+    /// replaced from outside the CRDT (file reload, revert-to-saved,
+    /// programmatic content swap); calling on a connected collab
+    /// session is allowed but remote peers will not see the clear —
+    /// that's a higher-layer concern.
+    void local_clear();
+
 private:
     uint16_t m_replica_id;
     Lamport m_clock;

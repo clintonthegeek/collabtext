@@ -399,6 +399,17 @@ void IdList::set_entries(std::vector<IdListEntry>&& entries) {
     m_entry_tree = std::move(tree);
 }
 
+void IdList::local_clear() {
+    m_entry_tree = IdListTree{};
+    m_undo_map = UndoMap{};
+    m_undo_stack.clear();
+    m_undo_cursor = 0;
+    m_deferred_queue = IdListOperationQueue{};
+    // Intentionally preserved: m_replica_id, m_clock, m_version,
+    // m_max_undo_depth, m_on_change, m_on_local_op.
+    // Intentionally not fired: m_on_change, m_on_local_op.
+}
+
 void IdList::insert_entry(std::vector<IdListEntry>& entries, IdListEntry entry) const {
     auto it = std::lower_bound(entries.begin(), entries.end(), entry,
         [](const IdListEntry& a, const IdListEntry& b) {

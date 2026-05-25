@@ -78,6 +78,50 @@ private slots:
         QCOMPARE(list.ids(), (std::vector<uint64_t>{3, 1}));
         QCOMPARE(list.tombstone_count(), size_t{1});
     }
+
+    void local_clear_empties_the_list() {
+        IdList list(1);
+        list.insert_after(Anchor::min(), 100);
+        list.insert_after(list.anchor_of(100, Bias::Right), 200);
+        QCOMPARE(list.size(), 2u);
+
+        list.local_clear();
+
+        QCOMPARE(list.size(), 0u);
+        QCOMPARE(list.tombstone_count(), size_t{0});
+        QCOMPARE(list.entry_count(), size_t{0});
+        QCOMPARE(list.undo_depth(), size_t{0});
+    }
+
+    void local_clear_preserves_clock_monotonicity() {
+        IdList list(1);
+        list.insert_after(Anchor::min(), 100);
+        auto op1 = list.insert_after(list.anchor_of(100, Bias::Right), 200);
+        const Lamport stampBefore = get_idlist_op_timestamp(op1);
+
+        list.local_clear();
+
+        auto op2 = list.insert_after(Anchor::min(), 300);
+        const Lamport stampAfter = get_idlist_op_timestamp(op2);
+
+        // Clock must not regress (Lamport has operator<=>).
+        QVERIFY(stampBefore < stampAfter);
+    }
+
+    void local_clear_does_not_fire_callbacks() {
+        IdList list(1);
+        list.insert_after(Anchor::min(), 100);
+
+        int changeCalls = 0;
+        int localOpCalls = 0;
+        list.set_on_change([&]{ ++changeCalls; });
+        list.set_on_local_op([&](const IdListOperation &){ ++localOpCalls; });
+
+        list.local_clear();
+
+        QCOMPARE(changeCalls, 0);
+        QCOMPARE(localOpCalls, 0);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIdList)
