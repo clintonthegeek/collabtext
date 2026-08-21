@@ -22,7 +22,7 @@ else()
     set(COLLABTEXT_ZSTD_TARGET PkgConfig::ZSTD)
 endif()
 
-add_library(collabtext STATIC
+add_library(collabtext SHARED
     src/CrdtEngine.cpp
     src/CollabDocument.cpp
     src/SyncManager.cpp
@@ -79,6 +79,14 @@ target_include_directories(collabtext
 )
 target_link_libraries(collabtext PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
 target_link_libraries(collabtext PRIVATE ${COLLABTEXT_ZSTD_TARGET})
+
+if(DEFINED KDE_INSTALL_LIBDIR)
+    install(TARGETS collabtext
+        RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
+        LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    )
+endif()
 
 # Tests
 enable_testing()
