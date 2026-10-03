@@ -243,7 +243,8 @@
         "R4"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "in_progress",
+      "baseline_revision": "3ec89c2addc34fe54a1a63200a5af497cc9f0710"
     },
     {
       "id": "V06",

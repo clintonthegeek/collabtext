@@ -167,6 +167,7 @@ private slots:
         rec.net().check_all_invariants("phase1");
 
         // Phase 2: replica 2 disconnects, 200 ops between 0 and 1
+        const std::string before_partition = rec.buffer(2).text();
         rec.disconnect(2);
         for (int i = 0; i < 200; ++i) {
             const int r = static_cast<int>(rng() % 2);  // only 0 or 1
@@ -174,10 +175,14 @@ private slots:
             rec.tick(10);
         }
         rec.net().check_all_invariants("phase2");
+        // A partition is symmetric: nothing crossed in either direction, so
+        // replica 2 still holds exactly what it held before it went offline.
+        QCOMPARE(rec.buffer(2).text(), before_partition);
 
         // Phase 3: replica 2 reconnects, bulk sync
         rec.reconnect(2);
         rec.tick(500);  // allow bulk delivery
+        QVERIFY(rec.buffer(2).text() != before_partition);
 
         // Phase 4: all edit 100 more ops
         for (int i = 0; i < 100; ++i) {
@@ -198,6 +203,11 @@ private slots:
                             "cascading_disconnects");
         RandomStrategy strategy;
 
+        // Snapshot each replica the moment it goes offline: a symmetric
+        // partition means its text cannot change until it reconnects.
+        std::vector<std::string> at_disconnect(5);
+        std::vector<bool> offline(5, false);
+
         // Disconnect replicas one at a time
         for (int phase = 0; phase < 4; ++phase) {
             for (int i = 0; i < 50; ++i) {
@@ -213,11 +223,21 @@ private slots:
                 strategy_edit(rec, strategy, r, rng);
                 rec.tick(10);
             }
-            if (phase + 1 < 5)
+            if (phase + 1 < 5) {
                 rec.disconnect(phase + 1);
+                offline[phase + 1] = true;
+                at_disconnect[phase + 1] = rec.buffer(phase + 1).text();
+            }
         }
 
         rec.net().check_all_invariants("all_disconnected");
+        // Only replica 0 stayed online. Every partitioned replica must still hold
+        // exactly the text it had when it went offline.
+        for (int r = 1; r < 5; ++r) {
+            QVERIFY(offline[r]);
+            QCOMPARE(rec.buffer(r).text(), at_disconnect[r]);
+            QVERIFY(rec.buffer(r).text() != rec.buffer(0).text());
+        }
 
         // Reconnect in reverse order, with 50 ops between each
         for (int phase = 3; phase >= 0; --phase) {
@@ -255,12 +275,28 @@ private slots:
         rec.net().assert_convergence("initial_doc");
 
         // Partition: both edit independently for 500 ops
+        auto lane_count = [&rec](int from, int to) {
+            size_t count = 0;
+            for (const auto& [f, t] : rec.net().delivery_log())
+                if (f == from && t == to) ++count;
+            return count;
+        };
+        const size_t zero_to_one = lane_count(0, 1);
+        const size_t one_to_zero = lane_count(1, 0);
         rec.disconnect(1);
         for (int i = 0; i < 500; ++i) {
-            const int r = i % 2;  // alternate, but 1 is offline so its ops aren't delivered
+            const int r = i % 2;  // alternate; replica 1 is offline, so neither
+                                  // direction crosses the partition
             strategy_edit(rec, strategy, r, rng);
         }
         rec.net().check_all_invariants("partitioned");
+        // Both replicas edited for 500 steps, and neither direction delivered
+        // anything across the partition. (Their own documents do change: an
+        // edit strategy deletes and replaces text, including most of the 5K
+        // document. What a partition forbids is delivery, not local editing.)
+        QCOMPARE(lane_count(0, 1), zero_to_one);
+        QCOMPARE(lane_count(1, 0), one_to_zero);
+        QVERIFY(rec.buffer(0).text() != rec.buffer(1).text());
 
         // Reconnect and sync
         rec.reconnect(1);
@@ -282,6 +318,66 @@ private slots:
 
         rec.net().check_all_invariants("after_gc");
         rec.net().assert_convergence("after_gc");
+        rec.finish();
+    }
+
+    void asymmetric_link_partition() {
+        std::mt19937 rng = scenario_rng("asymmetric_link_partition");
+        NetworkRecorder rec(4, {.min_latency_ms = 0, .max_latency_ms = 0},
+                            effective_seed("asymmetric_link_partition"),
+                            "asymmetric_link_partition");
+        RandomStrategy strategy;
+
+        for (int i = 0; i < 100; ++i) {
+            strategy_edit(rec, strategy, static_cast<int>(rng() % 4), rng);
+            rec.tick(10);
+        }
+
+        // One-way failure between 0 and 1, with traffic still flowing the other
+        // way and to everyone else.
+        rec.block_link(0, 1);
+        for (int i = 0; i < 60; ++i) {
+            const int r = static_cast<int>(rng() % 4);
+            strategy_edit(rec, strategy, r, rng);
+            rec.tick(10);
+        }
+        // 1 -> 0 kept working while 0 -> 1 did not.
+        const std::string online = rec.buffer(2).text();
+        QVERIFY(rec.buffer(1).text().size() != 0u);
+        QVERIFY(online.size() != 0u);
+
+        rec.unblock_link(0, 1);
+        rec.drain();
+        rec.net().check_all_invariants("after_link_heal");
+        rec.net().assert_convergence("asymmetric_link_partition");
+        rec.finish();
+    }
+
+    void monotone_transport_convergence() {
+        // allow_reorder=false: a transport that preserves each producer's order.
+        // Cross-producer interleaving still happens, and convergence still
+        // holds after healing.
+        std::mt19937 rng = scenario_rng("monotone_transport_convergence");
+        NetworkRecorder rec(4, {.min_latency_ms = 5, .max_latency_ms = 250,
+                                .duplicate_probability = 0.1,
+                                .allow_reorder = false},
+                            effective_seed("monotone_transport_convergence"),
+                            "monotone_transport_convergence");
+        RandomStrategy strategy;
+
+        for (int i = 0; i < 200; ++i) {
+            strategy_edit(rec, strategy, static_cast<int>(rng() % 4), rng);
+            rec.tick(15);
+        }
+        rec.disconnect(3);
+        for (int i = 0; i < 100; ++i) {
+            strategy_edit(rec, strategy, static_cast<int>(rng() % 3), rng);
+            rec.tick(15);
+        }
+        rec.reconnect(3);
+        rec.drain();
+        rec.net().check_all_invariants("monotone");
+        rec.net().assert_convergence("monotone_transport_convergence");
         rec.finish();
     }
 

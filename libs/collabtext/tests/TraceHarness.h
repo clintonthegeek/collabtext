@@ -33,6 +33,8 @@
 //   redo <replica>
 //   disconnect <replica>
 //   reconnect <replica>
+//   block <from> <to>
+//   unblock <from> <to>
 //   restart <replica>
 //   tick <ms>
 //   drain
@@ -57,9 +59,10 @@
 // idlist      Replica index r maps to IdList(r + 1). An insert/remove names a
 //             *visible index* resolved against the replica's current state.
 // networksim  Re-executes the events against NetworkSim using the recorded
-//             seed and configuration. Delivery order, latency, and duplication
-//             are NetworkSim's own deterministic evolution; the trace still
-//             records the seed so nothing is rerolled.
+//             seed and configuration. Delivery order, latency, duplication,
+//             symmetric disconnects, and asymmetric blocked links are
+//             NetworkSim's own deterministic evolution; the trace still records
+//             the seed and every partition decision, so nothing is rerolled.
 //
 // restart
 //   Modelled as replay-based recovery: the replica's engine is rebuilt from
@@ -127,6 +130,8 @@ enum class EventKind {
     Redo,
     Disconnect,
     Reconnect,
+    BlockLink,
+    UnblockLink,
     Restart,
     Tick,
     Drain,
@@ -138,6 +143,7 @@ enum class EventKind {
 struct Event {
     EventKind kind = EventKind::Edit;
     int replica = -1;        ///< acting or target replica index
+    int peer = -1;           ///< second replica for asymmetric link events
     uint32_t start = 0;      ///< Edit: byte range start
     uint32_t end = 0;        ///< Edit: byte range end
     std::string text;        ///< Edit: replacement text
@@ -239,6 +245,8 @@ inline std::string_view event_name(EventKind kind) {
     case EventKind::Redo: return "redo";
     case EventKind::Disconnect: return "disconnect";
     case EventKind::Reconnect: return "reconnect";
+    case EventKind::BlockLink: return "block";
+    case EventKind::UnblockLink: return "unblock";
     case EventKind::Restart: return "restart";
     case EventKind::Tick: return "tick";
     case EventKind::Drain: return "drain";
@@ -309,6 +317,11 @@ inline std::string Trace::to_text() const {
             out << "deliver " << e.replica << ' ' << e.op_index;
             if (e.lose) out << " x";
             out << '\n';
+            break;
+        case EventKind::BlockLink:
+        case EventKind::UnblockLink:
+            out << detail::event_name(e.kind) << ' ' << e.replica << ' ' << e.peer
+                << '\n';
             break;
         case EventKind::Undo:
         case EventKind::Redo:
@@ -436,6 +449,13 @@ inline bool Trace::load(const std::string& path, Trace& out, std::string& error)
                 e.lose = true;
             }
             e.kind = EventKind::Deliver;
+        } else if (verb == "block" || verb == "unblock") {
+            if (!need(3) || !detail::parse_int(tokens[1], e.replica) ||
+                !detail::parse_int(tokens[2], e.peer)) {
+                if (error.empty()) error = "malformed " + verb + " event";
+                return false;
+            }
+            e.kind = (verb == "block") ? EventKind::BlockLink : EventKind::UnblockLink;
         } else if (verb == "undo" || verb == "redo" || verb == "disconnect" ||
                    verb == "reconnect" || verb == "restart" || verb == "gc") {
             if (!need(2) || !detail::parse_int(tokens[1], e.replica)) {
@@ -973,6 +993,14 @@ inline ReplayResult replay_network(const Trace& trace) {
             break;
         case EventKind::Reconnect:
             net.reconnect(e.replica);
+            ++result.applied;
+            break;
+        case EventKind::BlockLink:
+        case EventKind::UnblockLink:
+            if (e.peer < 0 || e.peer >= trace.replicas)
+                return reject("link event names a replica out of range");
+            if (e.kind == EventKind::BlockLink) net.block_link(e.replica, e.peer);
+            else net.unblock_link(e.replica, e.peer);
             ++result.applied;
             break;
         case EventKind::Tick:
@@ -1602,6 +1630,24 @@ public:
         e.replica = r;
         m_trace.events.push_back(e);
         m_net.reconnect(r);
+    }
+
+    void block_link(int from, int to) {
+        Event e;
+        e.kind = EventKind::BlockLink;
+        e.replica = from;
+        e.peer = to;
+        m_trace.events.push_back(e);
+        m_net.block_link(from, to);
+    }
+
+    void unblock_link(int from, int to) {
+        Event e;
+        e.kind = EventKind::UnblockLink;
+        e.replica = from;
+        e.peer = to;
+        m_trace.events.push_back(e);
+        m_net.unblock_link(from, to);
     }
 
     void tick(uint64_t ms) {

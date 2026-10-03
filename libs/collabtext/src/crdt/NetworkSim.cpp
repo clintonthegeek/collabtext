@@ -1,5 +1,6 @@
 #include "crdt/NetworkSim.h"
 #include <QTest>
+#include <algorithm>
 #include <cassert>
 
 namespace CollabText::Crdt {
@@ -12,7 +13,10 @@ NetworkSim::NetworkSim(int num_replicas, NetworkConfig config, uint64_t seed)
         m_replicas.emplace_back(static_cast<uint16_t>(i + 1));
     m_queues.resize(num_replicas);
     m_offline.resize(num_replicas, false);
-    m_pending_offline.resize(num_replicas);
+    m_pending_outbound.resize(num_replicas);
+    m_links.assign(num_replicas, std::vector<bool>(num_replicas, false));
+    m_last_scheduled.assign(num_replicas,
+                            std::vector<uint64_t>(num_replicas, 0));
 }
 
 uint64_t NetworkSim::random_latency() {
@@ -22,27 +26,53 @@ uint64_t NetworkSim::random_latency() {
     return m_config.min_latency_ms + (m_rng() % (range + 1));
 }
 
-void NetworkSim::broadcast(int source, const Operation& op) {
+void NetworkSim::schedule_delivery(int target, const ScheduledOp& proto) {
+    ScheduledOp sop = proto;
+    // from_replica is the one-based Buffer replica id; lanes are zero-based.
+    const size_t producer =
+        static_cast<size_t>(sop.from_replica) - 1;
+    sop.deliver_at_ms = m_clock + random_latency();
+    if (!m_config.allow_reorder) {
+        // Per-(target, producer) monotonicity: this operation may not come due
+        // before the previous operation from the same producer. Latency stays
+        // random and other producers still interleave freely.
+        uint64_t& lane = m_last_scheduled[target][producer];
+        if (sop.deliver_at_ms <= lane) sop.deliver_at_ms = lane + 1;
+        lane = sop.deliver_at_ms;
+    }
+    m_queues[target].push(sop);
+    // Retransmission follows the same lane, so a duplicate can never overtake
+    // the original it duplicates.
+    double roll = static_cast<double>(m_rng() % 10000) / 10000.0;
+    if (roll < m_config.duplicate_probability) {
+        ScheduledOp dup = sop;
+        dup.deliver_at_ms = m_clock + random_latency();
+        if (!m_config.allow_reorder) {
+            uint64_t& lane = m_last_scheduled[target][producer];
+            if (dup.deliver_at_ms <= lane) dup.deliver_at_ms = lane + 1;
+            lane = dup.deliver_at_ms;
+        }
+        m_queues[target].push(dup);
+    }
+}
+
+void NetworkSim::schedule_to_peers(int source, const Operation& op) {
     for (int r = 0; r < static_cast<int>(m_replicas.size()); ++r) {
         if (r == source) continue;
         ScheduledOp sop;
-        sop.deliver_at_ms = m_clock + random_latency();
         sop.from_replica = static_cast<uint16_t>(source + 1);
         sop.op = op;
-
-        if (m_offline[r]) {
-            m_pending_offline[r].push_back(sop);
-        } else {
-            m_queues[r].push(sop);
-            // Duplicate with configured probability
-            double roll = static_cast<double>(m_rng() % 10000) / 10000.0;
-            if (roll < m_config.duplicate_probability) {
-                ScheduledOp dup = sop;
-                dup.deliver_at_ms = m_clock + random_latency();
-                m_queues[r].push(dup);
-            }
-        }
+        schedule_delivery(r, sop);
     }
+}
+
+void NetworkSim::broadcast(int source, const Operation& op) {
+    if (m_offline[source]) {
+        // A disconnected replica sends nothing until it reconnects.
+        m_pending_outbound[source].push_back(op);
+        return;
+    }
+    schedule_to_peers(source, op);
 }
 
 Operation NetworkSim::edit(int replica,
@@ -75,11 +105,22 @@ void NetworkSim::disconnect(int replica) {
 
 void NetworkSim::reconnect(int replica) {
     m_offline[replica] = false;
-    for (auto& sop : m_pending_offline[replica]) {
-        sop.deliver_at_ms = m_clock + random_latency();
-        m_queues[replica].push(sop);
-    }
-    m_pending_offline[replica].clear();
+    // What this replica missed is already in its inbox; the next tick delivers
+    // it now that the replica is online again.
+    //
+    // Release what this replica produced while it was off the network.
+    auto outbound = std::move(m_pending_outbound[replica]);
+    m_pending_outbound[replica].clear();
+    for (const auto& op : outbound)
+        schedule_to_peers(replica, op);
+}
+
+void NetworkSim::block_link(int from, int to) {
+    m_links[from][to] = true;
+}
+
+void NetworkSim::unblock_link(int from, int to) {
+    m_links[from][to] = false;
 }
 
 void NetworkSim::tick(uint64_t ms) {
@@ -87,19 +128,36 @@ void NetworkSim::tick(uint64_t ms) {
     for (int r = 0; r < static_cast<int>(m_replicas.size()); ++r) {
         if (m_offline[r]) continue;
         std::vector<Operation> batch;
-        while (!m_queues[r].empty() &&
-               m_queues[r].top().deliver_at_ms <= m_clock) {
-            batch.push_back(m_queues[r].top().op);
+        // Collect due operations, leaving anything behind a blocked link queued.
+        std::vector<ScheduledOp> held;
+        while (!m_queues[r].empty() && m_queues[r].top().deliver_at_ms <= m_clock) {
+            ScheduledOp sop = m_queues[r].top();
             m_queues[r].pop();
+            const int from = static_cast<int>(sop.from_replica) - 1;
+            if (from < 0 || from >= static_cast<int>(m_links.size())) continue;
+            if (m_links[from][r]) {
+                held.push_back(sop);
+                continue;
+            }
+            m_delivery_log.emplace_back(from, r);
+            batch.push_back(sop.op);
         }
+        for (const auto& sop : held) m_queues[r].push(sop);
         if (!batch.empty())
             m_replicas[r].apply_ops(batch);
     }
 }
 
 void NetworkSim::drain() {
-    // Deliver everything
-    m_clock = UINT64_MAX / 2;  // large but not overflow-prone
+    // A drain is the end-of-test flush: it heals every partition, because a
+    // scenario asserts convergence after healing.
+    for (auto& links : m_links) std::fill(links.begin(), links.end(), false);
+    for (size_t r = 0; r < m_replicas.size(); ++r)
+        if (m_offline[r]) reconnect(static_cast<int>(r));
+    // Move the clock forward, never backward: operations scheduled after an
+    // earlier drain already carry a delivery time beyond the old drain's mark,
+    // and rewinding the clock would strand them forever.
+    if (m_clock < UINT64_MAX / 2) m_clock = UINT64_MAX / 2;
     tick(0);
     // Retry deferred ops
     for (int pass = 0; pass < 30; ++pass) {
@@ -115,12 +173,13 @@ void NetworkSim::check_all_invariants(const char* context) const {
         std::string text = buf.text();
 
         // INV-1: visible_length matches text
-        if (buf.visible_length() != static_cast<uint32_t>(text.size()))
+        if (buf.visible_length() != static_cast<uint32_t>(text.size())) {
             QFAIL(qPrintable(QString("INV-1 at %1 r%2").arg(context).arg(r)));
+        }
 
         // INV-2 + INV-8: fragment byte sums match rope lengths
         uint32_t vis = 0, del = 0;
-        for (auto& f : frags) {
+        for (const auto& f : frags) {
             if (f.visible) vis += f.byte_length;
             else del += f.byte_length;
         }
@@ -191,4 +250,20 @@ uint64_t NetworkSim::clock() const {
     return m_clock;
 }
 
-} // namespace CollabText::Crdt
+bool NetworkSim::is_online(int replica) const {
+    return !m_offline[replica];
+}
+
+bool NetworkSim::is_link_blocked(int from, int to) const {
+    return m_links[from][to];
+}
+
+size_t NetworkSim::queued_inbound(int replica) const {
+    return m_queues[replica].size();
+}
+
+size_t NetworkSim::queued_outbound(int replica) const {
+    return m_pending_outbound[replica].size();
+}
+
+}  // namespace CollabText::Crdt
