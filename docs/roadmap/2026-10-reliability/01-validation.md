@@ -68,10 +68,14 @@ Run `./tools/verify-roadmap.sh debug 'tst_evaluation_regressions'`; inspect expe
 **Files / scope:**
 
 - `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/src/crdt/Buffer.h`
 - `libs/collabtext/src/crdt/IdList.cpp`
+- `libs/collabtext/src/crdt/IdList.h`
 - `libs/collabtext/include/collabtext/OpStream.h`
 - `libs/collabtext/tests/tst_gc.cpp`
 - `libs/collabtext/tests/tst_idlist_gc.cpp`
+- `libs/collabtext/tests/tst_evaluation_regressions.cpp`
+- `README.md`
 
 **Steps:**
 

@@ -131,14 +131,12 @@ public:
     /// Set the maximum undo stack depth.
     void set_max_undo_depth(size_t depth);
 
-    /// Run garbage collection: remove tombstones whose deletions are no longer
-    /// in the undo stack. Returns the number of tombstones removed.
+    /// Temporarily retains all fragments, including restoration/anchor context.
+    /// Returns zero until certified reclamation is implemented.
     size_t collect_garbage();
 
-    /// Watermark-based GC: remove tombstones whose deletions have ALL been
-    /// observed by the watermark (all replicas have seen them) AND are not
-    /// in the local undo stack.  Call when all replicas have synced past
-    /// the watermark.  Returns the number of tombstones removed.
+    /// Temporarily retains all fragments and returns zero. Observation in a
+    /// raw watermark does not establish safe reclamation or release remote undo.
     size_t compact(const Global& watermark);
 
 private:
@@ -216,14 +214,6 @@ private:
 
     /// Trim the undo stack to m_max_undo_depth entries.
     void trim_undo_stack();
-
-    /// Merge adjacent fragments that meet coalescing conditions.
-    static void coalesce_fragments(std::vector<Fragment>& frags);
-
-    /// Shared implementation: remove tombstones matching predicate, then
-    /// coalesce.  The predicate returns true for GC-eligible fragments.
-    template<typename Pred>
-    size_t sweep_and_coalesce(Pred is_gc_eligible);
 
     /// Deferred operations awaiting causal dependencies.
     OperationQueue m_deferred_queue;

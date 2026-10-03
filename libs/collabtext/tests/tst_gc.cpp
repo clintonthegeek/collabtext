@@ -90,7 +90,7 @@ private slots:
         QCOMPARE(buf.text(), std::string(" world"));
     }
 
-    void gc_removes_after_undo_stack_clear() {
+    void gc_retains_after_local_history_trim() {
         Buffer buf(1);
         buf.set_max_undo_depth(1);
         buf.apply_local_edit({{0, 0}}, {"hello world"});  // undo entry 1
@@ -105,28 +105,29 @@ private slots:
         buf.apply_local_edit({{6, 6}}, {"!"});  // undo entry 3, pushes entry 2 out
         QCOMPARE(buf.text(), std::string(" world!"));
 
-        // Now the delete's deletion_id is no longer in the undo stack
+        // Local trimming alone cannot retire a remote actor's restoration obligations.
         size_t tombstones_before = buf.tombstone_count();
         QVERIFY(tombstones_before > 0);
         removed = buf.collect_garbage();
-        QCOMPARE(removed, tombstones_before);
-        QCOMPARE(buf.tombstone_count(), size_t(0));
+        QCOMPARE(removed, size_t(0));
+        QCOMPARE(buf.tombstone_count(), tombstones_before);
         QCOMPARE(buf.text(), std::string(" world!"));
     }
 
     void gc_preserves_visible_text() {
         Buffer buf(1);
-        buf.set_max_undo_depth(0);  // no undo protection at all
+        buf.set_max_undo_depth(0);  // local undo is disabled; global eligibility is still unknown
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{1, 3}}, {""});  // delete "bc"
         buf.apply_local_edit({{1, 3}}, {""});  // delete "ef" (now "ad" visible)
         std::string text_before = buf.text();
         QCOMPARE(text_before, std::string("af"));
 
+        const auto tombstones_before = buf.tombstone_count();
         size_t removed = buf.collect_garbage();
-        QVERIFY(removed > 0);
+        QCOMPARE(removed, size_t(0));
         QCOMPARE(buf.text(), text_before);
-        QCOMPARE(buf.tombstone_count(), size_t(0));
+        QCOMPARE(buf.tombstone_count(), tombstones_before);
     }
 
     // -----------------------------------------------------------------------
@@ -157,10 +158,11 @@ private slots:
         buf.redo();  // re-delete
         QCOMPARE(buf.text(), std::string(""));
 
-        // All undo entries were trimmed (max_undo_depth=0), so GC is safe
+        // Trimming this local stack is not a distributed reclamation certificate.
+        const auto tombstones_before = buf.tombstone_count();
         size_t removed = buf.collect_garbage();
-        QVERIFY(removed > 0);
-        QCOMPARE(buf.tombstone_count(), size_t(0));
+        QCOMPARE(removed, size_t(0));
+        QCOMPARE(buf.tombstone_count(), tombstones_before);
         QCOMPARE(buf.text(), std::string(""));
     }
 
@@ -174,13 +176,12 @@ private slots:
 
         QCOMPARE(buf.text(), std::string(""));
 
-        // "abc" tombstones: deletion_id from entry 1, which aged out → GC-eligible
-        // "def" tombstones: deletion_id from entry 2, still in stack → protected
+        // Both trimmed and retained histories keep their stored context until
+        // a complete distributed certificate can authorize deletion.
         size_t before = buf.tombstone_count();
         size_t removed = buf.collect_garbage();
-        QVERIFY(removed > 0);
-        QVERIFY(removed < before);  // some but not all removed
-        QVERIFY(buf.tombstone_count() > 0);  // "def" tombstones remain
+        QCOMPARE(removed, size_t(0));
+        QCOMPARE(buf.tombstone_count(), before);
         QCOMPARE(buf.text(), std::string(""));
 
         // Undo the "def" deletion — "def" comes back
@@ -206,13 +207,12 @@ private slots:
     }
 
     // -----------------------------------------------------------------------
-    // Fragment coalescing
+    // GC requests preserve layout and anchor context during containment.
     // -----------------------------------------------------------------------
 
-    void coalesce_reduces_fragment_count() {
+    void gc_preserves_fragment_layout() {
         // Two replicas insert at the same position → normalization atomizes
-        // into single-char fragments. After convergence, those single-char
-        // fragments from the same replica can be coalesced.
+        // into single-char fragments. GC must retain their identity/layout.
         Buffer bufA(1), bufB(2);
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"aaa"});
         auto op2 = bufB.apply_local_edit({{0, 0}}, {"bbb"});
@@ -224,27 +224,32 @@ private slots:
         // After normalization, fragments are atomized at shared locators
         size_t before = bufA.fragment_count();
 
-        // GC + coalesce — no tombstones to remove, but coalescing should help
-        bufA.collect_garbage();
+        // No certificate exists; the request must leave the layout untouched.
+        QCOMPARE(bufA.collect_garbage(), size_t(0));
         size_t after = bufA.fragment_count();
-        QVERIFY(after <= before);  // coalescing may reduce count
+        QCOMPARE(after, before);
         QCOMPARE(bufA.text(), bufB.text());  // text unchanged
     }
 
-    void coalesce_preserves_text() {
+    void gc_preserves_deleted_anchor_context() {
         Buffer buf(1);
         buf.set_max_undo_depth(0);
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        const auto anchor = buf.anchor_at(2, Bias::Left);
         buf.apply_local_edit({{2, 4}}, {""});  // delete "cd"
         std::string text_before = buf.text();
         QCOMPARE(text_before, std::string("abef"));
 
-        buf.collect_garbage();  // removes "cd" tombstone, then tries to coalesce
+        const auto resolved_before = buf.resolve_anchor(anchor);
+        const auto tombstones_before = buf.tombstone_count();
+        QCOMPARE(buf.collect_garbage(), size_t(0));
+        QCOMPARE(buf.tombstone_count(), tombstones_before);
+        QCOMPARE(buf.resolve_anchor(anchor), resolved_before);
         QCOMPARE(buf.text(), text_before);
     }
 
-    void coalesce_does_not_merge_different_locators() {
-        // Fragments with different locators must not be coalesced
+    void gc_preserves_distinct_insertions() {
+        // Distinct insertion contexts remain untouched by an uncertified request.
         Buffer buf(1);
         buf.set_max_undo_depth(0);
         buf.apply_local_edit({{0, 0}}, {"abc"});
@@ -427,9 +432,8 @@ private slots:
     // Watermark-based compact()
     // -----------------------------------------------------------------------
 
-    void compact_removes_remote_tombstones() {
-        // collect_garbage() can't remove remote-deletion tombstones,
-        // but compact() can when the watermark covers the deletion.
+    void compact_retains_remote_tombstones() {
+        // Neither local history nor observed coverage retires remote undo.
         Buffer bufA(1), bufB(2);
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
@@ -440,20 +444,26 @@ private slots:
         QCOMPARE(bufA.text(), std::string(""));
         QCOMPARE(bufB.text(), std::string(""));
 
-        // A's collect_garbage won't remove this — deletion is from B
+        // A's local trimming is insufficient to authorize removal.
         bufA.set_max_undo_depth(0);
         QCOMPARE(bufA.collect_garbage(), size_t(0));
         QVERIFY(bufA.tombstone_count() > 0);
 
-        // But compact() with a watermark covering B's deletion WILL remove it
+        // An observation vector is insufficient even when it covers B's deletion.
         Global watermark;
         watermark.join(bufA.version());
         watermark.meet(bufB.version());
+        const auto tombstones_before = bufA.tombstone_count();
         size_t removed = bufA.compact(watermark);
-        QVERIFY(removed > 0);
-        QCOMPARE(bufA.tombstone_count(), size_t(0));
+        QCOMPARE(removed, size_t(0));
+        QCOMPARE(bufA.tombstone_count(), tombstones_before);
         QCOMPARE(bufA.text(), std::string(""));
         check_invariants(bufA, "after_compact");
+        auto undo = bufB.undo();
+        QVERIFY(undo.has_value());
+        bufA.apply_ops({*undo});
+        QCOMPARE(bufA.text(), std::string("hello"));
+        QCOMPARE(bufA.text(), bufB.text());
     }
 
     void compact_respects_undo_protection() {
@@ -517,12 +527,14 @@ private slots:
         // Both compact at the same watermark
         bufA.set_max_undo_depth(0);
         bufB.set_max_undo_depth(0);
-        bufA.compact(watermark);
-        bufB.compact(watermark);
+        const auto tombstones_a = bufA.tombstone_count();
+        const auto tombstones_b = bufB.tombstone_count();
+        QCOMPARE(bufA.compact(watermark), size_t(0));
+        QCOMPARE(bufB.compact(watermark), size_t(0));
 
         QCOMPARE(bufA.text(), bufB.text());
-        QCOMPARE(bufA.tombstone_count(), size_t(0));
-        QCOMPARE(bufB.tombstone_count(), size_t(0));
+        QCOMPARE(bufA.tombstone_count(), tombstones_a);
+        QCOMPARE(bufB.tombstone_count(), tombstones_b);
         check_invariants(bufA, "A_after_compact");
         check_invariants(bufB, "B_after_compact");
 

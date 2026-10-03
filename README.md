@@ -4,6 +4,8 @@ A conflict-free plain text engine for offline-first collaborative editing.
 
 collabtext is a CRDT text engine designed for a world where collaborators aren't always online at the same time. Instead of requiring a server or real-time connection, it produces compact operations that can travel over any file transport — Syncthing, Dropbox, a shared drive, a USB stick. Edits merge automatically. Documents converge. No conflicts, no "conflicted copy" files, no manual resolution.
 
+On the `roadmap/reliability-v2` branch, implementation has begun with V01–V03. See the [kickoff handoff](docs/handoff/2026-10-03-reliability-kickoff.md) for verification, remaining known failures, and the next task. Both primitives currently retain all state on GC/compaction requests until certified reclamation is implemented; memory can grow in the meantime.
+
 ## The problem
 
 You use Syncthing to keep your files in sync across your desktop and laptop. You're out with your laptop, editing a document. That same document is still open on your desktop at home. Maybe you made changes on both machines. Maybe you forgot to save before you left. When Syncthing connects, one of two things happens: one version silently overwrites the other, or you get a `.sync-conflict` file and have to manually figure out what changed where.
@@ -35,7 +37,7 @@ A C++20 library (no framework dependencies) that provides:
 
 - **Collaborative undo/redo** — Per-replica undo stacks with parity-based conflict resolution. Your undo reverses your edit, even if others have edited around it. Undo operations propagate to peers.
 
-- **Garbage collection** — Local tombstone cleanup (safe without coordination) and distributed watermark-based compaction (reclaims memory when all replicas have observed a deletion). Keeps long-lived documents from growing without bound.
+- **Garbage collection** — Temporarily disabled on the reliability branch to preserve local and remote undo/redo and anchor context. `collect_garbage()` and `compact(Global)` return zero and retain all state. Safe reclamation requires the later certificate, membership, and retention protocol; observing a deletion alone is insufficient.
 
 - **Causal ordering** — Operations carry version vectors. Out-of-order delivery is handled automatically via a deferred queue. No application-level ordering logic required.
 
@@ -121,8 +123,8 @@ public:
     std::optional<uint32_t> resolve_anchor(const Anchor&) const;
 
     // Garbage collection
-    size_t collect_garbage();             // local cleanup
-    size_t compact(const Global& watermark); // distributed compaction
+    size_t collect_garbage();             // temporary retention; returns zero
+    size_t compact(const Global& watermark); // temporary retention; returns zero
 
     // Diagnostics
     size_t fragment_count() const;
@@ -153,7 +155,7 @@ The test suite includes:
 - **Fuzz testing** — 16 scenarios with random edit patterns, undo/redo, and ordering variations
 - **Realistic editing simulation** — Cursor-tracking model (sequential typing, backspace, selection, paste) across multiple clients with simulated network conditions
 - **NetworkSim harness** — Configurable latency, jitter, out-of-order delivery, duplicate operations, disconnect/reconnect, and cascading partition tests
-- **Garbage collection** — Tombstone lifecycle, undo-stack protection, distributed compaction
+- **Garbage collection** — Tombstone retention, local/remote undo/redo preservation, and anchor context
 
 All tests are seeded and reproducible.
 

@@ -6,7 +6,7 @@ using namespace CollabText::Crdt;
 class TestIdListGc : public QObject {
     Q_OBJECT
 private slots:
-    void collect_garbage_removes_old_tombstones() {
+    void collect_garbage_retains_trimmed_tombstones() {
         IdList list(1);
         list.insert_after(Anchor::min(), 0xAA);
         list.remove_at(Anchor(1, 1, Bias::Left));
@@ -14,8 +14,8 @@ private slots:
         list.set_max_undo_depth(1000);
         QCOMPARE(list.tombstone_count(), size_t{1});
         size_t collected = list.collect_garbage();
-        QCOMPARE(collected, size_t{1});
-        QCOMPARE(list.tombstone_count(), size_t{0});
+        QCOMPARE(collected, size_t{0});
+        QCOMPARE(list.tombstone_count(), size_t{1});
     }
 
     void collect_garbage_skips_remote_deletions() {
@@ -26,10 +26,10 @@ private slots:
         alice.apply_ops({rm_b});
         alice.set_max_undo_depth(0);
         alice.set_max_undo_depth(1000);
-        QCOMPARE(alice.collect_garbage(), size_t{0});  // remote deletion — needs watermark
+        QCOMPARE(alice.collect_garbage(), size_t{0});  // remote deletion remains restorable
     }
 
-    void compact_with_watermark_reclaims_acknowledged() {
+    void compact_with_watermark_preserves_remote_undo() {
         IdList alice(1), bob(2);
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op_a});
@@ -43,7 +43,13 @@ private slots:
         alice.set_max_undo_depth(0);
         alice.set_max_undo_depth(1000);
         size_t reclaimed = alice.compact(wm);
-        QCOMPARE(reclaimed, size_t{1});
+        QCOMPARE(reclaimed, size_t{0});
+        QCOMPARE(alice.tombstone_count(), size_t{1});
+        auto undo = bob.undo();
+        QVERIFY(undo.has_value());
+        alice.apply_ops({*undo});
+        QCOMPARE(alice.ids(), std::vector<uint64_t>{0xAA});
+        QCOMPARE(alice.ids(), bob.ids());
     }
 
     void gc_protects_entries_in_undo_stack() {
@@ -53,7 +59,8 @@ private slots:
         QCOMPARE(list.collect_garbage(), size_t{0});  // protected
         list.set_max_undo_depth(0);   // drop undo entry
         list.set_max_undo_depth(1000);
-        QCOMPARE(list.collect_garbage(), size_t{1});  // now reclaimable
+        QCOMPARE(list.collect_garbage(), size_t{0});  // local trimming cannot prove global retirement
+        QCOMPARE(list.tombstone_count(), size_t{1});
     }
 
     void gc_protects_undone_insertion_with_no_deletions() {
@@ -67,10 +74,11 @@ private slots:
         QCOMPARE(list.tombstone_count(), size_t{1});
         QCOMPARE(list.collect_garbage(), size_t{0});  // must NOT collect — redo still possible
 
-        // After dropping the undo stack, GC can reclaim it.
+        // Dropping this stack does not prove remote restoration/anchor retirement.
         list.set_max_undo_depth(0);
         list.set_max_undo_depth(1000);
-        QCOMPARE(list.collect_garbage(), size_t{1});
+        QCOMPARE(list.collect_garbage(), size_t{0});
+        QCOMPARE(list.tombstone_count(), size_t{1});
     }
 };
 

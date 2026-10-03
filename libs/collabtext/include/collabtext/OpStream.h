@@ -26,8 +26,8 @@
 ///
 ///   push()                   — send an op onto a named stream
 ///   set_on_inbound()         — register a callback for received ops
-///   lowest_peer_acked_lamport() — cached GC-fence value; never does I/O
-///   set_on_ack_update()      — register a callback for fence advances
+///   lowest_peer_acked_lamport() — cached receipt summary; never does I/O
+///   set_on_ack_update()      — register a callback for acknowledgement advances
 ///
 /// ─── Usage ───────────────────────────────────────────────────────────────────
 ///
@@ -92,9 +92,11 @@ public:
 
     /// Return the lowest Lamport counter all enrolled peers have acked from us.
     ///
-    /// This value is the GC fence: ops with Lamport counter ≤ this value are
-    /// safe to collect.  The value is cached from the last poll cycle and
-    /// never performs I/O.  Returns 0 if no peers are enrolled.
+    /// This is a transport receipt summary, not authorization to reclaim state.
+    /// It does not establish per-stream durability, membership, or release of
+    /// retained undo/redo, anchor, and checkpoint obligations. The value is
+    /// cached from the last poll cycle and never performs I/O. Returns 0 if no
+    /// peers are enrolled.
     virtual uint64_t lowest_peer_acked_lamport() const = 0;
 
     /// Register a callback fired when lowest_peer_acked_lamport() advances.

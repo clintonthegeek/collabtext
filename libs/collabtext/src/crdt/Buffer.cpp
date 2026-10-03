@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cassert>
 #include <numeric>
-#include <unordered_set>
 
 namespace CollabText::Crdt {
 
@@ -19,11 +18,6 @@ Buffer::Buffer(uint16_t replica_id)
 
 std::vector<Fragment> Buffer::get_fragments() const {
     return m_fragment_tree.items();
-}
-
-/// Pack (replica_id, value) into a single uint64_t for map lookup.
-static uint64_t origin_key(const Lamport& origin) {
-    return (static_cast<uint64_t>(origin.replica_id) << 32) | origin.value;
 }
 
 void Buffer::set_fragments(std::vector<Fragment>&& frags) {
@@ -138,64 +132,16 @@ void Buffer::trim_undo_stack() {
         m_undo_cursor -= excess;
 }
 
-template<typename Pred>
-size_t Buffer::sweep_and_coalesce(Pred is_gc_eligible) {
-    auto frags = get_fragments();
-    size_t original_count = frags.size();
-
-    frags.erase(
-        std::remove_if(frags.begin(), frags.end(), is_gc_eligible),
-        frags.end());
-
-    size_t removed = original_count - frags.size();
-
-    coalesce_fragments(frags);
-
-    if (removed > 0 || frags.size() < original_count) {
-        set_fragments(std::move(frags));
-    }
-    return removed;
-}
-
 size_t Buffer::collect_garbage() {
-    // Build protected set: deletion IDs still in the undo stack
-    std::unordered_set<uint64_t> protected_ids;
-    for (const auto& entry : m_undo_stack) {
-        for (const auto& del_id : entry.deletion_ids)
-            protected_ids.insert(origin_key(del_id));
-    }
-
-    return sweep_and_coalesce([&](const Fragment& f) {
-        if (f.visible) return false;
-        for (const auto& del : f.deletions) {
-            if (del.replica_id != m_replica_id)
-                return false;  // remote deletion — needs watermark GC
-            if (protected_ids.count(origin_key(del)))
-                return false;  // protected by undo stack
-        }
-        return true;
-    });
+    // Local history cannot prove that remote redo or anchors have expired.
+    // Retain all restoration state until certified reclamation is available.
+    return 0;
 }
 
-size_t Buffer::compact(const Global& watermark) {
-    // Build local undo protection set
-    std::unordered_set<uint64_t> protected_ids;
-    for (const auto& entry : m_undo_stack) {
-        for (const auto& del_id : entry.deletion_ids)
-            protected_ids.insert(origin_key(del_id));
-    }
-
-    return sweep_and_coalesce([&](const Fragment& f) {
-        if (f.visible) return false;
-        if (f.deletions.empty()) return false;  // undone insertion, not a deletion tombstone
-        for (const auto& del : f.deletions) {
-            if (!watermark.observed(del))
-                return false;  // not all replicas have seen this deletion
-            if (protected_ids.count(origin_key(del)))
-                return false;  // locally undo-protected
-        }
-        return true;
-    });
+size_t Buffer::compact(const Global& /*watermark*/) {
+    // Observing a deletion does not release a replica's undo/redo obligations.
+    // A raw clock is not a reclamation certificate; retain identities and data.
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -288,29 +234,6 @@ std::vector<TextEdit> Buffer::edits_since(const Global &since) const {
 
     flush();
     return edits;
-}
-
-void Buffer::coalesce_fragments(std::vector<Fragment>& frags) {
-    if (frags.size() < 2) return;
-    size_t write = 0;
-    for (size_t read = 1; read < frags.size(); ++read) {
-        Fragment& prev = frags[write];
-        Fragment& curr = frags[read];
-        if (prev.visible == curr.visible &&
-            prev.locator == curr.locator &&
-            prev.origin.replica_id == curr.origin.replica_id &&
-            prev.origin.value + prev.length == curr.origin.value &&
-            prev.deletions == curr.deletions) {
-            prev.text += curr.text;
-            prev.byte_length += curr.byte_length;
-            prev.length += curr.length;
-        } else {
-            ++write;
-            if (write != read)
-                frags[write] = std::move(curr);
-        }
-    }
-    frags.resize(write + 1);
 }
 
 // ---------------------------------------------------------------------------

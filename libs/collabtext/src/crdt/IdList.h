@@ -124,7 +124,12 @@ public:
     const Global& version() const { return m_version; }
     uint16_t replica_id() const { return m_replica_id; }
 
+    /// Temporarily retains all entries, including restoration/anchor context.
+    /// Returns zero until certified reclamation is implemented.
     size_t collect_garbage();
+
+    /// Temporarily retains all entries and returns zero. Observation in a
+    /// raw watermark does not establish safe reclamation or release remote undo.
     size_t compact(const Global& watermark);
 
     std::vector<IdListEntry> entries() const;

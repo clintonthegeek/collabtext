@@ -84,7 +84,6 @@ private slots:
             QCOMPARE(a.text(), std::string());
             a.collect_garbage();
             QVERIFY(a.redo().has_value());
-            EVALUATION_EXPECT_FAIL("buffer", "F1 / V03 then G06: GC discards an undone insertion required by local redo");
             QCOMPARE(a.text(), std::string("abc"));
         }
     }
@@ -104,7 +103,6 @@ private slots:
             QVERIFY(redo.has_value());
             b.apply_ops({*redo});
             QCOMPARE(a.ids(), std::vector<uint64_t>{42});
-            EVALUATION_EXPECT_FAIL("idlist", "F1 / V03 then G06: remote retained redo is absent from the local GC eligibility check");
             QCOMPARE(b.ids(), a.ids());
         } else {
             Buffer a(1), b(2);
@@ -118,7 +116,6 @@ private slots:
             QVERIFY(redo.has_value());
             b.apply_ops({*redo});
             QCOMPARE(a.text(), std::string("abc"));
-            EVALUATION_EXPECT_FAIL("buffer", "F1 / V03 then G06: remote retained redo is absent from the local GC eligibility check");
             QCOMPARE(b.text(), a.text());
         }
     }
@@ -141,7 +138,6 @@ private slots:
             QVERIFY(undo.has_value());
             a.apply_ops({*undo});
             QCOMPARE(b.ids(), std::vector<uint64_t>{42});
-            EVALUATION_EXPECT_FAIL("idlist", "F2 / V03 then G06: observing deletion does not retire the deleting peer's undo");
             QCOMPARE(a.ids(), b.ids());
         } else {
             Buffer a(1), b(2);
@@ -156,7 +152,6 @@ private slots:
             QVERIFY(undo.has_value());
             a.apply_ops({*undo});
             QCOMPARE(b.text(), std::string("abc"));
-            EVALUATION_EXPECT_FAIL("buffer", "F2 / V03 then G06: observing deletion does not retire the deleting peer's undo");
             QCOMPARE(a.text(), b.text());
         }
     }

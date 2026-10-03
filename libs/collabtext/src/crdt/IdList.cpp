@@ -306,69 +306,15 @@ int IdList::compare_anchors(const Anchor& a, const Anchor& b) const {
 }
 
 size_t IdList::collect_garbage() {
-    auto is_deletion_protected = [&](Lamport del_id) {
-        for (const auto& entry : m_undo_stack)
-            for (const auto& uid : entry.deletion_ids)
-                if (uid == del_id) return true;
-        return false;
-    };
-    auto is_origin_protected = [&](Lamport origin) {
-        for (const auto& entry : m_undo_stack)
-            for (const auto& key : entry.inserted_keys)
-                if (key.replica_id == origin.replica_id && key.lamport_value == origin.value)
-                    return true;
-        return false;
-    };
-
-    auto entries = get_entries();
-    size_t original = entries.size();
-    entries.erase(
-        std::remove_if(entries.begin(), entries.end(), [&](const IdListEntry& e) {
-            if (e.visible) return false;
-            if (is_origin_protected(e.origin)) return false;      // insertion undone — redo must work
-            for (const auto& del : e.deletions) {
-                if (del.replica_id != m_replica_id) return false;  // remote deletion — needs watermark
-                if (is_deletion_protected(del)) return false;      // undo-protected
-            }
-            return true;
-        }),
-        entries.end());
-    size_t removed = original - entries.size();
-    if (removed > 0) set_entries(std::move(entries));
-    return removed;
+    // Local history cannot prove that remote redo or anchors have expired.
+    // Retain all restoration state until certified reclamation is available.
+    return 0;
 }
 
-size_t IdList::compact(const Global& watermark) {
-    auto is_deletion_protected = [&](Lamport del_id) {
-        for (const auto& entry : m_undo_stack)
-            for (const auto& uid : entry.deletion_ids)
-                if (uid == del_id) return true;
-        return false;
-    };
-    auto is_origin_protected = [&](Lamport origin) {
-        for (const auto& entry : m_undo_stack)
-            for (const auto& key : entry.inserted_keys)
-                if (key.replica_id == origin.replica_id && key.lamport_value == origin.value)
-                    return true;
-        return false;
-    };
-
-    auto entries = get_entries();
-    size_t original = entries.size();
-    entries.erase(
-        std::remove_if(entries.begin(), entries.end(), [&](const IdListEntry& e) {
-            if (e.visible) return false;
-            if (is_origin_protected(e.origin)) return false;      // insertion undone — redo must work
-            for (const auto& del : e.deletions) {
-                if (!watermark.observed(del)) return false;         // not globally acknowledged
-                if (is_deletion_protected(del)) return false;      // undo-protected
-            }
-            return true;
-        }),
-        entries.end());
-    size_t removed = original - entries.size();
-    if (removed > 0) set_entries(std::move(entries));
-    return removed;
+size_t IdList::compact(const Global& /*watermark*/) {
+    // Observing a deletion does not release a replica's undo/redo obligations.
+    // A raw clock is not a reclamation certificate; retain identities and data.
+    return 0;
 }
 
 std::vector<IdListEntry> IdList::entries() const {
