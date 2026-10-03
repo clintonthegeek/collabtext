@@ -99,6 +99,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -108,6 +109,11 @@
 namespace CollabText::Test {
 
 inline constexpr int kTraceFormatVersion = 1;
+
+/// Number of empty apply_ops() passes a `settle` event performs. A scenario
+/// that converges with a different pass count needs a different format
+/// version, not a private constant.
+inline constexpr int kSettlePasses = 20;
 inline constexpr std::string_view kTraceMagic = "#collabtext-trace";
 
 enum class TraceModel { Buffer, IdList, NetworkSim };
@@ -124,6 +130,7 @@ enum class EventKind {
     Restart,
     Tick,
     Drain,
+    Settle,
     CollectGarbage,
     Compact,
 };
@@ -145,6 +152,7 @@ struct Event {
         switch (kind) {
         case EventKind::Tick:
         case EventKind::Drain:
+        case EventKind::Settle:
         case EventKind::Compact:
             return false;
         default:
@@ -234,6 +242,7 @@ inline std::string_view event_name(EventKind kind) {
     case EventKind::Restart: return "restart";
     case EventKind::Tick: return "tick";
     case EventKind::Drain: return "drain";
+    case EventKind::Settle: return "settle";
     case EventKind::CollectGarbage: return "gc";
     case EventKind::Compact: return "compact";
     }
@@ -313,6 +322,7 @@ inline std::string Trace::to_text() const {
             out << "tick " << e.ms << '\n';
             break;
         case EventKind::Drain:
+        case EventKind::Settle:
         case EventKind::Compact:
             out << detail::event_name(e.kind) << '\n';
             break;
@@ -444,9 +454,12 @@ inline bool Trace::load(const std::string& path, Trace& out, std::string& error)
                 return false;
             }
             e.kind = EventKind::Tick;
-        } else if (verb == "drain") {
-            if (!need(1)) { if (error.empty()) error = "malformed drain event"; return false; }
-            e.kind = EventKind::Drain;
+        } else if (verb == "drain" || verb == "settle") {
+            if (!need(1)) {
+                if (error.empty()) error = "malformed " + verb + " event";
+                return false;
+            }
+            e.kind = (verb == "drain") ? EventKind::Drain : EventKind::Settle;
         } else if (verb == "compact") {
             if (!need(1)) { if (error.empty()) error = "malformed compact event"; return false; }
             e.kind = EventKind::Compact;
@@ -637,7 +650,7 @@ inline ReplayResult replay_buffer(const Trace& trace) {
         };
         if (e.replica < 0 || e.replica >= trace.replicas) {
             if (e.kind != EventKind::Tick && e.kind != EventKind::Drain &&
-                e.kind != EventKind::Compact)
+                e.kind != EventKind::Settle && e.kind != EventKind::Compact)
                 return reject("replica index out of range");
         }
         switch (e.kind) {
@@ -727,6 +740,14 @@ inline ReplayResult replay_buffer(const Trace& trace) {
             ++result.applied;
             break;
         }
+        case EventKind::Settle:
+            // Retry pass: Buffer defers operations whose causal dependencies
+            // have not arrived yet, and an empty apply_ops() is how a scenario
+            // flushes them. The pass count is part of trace format v1.
+            for (auto& buf : world.replicas)
+                for (int pass = 0; pass < kSettlePasses; ++pass) buf.apply_ops({});
+            ++result.applied;
+            break;
         case EventKind::Tick:
         case EventKind::Drain:
             // The buffer model is synchronous: timing and draining are
@@ -781,7 +802,7 @@ inline ReplayResult replay_idlist(const Trace& trace) {
         };
         if (e.replica < 0 || e.replica >= trace.replicas) {
             if (e.kind != EventKind::Tick && e.kind != EventKind::Drain &&
-                e.kind != EventKind::Compact)
+                e.kind != EventKind::Settle && e.kind != EventKind::Compact)
                 return reject("replica index out of range");
         }
         switch (e.kind) {
@@ -876,6 +897,11 @@ inline ReplayResult replay_idlist(const Trace& trace) {
             ++result.applied;
             break;
         }
+        case EventKind::Settle:
+            for (auto& list : world.replicas)
+                for (int pass = 0; pass < kSettlePasses; ++pass) list.apply_ops({});
+            ++result.applied;
+            break;
         case EventKind::Tick:
         case EventKind::Drain:
             ++result.applied;
@@ -924,8 +950,8 @@ inline ReplayResult replay_network(const Trace& trace) {
             return result;
         };
         if (e.replica < 0 || e.replica >= trace.replicas) {
-            if (e.kind != EventKind::Drain && e.kind != EventKind::Compact &&
-                e.kind != EventKind::Tick)
+            if (e.kind != EventKind::Drain && e.kind != EventKind::Settle &&
+                e.kind != EventKind::Compact && e.kind != EventKind::Tick)
                 return reject("replica index out of range");
         }
         switch (e.kind) {
@@ -957,6 +983,8 @@ inline ReplayResult replay_network(const Trace& trace) {
             net.drain();
             ++result.applied;
             break;
+        case EventKind::Settle:
+            return reject("settle is meaningless in the networksim model; use drain");
         case EventKind::CollectGarbage:
             net.collect_garbage(e.replica);
             ++result.applied;
@@ -1127,6 +1155,10 @@ inline std::string save_trace(const Trace& trace, std::string_view suffix) {
                              "-" + std::string(suffix) + ".trace";
     const std::string path = trace_artifact_path(name);
     if (path.empty()) return {};
+    std::error_code code;
+    const std::filesystem::path parent = std::filesystem::path(path).parent_path();
+    if (!parent.empty()) std::filesystem::create_directories(parent, code);
+    if (code) return {};
     if (!trace.save(path)) return {};
     return path;
 }
@@ -1264,6 +1296,15 @@ public:
         m_world.replicas[r] = std::move(rebuilt);
     }
 
+    /// Flush deferred operations with empty apply_ops() passes.
+    void settle() {
+        Event e;
+        e.kind = EventKind::Settle;
+        m_trace.events.push_back(e);
+        for (auto& buf : m_world.replicas)
+            for (int pass = 0; pass < kSettlePasses; ++pass) buf.apply_ops({});
+    }
+
     void collect_garbage(int r) {
         Event e;
         e.kind = EventKind::CollectGarbage;
@@ -1291,6 +1332,11 @@ public:
     }
 
     std::string save(std::string_view suffix) const { return save_trace(m_trace, suffix); }
+
+    /// Emit the scenario's trace when COLLABTEXT_TRACE_OUTPUT is set, so an
+    /// artifact campaign leaves one replayable file per scenario and not only
+    /// a file for the scenarios that failed. Returns the path, or empty.
+    std::string finish() const { return save("trace"); }
 
 private:
     Trace m_trace;
@@ -1448,6 +1494,15 @@ public:
         m_world.replicas[r] = std::move(rebuilt);
     }
 
+    /// Flush deferred operations with empty apply_ops() passes.
+    void settle() {
+        Event e;
+        e.kind = EventKind::Settle;
+        m_trace.events.push_back(e);
+        for (auto& buf : m_world.replicas)
+            for (int pass = 0; pass < kSettlePasses; ++pass) buf.apply_ops({});
+    }
+
     void collect_garbage(int r) {
         Event e;
         e.kind = EventKind::CollectGarbage;
@@ -1467,6 +1522,11 @@ public:
     }
 
     std::string save(std::string_view suffix) const { return save_trace(m_trace, suffix); }
+
+    /// Emit the scenario's trace when COLLABTEXT_TRACE_OUTPUT is set, so an
+    /// artifact campaign leaves one replayable file per scenario and not only
+    /// a file for the scenarios that failed. Returns the path, or empty.
+    std::string finish() const { return save("trace"); }
 
 private:
     Trace m_trace;
@@ -1493,6 +1553,7 @@ public:
 
     Crdt::NetworkSim& net() { return m_net; }
     const Crdt::NetworkSim& net() const { return m_net; }
+    Crdt::Buffer& buffer(int r) { return m_net.buffer(r); }
     const Crdt::Buffer& buffer(int r) const { return m_net.buffer(r); }
 
     void edit(int r, const std::vector<std::pair<uint32_t, uint32_t>>& ranges,
@@ -1574,6 +1635,11 @@ public:
     }
 
     std::string save(std::string_view suffix) const { return save_trace(m_trace, suffix); }
+
+    /// Emit the scenario's trace when COLLABTEXT_TRACE_OUTPUT is set, so an
+    /// artifact campaign leaves one replayable file per scenario and not only
+    /// a file for the scenarios that failed. Returns the path, or empty.
+    std::string finish() const { return save("trace"); }
 
 private:
     Trace m_trace;
