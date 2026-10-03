@@ -5,8 +5,10 @@
 On branch `roadmap/reliability-v2`, read `AGENTS.md` and
 `docs/roadmap/2026-10-reliability/README.md` first. That roadmap supersedes the
 historical OpStream scope below for this branch. The current deliverable is the
-plan; implementation has not started. Product-policy questions remain pending
-in its `DECISIONS.md`. No Superpowers skill or subagent workflow is required.
+plan; implementation has not started. All product-policy questions are resolved
+in its `DECISIONS.md`: improve the existing C++ engine incrementally. No Rust
+rewrite, Yrs adoption, or replacement-engine trial is in scope. No Superpowers
+skill or subagent workflow is required.
 
 The rest of this file preserves the previous project orientation as historical
 context. It remains the legacy checkout's orientation until its work is updated

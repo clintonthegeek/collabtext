@@ -260,7 +260,7 @@ Run all IdList suites, index/model tests, and ASan; publish fixed-trace before/a
 
 Run `tst_poll_budget`, transport/session recovery and Qt adapter tests; instrument event-loop delays during the X01 10-peer catch-up trace.
 
-## X10 — Publish matched comparisons and the optimization result
+## X10 — Publish measured native-engine improvements and comparisons
 
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** X03, X05, X06, X07, X08, X09, G08  
@@ -270,18 +270,17 @@ Run `tst_poll_budget`, transport/session recovery and Qt adapter tests; instrume
 
 - `benchmarks/adapters/`
 - `docs/reports/vnext-performance-results.md`
-- `docs/reports/vnext-backend-decision.md`
 
 **Steps:**
 
 1. Run five repeats of the frozen corrected traces before/after each accepted optimization; report per-stage and tail latency, history memory, recovery time, and disk/wire costs.
-2. Run at least one native-accessible comparison adapter if the S02 backend decision calls for it; pin revision/licenses/build flags, normalize offsets and operation counts, and verify exact content/semantics. Feature mismatch is explicitly described.
+2. Where an external engine offers a meaningful matched comparison, run it only as an isolated benchmark dependency. Pin revision/licenses/build flags, normalize offsets and operation counts, and verify exact content/semantics. Keep it out of shipped targets and runtime paths; feature mismatches are explicit. No backend substitution or Rust-core rewrite is planned.
 3. If an optimization does not help the measured target, revert or justify its independent simplification benefit. Do not use trace throughput reciprocal as single-edit latency.
 
 **Acceptance:**
 
 - Results are attributable to specific changes and comparable states; all correctness/retention gates still pass.
-- Remaining performance limits and any backend experiment recommendation are explicit; no backend substitution is performed merely to improve headline numbers.
+- Remaining performance limits and the effect of each native-engine improvement are explicit. External comparisons inform further local optimization, never an adoption/replacement decision.
 
 **Verification:**
 

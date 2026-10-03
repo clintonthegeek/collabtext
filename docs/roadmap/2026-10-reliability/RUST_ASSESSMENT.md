@@ -1,28 +1,27 @@
-# Rust and the collabtext backend decision
+# Rust background and external engine comparison
 
 **Date:** 2026-10-03. This is a researched design assessment, not a completed
 backend benchmark or an authorization to replace the core. Sources are official
 language documentation and the candidate project's own documentation. No Rust
 toolchain or new backend has been installed for this assessment.
 
-## Recommendation for this project
+## Selected direction and status
 
-Rust is a credible production language. Language instability is not a good
-reason to reject it. The meaningful tradeoff is whether its ownership safety
-and an established CRDT implementation outweigh an additional toolchain,
-language boundary, and dependence on another engine's semantics.
+The user explicitly chose to improve the existing native C++ engine on
+2026-10-03. The earlier suggestion to trial/adopt Yrs is withdrawn, and its
+proposed feasibility task list has been removed. No Rust rewrite, Yrs
+vendoring/adoption, or replacement-engine experiment is part of the roadmap.
 
-For collabtext, evaluate an existing Rust text engine behind a narrow C interface
-before committing to either a custom Rust rewrite or the full native C++
-ordering/GC redesign. Yrs is a practical first candidate. Treat persistent undo
-and redo, offline retirement, retained anchors, and recovery as pass/fail gates,
-then measure performance. A candidate failing those gates is not rescued by a
-fast throughput number. This recommendation is an engineering inference from
-the evaluation and sources, not a claim that a candidate already satisfies them.
+This document preserves the requested language/interop information as
+background. Its discussion of external engines is informational, not an
+unresolved backend choice or an instruction to change direction. The binding
+plan is incremental repair and measured optimization of Buffer, IdList, and
+their existing C++ foundations; see [DECISIONS.md](DECISIONS.md).
 
-The fresh-start decision makes this experiment substantially easier: no existing
-operation history, store format, or binary API must be preserved. The Qt/C++
-editor and file-sync direction can remain regardless of the engine language.
+Rust's safety mechanisms can still suggest ownership/error-handling principles
+to apply in C++. External algorithms and benchmarks can inform ordering and
+performance work without introducing them as shipped engines. The fresh-start
+permission applies to necessary API and format changes, not engine replacement.
 
 ## What “stable Rust” means
 
@@ -95,7 +94,7 @@ reused stream identity, absent replay, missing-segment gaps, wrong anchor
 affinity, character interleaving, insufficient durable sync, or incomplete
 semantic validation can all be written in safe Rust.
 
-There are three different projects to choose among:
+For the earlier comparison question, these were three distinct engineering routes. The user selected the first:
 
 1. **Repair the native C++ engine.** Retain expertise and direct Qt debugging;
    own the ordering, undo, checkpoints, GC, and their ongoing verification.
@@ -106,12 +105,13 @@ There are three different projects to choose among:
    reduce bespoke algorithm work where its contract matches ours. Concentrate
    on integration, durability, application history, retirement, and verification.
 
-The third route is the reason Rust deserves a trial here. Installing a compiler
-alone contributes much less than selecting a suitable implementation.
+The selected first route retains the engine already implemented. The other
+routes explain the earlier language comparison and are outside current scope.
 
-## Keeping Qt and consumers in C++
+## Rust/C++ interop background (outside the implementation plan)
 
-A reasonable boundary is:
+For understanding how a hypothetical Rust library could integrate with Qt, a
+possible boundary would be:
 
 ```text
 Qt widgets / QTextDocument (C++)
@@ -156,7 +156,7 @@ pinning is accompanied by reviewed upgrades, not indefinite avoidance of fixes.
 [Locked builds](https://doc.rust-lang.org/cargo/commands/cargo-build.html),
 [source vendoring](https://doc.rust-lang.org/cargo/reference/source-replacement.html).
 
-## Why Yrs is a candidate, and what remains unproven
+## Yrs as an informational comparison
 
 Yrs implements the Yjs algorithm/protocol in Rust; its project supplies a C FFI
 through yffi. That provides a concrete path to native C++ integration instead
@@ -191,22 +191,11 @@ and feature tables can lag or differ. Pin one matching engine/header/wrapper
 revision and its compiler requirements for a trial. Do not mix versions or infer
 C-FFI coverage from the Rust API alone. No candidate was built or timed here.
 
-## Proposed bounded feasibility experiment
+## Current implementation constraint
 
-These are proposed tasks for a separately selected trial, not additional
-authorized production implementation. Add them to TASKS.json with concrete
-paths and dependencies when that route is chosen.
-
-| Order | Task | Acceptance before proceeding |
-|---|---|---|
-| 1 | Pin stable toolchain, candidate revision, licenses, and C headers; build an independent C++ smoke consumer. | Repeatable native build, explicit minimum compiler, clean destruction/ownership, no nightly requirement. |
-| 2 | Test required text/list and anchor behavior through the facade. | Exact concurrent-passage, nested-edit, duplicate/reordered-delivery, Unicode/UTF-16, and boundary-affinity fixtures pass. |
-| 3 | Prove durable private undo and redo. | Restart with both stacks and grouped edits; peer changes survive local undo; trimming/crash recovery works without patching private layout. |
-| 4 | Prove retention and retired-device handling, then file-store recovery. | Still-enrolled offline actor can restore supported history; retired actor follows explicit rescue/rejoin; missing segments and process crashes do not lose committed edits. |
-| 5 | Measure matched workloads and issue an adoption decision. | Fixed-trace p50/p95/p99, memory/history, reopen time, binary/build cost, and adapter allocations; list remaining custom code and maintenance burden. |
-
-Stop the experiment early if durable history needs a large permanent private
-fork or the candidate cannot meet the selected semantics. If it succeeds,
-rewrite affected roadmap tasks around the proven facade and backend guarantees
-before implementation. If it fails, retain the native C++ route with a clear
-record of why. No benchmark result alone authorizes adoption.
+Follow the native C++ roadmap. Repair current ordering integration, anchor
+boundaries, recovery, durable history, and reclamation rules with complete
+specifications and regression/model evidence. Then optimize indexes, summaries,
+run bookkeeping, Unicode seeks, and bounded delivery against fixed traces.
+External comparisons may inform those local improvements; they do not create
+an adoption gate, require a Rust toolchain, or reopen the user's decision.

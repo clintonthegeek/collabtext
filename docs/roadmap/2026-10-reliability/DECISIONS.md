@@ -1,16 +1,16 @@
-# Decisions and remaining backend question
+# Accepted design and lifecycle decisions
 
-**Updated:** 2026-10-03. Q1–Q3 are resolved by the user's reply. Q4 remains pending an informed backend choice; willingness to install a toolchain is not a decision to replace the engine. Questions belong in ordinary conversation text for this user.
+**Updated:** 2026-10-03. All Q1–Q4 are resolved by the user's replies. Improve the existing native C++ engine incrementally. No backend choice remains open. Any new questions belong in ordinary conversation text for this user.
 
 ## Q1 — Fresh start: resolved
 
 **User statement:** “there is no existing data or stores or history to preserve. this is not in production. we can start totally fresh, however we want.”
 
-**Selected policy:** freely redesign source/API/ABI, identities, algorithms, wire formats, and stores. No legacy decoder, importer, data archive, anchor translation from old stores, compatibility shims, or mixed-version collaboration is required. Existing source and evaluation artifacts remain useful regression evidence; they do not impose old behavior on the replacement design.
+**Selected policy:** freely redesign source/API/ABI, identities, algorithms, wire formats, and stores. No legacy decoder, importer, data archive, anchor translation from old stores, compatibility shims, or mixed-version collaboration is required. Existing source and evaluation artifacts remain useful regression evidence; they do not impose old behavior on the repaired engine.
 
 **Plan changes:** remove E01/E02 entirely and their dependency edges; remove legacy fixtures/codec/shim requirements from V08/P01/P06/S04/A05/A06; replace porting requirements with independently compiling new examples in E03 and a fresh release dossier in E06. Retain task IDs E01/E02 in the registry change record so earlier references remain understandable. There are now 62 active tasks, including new A08.
 
-**Isolation:** retain the requested breaking-change worktree for review and experiments. No production data migration or consumer porting deadline is needed. Master integration and publication remain separate explicit actions.
+**Isolation:** retain the requested breaking-change worktree for implementation and review. No production data migration or consumer porting deadline is needed. Master integration and publication remain separate explicit actions.
 
 ## Q2 — Explicit device retirement: resolved
 
@@ -32,17 +32,17 @@
 
 **Plan changes:** L06 has one persistence route, with no session-only alternative. L07/G04/G05 and final acceptance test reopening with both stacks. Shared checkpoints do not replace private actor history. Physical GC must honor all still-enrolled actors' retained restoration obligations.
 
-## Q4 — Backend route: pending after informed assessment
+## Q4 — Improve the existing native C++ engine: resolved
 
-**Current user position:** interested in Rust benefits/drawbacks, potentially willing to install a toolchain, concerned about language stability. No rewrite or backend adoption has been chosen.
+**User statement:** “No, i want to improve the engine we have, not rewrite it. Let's improve what we have to the best possible engine it can be.”
 
-Read [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md). Stable Rust is suitable for production use; the open issue is project fit and maintenance cost, especially persistent collaborative undo and GC.
+**Selected policy:** retain and improve the current C++20 Buffer and IdList engines. Reuse their working SumTree/run/identity/undo machinery, file-transport separation, and Qt integration. Correct invariants and extend components in place with explicit models, regression evidence, and measured optimization. No Yrs vendoring/adoption, Rust-core rewrite, backend trial, or new replacement production engine belongs to this roadmap.
 
-**Current implementation route:** native C++20 remains provisional. D01 records the actual choice before backend-dependent work. Baseline evidence tasks remain independent of this answer.
+**Meaning of the fresh-start permission:** source/API/ABI and serialized formats may change as needed, and no old data migration is required. This does not authorize discarding the implemented engine or replacing it with another library. Existing working behavior and components are valuable foundations.
 
-**Recommendation:** authorize a small, isolated Yrs/C-ABI feasibility experiment before committing to the extensive native ordering/GC redesign. Test persistent undo/redo and indefinitely offline actors first. Adopt only if the experiment demonstrates the required semantics without maintaining a large private fork. A fresh custom Rust rewrite carries much of the same CRDT design burden as native C++ repair.
+**Plan changes:** D01 now specifies accepted constraints instead of waiting for a backend answer. S02 maps ordering defects to precise incremental repairs inside existing integration helpers; S03 applies that map in Buffer/IdList. X10 reports native improvements and may use external engines only as isolated benchmark references. Algorithm or GC difficulties require deeper local design work, not substitution.
 
-If a trial is chosen, add its concrete tasks/dependencies before P01 and revise backend-specific identity, operation, checkpoint, GC, and optimization tasks based on evidence. The task list's custom 128-bit actor IDs and internal operation fields are native design choices; an existing backend may require a different internal representation. Do not wrap the two models as though their histories were interchangeable.
+**Earlier Rust assessment:** [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is retained as the requested language/interop background. Its earlier adoption recommendation is withdrawn and the proposed trial removed. It is not an implementation plan or an unresolved decision. This user direction also supersedes the evaluation's conditional replacement-backend recommendation.
 
 ## Implementation choices already within scope
 
@@ -55,4 +55,4 @@ If a trial is chosen, add its concrete tasks/dependencies before P01 and revise 
 - Verify Linux first and test other claimed platforms rather than inferring portability.
 - Detect observable identity conflicts; ordinary shared-document copies must not copy private writer identity. Arbitrary identical disconnected device clones cannot always be detected before exchange.
 
-D01 still supplies the complete fresh-format/API contract after the V08 inventory and Q4 decision. Recording Q1–Q3 here does not complete unimplemented tasks or substitute for the technical design/model gates at S02/G01.
+D01 still supplies the complete native-engine/fresh-format/API contract after the V08 inventory. All product choices are settled; documenting them does not complete unimplemented tasks or substitute for the technical design/model gates at S02/G01.

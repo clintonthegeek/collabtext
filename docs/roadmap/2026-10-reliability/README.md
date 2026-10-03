@@ -4,15 +4,15 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status:** revised for the user's fresh-start decision; retirement and undo policies resolved; backend choice pending; implementation not started.
+**Status:** all product-policy decisions resolved; improve the existing C++ engine incrementally; implementation not started.
 
-This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md). It contains **62 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records resolved policies and the remaining backend choice. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) explains language stability, integration, candidate risks, and a proposed feasibility experiment.
+This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **62 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
 All breaking implementation work belongs in the worktree above. The user confirmed there is no production data, store, or history to preserve; the new API and formats can start fresh. A copy of these plans is kept in the original checkout's `docs/` for discovery; the worktree is the authoritative implementation copy. This planning deliverable does not authorize a merge, publication, consumer-repository changes, or external messages.
 
 ## Read first
 
-1. Read [DECISIONS.md](DECISIONS.md): Q1–Q3 are resolved; Q4 awaits a backend choice after the Rust assessment. Do not reinstate removed migration requirements.
+1. Read [DECISIONS.md](DECISIONS.md): all Q1–Q4 are resolved. Retain and improve the native engine; do not reinstate migration work or replacement-backend options.
 2. Read [EXECUTION.md](EXECUTION.md). Start with V01; do not assume its verification script or other planned files already exist.
 3. Select the next task whose dependencies are complete. Use the registry order as a safe serial execution order; do not treat phase numbering as permission to skip unfinished prerequisites.
 4. Read the complete task in its phase file and its referenced specification before editing.
@@ -49,7 +49,9 @@ M0–M2 are the first implementation priority. M2 provides a recovery baseline w
 
 ## Scope and compatibility
 
-The provisional route retains C++20 Buffer and IdList engines, one file-backed reference transport, and optional Qt integration. It does not add rich text, maps/counters, a transport menagerie, SQLite as a prerequisite, automatic peer eviction, or a replacement CRDT backend. Backend comparison is a measured contingency, not a rewrite mandate.
+The selected route evolves the existing C++20 Buffer and IdList engines, their SumTree/run storage and selective-undo machinery, one file-backed reference transport, and Qt integration. Repairs change only the components/invariants required by their acceptance tests. External algorithms can inform design and isolated comparison benchmarks can inform optimization; neither becomes a replacement engine. Rust rewrites, Yrs adoption, and backend feasibility trials are outside scope.
+
+The implementation priorities are recovery and durability, explicit merge/anchor/undo/GC semantics, a supported public library and Qt adapter, then measured latency/memory improvements. Retain working code and fast paths where their invariants hold. A complete reference model supports local repairs; it is not a second production engine. The roadmap adds no rich text, new CRDT primitives, transport menagerie, SQLite prerequisite, or automatic peer eviction.
 
 Breaking changes are expected in:
 
@@ -69,9 +71,9 @@ An enrolled device may remain offline indefinitely; only explicit retirement rem
 
 | Gate | Required artifact before implementation | Why it exists |
 |---|---|---|
-| D01 | Resolved lifecycle policies, actual Q4 backend choice, and fresh-format/API contract | Product policy is not an implementation guess |
+| D01 | Accepted native-engine/lifecycle constraints and fresh-format/API contract | All user policies are settled; their written implementation contract must be complete |
 | P01 | Complete stable types, errors, ownership, counter, and version contracts | Partial API decisions create inconsistent consumers and codecs |
-| S02 | Full ordering algorithm specification, pseudocode, independent executable model, fixture/enumeration evidence | A comparator tweak is not a valid new sequence CRDT |
+| S02 | Complete incremental ordering repair, transformation map, pseudocode, independent model, fixture/enumeration evidence | Ordering changes need precise invariants and verification within existing engines |
 | G01 | Full membership/epoch/undo/anchor/checkpoint protocol and independent GC model | Durable observation alone does not permit reclamation |
 
 Technical review at these gates does not mean repeatedly asking the user for routine implementation permission. It means a complete reviewable design with explicit invariants must exist before a less-capable executor proceeds. If a model cannot supply that artifact reliably, it records the gap and stops that dependent task rather than choosing an algorithm arbitrarily.
@@ -106,7 +108,7 @@ Additional recommendations use the following traceability IDs in tasks:
 | R9 | Callback ownership/reentrancy, applied/deferred distinction, batching/backpressure | P01, P05, P07, L04, A04, X09 |
 | R10 | Undo step/byte limits, persistent retention/pins, snapshots, safe retirement and memory/disk reclamation | L06, G01–G08, A08, X02, X06, X09 |
 | R11 | Honest guarantees/status, signing stub scope, architecture/docs | V08, D01, E04–E06 |
-| R12 | Conditional backend study with matched data, retain native direction unless chosen otherwise | S02, X10, E04 |
+| R12 | Informational design/benchmark comparisons; replacement recommendation rejected by the user | S02, X10, E04; Q4 in DECISIONS.md |
 | R13 | Package install/export, platform support, fresh versioned formats, installed examples | P01, P06–P07, A01–A07, E03–E06 |
 | R14 | Explicit local_clear, recovery, and collaborative reset semantics | V08, A05, E03 |
 
@@ -115,7 +117,7 @@ No recommendation is considered complete merely because it appears in a plan. E0
 ## Implementation handoff
 
 - **Immediately available:** V01, followed by independent baseline/fixture/containment tasks as dependencies finish.
-- **Backend choice pending:** D01 and tasks that depend on it; Q1–Q3 are already resolved and must not be asked again. No Rust adoption is inferred from requesting information.
+- **All product choices settled:** D01 writes their implementation contract after V08; it does not require another backend question or user confirmation.
 - **Algorithm/protocol blocked until designed:** S03 depends on S02; G02 depends on G01; physical GC depends on all G06 prerequisites.
 - **No changes made yet:** production C++, CMake, serialized formats, and external consumers remain as at the evaluated revision.
 - **Integration:** complete installed examples and release evidence before proposing a merge to master. No production porting deadline or legacy-data migration is needed.
@@ -123,3 +125,5 @@ No recommendation is considered complete merely because it appears in a plan. E0
 ## Plan revision record
 
 On 2026-10-03 the user clarified preproduction status and authorized a complete fresh start. E01/E02 were removed, migration/shim requirements were removed from retained tasks, persistent undo/redo became the only route, and A08 added advisory device review with explicit retirement. Active count changed from 63 to 62. The original evaluation remains a historical assessment of revision 046d375; data-preservation assumptions in that report do not override this decision.
+
+Later on 2026-10-03 the user clarified that the goal is improving the already implemented C++ engine, not rewriting it or adopting Yrs. Q4 is resolved accordingly. D01/S02/S03/X10 now enforce incremental native repair; the Rust assessment's adoption recommendation and trial are removed. External comparisons remain informational. The task count stays 62.

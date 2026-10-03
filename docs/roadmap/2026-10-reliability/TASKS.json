@@ -252,30 +252,30 @@
     },
     {
       "id": "D01",
-      "title": "Finalize fresh-start and lifecycle contracts",
+      "title": "Specify the accepted native-engine and lifecycle constraints",
       "phase": 2,
       "depends_on": [
         "V08"
       ],
       "files": [
         "docs/roadmap/2026-10-reliability/DECISIONS.md",
-        "docs/specs/vnext-compatibility.md"
+        "docs/specs/vnext-design-constraints.md"
       ],
       "steps": [
-        "Record the resolved Q1 clean start, Q2 explicit retirement with advisory reminders, and Q3 persistent bounded undo. Q4 remains an informed backend choice; do not turn openness to learning Rust into adoption approval.",
-        "Specify that source, ABI, wire, and store formats can be redesigned freely: no legacy decoder, importer, archive, compatibility shim, or mixed-version protocol is required. Preserve evaluation evidence as regression material.",
-        "Read RUST_ASSESSMENT.md, record the actual Q4 answer, and amend backend-dependent tasks before P01 if a Rust trial or adoption is selected. Keep Qt/C++ presentation, file transport, and text/IdList scope; do not execute incompatible backend routes."
+        "Carry forward all four resolved user policies: fresh API/formats without legacy migration; indefinite offline enrollment with explicit retirement and advisory reminders; persistent bounded undo AND redo; improve the existing native C++20 engine without replacing it or rewriting it in Rust.",
+        "Use V08 to document the intended public behavior, freely revisable source/ABI/wire/store formats, and the existing Buffer/IdList/SumTree/run/undo/transport foundations to retain. No legacy compatibility work is required.",
+        "Define incremental repair constraints: narrow transformations within current components, failing regressions and independent models for algorithm changes, and measured optimization after correctness. Existing engines may be studied for principles or benchmarks; do not vendor/adopt one, add a backend abstraction for substitution, or plan a parallel replacement engine."
       ],
       "acceptance": [
-        "Resolved policies match the user reply of 2026-10-03; reminders can never automatically retire a device.",
-        "The backend route and its task amendments are explicit before backend-dependent implementation. No migration work survives merely because it was in the first plan."
+        "All Q1\u2013Q4 answers are recorded and applied; no pending backend-policy question blocks implementation.",
+        "The written contract commits to evolving the existing engine and lists retained components plus exact release invariants. Algorithm design gates still require specifications/models; they cannot redirect work into a replacement."
       ],
-      "verification": "Review the decision register against the user's actual replies and V08 inventory; no tests required for this documentation-only task.",
+      "verification": "Review the constraint specification against V08 and the recorded user replies; check that no task requires Rust, Yrs adoption, a backend experiment, or legacy data migration.",
       "addresses": [
         "R11",
         "R13"
       ],
-      "gate": "Q1\u2013Q3 resolved on 2026-10-03; Q4 backend route remains pending. Record an actual answer before backend-dependent work.",
+      "gate": "All product-policy questions resolved. Complete the written design constraints using V08; no additional user backend approval is needed.",
       "status": "not_started"
     },
     {
@@ -823,7 +823,7 @@
     },
     {
       "id": "S02",
-      "title": "Choose and completely specify the C++ ordering algorithm",
+      "title": "Specify the ordering repair within the existing C++ engine",
       "phase": 4,
       "depends_on": [
         "S01",
@@ -832,29 +832,29 @@
       ],
       "files": [
         "docs/specs/vnext-sequence-algorithm.md",
-        "docs/reports/vnext-backend-decision.md",
+        "docs/reports/vnext-ordering-design.md",
         "libs/collabtext/tests/reference/SequenceModel.h"
       ],
       "steps": [
-        "Compare a principled native ordering repair with a well-specified origin-neighbor/run algorithm, using the S01 requirements. Default is retaining a native C++ engine; no external backend adoption is authorized by this task.",
-        "Write operation fields, integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and anchor boundary interpretation. Explain why each concurrent-passage fixture is preserved.",
-        "Implement a deliberately simple vector/reference interpreter. If no candidate passes the fixtures and bounded-history checks, record the blocker and a separate backend experiment specification; do not ask a weaker executor to invent missing CRDT rules."
+        "Trace each S01 failing history through existing Buffer/IdList insertion integration, origins, run splitting, Locator ordering, and undo visibility. Identify the first violated invariant and specify the smallest representation/integration repair that satisfies the complete fixtures. Retain current engine components and storage structures where their invariants hold.",
+        "Write changed operation fields (if any), integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and anchor boundary interpretation. Include a current\u2192repaired transformation map with exact helper/file scope and justify each changed invariant. Existing origin-neighbor algorithms may inform the repair; do not implement a replacement CRDT/backend.",
+        "Implement a deliberately simple independent vector/reference interpreter for the repaired semantics. Validate the full fixture and bounded-history corpus. If it fails, record the smallest counterexample and refine this repair specification; do not launch a Rust/backend experiment or ask a routine executor to invent missing rules."
       ],
       "acceptance": [
-        "Algorithm decision includes complete implementable pseudocode and the reference interpreter passing S01.",
-        "Technical review specifically checks nested/concurrent run boundaries, reverse insertion, and post-merge edits. An incomplete ADR does not unlock S03."
+        "The repair includes implementable pseudocode, a transformation map within current components, and an independent reference interpreter passing S01.",
+        "Technical review checks nested/concurrent runs, reverse insertion, post-merge edits, undo, and reuse of existing storage. A superficial comparator tweak or an incomplete specification does not unlock S03."
       ],
       "verification": "Run the reference interpreter on all S01 fixtures and bounded enumerations; retain exact traces and implementation-independent expected outputs.",
       "addresses": [
         "F8",
         "R12"
       ],
-      "gate": "Requires a complete reviewed algorithm specification and executable model; unresolved algorithm choices block S03/S04.",
+      "gate": "Requires a complete reviewed incremental repair specification and independent executable model. Unresolved ordering invariants block dependent code changes; replacement engines are outside scope.",
       "status": "not_started"
     },
     {
       "id": "S03",
-      "title": "Implement ordering in a slow, correctness-first engine path",
+      "title": "Apply the ordering repair to existing Buffer and IdList paths",
       "phase": 4,
       "depends_on": [
         "S02"
@@ -866,8 +866,8 @@
         "libs/collabtext/tests/tst_sequence_semantics.cpp"
       ],
       "steps": [
-        "Implement the S02 algorithm in an explicit slow path first; keep logical character identities compressed into physical runs where valid. Production decisions must match the reference interpreter.",
-        "Replace shared-locator atomization/order assumptions and obsolete split relocations only as required by the new spec. Update operation codecs/schema fixtures if fields change; never reinterpret old payloads in place.",
+        "Apply the S02 transformation map to current Buffer/IdList integration helpers. Use their existing general/slow paths as the initial correctness baseline; preserve logical identities and run compression. Do not create a new production engine alongside them. Production decisions must match the independent reference interpreter.",
+        "Adjust existing shared-locator order assumptions and split relocations only where the reviewed repair requires it. Keep unaffected storage/tree/undo behavior; update codecs/schema fixtures for explicitly changed fields and reject obsolete formats.",
         "Disable old fast paths when their invariants no longer apply; do not optimize this task. Remove the F8 expected-fail marker only after all exact-content fixtures pass."
       ],
       "acceptance": [
@@ -1819,7 +1819,7 @@
     },
     {
       "id": "X10",
-      "title": "Publish matched comparisons and the optimization result",
+      "title": "Publish measured native-engine improvements and comparisons",
       "phase": 7,
       "depends_on": [
         "X03",
@@ -1832,17 +1832,16 @@
       ],
       "files": [
         "benchmarks/adapters/",
-        "docs/reports/vnext-performance-results.md",
-        "docs/reports/vnext-backend-decision.md"
+        "docs/reports/vnext-performance-results.md"
       ],
       "steps": [
         "Run five repeats of the frozen corrected traces before/after each accepted optimization; report per-stage and tail latency, history memory, recovery time, and disk/wire costs.",
-        "Run at least one native-accessible comparison adapter if the S02 backend decision calls for it; pin revision/licenses/build flags, normalize offsets and operation counts, and verify exact content/semantics. Feature mismatch is explicitly described.",
+        "Where an external engine offers a meaningful matched comparison, run it only as an isolated benchmark dependency. Pin revision/licenses/build flags, normalize offsets and operation counts, and verify exact content/semantics. Keep it out of shipped targets and runtime paths; feature mismatches are explicit. No backend substitution or Rust-core rewrite is planned.",
         "If an optimization does not help the measured target, revert or justify its independent simplification benefit. Do not use trace throughput reciprocal as single-edit latency."
       ],
       "acceptance": [
         "Results are attributable to specific changes and comparable states; all correctness/retention gates still pass.",
-        "Remaining performance limits and any backend experiment recommendation are explicit; no backend substitution is performed merely to improve headline numbers."
+        "Remaining performance limits and the effect of each native-engine improvement are explicit. External comparisons inform further local optimization, never an adoption/replacement decision."
       ],
       "verification": "Run the Release trace matrix and publish machine-readable/raw results with metadata; cross-check narrative tables against measured units.",
       "addresses": [
@@ -1996,7 +1995,7 @@
     }
   ],
   "revised": "2026-10-03",
-  "revision_reason": "User confirmed preproduction fresh start, explicit retirement with advisory reminders, and persistent undo/redo. Backend choice remains pending Rust assessment.",
+  "revision_reason": "All user policies resolved: improve existing native C++ engine incrementally; no Rust rewrite, Yrs adoption, or replacement trial. Retain fresh formats, explicit device retirement, and persistent undo/redo.",
   "removed_tasks": [
     {
       "id": "E01",

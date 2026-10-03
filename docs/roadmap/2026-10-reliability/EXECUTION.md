@@ -13,7 +13,7 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 ## Choosing the next task
 
 1. Load TASKS.json. Only tasks whose prerequisites have `status=complete` are eligible. A deferred prerequisite is not equivalent to complete; if the user chooses an alternate route, explicitly revise the dependency graph.
-2. Check DECISIONS.md. Q1–Q3 are resolved: clean start, explicit offline-device retirement with advisory reminders, and persistent undo/redo. Q4 is the remaining backend choice; read RUST_ASSESSMENT.md and record the actual choice before backend-dependent work. Do not ask resolved questions again.
+2. Check DECISIONS.md. All Q1–Q4 are resolved: clean API/formats, explicit offline-device retirement with advisory reminders, persistent undo/redo, and incremental improvement of the existing C++ engine. No backend question remains open. Do not ask resolved questions again or reintroduce Yrs adoption/Rust rewrites.
 3. Check the task's design gate. S03 cannot begin merely because someone wrote an S02 title: the complete specification/model/evidence must exist. The same applies to G01/G02/G06.
 4. Prefer registry order for a serial run. Work on one task at a time. If a task is too broad, split it into new well-defined subtask IDs with dependencies and acceptance criteria before coding; do not silently expand scope.
 5. Mark the task `in_progress`, record the baseline revision and relevant failures, and read every existing file the task will touch. Paths named as new files are not missing prerequisites.
@@ -24,7 +24,7 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 
 1. Write the smallest meaningful failing regression first for an algorithm, interface, or lifecycle change. Existing known-failure tests use explicit expected-fail markers; remove only the markers the task actually fixes.
 2. Confirm the test fails for the intended reason. Do not confuse a compiler failure with proof of a behavioral defect.
-3. Implement the documented steps within the listed scope. Existing analogous code is a reference, not authority to repeat an unsafe behavior identified in the evaluation.
+3. Implement the documented steps within the listed scope, reusing working components and correcting the identified invariant. Existing analogous code is a reference, not authority to repeat an unsafe behavior identified in the evaluation. The independent model is verification support, not a replacement production engine; do not add a backend substitution layer.
 4. Keep logical operation identity, local history, durable coverage, and derived indexes distinct. Every mutation must honor the task's failure-atomicity and ownership contract.
 5. Re-run the targeted checks, then the affected integration/model suites. Record seed, trace/fixture hash, compiler/configuration, pass counts, and any limits. Do not hide a red suite with a regex exclusion or unconditional skip.
 6. Inspect the diff for unintended API exposure, regenerated artifacts, broad formatting, side effects outside this worktree, and test weakening. Update affected specs and the new API guide if public behavior changed.
@@ -37,7 +37,7 @@ Documentation-only policy/spec tasks need review and consistency checks, not art
 
 Leave it incomplete and record the concrete blocker in TASKS.json: missing user answer, incomplete algorithm/protocol specification, unavailable platform verification, or a failing required invariant. A difficult task is not license to choose missing semantics or mark acceptance complete.
 
-Continue independent ready work when possible. A technical design that needs more expertise is routed to its existing design task and reviewer; do not silently replace the CRDT backend, loosen GC eligibility, discard malformed records, or remove exact expected-output assertions to get green tests.
+Continue independent ready work when possible. Route a technical design gap to its existing design task with the exact counterexample and violated invariant; refine the native repair. Engine replacement and Rust/Yrs feasibility trials are outside the selected scope. Do not loosen GC eligibility, discard malformed records, or remove exact expected-output assertions to get green tests.
 
 User-facing questions belong in ordinary conversation/final text for this user, who cannot use inline question controls. Ask only for missing policy, scope changes, or permission that is actually necessary. Routine implementation choices with documented authorization do not need another question.
 

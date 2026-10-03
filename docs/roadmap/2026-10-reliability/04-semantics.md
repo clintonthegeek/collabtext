@@ -4,6 +4,8 @@ Goal: agree and execute precise sequence semantics, independent of transport and
 
 Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starting. Task dependencies refer to the [master task registry](TASKS.json). New file paths below are intentional; do not assume they already exist.
 
+The selected route is incremental repair of existing Buffer/IdList integration, anchors, and fast paths. Keep their working foundations; complete specification/model gates prevent unprincipled changes without introducing a replacement production engine.
+
 ## S01 — Specify sequence ordering and observable edit behavior
 
 **Status:** see TASKS.json (initially not started)  
@@ -30,35 +32,35 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 
 Review fixture histories against the evaluation and original engine; run fixture parsing tests. No production algorithm change in this task.
 
-## S02 — Choose and completely specify the C++ ordering algorithm
+## S02 — Specify the ordering repair within the existing C++ engine
 
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** S01, P06, L08  
 **Coverage:** F8, R12  
-**Design/decision gate:** Requires a complete reviewed algorithm specification and executable model; unresolved algorithm choices block S03/S04.  
+**Design/decision gate:** Requires a complete reviewed incremental repair specification and independent executable model. Unresolved ordering invariants block dependent code changes; replacement engines are outside scope.  
 
 **Files / scope:**
 
 - `docs/specs/vnext-sequence-algorithm.md`
-- `docs/reports/vnext-backend-decision.md`
+- `docs/reports/vnext-ordering-design.md`
 - `libs/collabtext/tests/reference/SequenceModel.h`
 
 **Steps:**
 
-1. Compare a principled native ordering repair with a well-specified origin-neighbor/run algorithm, using the S01 requirements. Default is retaining a native C++ engine; no external backend adoption is authorized by this task.
-2. Write operation fields, integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and anchor boundary interpretation. Explain why each concurrent-passage fixture is preserved.
-3. Implement a deliberately simple vector/reference interpreter. If no candidate passes the fixtures and bounded-history checks, record the blocker and a separate backend experiment specification; do not ask a weaker executor to invent missing CRDT rules.
+1. Trace each S01 failing history through existing Buffer/IdList insertion integration, origins, run splitting, Locator ordering, and undo visibility. Identify the first violated invariant and specify the smallest representation/integration repair that satisfies the complete fixtures. Retain current engine components and storage structures where their invariants hold.
+2. Write changed operation fields (if any), integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and anchor boundary interpretation. Include a current→repaired transformation map with exact helper/file scope and justify each changed invariant. Existing origin-neighbor algorithms may inform the repair; do not implement a replacement CRDT/backend.
+3. Implement a deliberately simple independent vector/reference interpreter for the repaired semantics. Validate the full fixture and bounded-history corpus. If it fails, record the smallest counterexample and refine this repair specification; do not launch a Rust/backend experiment or ask a routine executor to invent missing rules.
 
 **Acceptance:**
 
-- Algorithm decision includes complete implementable pseudocode and the reference interpreter passing S01.
-- Technical review specifically checks nested/concurrent run boundaries, reverse insertion, and post-merge edits. An incomplete ADR does not unlock S03.
+- The repair includes implementable pseudocode, a transformation map within current components, and an independent reference interpreter passing S01.
+- Technical review checks nested/concurrent runs, reverse insertion, post-merge edits, undo, and reuse of existing storage. A superficial comparator tweak or an incomplete specification does not unlock S03.
 
 **Verification:**
 
 Run the reference interpreter on all S01 fixtures and bounded enumerations; retain exact traces and implementation-independent expected outputs.
 
-## S03 — Implement ordering in a slow, correctness-first engine path
+## S03 — Apply the ordering repair to existing Buffer and IdList paths
 
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** S02  
@@ -73,8 +75,8 @@ Run the reference interpreter on all S01 fixtures and bounded enumerations; reta
 
 **Steps:**
 
-1. Implement the S02 algorithm in an explicit slow path first; keep logical character identities compressed into physical runs where valid. Production decisions must match the reference interpreter.
-2. Replace shared-locator atomization/order assumptions and obsolete split relocations only as required by the new spec. Update operation codecs/schema fixtures if fields change; never reinterpret old payloads in place.
+1. Apply the S02 transformation map to current Buffer/IdList integration helpers. Use their existing general/slow paths as the initial correctness baseline; preserve logical identities and run compression. Do not create a new production engine alongside them. Production decisions must match the independent reference interpreter.
+2. Adjust existing shared-locator order assumptions and split relocations only where the reviewed repair requires it. Keep unaffected storage/tree/undo behavior; update codecs/schema fixtures for explicitly changed fields and reject obsolete formats.
 3. Disable old fast paths when their invariants no longer apply; do not optimize this task. Remove the F8 expected-fail marker only after all exact-content fixtures pass.
 
 **Acceptance:**

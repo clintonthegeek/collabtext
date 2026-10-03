@@ -1,35 +1,35 @@
 # 02. Identity, decoding, and protocol foundations
 
-Goal: make identifiers, operations, codecs, and delivery outcomes explicit. This phase intentionally changes public types on the isolated branch. The user authorized a fresh API and formats without old-store compatibility. D01 records resolved lifecycle policies and the remaining backend choice before backend-dependent work.
+Goal: make identifiers, operations, codecs, and delivery outcomes explicit. This phase intentionally changes public types on the isolated branch. The user authorized a fresh API and formats without old-store compatibility. D01 specifies all resolved policies and the constraint to improve the existing native engine before public/protocol changes.
 
 Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starting. Task dependencies refer to the [master task registry](TASKS.json). New file paths below are intentional; do not assume they already exist.
 
-## D01 — Finalize fresh-start and lifecycle contracts
+## D01 — Specify the accepted native-engine and lifecycle constraints
 
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** V08  
 **Coverage:** R11, R13  
-**Design/decision gate:** Q1–Q3 resolved on 2026-10-03; Q4 backend route remains pending. Record an actual answer before backend-dependent work.  
+**Design/decision gate:** All product-policy questions resolved. Complete the written design constraints using V08; no additional user backend approval is needed.  
 
 **Files / scope:**
 
 - `docs/roadmap/2026-10-reliability/DECISIONS.md`
-- `docs/specs/vnext-compatibility.md`
+- `docs/specs/vnext-design-constraints.md`
 
 **Steps:**
 
-1. Record the resolved Q1 clean start, Q2 explicit retirement with advisory reminders, and Q3 persistent bounded undo. Q4 remains an informed backend choice; do not turn openness to learning Rust into adoption approval.
-2. Specify that source, ABI, wire, and store formats can be redesigned freely: no legacy decoder, importer, archive, compatibility shim, or mixed-version protocol is required. Preserve evaluation evidence as regression material.
-3. Read RUST_ASSESSMENT.md, record the actual Q4 answer, and amend backend-dependent tasks before P01 if a Rust trial or adoption is selected. Keep Qt/C++ presentation, file transport, and text/IdList scope; do not execute incompatible backend routes.
+1. Carry forward all four resolved user policies: fresh API/formats without legacy migration; indefinite offline enrollment with explicit retirement and advisory reminders; persistent bounded undo AND redo; improve the existing native C++20 engine without replacing it or rewriting it in Rust.
+2. Use V08 to document the intended public behavior, freely revisable source/ABI/wire/store formats, and the existing Buffer/IdList/SumTree/run/undo/transport foundations to retain. No legacy compatibility work is required.
+3. Define incremental repair constraints: narrow transformations within current components, failing regressions and independent models for algorithm changes, and measured optimization after correctness. Existing engines may be studied for principles or benchmarks; do not vendor/adopt one, add a backend abstraction for substitution, or plan a parallel replacement engine.
 
 **Acceptance:**
 
-- Resolved policies match the user reply of 2026-10-03; reminders can never automatically retire a device.
-- The backend route and its task amendments are explicit before backend-dependent implementation. No migration work survives merely because it was in the first plan.
+- All Q1–Q4 answers are recorded and applied; no pending backend-policy question blocks implementation.
+- The written contract commits to evolving the existing engine and lists retained components plus exact release invariants. Algorithm design gates still require specifications/models; they cannot redirect work into a replacement.
 
 **Verification:**
 
-Review the decision register against the user's actual replies and V08 inventory; no tests required for this documentation-only task.
+Review the constraint specification against V08 and the recorded user replies; check that no task requires Rust, Yrs adoption, a backend experiment, or legacy data migration.
 
 ## P01 — Specify the vNext type and error contracts
 
