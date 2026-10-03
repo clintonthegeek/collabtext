@@ -43,7 +43,7 @@ User-facing questions belong in ordinary conversation/final text for this user, 
 
 ## Verification command contract
 
-V01 creates `tools/verify-roadmap.sh`. Until V01 is complete, that path is intentionally absent. The script interface is:
+`tools/verify-roadmap.sh` supplies V01's verification entry point. The script interface is:
 
 ```sh
 ./tools/verify-roadmap.sh debug 'anchored-or-specific-ctest-regex'
@@ -51,7 +51,11 @@ V01 creates `tools/verify-roadmap.sh`. Until V01 is complete, that path is inten
 ./tools/verify-roadmap.sh asan 'anchored-or-specific-ctest-regex'
 ```
 
-The script runs from its repository/worktree root, configures `build-roadmap-{mode}`, builds required targets, and runs CTest with `--output-on-failure`. Debug and Release use the appropriate CMake build type. ASan uses Debug with address/undefined-behavior sanitizer compile/link flags and frame pointers on a supported compiler. It must reject unsupported sanitizer configurations rather than pretending to run them. Set `QT_QPA_PLATFORM=offscreen` for Qt tests; do not export it globally for normal app execution. Default to two workers and make the count configurable.
+The script resolves its own repository/worktree root, configures `build-roadmap-{mode}`, builds the selected test targets, and runs CTest with `--output-on-failure`. Test names must match build target names, as they do in add_crdt_test. Zero matches and build/test failures return nonzero. Debug and Release use the appropriate CMake build type. ASan uses Debug with opt-in `COLLABTEXT_ENABLE_SANITIZERS=ON`, address/undefined-behavior sanitizer compile/link flags, and frame pointers on supported GCC/Clang non-Windows configurations; unsupported configurations fail explicitly. The script also checks that the core compile command contains instrumentation.
+
+Set `COLLABTEXT_VERIFY_JOBS` to a positive integer to change the default two workers. The runner sets `QT_QPA_PLATFORM=offscreen` only for CTest. Every invocation retains `run.log`, `metadata.json`, CTest selection JSON, target names, and exit status under `build-roadmap-{mode}/verification/`; metadata includes revision, compiler, flags, representative core compilation, selected test count, and commands. These generated artifacts are ignored by Git. Task reports retain portable evidence summaries and paths.
+
+Leak checking stays enabled by default; the runner does not hide failures with global suppressions. A restricted sandbox may block LeakSanitizer's process inspection even when all test assertions pass. Rerun outside that restriction when authorized, and distinguish this environment failure from a leak report. Do not disable leak detection or suppress Qt allocations without recording the limitation and actual evidence. V01's successful unrestricted smoke run covers Buffer/IdList with Qt and requires no Qt leak suppression.
 
 Before A01, the full project still needs Qt6 and zstd. After A01, support these independent configurations:
 
