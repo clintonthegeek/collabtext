@@ -1,0 +1,14 @@
+sizeof Fragment=104 summary=160 tree node=3352 Global=40
+Buffer random insert size=10000 n=500 mean_us=2106.26 p50_us=2102.9 p95_us=4400.94 p99_us=5305.54 max_us=5498.84
+fragments=1072
+Buffer random insert size=100000 n=500 mean_us=6227.14 p50_us=6032.95 p95_us=9889.76 p99_us=11967.2 max_us=12804.1
+fragments=1995
+Buffer append seed 100K n=1000 mean_us=69.702 p50_us=68.695 p95_us=98.338 p99_us=230.332 max_us=314.105
+CrdtEngine append seed 100K n=1000 mean_us=169.157 p50_us=161.417 p95_us=259.333 p99_us=414.738 max_us=528.841
+IdList insert head n=1000 mean_us=866.541 p50_us=706.461 p95_us=2257.24 p99_us=2813.99 max_us=3126.64
+encode rid=1 n=100 mean_us=0.56583 p50_us=0.55 p95_us=0.605 p99_us=1.201 max_us=1.201
+wire_bytes=125
+encode rid=250 n=100 mean_us=3.78296 p50_us=3.778 p95_us=3.842 p99_us=4.472 max_us=4.472
+wire_bytes=629
+encode rid=65535 n=100 mean_us=1152.57 p50_us=1055.7 p95_us=1778.22 p99_us=1931.05 max_us=1931.05
+wire_bytes=131205

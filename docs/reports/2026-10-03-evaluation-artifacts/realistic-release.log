@@ -1,0 +1,21 @@
+********* Start testing of TestRealistic *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestRealistic::initTestCase()
+PASS   : TestRealistic::networksim_basic_convergence()
+PASS   : TestRealistic::networksim_disconnect_reconnect()
+PASS   : TestRealistic::networksim_strategies_compile()
+PASS   : TestRealistic::networksim_compact_all()
+QDEBUG : TestRealistic::sustained_3_client_convergence() Seed: 3855852147
+PASS   : TestRealistic::sustained_3_client_convergence()
+QDEBUG : TestRealistic::disconnect_reconnect_cycle() Seed: 2255281937
+PASS   : TestRealistic::disconnect_reconnect_cycle()
+QDEBUG : TestRealistic::cascading_disconnects() Seed: 2433199352
+PASS   : TestRealistic::cascading_disconnects()
+QDEBUG : TestRealistic::long_partition_with_gc() Seed: 2147023276
+QDEBUG : TestRealistic::long_partition_with_gc() Tombstones removed by compact: 1600
+PASS   : TestRealistic::long_partition_with_gc()
+QDEBUG : TestRealistic::ten_client_sustained() Seed: 1381765920
+PASS   : TestRealistic::ten_client_sustained()
+PASS   : TestRealistic::cleanupTestCase()
+Totals: 11 passed, 0 failed, 0 skipped, 0 blacklisted, 19808ms
+********* Finished testing of TestRealistic *********

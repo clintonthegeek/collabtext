@@ -1,5 +1,17 @@
 # collabtext — orientation
 
+## Current isolated workstream: reliability roadmap
+
+On branch `roadmap/reliability-v2`, read `AGENTS.md` and
+`docs/roadmap/2026-10-reliability/README.md` first. That roadmap supersedes the
+historical OpStream scope below for this branch. The current deliverable is the
+plan; implementation has not started. Product-policy questions remain pending
+in its `DECISIONS.md`. No Superpowers skill or subagent workflow is required.
+
+The rest of this file preserves the previous project orientation as historical
+context. It remains the legacy checkout's orientation until its work is updated
+separately.
+
 ## Active project: `OpStream` extraction (post-IdList β)
 
 The current work is extracting a transport-agnostic `OpStream` boundary on the public collabtext surface, with `StreamSync` adopting that boundary as the file-backed reference implementation. This was committed to in `docs/specs/2026-05-08-d5-negotiation-response.md` as the response to Markoff's D5 negotiation opener.

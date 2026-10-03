@@ -1,0 +1,2035 @@
+{
+  "schema_version": 1,
+  "base_revision": "046d375",
+  "branch": "roadmap/reliability-v2",
+  "status": "planned",
+  "tasks": [
+    {
+      "id": "V01",
+      "title": "Create reproducible verification entry points",
+      "phase": 1,
+      "depends_on": [],
+      "files": [
+        "CMakeLists.txt",
+        "libs/collabtext/CMakeLists.txt",
+        "tools/verify-roadmap.sh",
+        "docs/roadmap/2026-10-reliability/EXECUTION.md"
+      ],
+      "steps": [
+        "Add opt-in Debug, Release, and ASan/UBSan configure modes without changing the current default library API. The verification script takes a mode and anchored CTest regex, runs configure/build/test from the worktree, and propagates failures.",
+        "Use build directories under this worktree; default to two build workers; set offscreen Qt only for test execution. Make sanitizer setup explicitly unsupported on an unavailable compiler, not a successful empty run.",
+        "Record base commit, compiler flags, test count, and commands. Avoid running all expensive benchmarks on every core check."
+      ],
+      "acceptance": [
+        "Debug and Release fast suites reproduce the report baseline; script exits nonzero when a deliberately failing test is selected.",
+        "Sanitizer smoke tests execute both Buffer and IdList paths, with leak behavior documented for Qt."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_clock|tst_buffer|tst_idlist'` and the same selection in `release` and `asan` modes. Retain logs outside source files.",
+      "addresses": [
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "V02",
+      "title": "Convert the report probes into lifecycle regressions",
+      "phase": 1,
+      "depends_on": [
+        "V01"
+      ],
+      "files": [
+        "docs/reports/2026-10-03-evaluation-artifacts/probes.cpp",
+        "libs/collabtext/tests/tst_evaluation_regressions.cpp",
+        "libs/collabtext/CMakeLists.txt"
+      ],
+      "steps": [
+        "Create one named test per F1\u2013F8 sequence; include both primitives for restoration failures and exact text/anchor expectations. Use independent temp directories and no timing sleeps.",
+        "Use narrowly placed QEXPECT_FAIL only for confirmed outstanding defects; controls for ordinary undo/redo must pass normally. Each fixing task removes its own expected-fail marker.",
+        "Give every known failure an ID linked to its fixing task. Treat an unexpected pass as requiring removal of the marker, not weakening the assertion."
+      ],
+      "acceptance": [
+        "All confirmed report failures are visible by task/finding ID; existing successful controls stay green.",
+        "The test executable cannot silently succeed after removing an assertion or skipping an entire failure case."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_evaluation_regressions'`; inspect expected-fail counts and confirm each case matches the report.",
+      "addresses": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "V03",
+      "title": "Disable unsafe physical reclamation until a certificate exists",
+      "phase": 1,
+      "depends_on": [
+        "V02"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/include/collabtext/OpStream.h",
+        "libs/collabtext/tests/tst_gc.cpp",
+        "libs/collabtext/tests/tst_idlist_gc.cpp"
+      ],
+      "steps": [
+        "Make legacy collect_garbage/compact retain tombstones and restoration metadata by default; allow only separately tested coalescing that preserves identities, undo, and anchors. Do not expose an unsafe opt-in.",
+        "Document that a scalar transport acknowledgement is receipt information and cannot authorize physical deletion. Preserve source signatures provisionally, returning zero removals until G06 replaces the interface.",
+        "Update tests that assumed reclamation succeeds; add local and remote undo/redo preservation tests. Do not claim a bounded-memory solution yet."
+      ],
+      "acceptance": [
+        "F1/F2 restoration probes pass for Buffer and IdList; existing text and remote convergence do not change.",
+        "No application or public scalar-ack path can invoke unsafe destructive reclamation."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_gc|tst_idlist_gc|tst_evaluation_regressions'`; run the fast suite after changing historical expectations.",
+      "addresses": [
+        "F1",
+        "F2",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "V04",
+      "title": "Make randomized failures replayable and reducible",
+      "phase": 1,
+      "depends_on": [
+        "V01"
+      ],
+      "files": [
+        "libs/collabtext/tests/TestSeed.h",
+        "libs/collabtext/tests/TraceHarness.h",
+        "libs/collabtext/tests/tst_fuzz.cpp",
+        "libs/collabtext/tests/tst_idlist_fuzz.cpp",
+        "libs/collabtext/tests/tst_realistic.cpp",
+        "tools/reduce-trace.cpp"
+      ],
+      "steps": [
+        "Define COLLABTEXT_TEST_SEED as a checked uint64 seed and COLLABTEXT_TRACE_OUTPUT as an optional artifact directory. Use a documented fixed default for CI; retain opt-in random campaigns.",
+        "Record edits, delivery order, disconnects, undo/redo, store restarts, and GC requests in a versioned trace. Replay without rerolling strategy choices.",
+        "Add delta reduction that removes events only when identity/causality remain valid and the same failure predicate persists. Save the unreduced trace first."
+      ],
+      "acceptance": [
+        "Two runs with the same seed produce identical event traces; every migrated fuzz suite prints an effective seed.",
+        "An injected convergence failure produces a replayable artifact and a smaller valid reproduction."
+      ],
+      "verification": "Run seeded fuzz twice with seed 42; compare traces. Run reducer tests and replay the reduced injected failure. Use Debug and ASan.",
+      "addresses": [
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "V05",
+      "title": "Correct simulator partitions and ordering configuration",
+      "phase": 1,
+      "depends_on": [
+        "V04"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/NetworkSim.h",
+        "libs/collabtext/src/crdt/NetworkSim.cpp",
+        "libs/collabtext/tests/tst_network_sim.cpp",
+        "libs/collabtext/tests/tst_realistic.cpp"
+      ],
+      "steps": [
+        "Define disconnect as blocking both inbound and outbound delivery while allowing local edits. Queue offline-produced edits until reconnection; retain duplicate and causal-reordering scenarios.",
+        "Implement allow_reorder=false using per-producer/per-stream monotone scheduling; allow cross-producer reorder. Add explicit link partition support for asymmetric-network tests instead of overloading disconnect.",
+        "Test a partitioned sender edit remains invisible to online peers until heal, and that queued operations eventually deliver exactly or redundantly as configured."
+      ],
+      "acceptance": [
+        "Symmetric disconnect behavior matches the documented contract; allow_reorder influences delivery order.",
+        "Old realistic scenarios are updated to the corrected network model and converge after healing."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_network_sim|tst_realistic|tst_fuzz'` with fixed seeds 42 and 20261003.",
+      "addresses": [
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "V06",
+      "title": "Repair benchmark timing, units, correctness, and memory labels",
+      "phase": 1,
+      "depends_on": [
+        "V01"
+      ],
+      "files": [
+        "libs/collabtext/tests/tst_benchmark.cpp",
+        "libs/collabtext/tests/BenchmarkSupport.h"
+      ],
+      "steps": [
+        "Start reconnect timing before reconnect/tick and stop after actual application plus deferred retry. Use steady_clock throughout.",
+        "Make every convergence benchmark assert equality. Report source edits, remote applications, wall duration, and duration per defined unit separately. Remove fake zero memory measurements; unavailable metrics are explicitly absent.",
+        "Run GC before/after comparisons on independently recreated identical traces and state snapshots. Distinguish active engine memory from process RSS."
+      ],
+      "acceptance": [
+        "A controlled catch-up test measures work inside its timed region; the total is nonzero without asserting a speed threshold.",
+        "Wrong content fails a benchmark; JSON or text reports have unambiguous units and actual metric availability."
+      ],
+      "verification": "Run selected single-replica, multi-replica, reconnect, and GC benchmark functions in Release; inspect reports against operation counts. Do not compare the corrected outputs directly to old mislabeled values.",
+      "addresses": [
+        "R5"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "V07",
+      "title": "Add store fault-injection and subprocess crash harnesses",
+      "phase": 1,
+      "depends_on": [
+        "V01"
+      ],
+      "files": [
+        "libs/collabtext/tests/StoreFaultHarness.h",
+        "libs/collabtext/tests/tst_store_fault_harness.cpp",
+        "libs/collabtext/tests/store_crash_worker.cpp",
+        "libs/collabtext/CMakeLists.txt"
+      ],
+      "steps": [
+        "Provide injectable hooks before/after write, file sync, rename, directory sync, cursor publication, segment seal, and checkpoint publication. Hooks identify operation and path; production default is a no-op.",
+        "Use subprocess termination to test loss of user-space buffers without relying on destructor cleanup. Distinguish kill/restart from power-loss durability evidence.",
+        "Provide filesystem fixtures for missing/out-of-order segments, partial tails, disk-full simulation, failed rename, repaired corruption, and concurrent writer lock attempts."
+      ],
+      "acceptance": [
+        "Each fault can be deterministically triggered and replayed; terminated workers cannot hang the test runner.",
+        "The harness itself verifies parent cleanup, retained source data, and independent temp paths."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_store_fault_harness'`; run harness-only ASan tests without treating deliberate worker termination as a library memory defect.",
+      "addresses": [
+        "F5",
+        "F6",
+        "F9",
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "V08",
+      "title": "Inventory consumers and freeze legacy compatibility fixtures",
+      "phase": 1,
+      "depends_on": [
+        "V02"
+      ],
+      "files": [
+        "docs/roadmap/2026-10-reliability/compatibility-inventory.md",
+        "libs/collabtext/tests/fixtures/legacy-v1/",
+        "tests/consumer-smoke/"
+      ],
+      "steps": [
+        "Inventory public headers, actual aliases, callbacks, OpStream methods, CMake target/includes, serialized operations, manifests, anchors, and IdList local_clear behavior. Include Markoff contracts from existing handoff docs without accessing external repositories.",
+        "Freeze valid operations/stores with Buffer, IdList, chat/comments, Unicode, multiple producers, restart ID collisions, and known corrupt cases. Record expected legacy visible content using the frozen old engine.",
+        "Create a compile-only legacy consumer sample; identify behavior changes independently from source and ABI changes."
+      ],
+      "acceptance": [
+        "Inventory explicitly names every planned compatibility break and old guarantee; fixtures have licenses/provenance and exact expected outputs.",
+        "No external consumer is modified or contacted. Legacy source is retained for migration comparison."
+      ],
+      "verification": "Build the legacy sample against the original checkout; validate fixture hashes and expected content. Record the base revision `046d375`.",
+      "addresses": [
+        "R2",
+        "R3",
+        "R11",
+        "R13",
+        "R14"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "D01",
+      "title": "Finalize compatibility and lifecycle decisions",
+      "phase": 2,
+      "depends_on": [
+        "V08"
+      ],
+      "files": [
+        "docs/roadmap/2026-10-reliability/DECISIONS.md",
+        "docs/specs/vnext-compatibility.md"
+      ],
+      "steps": [
+        "Record the user answers to compatibility, offline peer retirement, persisted undo, and the native C++ requirement. If no answer is available, leave dependent tasks blocked rather than treating elapsed time as approval.",
+        "Enumerate source, ABI, behavior, wire, and on-disk breaks. Specify migration input read-only/output new store and the old/new store isolation rule for the recommended route.",
+        "Confirm this release keeps a C++20 engine, Buffer and IdList only, Qt as an optional adapter, and one file transport. A backend replacement remains a separate technical decision, not an automatic dependency."
+      ],
+      "acceptance": [
+        "No unresolved policy is silently embedded in an implementation task.",
+        "Mixed-version collaboration, if required, has its own negotiated bridge plan before P01 proceeds."
+      ],
+      "verification": "Review the decision register against the user's actual replies and V08 inventory; no tests required for this documentation-only task.",
+      "addresses": [
+        "R11",
+        "R13"
+      ],
+      "gate": "Q1\u2013Q4 must be resolved; alternate routes require updating the task registry.",
+      "status": "not_started"
+    },
+    {
+      "id": "P01",
+      "title": "Specify the vNext type and error contracts",
+      "phase": 2,
+      "depends_on": [
+        "D01"
+      ],
+      "files": [
+        "docs/specs/vnext-protocol.md",
+        "docs/specs/vnext-public-api.md"
+      ],
+      "steps": [
+        "Define ActorId as 128-bit persistent random identity and operation counters as checked uint64; stream/document/epoch identity must be part of an operation context. Use per-stream actor counters; never infer cross-stream coverage from a scalar maximum.",
+        "Define separate BufferOperation and IdListOperation opaque value types, OperationId accessors, ApplyOutcome (applied/duplicate/deferred/rejected), DecodeError, StoreError, and PollOutcome. Use a small C++20 Result type rather than requiring C++23 expected.",
+        "Allocate separate version fields for operation payload, envelope, manifest, segment, checkpoint, and ack formats. Confirm existing maximum versions via fixture inventory; document each bump rather than blindly using one shared number.",
+        "Specify non-reentrant single-owner callbacks, replacement/unregistration, object lifetimes, failure atomicity, bounded deferred queues, and notifications only for visible change."
+      ],
+      "acceptance": [
+        "Every callback and mutation has a precise success/error/ownership contract and examples for both primitives.",
+        "Missing/unknown schema records are retained or quarantined and cannot advance coverage. Counter exhaustion returns an error without mutation."
+      ],
+      "verification": "Review the specification using the F4/F5/F10 examples and multi-stream independent-counter cases; create compile-oriented API examples for A02.",
+      "addresses": [
+        "F4",
+        "F10",
+        "R1",
+        "R2",
+        "R9",
+        "R13"
+      ],
+      "gate": "Public signatures must be finalized here before changing callers; amendments update migration mapping.",
+      "status": "not_started"
+    },
+    {
+      "id": "P02",
+      "title": "Implement persistent actor identity, writer lease, and checked counters",
+      "phase": 2,
+      "depends_on": [
+        "P01",
+        "V07"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/ActorId.h",
+        "libs/collabtext/src/identity/ReplicaState.cpp",
+        "libs/collabtext/src/crdt/Clock.h",
+        "libs/collabtext/src/crdt/Clock.cpp",
+        "libs/collabtext/tests/tst_actor_identity.cpp"
+      ],
+      "steps": [
+        "Generate IDs from OS cryptographic randomness through a narrow platform adapter; accept injected generators for collision/error tests. Persist atomically before creating operations; do not derive uniqueness from presence or 16-bit random allocation.",
+        "Lock a producer/stream writer across processes. Detect observable duplicate ownership/conflicting actor payloads. Keep private actor state outside shared document stores so ordinary document copying creates a new actor; require an explicit fork-identity operation when copying private device state. Identical disconnected clones cannot always be detected before exchange; document this limit.",
+        "Recover next counters from durable own log/checkpoint; reserve IDs without reuse and check increments/range arithmetic before mutation. Widen clocks and affected origin/vector fields consistently."
+      ],
+      "acceptance": [
+        "Offline enrollment of separate devices produces independent actors; restart cannot reuse a durable operation ID.",
+        "Concurrent local writers, corrupted identity state, random-source failure, observable identity conflicts, and uint64 exhaustion produce typed errors without silent fallback to actor 1. Explicitly forked private state uses fresh identity; normal shared-store copies never copy writer identity."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_actor_identity|tst_clock|tst_buffer|tst_idlist'`; inject deterministic identity collisions and max-counter boundaries. Run ASan.",
+      "addresses": [
+        "F4",
+        "R1"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "P03",
+      "title": "Separate coverage intersection from summary aggregation",
+      "phase": 2,
+      "depends_on": [
+        "P01",
+        "V02"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Clock.h",
+        "libs/collabtext/src/crdt/Clock.cpp",
+        "libs/collabtext/src/crdt/Fragment.h",
+        "libs/collabtext/src/crdt/IdList.h",
+        "libs/collabtext/tests/tst_clock.cpp",
+        "libs/collabtext/tests/tst_summary_laws.cpp"
+      ],
+      "steps": [
+        "Implement coverage_intersection over the union of actors with absent components equal to zero; canonicalize zero components away. Do not change every existing meet call mechanically.",
+        "Inventory summary minimum fields. Remove unused fields, or specify a distinct aggregate with a real identity and associative composition; update SumTree dimensions and tests accordingly.",
+        "Add property cases for empty/disjoint/overlapping vectors, commutativity, associativity, idempotence, and sum-summary identity. Remove the F3 expected-fail marker."
+      ],
+      "acceptance": [
+        "Intersection of {A:10} and empty is empty; any peer lacking A constrains A coverage to zero.",
+        "Tree summaries pass algebraic tests and visible text remains unchanged across randomized splice patterns."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_clock|tst_summary_laws|tst_sumtree|tst_evaluation_regressions'`; run seeded convergence suites.",
+      "addresses": [
+        "F3",
+        "R7"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "P04",
+      "title": "Implement strict JSON and UTF validation utilities",
+      "phase": 2,
+      "depends_on": [
+        "P01"
+      ],
+      "files": [
+        "libs/collabtext/src/codec/JsonReader.cpp",
+        "libs/collabtext/src/codec/Utf.cpp",
+        "libs/collabtext/src/crdt/Utf16.h",
+        "libs/collabtext/tests/tst_decode_validation.cpp",
+        "libs/collabtext/tests/tst_utf8.cpp"
+      ],
+      "steps": [
+        "Build a bounded, schema-focused JSON reader with complete-input consumption, arbitrary object key ordering, duplicate-key rejection, strict separators, and correct escape/surrogate handling. Use a reviewed portable parser dependency only if its adoption is explicitly recorded in P01; do not invent a permissive partial parser.",
+        "Validate UTF-8 scalar sequences including continuation bytes, overlong forms, surrogates, truncation, and Unicode maximum. Checked conversion reports an invalid offset inside a scalar/surrogate pair rather than manufacturing an out-of-bounds byte position.",
+        "Define maximum input bytes, nesting, element count, text bytes, and locator depth as configuration with conservative defaults in the spec. Reject before allocating beyond limits."
+      ],
+      "acceptance": [
+        "Missing syntax, trailing garbage, lone surrogates, invalid UTF-8, duplicate fields, and oversized structures fail with offset/context.",
+        "Equivalent reordered JSON decodes identically; all valid non-BMP escapes round-trip correctly."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_decode_validation|tst_utf8'` and ASan/UBSan; include a fixed malformed-input corpus.",
+      "addresses": [
+        "F10",
+        "R8"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "P05",
+      "title": "Validate semantic operations before engine mutation",
+      "phase": 2,
+      "depends_on": [
+        "P02",
+        "P03",
+        "P04"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/OperationValidation.cpp",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/tests/tst_operation_validation.cpp"
+      ],
+      "steps": [
+        "Check operation/actor/epoch identities, counter intervals without overflow, insertion length versus Unicode scalar count, locator/boundary constraints, causal relationships, deletion intervals, and edit range/text cardinality.",
+        "Distinguish missing dependencies (deferred) from invalid input (rejected). Validate local offsets, negative public positions, invalid anchors, and overlapping ranges before mutating any tree, clock, or undo history.",
+        "Enforce configurable deferred-operation count/byte limits with explicit backpressure; do not silently discard dependencies. Return ApplyOutcome and avoid duplicate/deferred visible-change notifications."
+      ],
+      "acceptance": [
+        "Invalid operation/local edit leaves serialized engine state, version, undo depth, and callbacks unchanged.",
+        "Out-of-order valid operations still converge; unknown dependencies can be deferred within budget and reported when the budget is exhausted."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_operation_validation|tst_opqueue|tst_convergence|tst_idlist_convergence'`; run boundary corpus under ASan.",
+      "addresses": [
+        "F10",
+        "R9"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "P06",
+      "title": "Implement versioned sparse codecs and opaque operation values",
+      "phase": 2,
+      "depends_on": [
+        "P05"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/Operations.h",
+        "libs/collabtext/include/collabtext/IdListOperations.h",
+        "libs/collabtext/include/collabtext/Serialization.h",
+        "libs/collabtext/src/codec/OperationCodec.cpp",
+        "libs/collabtext/src/codec/LegacyCodec.cpp",
+        "libs/collabtext/tests/tst_serialization_public.cpp"
+      ],
+      "steps": [
+        "Implement copy/move opaque operation values and stable OperationId/stream accessors; keep Buffer and IdList variants separate. Move construction/details into internal headers.",
+        "Encode canonical sparse actor/counter vectors and explicit payload version; avoid storing replacement text twice. Encode uint64 values exactly without double conversion.",
+        "Keep strict legacy decoding only for migration fixtures. A normal vNext store rejects incompatible legacy envelopes instead of warn-and-skip loss. Add a read-only old/new codec mapping document."
+      ],
+      "acceptance": [
+        "Wire size depends on observed actors/text, not largest numeric legacy actor ID; Buffer/IdList round-trips preserve logical operations.",
+        "Header-only external compilation uses only installed public includes; unknown versions return distinguishable unsupported-version errors."
+      ],
+      "verification": "Run serialization and public-operation tests; benchmark 1, 250, 65535 legacy IDs through migration and corresponding vNext actors. Verify round-trip stable fixtures.",
+      "addresses": [
+        "F10",
+        "R2",
+        "R5",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "P07",
+      "title": "Define transactional transport receipt and commit APIs",
+      "phase": 2,
+      "depends_on": [
+        "P06",
+        "V08"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/OpStream.h",
+        "libs/collabtext/include/collabtext/StreamSync.h",
+        "libs/collabtext/tests/tst_opstream_interface.cpp",
+        "docs/specs/vnext-transport.md"
+      ],
+      "steps": [
+        "Replace scalar GC fence with per-stream/per-producer durable coverage; supply explicit delivery tokens and commit/retry dispositions. A token identifies exact producer/envelope sequence and epoch, not engine Lamport maximum.",
+        "Specify push durability modes, result/error return, unknown-stream errors, subscribe/unsubscribe lifetime, poll budgets, and the requirement that commit occurs only after recoverable application state is durable.",
+        "Expose transport coverage independently from semantic GC certificates. Document an old OpStream adapter for sending only; it must never fabricate durable acknowledgements or destructive-GC eligibility."
+      ],
+      "acceptance": [
+        "A no-callback or deferred/rejected inbound record cannot be acknowledged as durably applied.",
+        "Different streams using the same actor/counter values never advance one another's frontiers. Third-party adapters have complete porting examples."
+      ],
+      "verification": "Compile the new interface sample and in-memory test double; run `tst_opstream_interface` and new `tst_transport_commit_contract` tests.",
+      "addresses": [
+        "F2",
+        "F5",
+        "R2",
+        "R9",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "P08",
+      "title": "Fuzz and bound the complete decoding pipeline",
+      "phase": 2,
+      "depends_on": [
+        "P06",
+        "P07",
+        "V04"
+      ],
+      "files": [
+        "libs/collabtext/tests/fuzz_decode.cpp",
+        "libs/collabtext/tests/tst_decode_validation.cpp",
+        "libs/collabtext/src/crdt/ZstdUtil.cpp",
+        "libs/collabtext/src/crdt/SegmentFormat.cpp"
+      ],
+      "steps": [
+        "Fuzz operation, envelope, manifest, ack, cursor, and segment decoders using one checked boundary. Apply only values accepted by semantic validation to fresh engine instances.",
+        "Cap decompressed bytes and records; reject incomplete zstd frames, malformed base64 padding, unexpected segment kinds/flags, checksum failures, and size mismatches.",
+        "Seed corpus from V08 fixtures plus F10 probes; record max input/output budgets and run bounded deterministic sanitizer campaigns."
+      ],
+      "acceptance": [
+        "Malformed input cannot cause out-of-bounds access, unchecked overflow, indefinite loops, or uncontrolled allocation.",
+        "Corrupt/unsupported records retain their original bytes and do not produce a committed delivery token."
+      ],
+      "verification": "Run ASan/UBSan corpus tests and a time-bounded fuzz campaign; publish compiler/options, duration, corpus hash, and findings. No unbounded fuzz run in routine CI.",
+      "addresses": [
+        "F10",
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "L01",
+      "title": "Implement checked durable filesystem primitives",
+      "phase": 3,
+      "depends_on": [
+        "P01",
+        "V07"
+      ],
+      "files": [
+        "libs/collabtext/src/storage/DurableFile.h",
+        "libs/collabtext/src/storage/DurableFile.cpp",
+        "libs/collabtext/tests/tst_durable_file.cpp"
+      ],
+      "steps": [
+        "Provide checked append/write-all, file sync, atomic replacement, parent-directory sync, close, and process lease primitives behind Linux/Windows/macOS adapters. Define supported durability guarantees and unsupported-operation errors.",
+        "Never delete the old destination before replacement. Check short writes, sync failures, rename failures, and cleanup failures; retain the last durable source and return StoreError.",
+        "Use injected filesystem hooks from V07; add real-platform subprocess smoke tests without claiming a kill test simulates power loss."
+      ],
+      "acceptance": [
+        "The documented write\u2192file-sync\u2192replace\u2192directory-sync order is observable in fault tests.",
+        "Failed writes cannot be reported as committed; atomic replacement preserves either old or new complete data."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_durable_file|tst_store_fault_harness'`; test the platform matrix established by A07.",
+      "addresses": [
+        "F9",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "L02",
+      "title": "Make segment writer transactions durable and recoverable",
+      "phase": 3,
+      "depends_on": [
+        "L01",
+        "P02",
+        "P08"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/SegmentWriter.h",
+        "libs/collabtext/src/crdt/SegmentWriter.cpp",
+        "libs/collabtext/tests/tst_segment_writer.cpp"
+      ],
+      "steps": [
+        "Implement checked append/flush/durable-commit/seal results. fsync_count counts actual successful durable-sync calls only; pending records are cleared only after the chosen durability boundary succeeds.",
+        "Seal using durable temporary contents, checked atomic publish, directory sync, then removal of the covered tail. Recover interrupted seals without silently dropping records; reconstruct header first/last counter ranges and seal deadlines from recovered records.",
+        "Define destructor policy as best-effort cleanup with explicit close required for reportable errors; use DocumentSession explicit close. Bound tail buffers and expose backpressure."
+      ],
+      "acceptance": [
+        "Every V07 seal/append crash point recovers each committed record exactly logically once; uncommitted records may survive and are deduplicated by identity.",
+        "No failed write removes the only valid tail; recovered header metadata is correct."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_segment_writer|tst_durable_file'` plus seal subprocess crash cases in Debug and Release.",
+      "addresses": [
+        "F4",
+        "F9",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "L03",
+      "title": "Implement gap-aware transactional segment reads",
+      "phase": 3,
+      "depends_on": [
+        "L02",
+        "P07"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/SegmentReader.h",
+        "libs/collabtext/src/crdt/SegmentReader.cpp",
+        "libs/collabtext/tests/tst_segment_reader.cpp"
+      ],
+      "steps": [
+        "Replace one highest-segment cursor with an explicit contiguous committed frontier and bounded read state. Safest baseline: stop at missing/invalid predecessors; do not acknowledge later segments past a gap.",
+        "Treat open tails as provisional prefixes and sealed segments as authoritative equivalents. Store content identity/offset so an atomic tail replacement, truncation, repaired record, or seal transition cannot skip unseen records.",
+        "Return records plus delivery tokens without committing merely because they were read. Persist committed coverage only via L01 after recoverable consumer state exists; preserve unsupported/corrupt input and report the gap."
+      ],
+      "acceptance": [
+        "Segment 2 before 1, repaired invalid 1, partial line, replaced tail, and open\u2192sealed duplicate replay lose no logical operations.",
+        "Reader restart returns uncommitted records again; commit cannot advance past an unvalidated record. F6 expected-fail marker is removed."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_segment_reader|tst_evaluation_regressions'`; run all arrival permutations of a three-segment fixture.",
+      "addresses": [
+        "F6"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "L04",
+      "title": "Persist stream envelope identity and implement transport outcomes",
+      "phase": 3,
+      "depends_on": [
+        "L03",
+        "P06",
+        "P07"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/StreamSerialization.cpp",
+        "libs/collabtext/src/crdt/StreamSync.cpp",
+        "libs/collabtext/include/collabtext/StreamSync.h",
+        "libs/collabtext/tests/tst_opstream_replay.cpp",
+        "libs/collabtext/tests/tst_transport_commit_contract.cpp"
+      ],
+      "steps": [
+        "Generate persistent per-actor/per-stream envelope sequence numbers from the durable producer log; recover them under the writer lease before accepting push. ID allocation survives sender-only restart.",
+        "Handle unknown stream, invalid payload, callback absence, callback failure, deferred apply, and poll budget limits via explicit outcomes. Retain rejected records; do not overwrite progress to hide failures.",
+        "Use delivery token commits and per-stream coverage from P07. Deduplicate envelopes and operations separately. Cache ack writes and skip unchanged coverage; do not implement destructive GC here."
+      ],
+      "acceptance": [
+        "F4 sender-restart reproduction delivers b to the already-running receiver; no-op polling does not rewrite ack files.",
+        "Buffer and IdList streams with reused counters have independent coverage; missing callbacks cannot ack."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_transport_commit_contract|tst_opstream_replay|tst_opstream_idempotent|tst_evaluation_regressions'` and multi-stream tests.",
+      "addresses": [
+        "F4",
+        "F5",
+        "R9"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "L05",
+      "title": "Add a full-replay DocumentSession as the recovery baseline",
+      "phase": 3,
+      "depends_on": [
+        "L04",
+        "V03"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/DocumentSession.h",
+        "libs/collabtext/src/DocumentSession.cpp",
+        "libs/collabtext/src/crdt/FileSync.cpp",
+        "libs/collabtext/tests/tst_session_recovery.cpp"
+      ],
+      "steps": [
+        "Own the engines, producer lease, log, and transport binding in one single-thread owner. Opening loads seed/context, replays ALL own and remote durable logs, and drains dependencies; do not use previously persisted incremental cursors to bootstrap empty state.",
+        "Recover the own actor clock from accepted own operations before enabling new local edits. Missing causal data remains a visible recovery/incomplete state; never render it as complete and acknowledge it.",
+        "After baseline replay, derive incremental read state from the recovered coverage and keep it paired with the recoverable logs. Expose open/recover/apply/save/close results and logical visible deltas."
+      ],
+      "acceptance": [
+        "Own-only, mixed-peer, duplicate, reordered, copied, and restart fixtures recover exact CRDT state, not just visible text.",
+        "F5 receiver-restart failure passes; stale cursors cannot suppress recovery. Opening does not manufacture fresh operations or callbacks for replayed local edits."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regressions|tst_opstream_replay'`; restart the same temp store twice and continue editing after each open.",
+      "addresses": [
+        "F5",
+        "R3"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "L06",
+      "title": "Persist local undo policy and bounded history events",
+      "phase": 3,
+      "depends_on": [
+        "L05",
+        "D01"
+      ],
+      "files": [
+        "libs/collabtext/src/storage/LocalHistoryLog.cpp",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/tests/tst_persistent_undo.cpp"
+      ],
+      "steps": [
+        "For Q3=persist: durably record local undo groups, coalescing, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.",
+        "For Q3=session-only: explicitly close and retire old local history without claiming remote peers can instantly remove referenced state; record the retention decision and implement G01/G03 obligations.",
+        "Bound history by steps AND retained bytes, including coalesced entries, inserted keys, and restoration content. Make trim atomic with its retirement record; never drop history silently on allocation/error."
+      ],
+      "acceptance": [
+        "Selected Q3 policy is tested across close/reopen/crash; restored undo reverses only the owner's edits and preserves peer edits.",
+        "A single huge coalesced edit respects the memory limit; retirement survives crash and never re-enables older undo."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_persistent_undo|tst_idlist_undo|tst_undomap|tst_session_recovery'`; test undo\u2192close\u2192reopen\u2192redo and trim crash points.",
+      "addresses": [
+        "F1",
+        "F2",
+        "R10"
+      ],
+      "gate": "Q3 determines this task's path; both paths must state migration history policy.",
+      "status": "not_started"
+    },
+    {
+      "id": "L07",
+      "title": "Wire the dogfood editor to the supported durable session",
+      "phase": 3,
+      "depends_on": [
+        "L06"
+      ],
+      "files": [
+        "app/collabedit/CollabPane.h",
+        "app/collabedit/CollabPane.cpp",
+        "app/collabedit/Document.cpp",
+        "app/collabedit/Document.h",
+        "libs/collabtext/tests/tst_editor_recovery.cpp"
+      ],
+      "steps": [
+        "Replace direct Buffer/FileSync startup ownership with DocumentSession; preserve surgical deltas, scroll behavior, presence, and side streams. Replace the 1\u2013250 allocator with P02 actor state.",
+        "Define Save as durable operation/history commit followed by checked atomic materialized-view replacement; never report success when log commit fails. Expose errors and dirty state without engine internals in the user flow.",
+        "Use explicit session close with surfaced errors; ensure application shutdown invokes it once. Read-only recovery/incompatible stores must not accept accidental edits."
+      ],
+      "acceptance": [
+        "Actual editor open\u2192type\u2192save\u2192close\u2192open retains own/remote edits and follows Q3 undo semantics.",
+        "Failed saves preserve old data and modified state; shutdown does not discard unflushed operations."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_editor_recovery|tst_scroll_stability|tst_collab_plain_text_edit'`; offscreen integration exercises actual Document/CollabPane, not only a fake wrapper.",
+      "addresses": [
+        "F5",
+        "F9",
+        "R1",
+        "R3"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "L08",
+      "title": "Prove the recovery milestone with restart/arrival matrices",
+      "phase": 3,
+      "depends_on": [
+        "L07",
+        "V05"
+      ],
+      "files": [
+        "libs/collabtext/tests/tst_store_lifecycle.cpp",
+        "libs/collabtext/tests/tst_transport_commit_contract.cpp",
+        "docs/reports/vnext-recovery-milestone.md"
+      ],
+      "steps": [
+        "Enumerate sender restart, receiver restart, both restart, missing older segment, repaired corruption, blocked callback, failed durable commit, open\u2192seal transition, and two competing writers for both operation kinds.",
+        "Run simulated sync between physically separate temporary directory trees; copy files in controlled orders, including manifest-before-seed and segment-delete-before-sealed-arrival. Do not assume shared-memory directory visibility models Syncthing.",
+        "Compare recovered versions, logical content, local history policy, and coverage. Record all outstanding defects explicitly; do not enable GC at this milestone."
+      ],
+      "acceptance": [
+        "All committed edits eventually appear exactly logically once after full recovery; unsupported/corrupt stores remain visibly incomplete rather than silently losing records.",
+        "The recovery report cites seed/fixture hashes and Debug/Release/sanitizer results."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_store_lifecycle|tst_session_recovery|tst_transport_commit_contract'`, Release equivalents, and the bounded fault corpus under ASan.",
+      "addresses": [
+        "F4",
+        "F5",
+        "F6",
+        "F9",
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "S01",
+      "title": "Specify sequence ordering and observable edit behavior",
+      "phase": 4,
+      "depends_on": [
+        "P01",
+        "V04"
+      ],
+      "files": [
+        "docs/specs/vnext-sequence-semantics.md",
+        "libs/collabtext/tests/fixtures/sequence-semantics/"
+      ],
+      "steps": [
+        "State exact properties: convergence, duplicate safety, causal integration, contiguous concurrent passages, intended left/right insertion affinity, selective local undo, and explicit behavior for concurrent replacements.",
+        "Create finite fixtures for whole-run paste, per-character forward typing, reverse typing, nested insertions, deleting a neighbor concurrently, undo and reinsert, and editing inside a merged run. Include Buffer and IdList ties; stable expected order derives from actor/operation order and the chosen algorithm.",
+        "Keep plain text and IdList only. Do not claim arbitrary semantic merge intent or maximal non-interleaving unless the selected algorithm/spec establishes it."
+      ],
+      "acceptance": [
+        "F8 fixture accepts only abcXYZ or XYZabc according to the specified tie rule, never aXbYcZ.",
+        "Every example has operation IDs, causal edges, and exact expected content, not just equality between replicas."
+      ],
+      "verification": "Review fixture histories against the evaluation and original engine; run fixture parsing tests. No production algorithm change in this task.",
+      "addresses": [
+        "F8",
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "S02",
+      "title": "Choose and completely specify the C++ ordering algorithm",
+      "phase": 4,
+      "depends_on": [
+        "S01",
+        "P06",
+        "L08"
+      ],
+      "files": [
+        "docs/specs/vnext-sequence-algorithm.md",
+        "docs/reports/vnext-backend-decision.md",
+        "libs/collabtext/tests/reference/SequenceModel.h"
+      ],
+      "steps": [
+        "Compare a principled native ordering repair with a well-specified origin-neighbor/run algorithm, using the S01 requirements. Default is retaining a native C++ engine; no external backend adoption is authorized by this task.",
+        "Write operation fields, integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and anchor boundary interpretation. Explain why each concurrent-passage fixture is preserved.",
+        "Implement a deliberately simple vector/reference interpreter. If no candidate passes the fixtures and bounded-history checks, record the blocker and a separate backend experiment specification; do not ask a weaker executor to invent missing CRDT rules."
+      ],
+      "acceptance": [
+        "Algorithm decision includes complete implementable pseudocode and the reference interpreter passing S01.",
+        "Technical review specifically checks nested/concurrent run boundaries, reverse insertion, and post-merge edits. An incomplete ADR does not unlock S03."
+      ],
+      "verification": "Run the reference interpreter on all S01 fixtures and bounded enumerations; retain exact traces and implementation-independent expected outputs.",
+      "addresses": [
+        "F8",
+        "R12"
+      ],
+      "gate": "Requires a complete reviewed algorithm specification and executable model; unresolved algorithm choices block S03/S04.",
+      "status": "not_started"
+    },
+    {
+      "id": "S03",
+      "title": "Implement ordering in a slow, correctness-first engine path",
+      "phase": 4,
+      "depends_on": [
+        "S02"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/src/crdt/SequenceOrder.cpp",
+        "libs/collabtext/tests/tst_sequence_semantics.cpp"
+      ],
+      "steps": [
+        "Implement the S02 algorithm in an explicit slow path first; keep logical character identities compressed into physical runs where valid. Production decisions must match the reference interpreter.",
+        "Replace shared-locator atomization/order assumptions and obsolete split relocations only as required by the new spec. Update operation codecs/schema fixtures if fields change; never reinterpret old payloads in place.",
+        "Disable old fast paths when their invariants no longer apply; do not optimize this task. Remove the F8 expected-fail marker only after all exact-content fixtures pass."
+      ],
+      "acceptance": [
+        "Production Buffer and IdList match the reference model on every S01 history and delivery permutation.",
+        "All existing valid local editing, duplicate, undo, and convergence tests pass or have explicitly justified semantic expectation updates."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_sequence_semantics|tst_convergence|tst_idlist_convergence|tst_evaluation_regressions'` plus seeded differential traces under ASan.",
+      "addresses": [
+        "F8"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "S04",
+      "title": "Define and implement stable boundary anchors",
+      "phase": 4,
+      "depends_on": [
+        "S03"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/Anchor.h",
+        "libs/collabtext/src/crdt/Anchor.h",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/tests/tst_anchor.cpp"
+      ],
+      "steps": [
+        "Represent boundaries and affinity according to S02 using sufficient left/right identity context; cover start/end, empty document, deleted neighbors, and subsequent concurrent insertions.",
+        "Return explicit unresolved/wrong-epoch results rather than silently returning document end. Specify IdList element anchors separately from text insertion boundaries.",
+        "Encode anchors with their own version, document/stream/epoch context, and checked affinity. Add legacy-anchor conversion only in migration."
+      ],
+      "acceptance": [
+        "In ab\u2192aXb, preexisting left/right anchors at 1 resolve to 1/2; start/end affinity and remote exact-position tests pass.",
+        "Deleted-neighbor anchors remain meaningful before reclamation; foreign-stream/epoch anchors cannot resolve accidentally. F7 marker is removed."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_anchor|tst_idlist_anchor|tst_sequence_semantics|tst_evaluation_regressions'`; assert exact positions through undo/redo and concurrent inserts.",
+      "addresses": [
+        "F7",
+        "R2",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "S05",
+      "title": "Specify retained anchors and historical delta validity",
+      "phase": 4,
+      "depends_on": [
+        "S04",
+        "L06"
+      ],
+      "files": [
+        "docs/specs/vnext-anchor-retention.md",
+        "libs/collabtext/src/DocumentSession.cpp",
+        "libs/collabtext/src/crdt/Comment.cpp",
+        "libs/collabtext/src/crdt/ChatMessage.cpp",
+        "libs/collabtext/tests/tst_anchor_retention.cpp"
+      ],
+      "steps": [
+        "Classify ephemeral cursors separately from durable comments/bookmarks/undo selections. Persist explicit durable anchor pins; pins must be retired by an operation, not by presence timeout.",
+        "Specify which versions edits_since may query and how a checkpoint/GC floor invalidates older queries. Return HistoryUnavailable instead of silently producing an incorrect delta.",
+        "Make comment/chat anchor ingestion reject wrong document/epoch and preserve unresolved anchors for later causal resolution. Define anchor translation for epoch transitions before G06 can remove identities."
+      ],
+      "acceptance": [
+        "A durable comment on deleted text survives permitted undo and restart; stale ephemeral cursors do not pin history indefinitely.",
+        "Querying a version older than the supported retention floor reports an explicit error."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_anchor_retention|tst_comment|tst_chat_message|tst_edits_since|tst_persistent_undo'`.",
+      "addresses": [
+        "F7",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "S06",
+      "title": "Boundedly enumerate sequence/undo histories against the model",
+      "phase": 4,
+      "depends_on": [
+        "S05",
+        "V04"
+      ],
+      "files": [
+        "libs/collabtext/tests/tst_sequence_model.cpp",
+        "libs/collabtext/tests/reference/SequenceModel.h",
+        "libs/collabtext/tests/fixtures/reduced-traces/"
+      ],
+      "steps": [
+        "Enumerate 2\u20133 actors and small histories under all causally valid delivery orders, duplicates, deferred retry, forward/reverse insertion, deletion, undo/redo, and anchors.",
+        "Compare production visible content, resolved boundaries, operation coverage, and future edit behavior to the S02 interpreter. Reduce and retain every discrepancy.",
+        "Provide bounded CI limits and a longer deterministic campaign; clearly state that bounded enumeration is evidence, not a general proof."
+      ],
+      "acceptance": [
+        "No mismatch in the checked domain; histories reproduce from artifacts and have exact resource/runtime bounds.",
+        "New ordering/anchor regression traces are included permanently; model does not call production ordering helpers."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_sequence_model|tst_sequence_semantics'` and a bounded ASan campaign; retain enumeration limits and counts.",
+      "addresses": [
+        "F7",
+        "F8",
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "S07",
+      "title": "Reintegrate safe fast paths with equivalence checks",
+      "phase": 4,
+      "depends_on": [
+        "S06"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/tests/tst_sequence_fast_paths.cpp"
+      ],
+      "steps": [
+        "Re-enable one fast path per small change only when its preconditions are written next to the code. Keep the slow production path and model available for differential testing. Remove the obsolete first attempt and redundant accumulators in edits_since; split ordering/delta transformations into named helpers with explicit preconditions and update stale extract/rebuild comments. Reuse shared policy helpers where semantics match, keeping Buffer and IdList storage distinct.",
+        "For each path, exercise split boundaries, same-position concurrency, mixed Unicode, undo visibility, and origins retired from the local undo stack but retained globally.",
+        "Record fast/fallback counters so later performance work can measure which path is used rather than assuming historical frequency."
+      ],
+      "acceptance": [
+        "Fast and slow paths produce identical logical state and anchors on differential corpus.",
+        "No blanket normalization bypass or altered comparator is accepted as a performance shortcut."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_sequence_fast_paths|tst_sequence_model|tst_fuzz|tst_idlist_fuzz'`; run Release benchmark smoke without speed assertions.",
+      "addresses": [
+        "F8",
+        "R6"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "G01",
+      "title": "Specify membership epochs and reclamation certificates",
+      "phase": 5,
+      "depends_on": [
+        "D01",
+        "S06",
+        "L08",
+        "P07"
+      ],
+      "files": [
+        "docs/specs/vnext-membership-gc.md",
+        "libs/collabtext/tests/reference/GcModel.h"
+      ],
+      "steps": [
+        "Define immutable epoch membership, explicit enrollment/retirement events, producer identities, and how new actors join without invalidating an already published common frontier. Q2 chooses the retirement policy; absence/presence timeout is never itself an acknowledgement.",
+        "Define a certificate binding stream, epoch, membership hash, common durable coverage, per-actor undo-retirement coverage, retained anchor translations, and durable checkpoint hash. Require all still-enrolled actors, including silent ones, to contribute; no scalar-max substitution.",
+        "Specify the full state machine for checkpoint proposal, coverage confirmation, epoch transition, interruption, competing proposals, and returning retired peers. Preserve a returning peer's unsynced branch for explicit reconciliation; do not pretend replay into a new epoch is automatically valid.",
+        "Implement a slow model and complete eligibility predicate. Include no available peers, unknown actor, missing ack, restored stale ack, remote redo, concurrent enrollment, retirement, and checkpoint corruption."
+      ],
+      "acceptance": [
+        "There is a complete implementable protocol; every physical deletion has a certificate and no permitted future undo/anchor request needs removed data.",
+        "If a live actor retains a relevant undo group or is offline, GC blocks unless the selected explicit retirement/epoch policy safely removes that obligation."
+      ],
+      "verification": "Run GcModel against all F1/F2/F3 histories and adversarial membership traces; publish the eligibility predicate and state transition table before G02 starts.",
+      "addresses": [
+        "F1",
+        "F2",
+        "F3",
+        "F7",
+        "R10"
+      ],
+      "gate": "Q2/Q3 resolved; protocol must pass independent technical review and executable-model checks. Incomplete certificates never unlock physical GC.",
+      "status": "not_started"
+    },
+    {
+      "id": "G02",
+      "title": "Implement durable membership and undo-retirement publication",
+      "phase": 5,
+      "depends_on": [
+        "G01",
+        "L06"
+      ],
+      "files": [
+        "libs/collabtext/src/storage/MembershipStore.cpp",
+        "libs/collabtext/src/storage/RetentionState.cpp",
+        "libs/collabtext/tests/tst_membership.cpp",
+        "libs/collabtext/tests/tst_undo_retirement.cpp"
+      ],
+      "steps": [
+        "Persist enrollment/retirement/epoch events in per-producer immutable records using L01; validate them against G01 before changing eligible peer sets.",
+        "Publish per-stream undo-retirement state monotonically only after local trim is durable. A retained group containing old origins must block the corresponding floor; coalescing cannot conceal pins.",
+        "Require explicit confirmation for any product action retiring another device because that action changes later merge guarantees; show concrete affected store/actor and rescue instructions in the application, not an automatic heartbeat eviction."
+      ],
+      "acceptance": [
+        "Restart preserves membership and undo-retirement obligations; silence never removes a member on the recommended policy.",
+        "Retired peers cannot silently resume old-epoch mutation, and their unmerged operations remain exportable."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_persistent_undo'`; inject crashes before/after each publication point.",
+      "addresses": [
+        "F1",
+        "F2",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "G03",
+      "title": "Implement per-stream durable coverage and certificate construction",
+      "phase": 5,
+      "depends_on": [
+        "G02",
+        "L04",
+        "P03"
+      ],
+      "files": [
+        "libs/collabtext/src/storage/CoverageStore.cpp",
+        "libs/collabtext/src/crdt/StreamSync.cpp",
+        "libs/collabtext/src/storage/GcCertificate.cpp",
+        "libs/collabtext/tests/tst_gc_certificate.cpp"
+      ],
+      "steps": [
+        "Publish only delivery-token coverage tied to durable local state; enforce contiguous producer envelope coverage separately from engine operation vectors. Include IdList streams.",
+        "Compute common coverage over the current certified epoch membership using true intersection. Missing/stale/unsupported peer data constrains eligibility; cache by membership hash and invalidate on epoch changes.",
+        "Construct an immutable internal certificate only after all G01 requirements are satisfied. Public callers cannot forge a certificate from a Global or integer."
+      ],
+      "acceptance": [
+        "Cross-stream counter reuse, silent members, deferred ops, callback absence, and stale checkpoint recovery cannot advance eligibility.",
+        "A certified frontier references exact coverage and checkpoint artifacts and can be independently revalidated after restart."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_gc_certificate|tst_transport_commit_contract|tst_membership'`; compare with GcModel on adversarial traces.",
+      "addresses": [
+        "F2",
+        "F3",
+        "F5"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "G04",
+      "title": "Implement full engine checkpoint serialization",
+      "phase": 5,
+      "depends_on": [
+        "S06",
+        "L06",
+        "P08"
+      ],
+      "files": [
+        "libs/collabtext/src/storage/CheckpointCodec.cpp",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/tests/tst_checkpoint_codec.cpp"
+      ],
+      "steps": [
+        "Specify local versus shareable checkpoint sections. Capture logical tree runs/entries, origin/boundary state, visibility derivation, UndoMap, causal/version/counter state, deferred input, pins, and coverage. Local actor undo/redo groups and private writer state belong in local sections.",
+        "Rebuild derived indexes rather than serializing raw tree pointers or object layouts. Validate snapshot invariants and limits before exposing restored engines.",
+        "Reject incomplete/corrupt/wrong-epoch checkpoints and fall back to retained replay data with an explicit diagnostic. Include checkpoint format version and integrity hash."
+      ],
+      "acceptance": [
+        "Round-trip engines produce identical future edits, undo/redo, anchors, and convergence after receiving more remote operations.",
+        "Malformed checkpoints never partially replace live state; shared import does not adopt another actor's local undo stack or writer identity."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_checkpoint_codec|tst_sequence_model|tst_persistent_undo'`; fuzz bounded checkpoint input under ASan.",
+      "addresses": [
+        "F5",
+        "F7",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "G05",
+      "title": "Publish checkpoints atomically and accelerate recovery",
+      "phase": 5,
+      "depends_on": [
+        "G04",
+        "L08"
+      ],
+      "files": [
+        "libs/collabtext/src/storage/CheckpointStore.cpp",
+        "libs/collabtext/src/DocumentSession.cpp",
+        "libs/collabtext/tests/tst_checkpoint_recovery.cpp"
+      ],
+      "steps": [
+        "Write/check durable checkpoint contents, then atomically publish its pointer and coverage using L01. Never advance a reader cursor ahead of a recoverable local checkpoint/log set.",
+        "On startup choose a validated checkpoint, replay uncovered own/remote records, restore Q3 local history, and rebuild counters/indexes. Verify full replay and checkpoint replay give equivalent future behavior.",
+        "Retain previous checkpoints and covered logs until G06 certifies deletion. Support threshold configuration and manual creation without requiring SQLite."
+      ],
+      "acceptance": [
+        "Crash at each publication point recovers old or new complete state; missing/corrupt newest checkpoint falls back safely.",
+        "Recovery time reduction is measured separately from correctness; reader cursors cannot cause lost operations after rollback."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_checkpoint_recovery|tst_store_lifecycle|tst_session_recovery'`; compare full replay and checkpoint bootstrap fixtures.",
+      "addresses": [
+        "F5",
+        "R5",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "G06",
+      "title": "Implement certificate-based tombstone and UndoMap reclamation",
+      "phase": 5,
+      "depends_on": [
+        "G03",
+        "G05",
+        "S05",
+        "V03"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/ReclamationPolicy.h",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/src/crdt/UndoMap.cpp",
+        "libs/collabtext/tests/tst_gc.cpp",
+        "libs/collabtext/tests/tst_idlist_gc.cpp"
+      ],
+      "steps": [
+        "Replace public compact(Global) as a destructive entry point with DocumentSession-managed certificate reclamation; retain a clearly deprecated harmless compatibility wrapper if useful.",
+        "Share eligibility policy across Buffer/IdList, not their entire storage implementations. Protect local and remote undo/redo, insertions without deletion IDs, and pinned anchors; retain boundary stubs/translation entries where the approved algorithm requires them.",
+        "Reclaim UndoMap entries only when no retained item/history/pin or supported historical query requires them. Maintain the documented edits_since floor. Count content, metadata, indexes, and retention bytes separately."
+      ],
+      "acceptance": [
+        "All local/remote restoration cases remain correct after GC; no missing anchor jumps to end; both primitives obey the same policy.",
+        "Memory reclamation includes eligible undo metadata and never relies only on local stack protection."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_gc|tst_idlist_gc|tst_anchor_retention|tst_gc_certificate|tst_evaluation_regressions'`; differential-check permitted post-GC operations against unreclaimed engines.",
+      "addresses": [
+        "F1",
+        "F2",
+        "F3",
+        "F7",
+        "R7",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "G07",
+      "title": "Reclaim covered log segments and old checkpoints safely",
+      "phase": 5,
+      "depends_on": [
+        "G06"
+      ],
+      "files": [
+        "libs/collabtext/src/storage/StoreCompactor.cpp",
+        "libs/collabtext/src/storage/CheckpointStore.cpp",
+        "libs/collabtext/tests/tst_store_compaction.cpp"
+      ],
+      "steps": [
+        "Delete only sealed segments fully covered by the validated shareable/local checkpoint and G01 certificate; never delete live tails or logs needed by an enrolled peer's future operations.",
+        "Retain required checkpoint chains, epoch translation records, retirement data, and unsupported/quarantined records. Use durable deletion bookkeeping so interrupted cleanup is idempotent.",
+        "Add dry-run inventory listing eligible and protected artifacts with reasons. Returning stale peers follow G01 rescue/bootstrap semantics instead of silently omitting their unsynced edits."
+      ],
+      "acceptance": [
+        "Repeated compaction/restart produces the same recoverable logical state; no checkpoint pointer references deleted data.",
+        "Disk usage plateaus in an eligible workload, while an offline/pinned workload reports exactly why reclamation is blocked."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_store_compaction|tst_checkpoint_recovery|tst_store_lifecycle'`; inject interruption at every deletion/publish boundary.",
+      "addresses": [
+        "F5",
+        "F6",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "G08",
+      "title": "Validate long-lived editing and reclaimable memory/disk bounds",
+      "phase": 5,
+      "depends_on": [
+        "G07",
+        "S07",
+        "V05"
+      ],
+      "files": [
+        "libs/collabtext/tests/tst_long_lived_store.cpp",
+        "docs/reports/vnext-reclamation-milestone.md"
+      ],
+      "steps": [
+        "Exercise many edit/undo/redo/coalesce/trim cycles, durable comments, offline devices, explicit retirement, checkpointing, and reconnect with both CRDT primitives.",
+        "Measure engine allocations, UndoMap/history/pin bytes, checkpoint sizes, retained logs, and RSS separately. Demonstrate a plateau only in workloads meeting retirement/retention assumptions.",
+        "Publish final GC invariants, blocked-case diagnostics, seed/trace identities, and limits; do not promise history-free arbitrary offline return after retirement."
+      ],
+      "acceptance": [
+        "Logical state and permitted future operations match unreclaimed reference engines throughout the trace.",
+        "Eligible workloads have bounded retained state; ineligible workloads preserve correctness and report unbounded obligations rather than deleting them."
+      ],
+      "verification": "Run bounded long-lived Debug/Release campaigns and ASan; publish counts and actual byte metrics, with explicit campaign time/memory budgets.",
+      "addresses": [
+        "F1",
+        "F2",
+        "F3",
+        "F7",
+        "R4",
+        "R7",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "A01",
+      "title": "Split CMake targets and remove runtime test dependencies",
+      "phase": 6,
+      "depends_on": [
+        "P06",
+        "L08"
+      ],
+      "files": [
+        "CMakeLists.txt",
+        "libs/collabtext/CMakeLists.txt",
+        "app/CMakeLists.txt",
+        "libs/collabtext/src/crdt/SegmentFormat.cpp",
+        "tests/core-smoke/"
+      ],
+      "steps": [
+        "Introduce CollabText::Core (C++20 only), CollabText::FileTransport (zstd plus portable SHA-256 provider), CollabText::QtAdapter, CollabText::Widgets, and test-only support. Keep NetworkSim/QtTest out of production archives.",
+        "Use explicit COLLABTEXT_BUILD_TESTS, COLLABTEXT_BUILD_QT, COLLABTEXT_BUILD_APPS, and COLLABTEXT_BUILD_FILE_TRANSPORT options. Core-only configure must not search for Qt or zstd.",
+        "Record the SHA-256 implementation/dependency and license; default portable file-transport provider can use OpenSSL::Crypto, leaving Core dependency-free. Remove QCryptographicHash from mandatory transport code."
+      ],
+      "acceptance": [
+        "Core-only configure/build works with Qt package discovery disabled; FileTransport works without Qt; Qt targets are optional.",
+        "Runtime linkage contains no QtTest. Existing applications/tests link only the targets they actually use."
+      ],
+      "verification": "Configure all-option and core-only builds; use a plain C++ core smoke executable without QtTest. Run the fast suite on the full configuration.",
+      "addresses": [
+        "R2",
+        "R7",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "A02",
+      "title": "Establish an installed public header boundary",
+      "phase": 6,
+      "depends_on": [
+        "A01",
+        "P07",
+        "S04"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/",
+        "libs/collabtext/src/crdt/",
+        "tests/consumer-smoke/",
+        "docs/specs/vnext-public-api.md"
+      ],
+      "steps": [
+        "Move stable public ActorId, OperationId, Anchor, outcome/config types, and engine APIs into self-contained public headers. Keep fragments, locators, raw variants, Global/tree layouts, and writers private.",
+        "Ensure Buffer and IdList consumer entry points remain accessible through documented facades, including anchors, undo limits, batch apply, and session integration. A facade must not silently remove required capabilities.",
+        "Remove src from PUBLIC include paths. Public tests compile with only installed headers and libraries, not source-tree includes inherited from the target."
+      ],
+      "acceptance": [
+        "Every public header compiles independently; no public include references crdt/ or src internals.",
+        "Consumer smoke exercises Buffer/IdList equivalent facades and an external OpStream implementation using stable types only."
+      ],
+      "verification": "Compile each installed header in a separate translation unit and run the external consumer sample. Inspect compiler include paths for accidental source-tree exposure.",
+      "addresses": [
+        "R2",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "A03",
+      "title": "Implement a single complete Qt document adapter",
+      "phase": 6,
+      "depends_on": [
+        "A02",
+        "L07",
+        "S05"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/CollabDocument.h",
+        "libs/collabtext/src/CollabDocument.cpp",
+        "libs/collabtext/src/CrdtEngine.cpp",
+        "libs/collabtext/src/SyncManager.cpp",
+        "libs/collabtext/tests/tst_document_adapter.cpp"
+      ],
+      "steps": [
+        "Bind all supported QTextDocument mutation paths to DocumentSession, and apply engine deltas back using scoped suppression and edit blocks. Handle typing, paste, IME, programmatic insert/delete, selection replacements, undo/redo, and remote changes.",
+        "Use one engine-owned undo path; preserve cursor/scroll selections with stable anchors. Remove stale serialization-pending stubs and signal-only pseudo-bindings.",
+        "Make SyncManager a documented presence/transport composition helper or deprecate it with a precise replacement sample. Route dogfood CollabPane through this supported adapter while preserving widgets."
+      ],
+      "acceptance": [
+        "Direct document edits and remote engine operations stay synchronized without feedback loops or double operations.",
+        "IME/non-BMP input, multi-cursor edits, undo/redo, and surgical scroll behavior are covered by real adapter tests."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_document_adapter|tst_editor_recovery|tst_multicursor|tst_scroll_stability'`; include QInputMethodEvent and programmatic QTextCursor paths.",
+      "addresses": [
+        "R3",
+        "R8",
+        "R9"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "A04",
+      "title": "Implement batch outcomes, subscriptions, and safe notification policy",
+      "phase": 6,
+      "depends_on": [
+        "A03",
+        "P05"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/CrdtEngine.h",
+        "libs/collabtext/include/collabtext/DocumentSession.h",
+        "libs/collabtext/src/DocumentSession.cpp",
+        "libs/collabtext/tests/tst_callbacks.cpp"
+      ],
+      "steps": [
+        "Provide batch remote application outcomes and one visible-change notification per applied batch, with exact deltas. Duplicate/deferred/rejected operations do not claim visible change.",
+        "Use scoped subscriptions/unsubscribe handles with defined lifetime; reject or queue reentrant mutations according to P01. Do not allow callbacks to outlive their session.",
+        "Expose single-owner thread rules and bounded pending byte/count queues. Return actionable backpressure rather than abandoning accepted records."
+      ],
+      "acceptance": [
+        "Callback order/count and invalid/deferred behavior match P01; remote ops never echo as local ops.",
+        "Destroyed/unsubscribed listeners are not called; reentrant mutation has tested deterministic behavior."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_callbacks|tst_document_adapter|tst_transport_commit_contract'`; ASan verifies listener teardown/lifetime cases.",
+      "addresses": [
+        "R9"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "A05",
+      "title": "Define local_clear and other reset semantics across epochs",
+      "phase": 6,
+      "depends_on": [
+        "A02",
+        "G05"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/include/collabtext/IdList.h",
+        "libs/collabtext/tests/tst_reset_semantics.cpp",
+        "docs/specs/vnext-public-api.md"
+      ],
+      "steps": [
+        "Preserve legacy local_clear in migration/compatibility documentation as local-only state discard with version retention. Do not use it for history replay or a collaborative reset.",
+        "Expose an explicitly named local-view discard only if consumers need it; collaborative clear produces operations, while replacing a store/checkpoint uses an explicit epoch-aware recovery operation.",
+        "Document which callbacks, identity, clocks, anchors, deferred input, and undo groups survive each action. Reject replay into a cleared engine whose preserved coverage would deduplicate required operations."
+      ],
+      "acceptance": [
+        "Consumer reset examples are unambiguous; a local clear cannot masquerade as a synced document reset.",
+        "Replay/restoration uses fresh recovery state or valid checkpoint import, never preserved-version local_clear."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_reset_semantics|tst_idlist|tst_session_recovery'`; compile a port of the V08 local_clear consumer sample.",
+      "addresses": [
+        "R14",
+        "R2"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "A06",
+      "title": "Install and export the library package with migration adapters",
+      "phase": 6,
+      "depends_on": [
+        "A04",
+        "A05"
+      ],
+      "files": [
+        "cmake/CollabTextConfig.cmake.in",
+        "libs/collabtext/CMakeLists.txt",
+        "tests/consumer-smoke/CMakeLists.txt",
+        "docs/MIGRATING_TO_VNEXT.md"
+      ],
+      "steps": [
+        "Implement install/export/version package metadata, component dependency discovery, stable target names, and separate public include installs. Test a relocated installation prefix.",
+        "Document old\u2192new headers, types, signatures, callback/ack semantics, error paths, ownership, offsets, and reset APIs; include Buffer and IdList plus custom transport porting examples.",
+        "Provide limited deprecated adapters only where safe; old scalar GC wrappers cannot create a certificate, and old void push cannot pretend commit success. Mark source and ABI compatibility separately."
+      ],
+      "acceptance": [
+        "An independent project finds CollabText through find_package and links without source-tree paths.",
+        "Migration guide maps every V08 item and has compilable before/after samples; no same-store mixed-version promise unless D01 explicitly selects and implements it."
+      ],
+      "verification": "Install to a temporary prefix, hide original include tree, relocate prefix, and configure/build/run external samples for Core, FileTransport, and QtAdapter.",
+      "addresses": [
+        "R2",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "A07",
+      "title": "Add compiler/platform/package verification in CI",
+      "phase": 6,
+      "depends_on": [
+        "A06",
+        "P08",
+        "V04"
+      ],
+      "files": [
+        ".github/workflows/ci.yml",
+        "tools/verify-roadmap.sh",
+        "docs/specs/vnext-platform-support.md"
+      ],
+      "steps": [
+        "Publish support tier: Linux production verification first; Windows/macOS build and functional durability coverage where runners are available. Do not claim verified power-loss guarantees without evidence.",
+        "Run core-only builds without Qt, full Linux Debug/Release suites, bounded seeded fuzz/model tests, ASan/UBSan on supported compilers, and install-consumer checks.",
+        "Keep slow campaigns/benchmarks in scheduled or manually triggered jobs; failures retain traces and do not become successful skips. Record any unavailable platform as unsupported/unverified."
+      ],
+      "acceptance": [
+        "CI catches accidental Qt dependencies, public-header leakage, sanitizer failures, and package regressions.",
+        "Platform-specific durable-file implementations compile/test on their claimed platforms; POSIX APIs no longer leak into unconditional builds."
+      ],
+      "verification": "Validate workflow syntax locally; run matching Linux jobs locally; require first remote CI results before E06 declares platform support.",
+      "addresses": [
+        "R4",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X01",
+      "title": "Define workloads, budgets, and structured benchmark output",
+      "phase": 7,
+      "depends_on": [
+        "V06",
+        "V04",
+        "S07",
+        "A04"
+      ],
+      "files": [
+        "benchmarks/TraceFormat.md",
+        "benchmarks/traces/",
+        "benchmarks/BenchmarkRunner.cpp",
+        "docs/specs/vnext-performance-targets.md"
+      ],
+      "steps": [
+        "Create deterministic prose/typing, random mid-run, bulk paste/delete, Unicode, long-tombstone, retained-undo, 2/5/10-peer offline merge, stream restart, and high-actor-count workloads. Record original edit and remote apply counts.",
+        "Separate engine API, encode/decode, recovery, file transport, Qt mutation/layout, and paint scheduling measurements. Emit revision, seed/trace hash, hardware, flags, state/fragment counts, percentiles, allocation/RSS/disk/wire metrics, and unavailable fields.",
+        "Choose per-workload targets after a five-run corrected baseline. Treat a candidate 100 KB engine p99 below 8 ms and bounded GUI poll slices as goals to evaluate, not unmeasured release guarantees. Record all normalization units."
+      ],
+      "acceptance": [
+        "Every benchmark checks exact content/version/anchor expectations and is reproducible without private data.",
+        "Targets reference one recorded environment; compiler/hardware changes cannot silently look like regressions or wins."
+      ],
+      "verification": "Run a short Release workload matrix and five repeats of principal workloads; validate output schema and compare operation counts to trace metadata.",
+      "addresses": [
+        "R5"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X02",
+      "title": "Instrument algorithm paths, allocations, and retention costs",
+      "phase": 7,
+      "depends_on": [
+        "X01"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Diagnostics.h",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/src/crdt/SumTree.h",
+        "benchmarks/BenchmarkRunner.cpp"
+      ],
+      "steps": [
+        "Add opt-in counters for tree visits, clones, allocations, fragment splits, normalization/fallbacks, deferred queue bytes/retries, origin/deletion lookup, undo scans, delta scans, and retained pin/history/UndoMap bytes.",
+        "Keep diagnostics out of default hot paths or behind compile-time/runtime disabled settings. Distinguish allocated/live engine memory from process RSS and file cache.",
+        "Profile representative corrected traces and publish the largest measured costs. Do not assume fallback frequency remains 2.3 percent."
+      ],
+      "acceptance": [
+        "Counters agree with synthetic tiny cases and do not alter behavior.",
+        "Profile report identifies target bottlenecks using data, including wire-size and catch-up paths."
+      ],
+      "verification": "Run diagnostic correctness tests and Release trace profiles; compare diagnostics enabled/disabled logical output and overhead.",
+      "addresses": [
+        "R5",
+        "R6",
+        "R7",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X03",
+      "title": "Optimize summary layout and sparse vector ownership",
+      "phase": 7,
+      "depends_on": [
+        "X02",
+        "P03"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Clock.h",
+        "libs/collabtext/src/crdt/Clock.cpp",
+        "libs/collabtext/src/crdt/Fragment.h",
+        "libs/collabtext/src/crdt/IdList.h",
+        "libs/collabtext/src/crdt/SumTree.h"
+      ],
+      "steps": [
+        "Remove demonstrated unused summaries/index storage; retain only fields required by measured queries. Preserve summary monoid laws and checkpoint rebuild behavior.",
+        "Replace unchecked manual allocation with exception/error-consistent RAII small-buffer storage and checked growth. Test inline\u2192heap, move/copy/self-assignment, empty vectors, and allocation failure before optimizing copies.",
+        "Measure node/item sizes, live allocations, cache behavior where available, and small/large-actor costs. Accept a layout change only with equivalent logical behavior."
+      ],
+      "acceptance": [
+        "Allocation failure leaves valid state; sparse-vector and summary law tests pass.",
+        "Memory/latency results show actual improvement or the change is documented/reverted instead of retaining unproved complexity."
+      ],
+      "verification": "Run clock/summary/tree/model suites under ASan; run the X01 fixed trace matrix and publish before/after node bytes and live allocation metrics.",
+      "addresses": [
+        "R7"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X04",
+      "title": "Index origins and deletion references for targeted updates",
+      "phase": 7,
+      "depends_on": [
+        "X03",
+        "G06"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/OriginIndex.h",
+        "libs/collabtext/src/crdt/DeletionIndex.h",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/tests/tst_crdt_indexes.cpp"
+      ],
+      "steps": [
+        "Maintain origin-range\u2192current run/boundary and deletion-id\u2192affected runs mappings across split, insertion, coalescing, undo, GC, and checkpoint restoration. Do not keep raw pointers invalidated by tree mutation.",
+        "Use indexes for remote deletion lookup and undo/redo targeted visibility updates; remove redundant complete index rebuilds where tests establish incremental equivalence.",
+        "Provide diagnostic validation that compares indexed lookups to a full scan in test builds. Test origins absent because of safe reclamation distinctly from corrupt input."
+      ],
+      "acceptance": [
+        "Index rebuild and incremental maintenance agree on every seeded mutation trace.",
+        "Undo/deletion visits scale with affected spans, with correct remote restoration and GC behavior."
+      ],
+      "verification": "Run `tst_crdt_indexes`, GC/model/undo suites and ASan; profile 1, 100, and many affected runs at fixed total history size.",
+      "addresses": [
+        "R6",
+        "R7"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X05",
+      "title": "Replace full-tree local ordering checks with checked splice boundaries",
+      "phase": 7,
+      "depends_on": [
+        "X04",
+        "S07"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/SumTree.h",
+        "libs/collabtext/tests/tst_sequence_fast_paths.cpp"
+      ],
+      "steps": [
+        "Derive local splice preconditions from S02 and validate adjacent boundaries touched by a splice; keep the full-tree ordering walk as a debug/test diagnostic.",
+        "Remove production O(all-fragments) validation only after differential traces demonstrate that untouched subtrees retain ordering invariants.",
+        "Retain an explicit slow path for cases outside those preconditions; record its frequency and avoid broad sort/rebuild unless required."
+      ],
+      "acceptance": [
+        "No ordering discrepancy against full validation/reference model, including adversarial split/undo/concurrent traces.",
+        "Common local edits visit bounded tree paths/affected runs instead of a full history scan."
+      ],
+      "verification": "Run sequence model, SumTree, seeded convergence, and fast/slow differential tests; publish visited-node counts at increasing historical fragment counts.",
+      "addresses": [
+        "R6"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X06",
+      "title": "Use run intervals for deletion and undo bookkeeping",
+      "phase": 7,
+      "depends_on": [
+        "X04"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/UndoMap.h",
+        "libs/collabtext/src/storage/LocalHistoryLog.cpp",
+        "libs/collabtext/tests/tst_run_bookkeeping.cpp"
+      ],
+      "steps": [
+        "Replace temporary per-character deletion timestamp expansion and sorting with canonical actor/counter intervals; use interval references for undo groups where semantics permit.",
+        "Preserve origin identity and parity semantics through overlapping deletes, split runs, mixed Unicode, coalescing, local history persistence, and checkpoint/GcCertificate processing.",
+        "Version local-history/checkpoint encoding if intervals alter storage; provide decoder compatibility within the development branch rather than silently changing persisted records."
+      ],
+      "acceptance": [
+        "Large delete/paste replacement bookkeeping scales with affected runs and output intervals, not temporary character objects.",
+        "Undo/redo and remote overlapping deletes match the slow model exactly."
+      ],
+      "verification": "Run run-bookkeeping/model/undo/checkpoint suites; measure 1 KB/100 KB/1 MB bulk operations and retained history bytes.",
+      "addresses": [
+        "R6",
+        "R7",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X07",
+      "title": "Add Unicode summaries and indexed anchor/delta queries",
+      "phase": 7,
+      "depends_on": [
+        "X04",
+        "X05",
+        "S05"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Fragment.h",
+        "libs/collabtext/src/crdt/SumTree.h",
+        "libs/collabtext/src/CrdtEngine.cpp",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/CollabDocument.cpp",
+        "libs/collabtext/tests/tst_unicode_seek.cpp"
+      ],
+      "steps": [
+        "Add UTF-16/scalar/line summaries only for supported query needs; make byte\u2194UTF-16 conversion seek by tree summary with local run scanning.",
+        "Resolve anchors through maintained origin/boundary indexes and retain correct affinity/retention behavior. For deltas, add an applied-batch change journal or safe summary pruning within the documented historical window.",
+        "Avoid whole text() reconstruction for each keystroke, remote caret, or viewport conversion. Cache viewport conversion/layout data at the adapter boundary where valid."
+      ],
+      "acceptance": [
+        "Multibyte, non-BMP, combining-mark, newline, and invalid-offset tests match exact expected Qt/text positions.",
+        "Anchor/conversion visits are logarithmic plus touched-run work; delta queries never return plausible but incorrect edits outside their retention window."
+      ],
+      "verification": "Run unicode-seek/anchor/delta/document-adapter/model suites; measure 1/10/100 remote cursors on fixed large Unicode documents.",
+      "addresses": [
+        "F7",
+        "R6",
+        "R8"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X08",
+      "title": "Implement incremental IdList mutations",
+      "phase": 7,
+      "depends_on": [
+        "X04",
+        "S07"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/src/crdt/SumTree.h",
+        "libs/collabtext/tests/tst_idlist_mutation_paths.cpp"
+      ],
+      "steps": [
+        "Replace ordinary get_entries\u2192vector edit\u2192set_entries with tree-path insert/remove/visibility updates under the S02 ordering rules.",
+        "Keep a rebuild/reference path for diagnostics, checkpoint import, and complex fallback. Share policy/index helpers with Buffer without changing element-vs-text semantics.",
+        "Cover duplicate element values, equal-position concurrent inserts, removed anchors, undo/redo, reset, and GC certificates."
+      ],
+      "acceptance": [
+        "Tree path and reference vector path remain equivalent; individual edits do not copy the whole list.",
+        "Costs are measured at 10/1,000/100,000 structural entries with controlled history and correct output."
+      ],
+      "verification": "Run all IdList suites, index/model tests, and ASan; publish fixed-trace before/after allocations and latency.",
+      "addresses": [
+        "R6",
+        "R7",
+        "R14"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X09",
+      "title": "Bound catch-up work and eliminate repeated idle scanning",
+      "phase": 7,
+      "depends_on": [
+        "X01",
+        "A04",
+        "G07"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/StreamSync.cpp",
+        "libs/collabtext/src/crdt/SegmentReader.cpp",
+        "libs/collabtext/src/DocumentSession.cpp",
+        "libs/collabtext/src/CollabDocument.cpp",
+        "libs/collabtext/tests/tst_poll_budget.cpp"
+      ],
+      "steps": [
+        "Add record/byte/time budgets per poll and preserve exact resume state. Batch engine application and Qt notifications without acknowledging beyond committed coverage.",
+        "Use resumable/cached validated segment inventories plus periodic complete reconciliation; filesystem watchers are hints, not the source of truth. Skip unchanged acks and avoid indefinitely retaining every merged payload when recoverable storage already owns it.",
+        "Start with bounded work on the owner thread. If profiling warrants workers, specify one engine owner and immutable messages before adding threading; never mutate one Buffer concurrently."
+      ],
+      "acceptance": [
+        "Large catch-up progresses across bounded slices without losing/reordering producer coverage; repeated idle polls do bounded work.",
+        "GUI remains responsive in an instrumented offline-merge workload; notification count scales with batches, not inbound records."
+      ],
+      "verification": "Run `tst_poll_budget`, transport/session recovery and Qt adapter tests; instrument event-loop delays during the X01 10-peer catch-up trace.",
+      "addresses": [
+        "F5",
+        "F6",
+        "R5",
+        "R9",
+        "R10"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "X10",
+      "title": "Publish matched comparisons and the optimization result",
+      "phase": 7,
+      "depends_on": [
+        "X03",
+        "X05",
+        "X06",
+        "X07",
+        "X08",
+        "X09",
+        "G08"
+      ],
+      "files": [
+        "benchmarks/adapters/",
+        "docs/reports/vnext-performance-results.md",
+        "docs/reports/vnext-backend-decision.md"
+      ],
+      "steps": [
+        "Run five repeats of the frozen corrected traces before/after each accepted optimization; report per-stage and tail latency, history memory, recovery time, and disk/wire costs.",
+        "Run at least one native-accessible comparison adapter if the S02 backend decision calls for it; pin revision/licenses/build flags, normalize offsets and operation counts, and verify exact content/semantics. Feature mismatch is explicitly described.",
+        "If an optimization does not help the measured target, revert or justify its independent simplification benefit. Do not use trace throughput reciprocal as single-edit latency."
+      ],
+      "acceptance": [
+        "Results are attributable to specific changes and comparable states; all correctness/retention gates still pass.",
+        "Remaining performance limits and any backend experiment recommendation are explicit; no backend substitution is performed merely to improve headline numbers."
+      ],
+      "verification": "Run the Release trace matrix and publish machine-readable/raw results with metadata; cross-check narrative tables against measured units.",
+      "addresses": [
+        "R5",
+        "R12"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "E01",
+      "title": "Implement a read-only legacy-store inspector",
+      "phase": 8,
+      "depends_on": [
+        "V08",
+        "P06",
+        "L08"
+      ],
+      "files": [
+        "tools/collabtext-inspect-legacy.cpp",
+        "libs/collabtext/src/codec/LegacyCodec.cpp",
+        "libs/collabtext/tests/tst_legacy_inspection.cpp",
+        "docs/MIGRATING_TO_VNEXT.md"
+      ],
+      "steps": [
+        "Scan all own/remote legacy segments and seeds independently of persisted read cursors. Deduplicate by actual operation identity, not colliding stream entry IDs.",
+        "Use the frozen legacy semantics to reconstruct legacy visible content. Detect reused operation IDs with different payloads, missing dependencies, corrupt records, manifest conflicts, invalid seeds, and unresolved anchors.",
+        "Produce a machine-readable inventory with recoverable/unrecoverable ambiguities; never guess a winner or claim dropped/unwritten content is recovered. Input filesystem is opened read-only."
+      ],
+      "acceptance": [
+        "Inspection does not modify input bytes; colliding envelope IDs with distinct valid operations are not suppressed.",
+        "Ambiguous legacy clock reuse or missing history yields an explicit rescue report instead of a silent plausible document."
+      ],
+      "verification": "Run all V08 legacy fixtures and compare input hashes before/after inspection; verify reconstructed content against the frozen legacy engine.",
+      "addresses": [
+        "F4",
+        "F5",
+        "F6",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "E02",
+      "title": "Implement migration into a new store and translate persistent anchors",
+      "phase": 8,
+      "depends_on": [
+        "E01",
+        "S05",
+        "G05",
+        "A06",
+        "D01"
+      ],
+      "files": [
+        "tools/collabtext-migrate.cpp",
+        "libs/collabtext/tests/tst_store_migration.cpp",
+        "docs/MIGRATING_TO_VNEXT.md"
+      ],
+      "steps": [
+        "For the recommended Q1 route, materialize validated legacy content into a new document/epoch/store using new identities and a deterministic seed/checkpoint. Preserve old histories as immutable archive/provenance; do not replay old interleaving rules as vNext operations.",
+        "Translate durable comments/anchors by resolved legacy boundary/range to new stable anchors; preserve IDs/lifecycle state and report every unresolved translation. Ephemeral presence is reset.",
+        "Migration creates a dry-run report first and never overwrites the input. State explicitly whether old undo groups can be ported: the safe baseline starts a new active undo history and archives old history, while Q3 persistence applies to vNext sessions. Require explicit opt-in to any lossy translation.",
+        "Prevent old/new writers from opening the same store; validate epoch/schema. If Q1 instead requires live mixed-version collaboration, this task stays blocked until a separate bridge plan is added and tested."
+      ],
+      "acceptance": [
+        "Migration retains exact legacy visible content and resolvable comments in the new store; source hashes are unchanged.",
+        "Unsupported/ambiguous data cannot silently become a successful migration. Porting and store migration are documented as separate actions."
+      ],
+      "verification": "Run migration fixtures including Unicode, comments on deleted text, restart-colliding envelopes, and IdList+Buffer composition; reopen the new store and continue edits/undo across restart.",
+      "addresses": [
+        "F7",
+        "R13"
+      ],
+      "gate": "Q1 selected; legacy undo migration exception must be explicit in DECISIONS.md.",
+      "status": "not_started"
+    },
+    {
+      "id": "E03",
+      "title": "Compile consumer ports and custom transport examples",
+      "phase": 8,
+      "depends_on": [
+        "A06",
+        "E02"
+      ],
+      "files": [
+        "tests/consumer-smoke/",
+        "examples/core-editor/",
+        "examples/custom-opstream/",
+        "docs/MIGRATING_TO_VNEXT.md"
+      ],
+      "steps": [
+        "Port the V08 old consumer samples into independently built new samples for text, IdList composition, anchors, local_clear replacement, error handling, subscriptions, and transport receipt commits.",
+        "Compile a minimal custom OpStream producer/consumer to demonstrate durable receipt versus semantic GC. Show how an external store pairs application recovery with delivery tokens.",
+        "Provide a checklist of old\u2192new symbols/behavior without changing real consumers outside this repository. Include minimum build/link/offset requirements."
+      ],
+      "acceptance": [
+        "All examples compile against the installed package and exercise restart/duplicate delivery correctly.",
+        "Every public breaking change has a concrete example or migration entry; source compilation success does not imply wire/store compatibility."
+      ],
+      "verification": "Install a clean build and run all independent consumer examples; use no internal include paths or direct fragment access.",
+      "addresses": [
+        "R2",
+        "R13",
+        "R14"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "E04",
+      "title": "Replace obsolete status claims and publish actual architecture",
+      "phase": 8,
+      "depends_on": [
+        "L08",
+        "S07",
+        "G08",
+        "A07",
+        "E03",
+        "X10"
+      ],
+      "files": [
+        "README.md",
+        "CLAUDE.md",
+        "docs/ARCHITECTURE.md",
+        "docs/CRDT_ENGINE_SPEC.md",
+        "docs/CRDT_IDLIST_SPEC.md",
+        "docs/CRDT_SYNC_SPEC.md",
+        "docs/CRDT_TRANSPORT_SPEC.md",
+        "docs/LOW_LATENCY_INPUT.md"
+      ],
+      "steps": [
+        "Rewrite current architecture around implemented targets/session/transport/checkpoints/GC policy and exact status. Preserve historical design reports with a superseded notice rather than editing past measurements to look current.",
+        "Describe guarantees conditionally: durable commits, eventual valid delivery, epoch membership, configured undo retention, and supported anchor lifetime. Remove absolute no-lost-work and unsupported uniqueness/performance claims.",
+        "Document trusted-folder identity scope; replace signing-success stubs with explicit Unsupported/no-authentication results, or hide them from the supported API. Cryptographic authentication is a separate feature; do not silently install a signing system.",
+        "Update low-latency guidance using measured editor paths, and list tested platforms, unsupported schemas, resource limits, and deferred features."
+      ],
+      "acceptance": [
+        "Docs match installed public APIs and actual behavior; build instructions reproduce optional-core/Qt/package configurations.",
+        "No unsupported signing, WebSocket requirement, proven non-interleaving, GC, or input-to-photon claim remains."
+      ],
+      "verification": "Validate local links and API examples; compare each advertised guarantee to a named passing test and retained report.",
+      "addresses": [
+        "R11",
+        "R12",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "E05",
+      "title": "Audit task coverage and close every known failure marker",
+      "phase": 8,
+      "depends_on": [
+        "E04"
+      ],
+      "files": [
+        "docs/roadmap/2026-10-reliability/TASKS.json",
+        "docs/reports/vnext-acceptance.md",
+        "libs/collabtext/tests/tst_evaluation_regressions.cpp"
+      ],
+      "steps": [
+        "Map F1\u2013F10 and R1\u2013R14 to commits, exact passing tests, and any explicitly user-approved deferrals. Verify no expected-fail marker remains for a promised release feature.",
+        "Review model independence, compatibility exceptions, error paths, single-owner threading, GC certificates, and recovery fallback invariants. Recheck original report probes against new facades.",
+        "Document residual risks and make incomplete tasks visible; a green test runner is insufficient if tasks or policy decisions remain unresolved."
+      ],
+      "acceptance": [
+        "Every recommendation is implemented/validated or visibly deferred by a recorded user decision.",
+        "No evaluation defect is claimed fixed solely through disabling its test or narrowing an advertised guarantee without documenting the limitation."
+      ],
+      "verification": "Run the complete Debug/Release correctness suite, bounded model/fuzz campaigns, ASan/UBSan, installed-consumer checks, and selected performance suite; retain acceptance logs.",
+      "addresses": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "R4",
+        "R11"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "E06",
+      "title": "Prepare a consumer migration release without merging master",
+      "phase": 8,
+      "depends_on": [
+        "E05"
+      ],
+      "files": [
+        "CMakeLists.txt",
+        "docs/MIGRATING_TO_VNEXT.md",
+        "docs/releases/vnext.md",
+        "docs/reports/vnext-acceptance.md"
+      ],
+      "steps": [
+        "Choose the release version explicitly from the current 0.1.0 baseline and compatibility policy; keep the architecture workstream name v2 distinct from a promise of package version 2.0.",
+        "Create reviewable release notes, package manifests, migration examples, old/new store isolation rules, known limits, and rollback instructions that preserve original stores.",
+        "Keep the breaking branch/worktree available for consumer porting. Prepare any tag/PR/package locally; publishing, external communications, and merging to master require a separate explicit user instruction."
+      ],
+      "acceptance": [
+        "Consumers can evaluate/install the new package while the original master API remains available.",
+        "Rollback restores the old untouched store and binary; new edits are exported/reconciled explicitly rather than silently replayed into v1."
+      ],
+      "verification": "Validate release metadata against installed-package and acceptance evidence; no external publishing or messaging is performed by this task.",
+      "addresses": [
+        "R11",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    }
+  ]
+}
