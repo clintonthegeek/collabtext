@@ -1,0 +1,12 @@
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+    Start 14: tst_gc
+    Start 40: tst_idlist_gc
+1/3 Test #40: tst_idlist_gc ....................   Passed    0.02 sec
+    Start 15: tst_evaluation_regressions
+2/3 Test #15: tst_evaluation_regressions .......   Passed    0.04 sec
+3/3 Test #14: tst_gc ...........................   Passed    0.43 sec
+
+100% tests passed out of 3
+
+Total Test time (real) =   0.43 sec
+Verification exit: 0; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213722Z-2

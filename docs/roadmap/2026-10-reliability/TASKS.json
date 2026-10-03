@@ -2,7 +2,7 @@
   "schema_version": 1,
   "base_revision": "046d375",
   "branch": "roadmap/reliability-v2",
-  "status": "planned",
+  "status": "in_progress",
   "tasks": [
     {
       "id": "V01",
@@ -29,7 +29,20 @@
         "R4"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "374f93c",
+      "implementation_commits": [
+        "9d5541b94734e12c01867c39203ba695ecf86fd1"
+      ],
+      "verification_results": {
+        "debug_fast": "51/51 passed",
+        "release_fast": "51/51 passed",
+        "asan_ubsan_lsan_smoke": "3/3 passed outside restricted sandbox; no suppressions",
+        "runner_failure": "intentional failing fixture exits 8; zero selection exits 3"
+      },
+      "artifacts": [
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/"
+      ]
     },
     {
       "id": "V02",
@@ -65,7 +78,20 @@
         "R4"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "9d5541b94734e12c01867c39203ba695ecf86fd1",
+      "implementation_commits": [
+        "cebabc32faf6d4dcd223ec0c0b1ee7dc76087d74"
+      ],
+      "verification_results": {
+        "strict_debug": "11 confirmed failures; process exits 11",
+        "expected_failures_debug": "16 QtTest passes, 11 explicit XFAIL assertions",
+        "release": "regression executable passed",
+        "asan_ubsan_lsan": "regression executable passed outside restricted sandbox"
+      },
+      "artifacts": [
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/"
+      ]
     },
     {
       "id": "V03",
@@ -76,10 +102,14 @@
       ],
       "files": [
         "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/Buffer.h",
         "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/src/crdt/IdList.h",
         "libs/collabtext/include/collabtext/OpStream.h",
         "libs/collabtext/tests/tst_gc.cpp",
-        "libs/collabtext/tests/tst_idlist_gc.cpp"
+        "libs/collabtext/tests/tst_idlist_gc.cpp",
+        "libs/collabtext/tests/tst_evaluation_regressions.cpp",
+        "README.md"
       ],
       "steps": [
         "Make legacy collect_garbage/compact retain tombstones and restoration metadata by default; allow only separately tested coalescing that preserves identities, undo, and anchors. Do not expose an unsafe opt-in.",
@@ -97,7 +127,28 @@
         "R10"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "cebabc32faf6d4dcd223ec0c0b1ee7dc76087d74",
+      "implementation_commits": [
+        "3f4a210f67dee3ec0313a994818416d45a240534"
+      ],
+      "verification_results": {
+        "red_restoration": "5/5 formerly marked assertions fail before containment; local IdList control passes",
+        "red_retention": "both revised GC executables fail before containment",
+        "debug_targeted": "3/3 CTest executables pass",
+        "debug_fast": "52/52 CTest executables pass",
+        "release_fast": "52/52 CTest executables pass",
+        "asan_ubsan_lsan": "3/3 GC/regression executables pass outside restricted sandbox; no suppressions",
+        "strict_restoration": "6 Buffer/IdList rows pass (8 QtTest passes including init/cleanup)",
+        "remaining_known_failures": "6 explicit F3\u2013F8 XFAIL assertions; entire strict run exits 6"
+      },
+      "artifacts": [
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/"
+      ],
+      "limitations": [
+        "Physical reclamation/coalescing disabled until G06; stored state can grow.",
+        "Durable recovery, persisted undo/redo, and F3\u2013F10 fixes remain pending."
+      ]
     },
     {
       "id": "V04",

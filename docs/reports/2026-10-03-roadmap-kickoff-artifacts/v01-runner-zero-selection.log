@@ -1,0 +1,9 @@
+Root: /tmp/collabtext-v01-runner-probe
+Mode: debug
+Regex: ^nothing_matches$
+Workers: 2
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/collabtext-v01-runner-probe/build-roadmap-debug
+ERROR: CTest selection matched zero tests
+Verification exit: 3; evidence: /tmp/collabtext-v01-runner-probe/build-roadmap-debug/verification/20261003T212002Z-12

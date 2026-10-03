@@ -4,16 +4,16 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status:** all product-policy decisions resolved; improve the existing C++ engine incrementally; implementation not started.
+**Status:** implementation started; V01–V03 complete. Continue with V04 from the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md). All product-policy decisions are resolved; improve the existing C++ engine incrementally.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **62 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
-All breaking implementation work belongs in the worktree above. The user confirmed there is no production data, store, or history to preserve; the new API and formats can start fresh. A copy of these plans is kept in the original checkout's `docs/` for discovery; the worktree is the authoritative implementation copy. This planning deliverable does not authorize a merge, publication, consumer-repository changes, or external messages.
+All breaking implementation work belongs in the worktree above. The user confirmed there is no production data, store, or history to preserve; the new API and formats can start fresh. A copy of these plans is kept in the original checkout's `docs/` for discovery; the worktree is the authoritative implementation copy. The user authorized implementation on this branch. A merge, publication, consumer-repository changes, or external messages require a separate instruction.
 
 ## Read first
 
 1. Read [DECISIONS.md](DECISIONS.md): all Q1–Q4 are resolved. Retain and improve the native engine; do not reinstate migration work or replacement-backend options.
-2. Read [EXECUTION.md](EXECUTION.md). Start with V01; do not assume its verification script or other planned files already exist.
+2. Read [EXECUTION.md](EXECUTION.md) and the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md). V01–V03 are complete; the verification runner exists. Continue with V04; later task artifacts remain planned until their creating tasks complete.
 3. Select the next task whose dependencies are complete. Use the registry order as a safe serial execution order; do not treat phase numbering as permission to skip unfinished prerequisites.
 4. Read the complete task in its phase file and its referenced specification before editing.
 5. Update the registry and record evidence after completing the task. See the design gates for work that needs more expertise than routine implementation.
@@ -112,14 +112,14 @@ Additional recommendations use the following traceability IDs in tasks:
 | R13 | Package install/export, platform support, fresh versioned formats, installed examples | P01, P06–P07, A01–A07, E03–E06 |
 | R14 | Explicit local_clear, recovery, and collaborative reset semantics | V08, A05, E03 |
 
-No recommendation is considered complete merely because it appears in a plan. E05 records implementation commits and exact passing acceptance tests or explicit user-approved deferrals. All tasks start `not_started`.
+No recommendation is considered complete merely because it appears in a plan. E05 records implementation commits and exact passing acceptance tests or explicit user-approved deferrals. Tasks initially start `not_started`; TASKS.json records current completion and evidence.
 
 ## Implementation handoff
 
-- **Immediately available:** V01, followed by independent baseline/fixture/containment tasks as dependencies finish.
+- **Next in serial order:** V04. V06, V07, and V08 are also structurally ready after V01–V03.
 - **All product choices settled:** D01 writes their implementation contract after V08; it does not require another backend question or user confirmation.
 - **Algorithm/protocol blocked until designed:** S03 depends on S02; G02 depends on G01; physical GC depends on all G06 prerequisites.
-- **No changes made yet:** production C++, CMake, serialized formats, and external consumers remain as at the evaluated revision.
+- **Completed kickoff:** reproducible build/test modes, F1–F8 regressions, and conservative GC containment are committed. The worktree contains C++/CMake changes; master remains at the evaluated revision.
 - **Integration:** complete installed examples and release evidence before proposing a merge to master. No production porting deadline or legacy-data migration is needed.
 
 ## Plan revision record
@@ -127,3 +127,5 @@ No recommendation is considered complete merely because it appears in a plan. E0
 On 2026-10-03 the user clarified preproduction status and authorized a complete fresh start. E01/E02 were removed, migration/shim requirements were removed from retained tasks, persistent undo/redo became the only route, and A08 added advisory device review with explicit retirement. Active count changed from 63 to 62. The original evaluation remains a historical assessment of revision 046d375; data-preservation assumptions in that report do not override this decision.
 
 Later on 2026-10-03 the user clarified that the goal is improving the already implemented C++ engine, not rewriting it or adopting Yrs. Q4 is resolved accordingly. D01/S02/S03/X10 now enforce incremental native repair; the Rust assessment's adoption recommendation and trial are removed. External comparisons remain informational. The task count stays 62.
+
+Implementation then began on the isolated branch: V01 (`9d5541b`), V02 (`cebabc3`), and V03 (`3f4a210`) completed. TASKS.json records verification and evidence; the kickoff handoff names V04 as the next task.

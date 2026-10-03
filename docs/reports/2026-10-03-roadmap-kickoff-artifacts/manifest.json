@@ -1,0 +1,95 @@
+{
+  "v01-debug-fast": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v01-debug-fast.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T211646Z-13"
+  },
+  "v01-release-fast": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v01-release-fast.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T212001Z-12"
+  },
+  "v01-asan-unrestricted": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v01-asan-unrestricted.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T212158Z-999621"
+  },
+  "v01-asan-sandbox-restriction": {
+    "exit_code": 8,
+    "source_log": "/tmp/collabtext-v01-asan.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T211807Z-2"
+  },
+  "v02-debug": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v02-debug.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T212833Z-2"
+  },
+  "v02-release": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v02-release.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T212931Z-2"
+  },
+  "v02-asan": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v02-asan.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T212933Z-1007768"
+  },
+  "v03-restoration-before-fix": {
+    "exit_code": 8,
+    "source_log": "/tmp/collabtext-v03-before-fix.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213126Z-2"
+  },
+  "v03-retention-before-fix": {
+    "exit_code": 8,
+    "source_log": "/tmp/collabtext-v03-retention-before-fix.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213308Z-2"
+  },
+  "v03-debug-targeted": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-debug.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213722Z-2"
+  },
+  "v03-asan": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-asan.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T213804Z-1012502"
+  },
+  "v02-default": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v02-expected-failures.log"
+  },
+  "v02-strict": {
+    "exit_code": 11,
+    "source_log": "/tmp/collabtext-v02-strict.log"
+  },
+  "v03-default": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-regressions-default.log"
+  },
+  "v03-strict": {
+    "exit_code": 6,
+    "source_log": "/tmp/collabtext-v03-regressions-strict.log"
+  },
+  "v03-restoration-strict": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-regressions-restoration.log"
+  },
+  "v01-runner-zero-selection": {
+    "exit_code": 3,
+    "source_log": "/tmp/collabtext-v01-runner-probe/zero.log"
+  },
+  "v01-runner-failing-fixture": {
+    "exit_code": 8,
+    "source_log": "/tmp/collabtext-v01-runner-probe/failure.log"
+  },
+  "v03-debug-fast": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-debug-fast.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213854Z-13"
+  },
+  "v03-release-fast": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-release-fast.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T213805Z-13"
+  }
+}

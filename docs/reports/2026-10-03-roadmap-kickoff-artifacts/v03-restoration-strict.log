@@ -1,0 +1,12 @@
+********* Start testing of TestEvaluationRegressions *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestEvaluationRegressions::initTestCase()
+PASS   : TestEvaluationRegressions::f1_local_gc_preserves_insertion_redo(buffer)
+PASS   : TestEvaluationRegressions::f1_local_gc_preserves_insertion_redo(idlist)
+PASS   : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(buffer)
+PASS   : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(idlist)
+PASS   : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(buffer)
+PASS   : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(idlist)
+PASS   : TestEvaluationRegressions::cleanupTestCase()
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 2ms
+********* Finished testing of TestEvaluationRegressions *********

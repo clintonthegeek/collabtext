@@ -18,7 +18,7 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 4. Prefer registry order for a serial run. Work on one task at a time. If a task is too broad, split it into new well-defined subtask IDs with dependencies and acceptance criteria before coding; do not silently expand scope.
 5. Mark the task `in_progress`, record the baseline revision and relevant failures, and read every existing file the task will touch. Paths named as new files are not missing prerequisites.
 
-`validate-plan.py --ready` lists structurally ready tasks. It cannot establish technical review or user approval; the executor must still check the decision/design artifacts. The initial ready list contains only V01 because implementation has not started.
+`validate-plan.py --ready` lists structurally ready tasks. It cannot establish technical review or user approval; the executor must still check the decision/design artifacts. After the V01–V03 kickoff, V04 is next in serial order; V06, V07, and V08 are also structurally ready. Read the [handoff](../../handoff/2026-10-03-reliability-kickoff.md) before continuing.
 
 ## Implementing the selected task
 

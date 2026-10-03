@@ -6,8 +6,9 @@ The evaluated source checkout is `/home/clinton/dev/collabtext`, branch `master`
 Read `docs/roadmap/2026-10-reliability/README.md`, `DECISIONS.md`, and
 `EXECUTION.md` before implementing a roadmap task. `TASKS.json` is the
 authoritative dependency/status registry; the numbered Markdown files contain
-the human-readable tasks. The initial deliverable is planning only: production
-implementation has not started. Begin implementation when the user requests it.
+the human-readable tasks. Implementation has started: V01–V03 are complete.
+Read `docs/handoff/2026-10-03-reliability-kickoff.md` for the verified starting
+point and next task, V04.
 
 For implementation turns:
 
