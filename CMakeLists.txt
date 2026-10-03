@@ -33,3 +33,11 @@ add_subdirectory(libs/collabtext)
 add_subdirectory(app)
 
 enable_testing()
+
+# Trace reduction tool (roadmap V04). Reads a versioned trace artifact produced
+# by a COLLABTEXT_TRACE_OUTPUT campaign and emits a smaller trace that still
+# reproduces the same failure. Not a CTest test; it is a developer tool.
+add_executable(reduce-trace tools/reduce-trace.cpp)
+target_link_libraries(reduce-trace PRIVATE collabtext)
+target_include_directories(reduce-trace PRIVATE ${CMAKE_SOURCE_DIR}/libs/collabtext/src
+                                           ${CMAKE_SOURCE_DIR}/libs/collabtext/tests)
