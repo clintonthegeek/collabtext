@@ -181,6 +181,98 @@ Both remain seeded and announce their seed. Nothing here measures performance,
 certifies another operating system, or completes the remaining roadmap.
 
 
+## 2026-10-03 — V05: correct simulator partitions and ordering configuration
+
+```text
+Task: V05
+Status: complete
+Baseline: 3ec89c2addc34fe54a1a63200a5af497cc9f0710
+Implementation commits: 5f9f759, plus this documentation commit
+Scope: libs/collabtext/src/crdt/NetworkSim.h, NetworkSim.cpp,
+       libs/collabtext/tests/tst_network_sim.cpp (new),
+       libs/collabtext/tests/tst_realistic.cpp, tests/TraceHarness.h,
+       libs/collabtext/CMakeLists.txt
+Regression: tst_network_sim (new) — the partition and ordering contract; plus the
+       realistic scenarios, which previously passed through a partition without
+       asserting anything about it
+Verification: seeds 42 and 20261003 → byte-identical traces on two runs each, all
+       11 recorded scenarios replay and converge; tst_network_sim 16/16; Debug
+       54/54, Release 54/54, sanitizer 54/54 fast; tst_realistic 13/13
+Artifacts: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v05-*
+API/store changes: NetworkSim gained block_link/unblock_link, is_online,
+       is_link_blocked, queued_inbound, queued_outbound, and delivery_log.
+       Trace format v1 gained `block`/`unblock` events.
+Known limits: the harness models latency, duplication, and partitions, not a
+       real transport; monotonicity is per (peer, producer); drain() heals
+       partitions by design
+Next ready tasks: V06, V07, V08
+```
+
+### What changed
+
+`disconnect(r)` used to stop deliveries *to* `r` while still delivering `r`'s own
+operations to every online peer immediately. A replica could broadcast while
+"offline", and a partitioned sender's work was visible to online peers before it
+healed — an asymmetry no transport exhibits. Disconnects are now symmetric:
+local editing keeps working, operations produced offline are queued and released
+on reconnect, and operations already scheduled for the replica stay in its inbox
+until it is online again.
+
+`allow_reorder` was declared and never read, so every delivery took an
+independent random latency and a producer's own operations could overtake each
+other. It now governs per-(peer, producer) monotonicity: with `allow_reorder`
+false an operation never becomes due before the previous one from the same
+producer, latency stays random, and different producers still interleave.
+Retransmissions are scheduled on the same lane, so a duplicate cannot overtake
+the operation it duplicates.
+
+Asymmetric loss has its own API rather than overloading disconnect:
+`block_link(from, to)` holds one direction in the receiver's inbox while the
+reverse keeps flowing, and `unblock_link` releases the held operations without
+rescheduling them.
+
+Writing the tests also exposed a real bug: `drain()` reset the clock to a fixed
+value, so anything scheduled after an earlier drain was stranded and never
+delivered. The clock now only moves forward. That bug was reachable before this
+task too, by any scenario that called `drain()` twice with operations in flight.
+
+### Acceptance evidence
+
+`tst_network_sim` adds 16 cases pinning the documented contract: inbound and
+outbound blocking, invisibility until heal, exactly-once delivery of queued
+work, redundant delivery when `duplicate_probability` is 1.0, monotone lanes with
+and without duplicates, per-seed determinism, and one-directional link blocking.
+
+`tst_realistic` no longer passes through a partition unnoticed. Each partition
+scenario pins the disconnected replica's text from the moment it went offline;
+`long_partition_with_gc` asserts that no delivery crossed the partition in either
+direction (its own documents do change — an edit strategy can delete most of a
+document during 500 edits — so the assertion is about delivery, not length). Two
+scenarios were added for an asymmetric link partition and a monotone transport.
+13/13 pass at seeds 42 and 20261003, with byte-identical traces across two runs
+at each seed and all 11 recorded scenarios replaying to completion and
+converging.
+
+The fast suite is now 54 executables (`tst_network_sim` is new) and passes 54/54
+in Debug, Release, and the sanitizer mode.
+
+One investigation worth recording: an early replay of a realistic trace aborted
+inside a Buffer fragment assertion. It was a stale `reduce-trace` binary linked
+against the pre-V05 library, not an engine defect — an incremental replay
+compared against the recorded run matched every one of 813 intermediate states.
+The lesson is that a partially rebuilt tool can look like a correctness bug;
+rebuild the tool before believing a crash from it.
+
+### Limits
+
+NetworkSim is a test harness, not a transport. It models latency, duplication,
+partitions, and ordering; it says nothing about TCP, Syncthing, or any real link.
+Monotonicity is a per-(peer, producer) lane property, with no cross-producer
+guarantee. `drain()` heals every partition by design, so it can assert only
+post-heal convergence, never convergence while partitioned. These are Linux/GCC
+runs and make no performance or cross-platform claim.
+
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest
@@ -192,6 +284,7 @@ against V02's production code.
 
 The [handoff](../handoff/2026-10-03-reliability-kickoff.md) gives exact commands,
 known failures, and settled product decisions. V04 has since made the randomized
-suites seeded, traced, and reducible; V05, V06, V07, and V08 are the remaining
-structurally ready tasks in phase 1. Do not interpret any single task as
+suites seeded, traced, and reducible; V05 has since corrected the simulated
+network's partition and ordering model. V06, V07, and V08 remain structurally
+ready in phase 1. Do not interpret any single task as
 completing the remaining roadmap.

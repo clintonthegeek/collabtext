@@ -243,8 +243,36 @@
         "R4"
       ],
       "gate": null,
-      "status": "in_progress",
-      "baseline_revision": "3ec89c2addc34fe54a1a63200a5af497cc9f0710"
+      "status": "complete",
+      "baseline_revision": "3ec89c2addc34fe54a1a63200a5af497cc9f0710",
+      "implementation_commits": [
+        "5f9f759"
+      ],
+      "verification_results": {
+        "fixed_seeds": "tst_realistic passes at seeds 42 and 20261003; two runs at each seed produce byte-identical traces",
+        "recorded_scenario_replay": "11/11 realistic scenarios replay to completion and converge via tools/reduce-trace --replay",
+        "tst_network_sim": "16/16 cases pass at the default seed and at seed 42",
+        "debug_targeted": "4/4 CTest executables pass (tst_network_sim, tst_trace_reduction, tst_fuzz, tst_idlist_fuzz)",
+        "debug_fast": "54/54 CTest executables pass",
+        "release_fast": "54/54 CTest executables pass",
+        "asan_ubsan_lsan_fast": "54/54 pass with leak checking enabled",
+        "tst_realistic_separate": "13/13 pass (11 before; two new partition/transport scenarios); minutes in Debug, excluded from the fast selection",
+        "defect_fixed": "drain() rewound the clock and stranded operations scheduled after an earlier drain"
+      },
+      "artifacts": [
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v05-debug-fast/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v05-release-fast/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v05-asan-fast/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v05-traces-seed42/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v05-replay-check.txt"
+      ],
+      "limitations": [
+        "NetworkSim is a test harness, not a transport: it models latency, duplication, partitions, and ordering, not TCP, Syncthing, or any real link.",
+        "Per-producer monotonicity is per (peer, producer) lane; there is no cross-producer ordering guarantee.",
+        "drain() heals every partition and link by design, so it can only assert post-heal convergence, not convergence while partitioned.",
+        "The realistic suite still uses an edit strategy that can delete most of a document in a long partition, so partition assertions compare delivery, not text length.",
+        "These are Linux/GCC runs and make no performance or cross-platform claim."
+      ]
     },
     {
       "id": "V06",

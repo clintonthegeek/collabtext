@@ -1,0 +1,810 @@
+#collabtext-trace 1
+#model networksim
+#label disconnect_reconnect_cycle
+#seed 2086493070933268904
+#replicas 3
+#net 50 200 500 1
+edit 0 0 0 e4ba8a75f09f9ea8
+tick 10
+edit 0 4 4 c3a766e4bb8d756d
+tick 10
+edit 2 0 0 6a7a
+tick 10
+edit 1 0 0 626779c3a563
+tick 10
+edit 2 1 1 -
+tick 10
+edit 0 6 11 e4b89766e4b8a3e4bba766
+tick 10
+edit 2 0 2 c3bbe4baab
+tick 10
+edit 0 16 16 -
+tick 10
+edit 2 2 2 -
+tick 10
+edit 2 5 5 6768
+tick 10
+edit 0 0 3 -
+tick 10
+edit 2 6 7 -
+tick 10
+edit 2 5 5 -
+tick 10
+edit 0 9 15 -
+tick 10
+edit 1 5 6 61
+tick 10
+edit 1 3 3 -
+tick 10
+edit 1 3 3 e4bb9361
+tick 10
+edit 2 0 2 6f66c3a7c3a1e4b984
+tick 10
+edit 2 3 13 6d77c3bf
+tick 10
+edit 0 6 15 6d75
+tick 10
+edit 2 23 34 7377e4b8a5
+tick 10
+edit 1 4 23 756161f09f9fad64
+tick 10
+edit 1 20 20 f09f98856ff09f9b8a
+tick 10
+edit 0 5 17 e4ba8075
+tick 10
+edit 2 5 5 65c3bb7a6cf09f9aab
+tick 10
+edit 0 5 5 f09f9cbd6a78
+tick 10
+edit 1 0 20 c3b961c3bf6d
+tick 10
+edit 1 15 18 -
+tick 10
+edit 2 19 19 6765c3ab
+tick 10
+edit 0 12 15 -
+tick 10
+edit 2 12 34 -
+tick 10
+edit 2 12 16 -
+tick 10
+edit 0 9 25 f09f99a6c3b56f65
+tick 10
+edit 2 18 19 7975e4b9a7c3ae
+tick 10
+edit 0 14 18 c3aa77e4b8b6f09f9fb6c3b7
+tick 10
+edit 2 13 18 -
+tick 10
+edit 2 12 17 -
+tick 10
+edit 1 4 34 6871
+tick 10
+edit 1 4 11 -
+tick 10
+edit 0 1 34 73
+tick 10
+edit 0 21 22 6573e4b99be4bbb4
+tick 10
+edit 0 10 21 -
+tick 10
+edit 1 8 9 79
+tick 10
+edit 2 25 31 77e4bbb96cf09f9dbc
+tick 10
+edit 2 9 30 f09f9f8f6ee4b9b565
+tick 10
+edit 1 10 18 62e4b9a175
+tick 10
+edit 1 7 7 f09f9996
+tick 10
+edit 0 2 5 62f09f9db563
+tick 10
+edit 0 22 22 6566
+tick 10
+edit 2 28 32 -
+tick 10
+edit 1 26 32 78e4bba0696d74
+tick 10
+edit 0 7 31 6b7a6e64c3b4
+tick 10
+edit 0 13 13 6b
+tick 10
+edit 0 3 8 -
+tick 10
+edit 0 6 6 f09f9f9f
+tick 10
+edit 0 2 2 -
+tick 10
+edit 1 34 34 69647465c3be
+tick 10
+edit 1 42 42 c3a479
+tick 10
+edit 1 20 21 64c3b1
+tick 10
+edit 0 21 29 77f09f9abc646d
+tick 10
+edit 2 22 32 61c3b07973
+tick 10
+edit 1 41 50 -
+tick 10
+edit 0 32 34 -
+tick 10
+edit 2 1 23 -
+tick 10
+edit 1 12 29 7774756d
+tick 10
+edit 0 20 34 -
+tick 10
+edit 2 15 15 73c3a0776375
+tick 10
+edit 1 22 22 -
+tick 10
+edit 1 11 11 6f6af09f9e89f09f9dbb7a
+tick 10
+edit 1 30 33 78776c66
+tick 10
+edit 2 24 24 e4b98b
+tick 10
+edit 0 6 15 69
+tick 10
+edit 0 0 15 -
+tick 10
+edit 1 44 44 636868e4b89e
+tick 10
+edit 2 7 27 -
+tick 10
+edit 1 47 50 70696176
+tick 10
+edit 1 3 33 6c6b75f09f9cbac3a0
+tick 10
+edit 2 0 2 71e4bb9b656471
+tick 10
+edit 2 17 17 f09f98ac74
+tick 10
+edit 1 33 34 e4bb81f09f9cb5
+tick 10
+edit 2 11 21 e4baa4746b6d72
+tick 10
+edit 2 5 18 c3b764
+tick 10
+edit 2 1 22 -
+tick 10
+edit 1 41 42 68f09f9ea477f09f98bb77
+tick 10
+edit 0 16 19 -
+tick 10
+edit 2 4 11 6179
+tick 10
+edit 0 14 25 6de4bbb7f09f9b9ac3b478
+tick 10
+edit 2 2 11 7771e4b8967579
+tick 10
+edit 1 0 33 6a736671
+tick 10
+edit 0 31 43 -
+tick 10
+edit 1 2 18 73e4b998f09f9a8979
+tick 10
+edit 0 36 37 e4b988f09f9f8ff09f9a9b
+tick 10
+edit 0 17 25 -
+tick 10
+edit 1 1 8 6b78c3b26f
+tick 10
+edit 0 1 17 e4baa3c3a66f7177
+tick 10
+edit 1 21 22 e4b898c3a56a64e4bba4
+tick 10
+edit 1 10 19 -
+tick 10
+edit 2 8 10 -
+tick 10
+edit 1 10 19 626de4b9acc3ae
+tick 10
+edit 2 17 18 6e76c3a179
+tick 10
+disconnect 2
+edit 0 1 36 6f
+tick 10
+edit 0 0 15 c3a9
+tick 10
+edit 1 21 21 64
+tick 10
+edit 0 7 15 f09f9cbbc3b6716f
+tick 10
+edit 1 17 20 -
+tick 10
+edit 1 17 28 75766e
+tick 10
+edit 1 19 28 c3be6376e4bbb1
+tick 10
+edit 0 0 10 6de4bb8871756c
+tick 10
+edit 1 16 18 -
+tick 10
+edit 0 19 19 6d
+tick 10
+edit 1 9 11 79736a66
+tick 10
+edit 1 17 21 e4b9bf6ee4b8a2c3ab
+tick 10
+edit 1 24 24 c3bde4b98fe4ba99f09f9f8968
+tick 10
+edit 1 15 46 e4bbbb6c79
+tick 10
+edit 0 19 25 e4b996776d
+tick 10
+edit 1 22 22 6bc3b3
+tick 10
+edit 0 29 34 e4ba8765
+tick 10
+edit 1 28 28 75e4b9bfc3a7706f
+tick 10
+edit 1 11 32 f09f9baa67
+tick 10
+edit 0 32 32 e4b8a27972
+tick 10
+edit 0 24 24 c3b37477e4bbae
+tick 10
+edit 1 25 36 67c3aa
+tick 10
+edit 0 1 5 7a61
+tick 10
+edit 0 26 35 e4bba3
+tick 10
+edit 1 11 26 65c3a8e4b98cc3ba6a
+tick 10
+edit 0 26 37 c3bec3bf69
+tick 10
+edit 1 22 27 -
+tick 10
+edit 1 19 19 7a78
+tick 10
+edit 0 42 43 77f09f9eaa
+tick 10
+edit 0 18 47 -
+tick 10
+edit 1 17 20 e4b9be66f09f9894
+tick 10
+edit 1 1 13 f09f9ca7e4bbb46c
+tick 10
+edit 0 25 30 7af09f9a85c3bc
+tick 10
+edit 1 12 22 f09f9cadc3b0
+tick 10
+edit 1 16 16 -
+tick 10
+edit 1 20 30 72746ff09f998369
+tick 10
+edit 0 21 30 -
+tick 10
+edit 1 31 31 7563f09f9a8f7161
+tick 10
+edit 1 5 18 -
+tick 10
+edit 1 26 26 -
+tick 10
+edit 0 2 9 -
+tick 10
+edit 0 13 13 6ce4b9b76777
+tick 10
+edit 0 21 21 -
+tick 10
+edit 0 17 19 -
+tick 10
+edit 0 4 5 -
+tick 10
+edit 0 2 9 e4b88e
+tick 10
+edit 1 1 7 f09f9c9b6ec3bdf09f98b1
+tick 10
+edit 0 8 9 69e4b989
+tick 10
+edit 1 20 24 -
+tick 10
+edit 1 22 28 62
+tick 10
+edit 1 16 25 -
+tick 10
+edit 1 14 21 -
+tick 10
+edit 0 5 27 6b75c3a6e4bb99
+tick 10
+edit 0 24 24 e4ba9f63
+tick 10
+edit 0 9 17 c3abc3baf09f9e99
+tick 10
+edit 1 14 14 f09f9b8462
+tick 10
+edit 1 1 5 62c3a96de4b8a779
+tick 10
+edit 1 5 10 7773
+tick 10
+edit 0 9 11 75
+tick 10
+edit 1 20 20 7af09f99a4
+tick 10
+edit 1 2 4 -
+tick 10
+edit 0 21 22 -
+tick 10
+edit 0 12 16 766ec3af
+tick 10
+edit 0 9 17 -
+tick 10
+edit 1 9 18 7278696c
+tick 10
+edit 1 7 12 66
+tick 10
+edit 1 15 15 -
+tick 10
+edit 0 9 13 686e63f09f9aa2
+tick 10
+edit 0 11 11 7375c3b1
+tick 10
+edit 1 5 9 -
+tick 10
+edit 0 0 5 77686cf09f99a5
+tick 10
+edit 1 0 1 e4b8a3
+tick 10
+edit 1 9 17 f09f99aef09f9caee4b9a2
+tick 10
+edit 0 21 21 f09f9eade4b898e4ba95
+tick 10
+edit 0 23 31 -
+tick 10
+edit 0 13 38 e4bab763f09f9ab4
+tick 10
+edit 1 7 24 e4b8ad
+tick 10
+edit 0 4 12 -
+tick 10
+edit 0 8 8 -
+tick 10
+edit 0 9 9 c3b8e4b88d6977c3b7
+tick 10
+edit 0 8 14 7264
+tick 10
+edit 0 4 10 6ce4b8b97869f09f98a9
+tick 10
+edit 0 10 16 -
+tick 10
+edit 1 21 21 -
+tick 10
+edit 0 18 18 7473c3b4
+tick 10
+edit 1 13 13 -
+tick 10
+edit 0 3 15 -
+tick 10
+edit 1 0 0 e4babb
+tick 10
+edit 1 6 18 e4b982c3b9f09f98b9
+tick 10
+edit 0 16 16 f09f9b9b7a
+tick 10
+edit 0 21 21 -
+tick 10
+edit 1 20 24 e4b8a7f09f9cbb6361
+tick 10
+edit 0 21 21 76e4b887
+tick 10
+edit 1 35 35 c3bf
+tick 10
+edit 1 9 31 -
+tick 10
+edit 0 20 21 68
+tick 10
+edit 0 22 22 61e4b8ad6f
+tick 10
+edit 1 13 15 68f09f9c96
+tick 10
+edit 0 26 30 6f
+tick 10
+edit 1 3 14 6de4bb81f09f98a378f09f98b7
+tick 10
+edit 1 20 20 e4b98061e4bbac67c3b4
+tick 10
+edit 0 27 27 7a
+tick 10
+edit 1 0 7 6c71
+tick 10
+edit 1 19 19 e4b992e4bb876f6de4b9b9
+tick 10
+edit 1 25 36 766bc3a2
+tick 10
+edit 0 23 29 74f09f9f94
+tick 10
+edit 0 9 17 6ee4b8a76165f09f9b84
+tick 10
+edit 0 10 25 68c3b7746d
+tick 10
+edit 1 15 25 c3b5
+tick 10
+edit 1 35 35 78
+tick 10
+edit 0 3 21 62c3b3c3ad
+tick 10
+edit 0 3 4 f09f9ba2716d6269
+tick 10
+edit 0 13 15 -
+tick 10
+edit 1 7 26 72e4bba764c3a3e4b8ab
+tick 10
+edit 0 24 37 -
+tick 10
+edit 0 23 24 -
+tick 10
+edit 1 6 6 6a6b6473
+tick 10
+edit 0 16 26 6778
+tick 10
+edit 1 12 18 77e4b8a376
+tick 10
+edit 0 26 26 677068c3a9
+tick 10
+edit 0 2 29 -
+tick 10
+edit 0 5 5 c3b963e4bbb4627a
+tick 10
+edit 1 20 32 -
+tick 10
+edit 0 4 13 72c3be
+tick 10
+edit 0 1 8 776d
+tick 10
+edit 0 1 3 6e79
+tick 10
+edit 1 27 27 c3b9
+tick 10
+edit 1 19 27 6671647269
+tick 10
+edit 0 0 4 -
+tick 10
+edit 0 0 9 66e4b9937768
+tick 10
+edit 1 23 23 e4b883e4baaef09f9caf
+tick 10
+edit 1 3 4 -
+tick 10
+edit 0 11 11 -
+tick 10
+edit 1 18 21 6e
+tick 10
+edit 0 1 7 69776a
+tick 10
+edit 1 17 19 62
+tick 10
+edit 0 2 2 c3bb75e4b8a9
+tick 10
+edit 1 2 16 -
+tick 10
+edit 0 5 14 e4ba9b68
+tick 10
+edit 1 4 4 e4b9b372c3afc3a7
+tick 10
+edit 0 1 2 -
+tick 10
+edit 0 7 8 e4b9b2c3af
+tick 10
+edit 0 10 10 63f09f9c9872
+tick 10
+edit 0 0 7 -
+tick 10
+edit 1 4 25 6ee4b983e4bb8e71
+tick 10
+edit 0 0 3 7262e4b8b8c3acf09f9c93
+tick 10
+edit 0 5 17 69
+tick 10
+edit 0 25 25 c3b8656871
+tick 10
+edit 1 13 13 62c3be66
+tick 10
+edit 0 29 31 62
+tick 10
+edit 0 30 30 76
+tick 10
+edit 0 18 26 e4b8aaf09f999e767167
+tick 10
+edit 0 3 13 716b6470
+tick 10
+edit 0 3 12 -
+tick 10
+edit 1 13 28 -
+tick 10
+edit 0 4 20 7a
+tick 10
+edit 1 0 1 64
+tick 10
+edit 0 1 1 67e4b89371
+tick 10
+edit 1 12 13 64
+tick 10
+edit 1 0 14 e4bbb676f09f9da26176
+tick 10
+edit 0 18 19 65c3b1676d64
+tick 10
+edit 1 8 9 e4bb9971
+tick 10
+edit 0 21 24 -
+tick 10
+edit 0 18 19 e4bab3e4ba81756cf09f9988
+tick 10
+edit 1 19 19 e4bab5
+tick 10
+edit 0 4 21 676bc3b973
+tick 10
+edit 1 14 17 f09f9e9e726f7465
+tick 10
+edit 0 0 12 -
+tick 10
+edit 0 6 6 f09f9a8270
+tick 10
+edit 0 6 10 77666370
+tick 10
+edit 1 11 23 f09f9da4796366
+tick 10
+edit 1 11 18 -
+tick 10
+edit 0 2 13 626ff09f9883c3ab
+tick 10
+edit 1 0 4 -
+tick 10
+edit 1 4 7 -
+tick 10
+edit 1 4 4 75
+tick 10
+edit 1 1 5 7a
+tick 10
+edit 1 6 10 c3af656fc3a96f
+tick 10
+edit 0 21 23 70f09f99846af09f9aa56a
+tick 10
+edit 1 25 25 76f09f9984
+tick 10
+edit 1 25 26 f09f9f8ae4bab961
+tick 10
+edit 1 32 33 71e4b992
+tick 10
+edit 1 23 26 f09f9992e4ba8b
+tick 10
+edit 1 8 27 6b68c3bd79e4b98f
+tick 10
+edit 0 11 15 -
+tick 10
+edit 1 35 35 e4baa475e4b99a7663
+tick 10
+edit 1 7 31 -
+tick 10
+edit 0 22 22 -
+tick 10
+edit 0 10 22 -
+tick 10
+edit 1 0 25 e4b9b46e76
+tick 10
+edit 0 7 7 6a6ae4bab5646f
+tick 10
+edit 0 15 15 70
+tick 10
+edit 1 1 11 f09f9ab0626ff09f9dba6f
+tick 10
+edit 1 12 18 78
+tick 10
+edit 0 30 38 67f09f9dbff09f999771e4b9be
+tick 10
+edit 1 1 5 -
+tick 10
+edit 0 17 21 f09f9d846be4b996f09f98b5f09f99a3
+tick 10
+edit 0 5 9 -
+tick 10
+edit 1 8 9 -
+tick 10
+edit 1 8 8 64c3a9
+tick 10
+reconnect 2
+tick 500
+edit 2 39 43 f09f9abb
+tick 10
+edit 1 5 45 79696a
+tick 10
+edit 1 6 6 6df09f9bbf6968
+tick 10
+edit 2 30 45 6cc3b7636f
+tick 10
+edit 1 12 13 -
+tick 10
+edit 1 7 14 e4b89b6e6772
+tick 10
+edit 1 10 10 7171
+tick 10
+edit 0 24 38 7a79
+tick 10
+edit 2 3 24 c3b4c3bf
+tick 10
+edit 2 16 18 67
+tick 10
+edit 0 12 31 -
+tick 10
+edit 0 6 6 68e4ba80
+tick 10
+edit 1 5 10 63796dc3a976
+tick 10
+edit 2 14 14 6c736879e4ba98
+tick 10
+edit 0 18 18 f09f9aa1656c
+tick 10
+edit 1 15 15 -
+tick 10
+edit 1 8 20 -
+tick 10
+edit 2 29 30 -
+tick 10
+edit 1 3 3 766e
+tick 10
+edit 2 17 20 696772e4babbe4b8b0
+tick 10
+edit 2 20 29 f09f9da36d74f09f9fb9
+tick 10
+edit 0 19 24 -
+tick 10
+edit 1 0 10 -
+tick 10
+edit 0 32 32 -
+tick 10
+edit 2 3 14 e4b89577
+tick 10
+edit 0 4 27 -
+tick 10
+edit 2 30 35 70
+tick 10
+edit 1 1 8 6970c3bc68
+tick 10
+edit 1 10 13 75
+tick 10
+edit 2 10 13 7373
+tick 10
+edit 0 8 8 -
+tick 10
+edit 1 6 10 -
+tick 10
+edit 2 25 32 7462e4baa0e4b9b2
+tick 10
+edit 0 5 6 -
+tick 10
+edit 0 0 0 -
+tick 10
+edit 1 10 15 e4b99f73
+tick 10
+edit 2 0 18 -
+tick 10
+edit 0 3 4 c3bc77e4ba9e
+tick 10
+edit 1 19 20 e4b89ff09f9fbc
+tick 10
+edit 2 14 14 f09f9eb8e4b8a068e4baa5
+tick 10
+edit 2 11 11 -
+tick 10
+edit 1 13 14 69e4bba7
+tick 10
+edit 0 3 23 6f686a
+tick 10
+edit 0 3 5 62676a61
+tick 10
+edit 2 23 23 7061
+tick 10
+edit 2 15 24 -
+tick 10
+edit 0 4 10 c3bf77
+tick 10
+edit 1 29 39 7a
+tick 10
+edit 0 0 23 76c3b2
+tick 10
+edit 1 31 31 c3a37979f09f9d94c3a0
+tick 10
+edit 1 16 22 c3a1e4b893c3a6
+tick 10
+edit 1 24 27 f09f9ea7
+tick 10
+edit 0 0 3 -
+tick 10
+edit 0 0 0 79f09f9aad74756f
+tick 10
+edit 2 0 23 -
+tick 10
+edit 2 6 6 -
+tick 10
+edit 1 17 24 -
+tick 10
+edit 0 7 8 6bc3baf09f98aff09f9fb564
+tick 10
+edit 0 19 26 6f75e4baac
+tick 10
+edit 2 14 14 6f
+tick 10
+edit 0 20 24 7061
+tick 10
+edit 1 11 21 6b63
+tick 10
+edit 1 17 17 e4bbbec3a6
+tick 10
+edit 0 26 31 -
+tick 10
+edit 2 16 17 -
+tick 10
+edit 1 0 2 e4ba9c
+tick 10
+edit 1 13 29 76c3bfc3af
+tick 10
+edit 0 14 20 c3b0c3b5e4bab3
+tick 10
+edit 2 6 23 70
+tick 10
+edit 2 18 18 e4b8816c6a7068
+tick 10
+edit 1 14 28 -
+tick 10
+edit 0 1 35 -
+tick 10
+edit 2 23 26 c3a7e4ba806669
+tick 10
+edit 0 4 5 -
+tick 10
+edit 1 17 21 -
+tick 10
+edit 0 8 10 7579c3a46d
+tick 10
+edit 2 24 37 -
+tick 10
+edit 1 7 10 7965e4ba8c69
+tick 10
+edit 2 9 20 c3a5
+tick 10
+edit 2 30 30 -
+tick 10
+edit 1 1 11 c3b3
+tick 10
+edit 1 11 11 -
+tick 10
+edit 1 8 9 63
+tick 10
+edit 1 8 14 c3b5707977
+tick 10
+edit 0 24 26 e4bb8768
+tick 10
+edit 2 22 22 f09f9bb8c3ac6d
+tick 10
+edit 2 0 21 c3b66971
+tick 10
+edit 0 24 24 e4b9b7f09f9c98e4b8af76
+tick 10
+edit 0 38 39 6b6771
+tick 10
+edit 1 10 15 -
+tick 10
+edit 0 17 35 c3b6f09f9b8b
+tick 10
+edit 1 5 6 6b
+tick 10
+edit 0 6 21 -
+tick 10
+edit 0 12 13 f09f9dbd6575
+tick 10
+edit 1 10 10 -
+tick 10
+edit 1 1 13 6162
+tick 10
+edit 0 12 12 e4baa87a
+tick 10
+edit 1 3 3 65c3a4c3b16b
+tick 10
+edit 2 0 11 74
+tick 10
+edit 0 16 18 e4bb8c6b716c
+tick 10
+drain

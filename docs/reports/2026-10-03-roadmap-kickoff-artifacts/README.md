@@ -1,4 +1,4 @@
-# V01–V04 verification artifacts
+# V01–V05 verification artifacts
 
 These are portable excerpts of actual verification runs on 2026-10-03. See
 [the task log](../vnext-task-log.md) and
@@ -36,6 +36,23 @@ installation requirements.
 | V04 seed-42 determinism | Two `tst_fuzz` runs produce byte-identical traces; a third run at seed 20261003 differs in every scenario |
 | V04 injected failure | 42-event trace with one injected lost delivery diverges; reduction removes 26 events and the reduced trace still diverges |
 | V04 strict regression executable | Unchanged: six remaining F3–F8 failures; exits 6 |
+| V05 targeted Debug | 4/4 CTest executables pass |
+| V05 final Debug / Release fast | 54/54 CTest executables pass in each mode |
+| V05 final sanitizer fast selection | 54/54 pass with ASan, UBSan, and leak checking enabled |
+| V05 `tst_network_sim` | 16/16 cases pass at the default seed and at seed 42 |
+| V05 realistic, seeds 42 and 20261003 | 13/13 pass; two runs at each seed produce byte-identical traces |
+| V05 recorded scenario replay | 11/11 realistic scenarios replay to completion and converge |
+
+### V05 additions
+
+`v05-debug-fast/`, `v05-release-fast/`, and `v05-asan-fast/` hold the runner
+evidence for the 54-executable fast selection. `v05-network-sim-*.log` are the
+`tst_network_sim` runs at the default seed and at seed 42;
+`v05-realistic-seed20261003.log` is the realistic suite at the other fixed seed.
+`v05-traces-seed42/` and `v05-traces-seed20261003/` hold the recorded traces from
+those two campaigns, `v05-traces-differ.txt` shows they differ from each other,
+and `v05-replay-check.txt` records all eleven scenarios replaying to completion
+and converging through `tools/reduce-trace`.
 
 ### V04 additions
 

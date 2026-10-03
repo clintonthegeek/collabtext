@@ -4,7 +4,7 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status:** implementation started; V01–V04 complete. Continue with V05, V06, V07, or V08 from [TASKS.json](TASKS.json); the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md) describes the verified V01–V03 starting point and V04's deliverables. All product-policy decisions are resolved; improve the existing C++ engine incrementally.
+**Status:** implementation started; V01–V05 complete. Continue with V06, V07, or V08 from [TASKS.json](TASKS.json); the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md) describes the verified V01–V03 starting point; later task results are in [the task log](../../reports/vnext-task-log.md). All product-policy decisions are resolved; improve the existing C++ engine incrementally.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **62 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
@@ -13,7 +13,7 @@ All breaking implementation work belongs in the worktree above. The user confirm
 ## Read first
 
 1. Read [DECISIONS.md](DECISIONS.md): all Q1–Q4 are resolved. Retain and improve the native engine; do not reinstate migration work or replacement-backend options.
-2. Read [EXECUTION.md](EXECUTION.md) and the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md). V01–V04 are complete: the verification runner exists and the randomized suites are seeded, traced, and reducible (see "Randomized test contract" in EXECUTION.md). Later task artifacts remain planned until their creating tasks complete.
+2. Read [EXECUTION.md](EXECUTION.md) and the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md). V01–V05 are complete: the verification runner exists and the randomized suites are seeded, traced, and reducible (see "Randomized test contract" in EXECUTION.md). Later task artifacts remain planned until their creating tasks complete.
 3. Select the next task whose dependencies are complete. Use the registry order as a safe serial execution order; do not treat phase numbering as permission to skip unfinished prerequisites.
 4. Read the complete task in its phase file and its referenced specification before editing.
 5. Update the registry and record evidence after completing the task. See the design gates for work that needs more expertise than routine implementation.
@@ -116,7 +116,8 @@ No recommendation is considered complete merely because it appears in a plan. E0
 
 ## Implementation handoff
 
-- **Next in serial order:** V05, whose V04 prerequisite is now complete. V06, V07, and V08 are also structurally ready; work on one task at a time.
+- **Next in serial order:** V06. V07 and V08 are also structurally ready; work on one task at a time.
+- **NetworkSim is now honest about partitions:** `disconnect` blocks both directions and queues a disconnected replica's work, `allow_reorder` implements per-producer monotonicity, and asymmetric loss has its own `block_link` API. A scenario can no longer pass by not noticing a partition.
 - **All product choices settled:** D01 writes their implementation contract after V08; it does not require another backend question or user confirmation.
 - **Algorithm/protocol blocked until designed:** S03 depends on S02; G02 depends on G01; physical GC depends on all G06 prerequisites.
 - **Completed kickoff:** reproducible build/test modes, F1–F8 regressions, and conservative GC containment are committed. The worktree contains C++/CMake changes; master remains at the evaluated revision.
@@ -128,6 +129,6 @@ On 2026-10-03 the user clarified preproduction status and authorized a complete 
 
 Later on 2026-10-03 the user clarified that the goal is improving the already implemented C++ engine, not rewriting it or adopting Yrs. Q4 is resolved accordingly. D01/S02/S03/X10 now enforce incremental native repair; the Rust assessment's adoption recommendation and trial are removed. External comparisons remain informational. The task count stays 62.
 
-Implementation then began on the isolated branch: V01 (`9d5541b`), V02 (`cebabc3`), V03 (`3f4a210`), and V04 (`e5eb6f5`, `97a306c`) completed. V04 made the randomized suites seeded, traced, and reducible; the seed and trace-artifact contract is documented in EXECUTION.md. TASKS.json records verification and evidence.
+Implementation then began on the isolated branch: V01 (`9d5541b`), V02 (`cebabc3`), V03 (`3f4a210`), and V04 (`e5eb6f5`, `97a306c`), and V05 (`5f9f759`) completed. V04 made the randomized suites seeded, traced, and reducible; the seed and trace-artifact contract is documented in EXECUTION.md. V05 corrected the simulated network's partition and ordering model and fixed a `drain()` clock bug. TASKS.json records verification and evidence.
 
 The V04 migration also found a failure that predated it: `tst_realistic`'s `networksim_compact_all` asserted that compaction removed tombstones, which has been false since V03's containment change and stayed hidden because that suite is excluded from the fast CTest selection. It now asserts retention. Treat the fast-suite exclusion list as a place where failures can hide, and run the excluded suites when touching their subject area.

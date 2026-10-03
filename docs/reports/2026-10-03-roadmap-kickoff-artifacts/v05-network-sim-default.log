@@ -1,0 +1,20 @@
+********* Start testing of TestNetworkSim *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestNetworkSim::initTestCase()
+PASS   : TestNetworkSim::defaults_are_a_hostile_network()
+PASS   : TestNetworkSim::disconnect_blocks_inbound_until_reconnect()
+PASS   : TestNetworkSim::disconnect_blocks_outbound_until_reconnect()
+PASS   : TestNetworkSim::partitioned_send_is_invisible_to_online_peers_until_heal()
+PASS   : TestNetworkSim::queued_offline_work_delivers_exactly_once()
+PASS   : TestNetworkSim::queued_offline_work_delivers_redundantly_when_configured()
+PASS   : TestNetworkSim::allow_reorder_false_keeps_each_producer_monotone()
+PASS   : TestNetworkSim::allow_reorder_false_includes_duplicates_in_the_lane()
+PASS   : TestNetworkSim::allow_reorder_true_permits_producer_reordering()
+PASS   : TestNetworkSim::allow_reorder_is_deterministic_for_a_seed()
+PASS   : TestNetworkSim::blocked_link_is_one_directional()
+PASS   : TestNetworkSim::blocked_link_holds_traffic_until_healed()
+PASS   : TestNetworkSim::disconnected_replica_is_reachable_again_after_reconnect()
+PASS   : TestNetworkSim::networksim_traces_record_disconnects_and_heals()
+PASS   : TestNetworkSim::cleanupTestCase()
+Totals: 16 passed, 0 failed, 0 skipped, 0 blacklisted, 138ms
+********* Finished testing of TestNetworkSim *********

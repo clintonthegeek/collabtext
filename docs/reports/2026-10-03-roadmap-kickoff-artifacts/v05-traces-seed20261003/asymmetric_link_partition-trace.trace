@@ -1,0 +1,329 @@
+#collabtext-trace 1
+#model networksim
+#label asymmetric_link_partition
+#seed 11317963592336482044
+#replicas 4
+#net 0 0 500 1
+edit 1 0 0 7963c3b07ac3aa
+tick 10
+edit 2 0 4 64e4bbb473
+tick 10
+edit 2 1 4 6ee4b9b4e4b8b173
+tick 10
+edit 3 0 11 -
+tick 10
+edit 1 0 0 -
+tick 10
+edit 1 2 2 e4b99d6bf09f98a063
+tick 10
+edit 0 2 2 e4b9b9757ac3b175
+tick 10
+edit 3 0 6 6376e4baaac3ab72
+tick 10
+edit 1 16 21 -
+tick 10
+edit 3 7 12 63e4b994
+tick 10
+edit 2 11 14 -
+tick 10
+edit 3 7 12 6bc3b76d6579
+tick 10
+edit 0 2 12 f09f9ebfc3b06d
+tick 10
+edit 3 0 2 796d64f09f9fbb
+tick 10
+edit 2 3 3 61f09f99b575
+tick 10
+edit 2 19 19 e4b99ec3b3
+tick 10
+edit 2 17 19 6b72
+tick 10
+edit 3 13 13 67c3ac65f09f9fa3e4b9b4
+tick 10
+edit 3 36 36 c3be786a71f09f9a8e
+tick 10
+edit 2 17 41 e4bba9c3b8
+tick 10
+edit 1 8 8 -
+tick 10
+edit 2 27 27 -
+tick 10
+edit 2 20 27 -
+tick 10
+edit 3 0 16 7a7979787a
+tick 10
+edit 2 3 5 c3bac3b3c3b4f09f989fe4b8a6
+tick 10
+edit 3 17 20 f09f99a07a6367f09f9a98
+tick 10
+edit 2 13 23 -
+tick 10
+edit 0 13 18 77c3bac3bbe4bbba
+tick 10
+edit 2 9 14 -
+tick 10
+edit 2 7 13 -
+tick 10
+edit 3 7 7 76
+tick 10
+edit 3 1 1 c3b0
+tick 10
+edit 3 3 4 e4ba8778c3a5e4b9bc
+tick 10
+edit 2 21 21 e4b9abe4bb9b66
+tick 10
+edit 2 21 28 7470
+tick 10
+edit 3 12 12 f09f99807265f09f9887
+tick 10
+edit 3 9 25 -
+tick 10
+edit 0 17 17 -
+tick 10
+edit 1 3 9 79e4bbb5
+tick 10
+edit 3 10 10 f09f9e836372
+tick 10
+edit 0 14 16 62616b736d
+tick 10
+edit 2 4 19 63766f65
+tick 10
+edit 0 3 11 7569c3b3
+tick 10
+edit 3 3 7 6c77736d61
+tick 10
+edit 2 5 8 f09f9eaae4bbb5
+tick 10
+edit 1 14 14 7679
+tick 10
+edit 3 0 3 6b6b6d
+tick 10
+edit 3 16 16 c3a6
+tick 10
+edit 0 1 12 c3b9
+tick 10
+edit 0 5 5 -
+tick 10
+edit 3 3 9 -
+tick 10
+edit 0 1 1 -
+tick 10
+edit 0 1 3 76
+tick 10
+edit 3 1 1 -
+tick 10
+edit 0 0 2 f09f99bfc3a268e4b9ace4b9b9
+tick 10
+edit 1 7 7 7a6f73
+tick 10
+edit 3 9 13 c3ad77646861
+tick 10
+edit 0 6 8 e4bb9ae4b8a5
+tick 10
+edit 2 6 18 7a676e61
+tick 10
+edit 2 6 11 6ac3ad64f09f999cf09f9a91
+tick 10
+edit 0 18 18 f09f9b966462c3af
+tick 10
+edit 2 4 10 -
+tick 10
+edit 1 23 23 61c3b16466e4b99f
+tick 10
+edit 3 27 28 7a
+tick 10
+edit 2 12 18 78e4b9ae
+tick 10
+edit 0 8 22 e4b88c
+tick 10
+edit 3 15 15 e4baaa
+tick 10
+edit 3 0 18 e4b88d67
+tick 10
+edit 3 4 7 f09f9881e4b885e4b9ae68c3ac
+tick 10
+edit 3 11 14 6de4b9b8
+tick 10
+edit 1 3 12 e4baaa
+tick 10
+edit 1 0 10 -
+tick 10
+edit 3 0 0 -
+tick 10
+edit 1 2 2 -
+tick 10
+edit 2 0 0 -
+tick 10
+edit 3 2 2 f09f998778f09f9d8b
+tick 10
+edit 2 0 11 68
+tick 10
+edit 1 1 1 6e
+tick 10
+edit 1 2 2 70f09f9ebdc3a6e4bbaae4b892
+tick 10
+edit 2 0 15 -
+tick 10
+edit 2 0 0 -
+tick 10
+edit 0 0 0 -
+tick 10
+edit 2 0 0 -
+tick 10
+edit 1 0 0 6dc3bbc3a4e4b98a
+tick 10
+edit 0 8 8 67c3ac6be4ba80c3ad
+tick 10
+edit 0 17 17 -
+tick 10
+edit 3 8 8 c3b9f09f98b3c3bb
+tick 10
+edit 2 10 17 e4b8b8
+tick 10
+edit 2 13 21 f09f9b98
+tick 10
+edit 0 10 17 c3a1f09f98896f6cc3b5
+tick 10
+edit 1 1 8 -
+tick 10
+edit 0 9 13 7364616a
+tick 10
+edit 2 13 13 79f09f9a9ac3b5
+tick 10
+edit 0 13 13 64
+tick 10
+edit 3 1 19 6176
+tick 10
+edit 2 2 5 -
+tick 10
+edit 2 0 0 -
+tick 10
+edit 1 2 2 -
+tick 10
+edit 1 0 1 -
+tick 10
+edit 2 1 1 7268
+tick 10
+block 0 1
+edit 0 0 1 646ac3a4f09f9f82c3a7
+tick 10
+edit 1 1 2 -
+tick 10
+edit 0 11 11 e4b9806fc3a1
+tick 10
+edit 1 2 2 -
+tick 10
+edit 2 4 11 7965c3aa
+tick 10
+edit 3 14 14 c3be
+tick 10
+edit 1 1 1 e4bb88f09f9fac7668e4bb8e
+tick 10
+edit 1 14 14 6f
+tick 10
+edit 1 15 15 -
+tick 10
+edit 2 29 29 f09f9bad
+tick 10
+edit 1 8 14 -
+tick 10
+edit 0 28 28 70e4bb93646c
+tick 10
+edit 2 22 22 746e766371
+tick 10
+edit 0 12 21 69
+tick 10
+edit 1 4 9 e4b89cc3b5c3a8
+tick 10
+edit 1 1 9 -
+tick 10
+edit 1 1 3 646ec3ab65c3a5
+tick 10
+edit 1 6 6 657a6fe4b999e4bb89
+tick 10
+edit 1 2 2 -
+tick 10
+edit 2 25 39 777ac3adc3a9e4b9a1
+tick 10
+edit 0 2 18 e4bbab707a
+tick 10
+edit 3 18 18 -
+tick 10
+edit 0 15 16 -
+tick 10
+edit 3 19 19 c3b1e4ba92687a6a
+tick 10
+edit 1 1 5 -
+tick 10
+edit 2 7 11 f09f9aac6fc3bd6d7a
+tick 10
+edit 0 17 21 6577
+tick 10
+edit 2 25 27 -
+tick 10
+edit 2 6 15 73f09f9f86
+tick 10
+edit 1 11 11 f09f9fa777
+tick 10
+edit 0 18 22 f09f9b807ae4baa573
+tick 10
+edit 2 7 12 c3ac6cc3af7a6a
+tick 10
+edit 3 24 28 f09f9eace4bb9a
+tick 10
+edit 3 32 32 -
+tick 10
+edit 3 35 36 -
+tick 10
+edit 3 2 19 6362f09f9cb06c
+tick 10
+edit 3 22 25 f09f9caef09f9dbf6578
+tick 10
+edit 2 0 2 -
+tick 10
+edit 0 33 33 -
+tick 10
+edit 3 12 30 -
+tick 10
+edit 0 8 15 -
+tick 10
+edit 0 0 7 -
+tick 10
+edit 0 0 1 72
+tick 10
+edit 1 1 3 7671
+tick 10
+edit 2 2 2 61
+tick 10
+edit 3 4 4 c3a571
+tick 10
+edit 2 6 7 e4b996e4bba07a696f
+tick 10
+edit 1 15 16 65
+tick 10
+edit 2 0 0 -
+tick 10
+edit 0 10 10 e4b99c75e4bb9f
+tick 10
+edit 2 22 23 -
+tick 10
+edit 0 17 20 626bf09f9b8e
+tick 10
+edit 3 5 19 e4b8b26473f09f9e91f09f9a93
+tick 10
+edit 3 24 24 6f63
+tick 10
+edit 1 15 18 6664
+tick 10
+edit 1 15 16 77
+tick 10
+edit 1 4 5 -
+tick 10
+edit 2 11 15 -
+tick 10
+edit 3 10 10 -
+tick 10
+edit 1 0 2 796669e4baa8
+tick 10
+unblock 0 1
+drain

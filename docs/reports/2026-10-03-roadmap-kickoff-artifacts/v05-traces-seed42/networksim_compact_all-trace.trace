@@ -1,0 +1,13 @@
+#collabtext-trace 1
+#model networksim
+#label networksim_compact_all
+#seed 12294114771235653134
+#replicas 2
+#net 0 0 500 1
+edit 0 0 0 68656c6c6f
+tick 1
+edit 0 0 5 -
+tick 1
+drain
+gc 0
+compact

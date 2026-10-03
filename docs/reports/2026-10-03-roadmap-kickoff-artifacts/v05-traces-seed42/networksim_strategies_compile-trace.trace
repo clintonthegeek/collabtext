@@ -1,0 +1,13 @@
+#collabtext-trace 1
+#model networksim
+#label networksim_strategies_compile
+#seed 5586446842875887974
+#replicas 2
+#net 0 0 500 1
+edit 0 0 0 68656c6c6f20776f726c6420746869732069732061207465737420646f63756d656e74
+tick 1
+edit 0 2 27 e4b88f
+tick 1
+edit 1 0 11 626172786c7179737a7361706261
+tick 1
+drain

@@ -141,5 +141,35 @@
     "exit_code": 1,
     "command": "pre-migration tst_realistic networksim_compact_all",
     "result": "asserted removed > 0; false since V03 containment, hidden by the fast-suite exclusion; now asserts retention"
+  },
+  "v05-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T232453Z-1095781",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v05-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T232553Z-1098230",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v05-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T232747Z-1101638",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v05-network-sim": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_network_sim at the default seed and seed 42",
+    "log": "v05-network-sim-default.log, v05-network-sim-seed42.log"
+  },
+  "v05-realistic-fixed-seeds": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_realistic with COLLABTEXT_TEST_SEED=42 and =20261003",
+    "result": "13/13 pass; traces byte-identical across two runs at each seed"
+  },
+  "v05-replay-check": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/reduce-trace --replay over both trace sets",
+    "log": "v05-replay-check.txt"
   }
 }
