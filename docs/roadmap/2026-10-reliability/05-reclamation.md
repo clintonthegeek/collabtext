@@ -9,7 +9,7 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** D01, S06, L08, P07  
 **Coverage:** F1, F2, F3, F7, R10  
-**Design/decision gate:** Q2/Q3 resolved; protocol must pass independent technical review and executable-model checks. Incomplete certificates never unlock physical GC.  
+**Design/decision gate:** Q2/Q3 resolved: explicit retirement and persistent undo/redo. The protocol still requires complete independent review/model checks; incomplete certificates never unlock physical GC.  
 
 **Files / scope:**
 
@@ -18,7 +18,7 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 
 **Steps:**
 
-1. Define immutable epoch membership, explicit enrollment/retirement events, producer identities, and how new actors join without invalidating an already published common frontier. Q2 chooses the retirement policy; absence/presence timeout is never itself an acknowledgement.
+1. Define immutable epoch membership, explicit enrollment/retirement events, producer identities, and how new actors join without invalidating an already published common frontier. Devices stay enrolled indefinitely until explicitly retired; elapsed time, reminders, and presence are advisory and never acknowledgements.
 2. Define a certificate binding stream, epoch, membership hash, common durable coverage, per-actor undo-retirement coverage, retained anchor translations, and durable checkpoint hash. Require all still-enrolled actors, including silent ones, to contribute; no scalar-max substitution.
 3. Specify the full state machine for checkpoint proposal, coverage confirmation, epoch transition, interruption, competing proposals, and returning retired peers. Preserve a returning peer's unsynced branch for explicit reconciliation; do not pretend replay into a new epoch is automatically valid.
 4. Implement a slow model and complete eligibility predicate. Include no available peers, unknown actor, missing ack, restored stale ack, remote redo, concurrent enrollment, retirement, and checkpoint corruption.
@@ -26,7 +26,7 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 **Acceptance:**
 
 - There is a complete implementable protocol; every physical deletion has a certificate and no permitted future undo/anchor request needs removed data.
-- If a live actor retains a relevant undo group or is offline, GC blocks unless the selected explicit retirement/epoch policy safely removes that obligation.
+- If an enrolled actor retains a relevant undo group or has insufficient coverage, GC blocks until a validated explicit retirement/epoch transition removes that obligation. A stale-device flag does not alter membership.
 
 **Verification:**
 
@@ -49,11 +49,11 @@ Run GcModel against all F1/F2/F3 histories and adversarial membership traces; pu
 
 1. Persist enrollment/retirement/epoch events in per-producer immutable records using L01; validate them against G01 before changing eligible peer sets.
 2. Publish per-stream undo-retirement state monotonically only after local trim is durable. A retained group containing old origins must block the corresponding floor; coalescing cannot conceal pins.
-3. Require explicit confirmation for any product action retiring another device because that action changes later merge guarantees; show concrete affected store/actor and rescue instructions in the application, not an automatic heartbeat eviction.
+3. Expose a typed retirement-preview and explicit commit API identifying the affected device, documents/epochs, and merge consequences. Persist retirement only after an intentional commit call. Returning-device reconciliation preserves its local unsynced branch; A08 implements the reminder and confirmation UI.
 
 **Acceptance:**
 
-- Restart preserves membership and undo-retirement obligations; silence never removes a member on the recommended policy.
+- Restart preserves membership and undo-retirement obligations; silence, advisory stale flags, and dismissal of reminders never remove a member.
 - Retired peers cannot silently resume old-epoch mutation, and their unmerged operations remain exportable.
 
 **Verification:**
@@ -160,7 +160,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_checkpoint_recovery|tst_store_lifecycl
 
 **Steps:**
 
-1. Replace public compact(Global) as a destructive entry point with DocumentSession-managed certificate reclamation; retain a clearly deprecated harmless compatibility wrapper if useful.
+1. Remove public compact(Global) as a destructive entry point and expose DocumentSession-managed certificate reclamation only; no compatibility wrapper is required.
 2. Share eligibility policy across Buffer/IdList, not their entire storage implementations. Protect local and remote undo/redo, insertions without deletion IDs, and pinned anchors; retain boundary stubs/translation entries where the approved algorithm requires them.
 3. Reclaim UndoMap entries only when no retained item/history/pin or supported historical query requires them. Maintain the documented edits_since floor. Count content, metadata, indexes, and retention bytes separately.
 

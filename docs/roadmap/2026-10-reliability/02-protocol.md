@@ -1,15 +1,15 @@
 # 02. Identity, decoding, and protocol foundations
 
-Goal: make identifiers, operations, codecs, and delivery outcomes explicit. This phase intentionally changes public types on the isolated branch. Legacy codecs remain in a read-only migration module; do not claim mixed-version live collaboration. D01 captures the user's compatibility choice before protocol work begins.
+Goal: make identifiers, operations, codecs, and delivery outcomes explicit. This phase intentionally changes public types on the isolated branch. The user authorized a fresh API and formats without old-store compatibility. D01 records resolved lifecycle policies and the remaining backend choice before backend-dependent work.
 
 Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starting. Task dependencies refer to the [master task registry](TASKS.json). New file paths below are intentional; do not assume they already exist.
 
-## D01 — Finalize compatibility and lifecycle decisions
+## D01 — Finalize fresh-start and lifecycle contracts
 
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** V08  
 **Coverage:** R11, R13  
-**Design/decision gate:** Q1–Q4 must be resolved; alternate routes require updating the task registry.  
+**Design/decision gate:** Q1–Q3 resolved on 2026-10-03; Q4 backend route remains pending. Record an actual answer before backend-dependent work.  
 
 **Files / scope:**
 
@@ -18,14 +18,14 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 
 **Steps:**
 
-1. Record the user answers to compatibility, offline peer retirement, persisted undo, and the native C++ requirement. If no answer is available, leave dependent tasks blocked rather than treating elapsed time as approval.
-2. Enumerate source, ABI, behavior, wire, and on-disk breaks. Specify migration input read-only/output new store and the old/new store isolation rule for the recommended route.
-3. Confirm this release keeps a C++20 engine, Buffer and IdList only, Qt as an optional adapter, and one file transport. A backend replacement remains a separate technical decision, not an automatic dependency.
+1. Record the resolved Q1 clean start, Q2 explicit retirement with advisory reminders, and Q3 persistent bounded undo. Q4 remains an informed backend choice; do not turn openness to learning Rust into adoption approval.
+2. Specify that source, ABI, wire, and store formats can be redesigned freely: no legacy decoder, importer, archive, compatibility shim, or mixed-version protocol is required. Preserve evaluation evidence as regression material.
+3. Read RUST_ASSESSMENT.md, record the actual Q4 answer, and amend backend-dependent tasks before P01 if a Rust trial or adoption is selected. Keep Qt/C++ presentation, file transport, and text/IdList scope; do not execute incompatible backend routes.
 
 **Acceptance:**
 
-- No unresolved policy is silently embedded in an implementation task.
-- Mixed-version collaboration, if required, has its own negotiated bridge plan before P01 proceeds.
+- Resolved policies match the user reply of 2026-10-03; reminders can never automatically retire a device.
+- The backend route and its task amendments are explicit before backend-dependent implementation. No migration work survives merely because it was in the first plan.
 
 **Verification:**
 
@@ -36,7 +36,7 @@ Review the decision register against the user's actual replies and V08 inventory
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** D01  
 **Coverage:** F4, F10, R1, R2, R9, R13  
-**Design/decision gate:** Public signatures must be finalized here before changing callers; amendments update migration mapping.  
+**Design/decision gate:** Public signatures must be finalized here before changing callers; amendments update the new API guide.  
 
 **Files / scope:**
 
@@ -47,7 +47,7 @@ Review the decision register against the user's actual replies and V08 inventory
 
 1. Define ActorId as 128-bit persistent random identity and operation counters as checked uint64; stream/document/epoch identity must be part of an operation context. Use per-stream actor counters; never infer cross-stream coverage from a scalar maximum.
 2. Define separate BufferOperation and IdListOperation opaque value types, OperationId accessors, ApplyOutcome (applied/duplicate/deferred/rejected), DecodeError, StoreError, and PollOutcome. Use a small C++20 Result type rather than requiring C++23 expected.
-3. Allocate separate version fields for operation payload, envelope, manifest, segment, checkpoint, and ack formats. Confirm existing maximum versions via fixture inventory; document each bump rather than blindly using one shared number.
+3. Allocate separate version fields for operation payload, envelope, manifest, segment, checkpoint, and ack formats. Choose fresh baseline versions with explicit format identifiers; versioning protects future data and does not imply old-format compatibility.
 4. Specify non-reentrant single-owner callbacks, replacement/unregistration, object lifetimes, failure atomicity, bounded deferred queues, and notifications only for visible change.
 
 **Acceptance:**
@@ -187,23 +187,22 @@ Run `./tools/verify-roadmap.sh debug 'tst_operation_validation|tst_opqueue|tst_c
 - `libs/collabtext/include/collabtext/IdListOperations.h`
 - `libs/collabtext/include/collabtext/Serialization.h`
 - `libs/collabtext/src/codec/OperationCodec.cpp`
-- `libs/collabtext/src/codec/LegacyCodec.cpp`
 - `libs/collabtext/tests/tst_serialization_public.cpp`
 
 **Steps:**
 
 1. Implement copy/move opaque operation values and stable OperationId/stream accessors; keep Buffer and IdList variants separate. Move construction/details into internal headers.
 2. Encode canonical sparse actor/counter vectors and explicit payload version; avoid storing replacement text twice. Encode uint64 values exactly without double conversion.
-3. Keep strict legacy decoding only for migration fixtures. A normal vNext store rejects incompatible legacy envelopes instead of warn-and-skip loss. Add a read-only old/new codec mapping document.
+3. Define and test only the new codecs. Old or unknown format identifiers produce explicit incompatible-format errors before mutation; retain diagnostic input and do not silently skip records. No legacy decoder or conversion mapping is required.
 
 **Acceptance:**
 
-- Wire size depends on observed actors/text, not largest numeric legacy actor ID; Buffer/IdList round-trips preserve logical operations.
+- Wire size depends on observed actors/text, not the magnitude of identity values; Buffer/IdList round-trips preserve logical operations.
 - Header-only external compilation uses only installed public includes; unknown versions return distinguishable unsupported-version errors.
 
 **Verification:**
 
-Run serialization and public-operation tests; benchmark 1, 250, 65535 legacy IDs through migration and corresponding vNext actors. Verify round-trip stable fixtures.
+Run serialization and public-operation tests; compare equal-cardinality small/large-valued actor sets and exact uint64 bounds. Verify new-format golden round trips and explicit rejection of old/unknown formats.
 
 ## P07 — Define transactional transport receipt and commit APIs
 
@@ -222,12 +221,12 @@ Run serialization and public-operation tests; benchmark 1, 250, 65535 legacy IDs
 
 1. Replace scalar GC fence with per-stream/per-producer durable coverage; supply explicit delivery tokens and commit/retry dispositions. A token identifies exact producer/envelope sequence and epoch, not engine Lamport maximum.
 2. Specify push durability modes, result/error return, unknown-stream errors, subscribe/unsubscribe lifetime, poll budgets, and the requirement that commit occurs only after recoverable application state is durable.
-3. Expose transport coverage independently from semantic GC certificates. Document an old OpStream adapter for sending only; it must never fabricate durable acknowledgements or destructive-GC eligibility.
+3. Expose transport coverage independently from semantic GC certificates. Provide a new-contract reference adapter; no old OpStream wrapper is required and no adapter may fabricate durable acknowledgements or destructive-GC eligibility.
 
 **Acceptance:**
 
 - A no-callback or deferred/rejected inbound record cannot be acknowledged as durably applied.
-- Different streams using the same actor/counter values never advance one another's frontiers. Third-party adapters have complete porting examples.
+- Different streams using the same actor/counter values never advance one another's frontiers. Third-party transport implementers have complete new-contract examples.
 
 **Verification:**
 

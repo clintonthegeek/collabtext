@@ -104,7 +104,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_sequence_semantics|tst_convergence|tst
 
 1. Represent boundaries and affinity according to S02 using sufficient left/right identity context; cover start/end, empty document, deleted neighbors, and subsequent concurrent insertions.
 2. Return explicit unresolved/wrong-epoch results rather than silently returning document end. Specify IdList element anchors separately from text insertion boundaries.
-3. Encode anchors with their own version, document/stream/epoch context, and checked affinity. Add legacy-anchor conversion only in migration.
+3. Encode anchors with their own version, document/stream/epoch context, and checked affinity. Reject obsolete formats explicitly; no legacy-anchor conversion is required.
 
 **Acceptance:**
 

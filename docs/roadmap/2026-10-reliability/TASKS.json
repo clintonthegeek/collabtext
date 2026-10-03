@@ -220,26 +220,26 @@
     },
     {
       "id": "V08",
-      "title": "Inventory consumers and freeze legacy compatibility fixtures",
+      "title": "Inventory the intended API and freeze behavioral fixtures",
       "phase": 1,
       "depends_on": [
         "V02"
       ],
       "files": [
-        "docs/roadmap/2026-10-reliability/compatibility-inventory.md",
-        "libs/collabtext/tests/fixtures/legacy-v1/",
+        "docs/roadmap/2026-10-reliability/api-inventory.md",
+        "libs/collabtext/tests/fixtures/behavior/",
         "tests/consumer-smoke/"
       ],
       "steps": [
-        "Inventory public headers, actual aliases, callbacks, OpStream methods, CMake target/includes, serialized operations, manifests, anchors, and IdList local_clear behavior. Include Markoff contracts from existing handoff docs without accessing external repositories.",
-        "Freeze valid operations/stores with Buffer, IdList, chat/comments, Unicode, multiple producers, restart ID collisions, and known corrupt cases. Record expected legacy visible content using the frozen old engine.",
-        "Create a compile-only legacy consumer sample; identify behavior changes independently from source and ABI changes."
+        "Inventory public headers, callbacks, OpStream methods, CMake targets, document/anchor behavior, and IdList reset semantics. Existing handoff contracts describe useful use cases, not compatibility obligations; do not access external repositories.",
+        "Freeze logical edit/delivery scenarios for Buffer, IdList, comments, Unicode, multiple producers, restart, and corruption. Separate desired exact outputs from observed defects; do not create legacy-store import fixtures.",
+        "List the supported new API requirements and obsolete surfaces to remove. Record source/ABI/format breaks for reviewers without requiring adapters or mixed-version editing."
       ],
       "acceptance": [
-        "Inventory explicitly names every planned compatibility break and old guarantee; fixtures have licenses/provenance and exact expected outputs.",
-        "No external consumer is modified or contacted. Legacy source is retained for migration comparison."
+        "Every supported use case and intended contract is named; behavioral fixtures have provenance and exact expected outputs.",
+        "There is no requirement to preserve old stores, history, or public types. No external consumer is modified or contacted."
       ],
-      "verification": "Build the legacy sample against the original checkout; validate fixture hashes and expected content. Record the base revision `046d375`.",
+      "verification": "Review against the evaluation and user fresh-start decision; reproduce behavioral fixtures against revision 046d375 and record known failures separately from desired outputs.",
       "addresses": [
         "R2",
         "R3",
@@ -252,7 +252,7 @@
     },
     {
       "id": "D01",
-      "title": "Finalize compatibility and lifecycle decisions",
+      "title": "Finalize fresh-start and lifecycle contracts",
       "phase": 2,
       "depends_on": [
         "V08"
@@ -262,20 +262,20 @@
         "docs/specs/vnext-compatibility.md"
       ],
       "steps": [
-        "Record the user answers to compatibility, offline peer retirement, persisted undo, and the native C++ requirement. If no answer is available, leave dependent tasks blocked rather than treating elapsed time as approval.",
-        "Enumerate source, ABI, behavior, wire, and on-disk breaks. Specify migration input read-only/output new store and the old/new store isolation rule for the recommended route.",
-        "Confirm this release keeps a C++20 engine, Buffer and IdList only, Qt as an optional adapter, and one file transport. A backend replacement remains a separate technical decision, not an automatic dependency."
+        "Record the resolved Q1 clean start, Q2 explicit retirement with advisory reminders, and Q3 persistent bounded undo. Q4 remains an informed backend choice; do not turn openness to learning Rust into adoption approval.",
+        "Specify that source, ABI, wire, and store formats can be redesigned freely: no legacy decoder, importer, archive, compatibility shim, or mixed-version protocol is required. Preserve evaluation evidence as regression material.",
+        "Read RUST_ASSESSMENT.md, record the actual Q4 answer, and amend backend-dependent tasks before P01 if a Rust trial or adoption is selected. Keep Qt/C++ presentation, file transport, and text/IdList scope; do not execute incompatible backend routes."
       ],
       "acceptance": [
-        "No unresolved policy is silently embedded in an implementation task.",
-        "Mixed-version collaboration, if required, has its own negotiated bridge plan before P01 proceeds."
+        "Resolved policies match the user reply of 2026-10-03; reminders can never automatically retire a device.",
+        "The backend route and its task amendments are explicit before backend-dependent implementation. No migration work survives merely because it was in the first plan."
       ],
       "verification": "Review the decision register against the user's actual replies and V08 inventory; no tests required for this documentation-only task.",
       "addresses": [
         "R11",
         "R13"
       ],
-      "gate": "Q1\u2013Q4 must be resolved; alternate routes require updating the task registry.",
+      "gate": "Q1\u2013Q3 resolved on 2026-10-03; Q4 backend route remains pending. Record an actual answer before backend-dependent work.",
       "status": "not_started"
     },
     {
@@ -292,7 +292,7 @@
       "steps": [
         "Define ActorId as 128-bit persistent random identity and operation counters as checked uint64; stream/document/epoch identity must be part of an operation context. Use per-stream actor counters; never infer cross-stream coverage from a scalar maximum.",
         "Define separate BufferOperation and IdListOperation opaque value types, OperationId accessors, ApplyOutcome (applied/duplicate/deferred/rejected), DecodeError, StoreError, and PollOutcome. Use a small C++20 Result type rather than requiring C++23 expected.",
-        "Allocate separate version fields for operation payload, envelope, manifest, segment, checkpoint, and ack formats. Confirm existing maximum versions via fixture inventory; document each bump rather than blindly using one shared number.",
+        "Allocate separate version fields for operation payload, envelope, manifest, segment, checkpoint, and ack formats. Choose fresh baseline versions with explicit format identifiers; versioning protects future data and does not imply old-format compatibility.",
         "Specify non-reentrant single-owner callbacks, replacement/unregistration, object lifetimes, failure atomicity, bounded deferred queues, and notifications only for visible change."
       ],
       "acceptance": [
@@ -308,7 +308,7 @@
         "R9",
         "R13"
       ],
-      "gate": "Public signatures must be finalized here before changing callers; amendments update migration mapping.",
+      "gate": "Public signatures must be finalized here before changing callers; amendments update the new API guide.",
       "status": "not_started"
     },
     {
@@ -451,19 +451,18 @@
         "libs/collabtext/include/collabtext/IdListOperations.h",
         "libs/collabtext/include/collabtext/Serialization.h",
         "libs/collabtext/src/codec/OperationCodec.cpp",
-        "libs/collabtext/src/codec/LegacyCodec.cpp",
         "libs/collabtext/tests/tst_serialization_public.cpp"
       ],
       "steps": [
         "Implement copy/move opaque operation values and stable OperationId/stream accessors; keep Buffer and IdList variants separate. Move construction/details into internal headers.",
         "Encode canonical sparse actor/counter vectors and explicit payload version; avoid storing replacement text twice. Encode uint64 values exactly without double conversion.",
-        "Keep strict legacy decoding only for migration fixtures. A normal vNext store rejects incompatible legacy envelopes instead of warn-and-skip loss. Add a read-only old/new codec mapping document."
+        "Define and test only the new codecs. Old or unknown format identifiers produce explicit incompatible-format errors before mutation; retain diagnostic input and do not silently skip records. No legacy decoder or conversion mapping is required."
       ],
       "acceptance": [
-        "Wire size depends on observed actors/text, not largest numeric legacy actor ID; Buffer/IdList round-trips preserve logical operations.",
+        "Wire size depends on observed actors/text, not the magnitude of identity values; Buffer/IdList round-trips preserve logical operations.",
         "Header-only external compilation uses only installed public includes; unknown versions return distinguishable unsupported-version errors."
       ],
-      "verification": "Run serialization and public-operation tests; benchmark 1, 250, 65535 legacy IDs through migration and corresponding vNext actors. Verify round-trip stable fixtures.",
+      "verification": "Run serialization and public-operation tests; compare equal-cardinality small/large-valued actor sets and exact uint64 bounds. Verify new-format golden round trips and explicit rejection of old/unknown formats.",
       "addresses": [
         "F10",
         "R2",
@@ -490,11 +489,11 @@
       "steps": [
         "Replace scalar GC fence with per-stream/per-producer durable coverage; supply explicit delivery tokens and commit/retry dispositions. A token identifies exact producer/envelope sequence and epoch, not engine Lamport maximum.",
         "Specify push durability modes, result/error return, unknown-stream errors, subscribe/unsubscribe lifetime, poll budgets, and the requirement that commit occurs only after recoverable application state is durable.",
-        "Expose transport coverage independently from semantic GC certificates. Document an old OpStream adapter for sending only; it must never fabricate durable acknowledgements or destructive-GC eligibility."
+        "Expose transport coverage independently from semantic GC certificates. Provide a new-contract reference adapter; no old OpStream wrapper is required and no adapter may fabricate durable acknowledgements or destructive-GC eligibility."
       ],
       "acceptance": [
         "A no-callback or deferred/rejected inbound record cannot be acknowledged as durably applied.",
-        "Different streams using the same actor/counter values never advance one another's frontiers. Third-party adapters have complete porting examples."
+        "Different streams using the same actor/counter values never advance one another's frontiers. Third-party transport implementers have complete new-contract examples."
       ],
       "verification": "Compile the new interface sample and in-memory test double; run `tst_opstream_interface` and new `tst_transport_commit_contract` tests.",
       "addresses": [
@@ -710,12 +709,12 @@
         "libs/collabtext/tests/tst_persistent_undo.cpp"
       ],
       "steps": [
-        "For Q3=persist: durably record local undo groups, coalescing, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.",
-        "For Q3=session-only: explicitly close and retire old local history without claiming remote peers can instantly remove referenced state; record the retention decision and implement G01/G03 obligations.",
+        "Durably record local undo groups, coalescing boundaries, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.",
+        "Restore both undo and redo stacks after reopen/crash without resetting them at session close. Make history and operation commits a consistent transaction; a shared checkpoint must not replace actor-private history. Record retention obligations for G01/G03.",
         "Bound history by steps AND retained bytes, including coalesced entries, inserted keys, and restoration content. Make trim atomic with its retirement record; never drop history silently on allocation/error."
       ],
       "acceptance": [
-        "Selected Q3 policy is tested across close/reopen/crash; restored undo reverses only the owner's edits and preserves peer edits.",
+        "Undo and redo survive close/reopen/crash within the configured bounds; restored undo reverses only the owner's edits and preserves peer edits.",
         "A single huge coalesced edit respects the memory limit; retirement survives crash and never re-enables older undo."
       ],
       "verification": "Run `./tools/verify-roadmap.sh debug 'tst_persistent_undo|tst_idlist_undo|tst_undomap|tst_session_recovery'`; test undo\u2192close\u2192reopen\u2192redo and trim crash points.",
@@ -724,7 +723,7 @@
         "F2",
         "R10"
       ],
-      "gate": "Q3 determines this task's path; both paths must state migration history policy.",
+      "gate": "Q3 resolved: persistent actor-local undo AND redo, bounded by step and byte limits.",
       "status": "not_started"
     },
     {
@@ -747,7 +746,7 @@
         "Use explicit session close with surfaced errors; ensure application shutdown invokes it once. Read-only recovery/incompatible stores must not accept accidental edits."
       ],
       "acceptance": [
-        "Actual editor open\u2192type\u2192save\u2192close\u2192open retains own/remote edits and follows Q3 undo semantics.",
+        "Actual editor open\u2192type\u2192save\u2192close\u2192open retains own/remote edits plus both local undo and redo stacks.",
         "Failed saves preserve old data and modified state; shutdown does not discard unflushed operations."
       ],
       "verification": "Run `./tools/verify-roadmap.sh debug 'tst_editor_recovery|tst_scroll_stability|tst_collab_plain_text_edit'`; offscreen integration exercises actual Document/CollabPane, not only a fake wrapper.",
@@ -899,7 +898,7 @@
       "steps": [
         "Represent boundaries and affinity according to S02 using sufficient left/right identity context; cover start/end, empty document, deleted neighbors, and subsequent concurrent insertions.",
         "Return explicit unresolved/wrong-epoch results rather than silently returning document end. Specify IdList element anchors separately from text insertion boundaries.",
-        "Encode anchors with their own version, document/stream/epoch context, and checked affinity. Add legacy-anchor conversion only in migration."
+        "Encode anchors with their own version, document/stream/epoch context, and checked affinity. Reject obsolete formats explicitly; no legacy-anchor conversion is required."
       ],
       "acceptance": [
         "In ab\u2192aXb, preexisting left/right anchors at 1 resolve to 1/2; start/end affinity and remote exact-position tests pass.",
@@ -1021,14 +1020,14 @@
         "libs/collabtext/tests/reference/GcModel.h"
       ],
       "steps": [
-        "Define immutable epoch membership, explicit enrollment/retirement events, producer identities, and how new actors join without invalidating an already published common frontier. Q2 chooses the retirement policy; absence/presence timeout is never itself an acknowledgement.",
+        "Define immutable epoch membership, explicit enrollment/retirement events, producer identities, and how new actors join without invalidating an already published common frontier. Devices stay enrolled indefinitely until explicitly retired; elapsed time, reminders, and presence are advisory and never acknowledgements.",
         "Define a certificate binding stream, epoch, membership hash, common durable coverage, per-actor undo-retirement coverage, retained anchor translations, and durable checkpoint hash. Require all still-enrolled actors, including silent ones, to contribute; no scalar-max substitution.",
         "Specify the full state machine for checkpoint proposal, coverage confirmation, epoch transition, interruption, competing proposals, and returning retired peers. Preserve a returning peer's unsynced branch for explicit reconciliation; do not pretend replay into a new epoch is automatically valid.",
         "Implement a slow model and complete eligibility predicate. Include no available peers, unknown actor, missing ack, restored stale ack, remote redo, concurrent enrollment, retirement, and checkpoint corruption."
       ],
       "acceptance": [
         "There is a complete implementable protocol; every physical deletion has a certificate and no permitted future undo/anchor request needs removed data.",
-        "If a live actor retains a relevant undo group or is offline, GC blocks unless the selected explicit retirement/epoch policy safely removes that obligation."
+        "If an enrolled actor retains a relevant undo group or has insufficient coverage, GC blocks until a validated explicit retirement/epoch transition removes that obligation. A stale-device flag does not alter membership."
       ],
       "verification": "Run GcModel against all F1/F2/F3 histories and adversarial membership traces; publish the eligibility predicate and state transition table before G02 starts.",
       "addresses": [
@@ -1038,7 +1037,7 @@
         "F7",
         "R10"
       ],
-      "gate": "Q2/Q3 resolved; protocol must pass independent technical review and executable-model checks. Incomplete certificates never unlock physical GC.",
+      "gate": "Q2/Q3 resolved: explicit retirement and persistent undo/redo. The protocol still requires complete independent review/model checks; incomplete certificates never unlock physical GC.",
       "status": "not_started"
     },
     {
@@ -1058,10 +1057,10 @@
       "steps": [
         "Persist enrollment/retirement/epoch events in per-producer immutable records using L01; validate them against G01 before changing eligible peer sets.",
         "Publish per-stream undo-retirement state monotonically only after local trim is durable. A retained group containing old origins must block the corresponding floor; coalescing cannot conceal pins.",
-        "Require explicit confirmation for any product action retiring another device because that action changes later merge guarantees; show concrete affected store/actor and rescue instructions in the application, not an automatic heartbeat eviction."
+        "Expose a typed retirement-preview and explicit commit API identifying the affected device, documents/epochs, and merge consequences. Persist retirement only after an intentional commit call. Returning-device reconciliation preserves its local unsynced branch; A08 implements the reminder and confirmation UI."
       ],
       "acceptance": [
-        "Restart preserves membership and undo-retirement obligations; silence never removes a member on the recommended policy.",
+        "Restart preserves membership and undo-retirement obligations; silence, advisory stale flags, and dismissal of reminders never remove a member.",
         "Retired peers cannot silently resume old-epoch mutation, and their unmerged operations remain exportable."
       ],
       "verification": "Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_persistent_undo'`; inject crashes before/after each publication point.",
@@ -1189,7 +1188,7 @@
         "libs/collabtext/tests/tst_idlist_gc.cpp"
       ],
       "steps": [
-        "Replace public compact(Global) as a destructive entry point with DocumentSession-managed certificate reclamation; retain a clearly deprecated harmless compatibility wrapper if useful.",
+        "Remove public compact(Global) as a destructive entry point and expose DocumentSession-managed certificate reclamation only; no compatibility wrapper is required.",
         "Share eligibility policy across Buffer/IdList, not their entire storage implementations. Protect local and remote undo/redo, insertions without deletion IDs, and pinned anchors; retain boundary stubs/translation entries where the approved algorithm requires them.",
         "Reclaim UndoMap entries only when no retained item/history/pin or supported historical query requires them. Maintain the documented edits_since floor. Count content, metadata, indexes, and retention bytes separately."
       ],
@@ -1418,7 +1417,7 @@
         "docs/specs/vnext-public-api.md"
       ],
       "steps": [
-        "Preserve legacy local_clear in migration/compatibility documentation as local-only state discard with version retention. Do not use it for history replay or a collaborative reset.",
+        "Remove or rename ambiguous local_clear behavior. Specify recovery-state reset independently from collaborative clear; no obsolete source signature or version-retaining discard needs to be preserved.",
         "Expose an explicitly named local-view discard only if consumers need it; collaborative clear produces operations, while replacing a store/checkpoint uses an explicit epoch-aware recovery operation.",
         "Document which callbacks, identity, clocks, anchors, deferred input, and undo groups survive each action. Reject replay into a cleared engine whose preserved coverage would deduplicate required operations."
       ],
@@ -1426,7 +1425,7 @@
         "Consumer reset examples are unambiguous; a local clear cannot masquerade as a synced document reset.",
         "Replay/restoration uses fresh recovery state or valid checkpoint import, never preserved-version local_clear."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_reset_semantics|tst_idlist|tst_session_recovery'`; compile a port of the V08 local_clear consumer sample.",
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_reset_semantics|tst_idlist|tst_session_recovery'`; compile new reset examples covering local discard, collaborative clear, and recovery.",
       "addresses": [
         "R14",
         "R2"
@@ -1436,7 +1435,7 @@
     },
     {
       "id": "A06",
-      "title": "Install and export the library package with migration adapters",
+      "title": "Install and export the fresh public library package",
       "phase": 6,
       "depends_on": [
         "A04",
@@ -1446,16 +1445,16 @@
         "cmake/CollabTextConfig.cmake.in",
         "libs/collabtext/CMakeLists.txt",
         "tests/consumer-smoke/CMakeLists.txt",
-        "docs/MIGRATING_TO_VNEXT.md"
+        "docs/USING_VNEXT.md"
       ],
       "steps": [
         "Implement install/export/version package metadata, component dependency discovery, stable target names, and separate public include installs. Test a relocated installation prefix.",
-        "Document old\u2192new headers, types, signatures, callback/ack semantics, error paths, ownership, offsets, and reset APIs; include Buffer and IdList plus custom transport porting examples.",
-        "Provide limited deprecated adapters only where safe; old scalar GC wrappers cannot create a certificate, and old void push cannot pretend commit success. Mark source and ABI compatibility separately."
+        "Document the new headers, types, callback/ack semantics, error paths, ownership, offsets, and reset APIs; include Buffer, IdList, and custom transport examples. Explain intentional breaks without preserving obsolete signatures.",
+        "Remove obsolete public wrappers and install only the supported surface. Do not create deprecated adapters, scalar-GC wrappers, legacy codecs, or void-push compatibility paths. State fresh-format identifiers and incompatible-format errors."
       ],
       "acceptance": [
         "An independent project finds CollabText through find_package and links without source-tree paths.",
-        "Migration guide maps every V08 item and has compilable before/after samples; no same-store mixed-version promise unless D01 explicitly selects and implements it."
+        "The new usage guide covers every V08 requirement with compilable samples; no old API/ABI/store compatibility is promised."
       ],
       "verification": "Install to a temporary prefix, hide original include tree, relocate prefix, and configure/build/run external samples for Core, FileTransport, and QtAdapter.",
       "addresses": [
@@ -1494,6 +1493,38 @@
         "R13"
       ],
       "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "A08",
+      "title": "Add advisory stale-device flags and explicit retirement UI",
+      "phase": 6,
+      "depends_on": [
+        "G02",
+        "A04"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/DeviceStatus.h",
+        "libs/collabtext/src/ui/DeviceRetirementDialog.cpp",
+        "app/collabedit/CollabPane.cpp",
+        "libs/collabtext/tests/tst_device_retirement_ui.cpp",
+        "docs/USING_VNEXT.md"
+      ],
+      "steps": [
+        "Expose advisory last-observed activity and stale_for_review per enrolled device. Provide a configurable reminder age (proposed default 90 days), enable/disable setting, and snooze/dismiss state. Inject a clock for testing; missing timestamps and clock jumps must never change membership or GC eligibility.",
+        "Show a nonblocking device-review interface after the reminder age with Keep enrolled, Remind later, and Review retirement actions. Open G02's concrete preview before confirmation; merely opening/dismissing the interface never calls retirement commit.",
+        "Explain that indefinite offline operation is supported while enrolled, retirement changes future merge guarantees, and unreceived edits may exist on the offline device. Commit only an explicit confirmation, surface durable errors, and show returning-device export/reconciliation instructions."
+      ],
+      "acceptance": [
+        "Clock advance beyond the configured age flags a device but leaves membership, undo pins, and GC eligibility unchanged. Keep, snooze, dismissal, disabled reminders, and restart all preserve enrollment.",
+        "Only explicit confirmation calls the durable retirement API; failure leaves the device enrolled. Successful retirement persists and a returning old-epoch device is routed to rescue/rejoin."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_device_retirement_ui|tst_membership|tst_undo_retirement'` offscreen with fake-clock boundary, snooze/restart, cancellation, and commit-failure cases.",
+      "addresses": [
+        "R3",
+        "R10"
+      ],
+      "gate": "Uses the validated G01/G02 retirement protocol; a reminder timeout is never authorization to retire.",
       "status": "not_started"
     },
     {
@@ -1669,7 +1700,7 @@
       "steps": [
         "Replace temporary per-character deletion timestamp expansion and sorting with canonical actor/counter intervals; use interval references for undo groups where semantics permit.",
         "Preserve origin identity and parity semantics through overlapping deletes, split runs, mixed Unicode, coalescing, local history persistence, and checkpoint/GcCertificate processing.",
-        "Version local-history/checkpoint encoding if intervals alter storage; provide decoder compatibility within the development branch rather than silently changing persisted records."
+        "Version local-history/checkpoint encoding if intervals alter storage; explicitly reject obsolete development formats and recreate test stores. Do not silently reinterpret persisted records or add unnecessary compatibility decoders."
       ],
       "acceptance": [
         "Large delete/paste replacement bookkeeping scales with affected runs and output intervals, not temporary character objects.",
@@ -1822,95 +1853,26 @@
       "status": "not_started"
     },
     {
-      "id": "E01",
-      "title": "Implement a read-only legacy-store inspector",
-      "phase": 8,
-      "depends_on": [
-        "V08",
-        "P06",
-        "L08"
-      ],
-      "files": [
-        "tools/collabtext-inspect-legacy.cpp",
-        "libs/collabtext/src/codec/LegacyCodec.cpp",
-        "libs/collabtext/tests/tst_legacy_inspection.cpp",
-        "docs/MIGRATING_TO_VNEXT.md"
-      ],
-      "steps": [
-        "Scan all own/remote legacy segments and seeds independently of persisted read cursors. Deduplicate by actual operation identity, not colliding stream entry IDs.",
-        "Use the frozen legacy semantics to reconstruct legacy visible content. Detect reused operation IDs with different payloads, missing dependencies, corrupt records, manifest conflicts, invalid seeds, and unresolved anchors.",
-        "Produce a machine-readable inventory with recoverable/unrecoverable ambiguities; never guess a winner or claim dropped/unwritten content is recovered. Input filesystem is opened read-only."
-      ],
-      "acceptance": [
-        "Inspection does not modify input bytes; colliding envelope IDs with distinct valid operations are not suppressed.",
-        "Ambiguous legacy clock reuse or missing history yields an explicit rescue report instead of a silent plausible document."
-      ],
-      "verification": "Run all V08 legacy fixtures and compare input hashes before/after inspection; verify reconstructed content against the frozen legacy engine.",
-      "addresses": [
-        "F4",
-        "F5",
-        "F6",
-        "R13"
-      ],
-      "gate": null,
-      "status": "not_started"
-    },
-    {
-      "id": "E02",
-      "title": "Implement migration into a new store and translate persistent anchors",
-      "phase": 8,
-      "depends_on": [
-        "E01",
-        "S05",
-        "G05",
-        "A06",
-        "D01"
-      ],
-      "files": [
-        "tools/collabtext-migrate.cpp",
-        "libs/collabtext/tests/tst_store_migration.cpp",
-        "docs/MIGRATING_TO_VNEXT.md"
-      ],
-      "steps": [
-        "For the recommended Q1 route, materialize validated legacy content into a new document/epoch/store using new identities and a deterministic seed/checkpoint. Preserve old histories as immutable archive/provenance; do not replay old interleaving rules as vNext operations.",
-        "Translate durable comments/anchors by resolved legacy boundary/range to new stable anchors; preserve IDs/lifecycle state and report every unresolved translation. Ephemeral presence is reset.",
-        "Migration creates a dry-run report first and never overwrites the input. State explicitly whether old undo groups can be ported: the safe baseline starts a new active undo history and archives old history, while Q3 persistence applies to vNext sessions. Require explicit opt-in to any lossy translation.",
-        "Prevent old/new writers from opening the same store; validate epoch/schema. If Q1 instead requires live mixed-version collaboration, this task stays blocked until a separate bridge plan is added and tested."
-      ],
-      "acceptance": [
-        "Migration retains exact legacy visible content and resolvable comments in the new store; source hashes are unchanged.",
-        "Unsupported/ambiguous data cannot silently become a successful migration. Porting and store migration are documented as separate actions."
-      ],
-      "verification": "Run migration fixtures including Unicode, comments on deleted text, restart-colliding envelopes, and IdList+Buffer composition; reopen the new store and continue edits/undo across restart.",
-      "addresses": [
-        "F7",
-        "R13"
-      ],
-      "gate": "Q1 selected; legacy undo migration exception must be explicit in DECISIONS.md.",
-      "status": "not_started"
-    },
-    {
       "id": "E03",
-      "title": "Compile consumer ports and custom transport examples",
+      "title": "Compile fresh API consumers and custom transport examples",
       "phase": 8,
       "depends_on": [
-        "A06",
-        "E02"
+        "A06"
       ],
       "files": [
         "tests/consumer-smoke/",
         "examples/core-editor/",
         "examples/custom-opstream/",
-        "docs/MIGRATING_TO_VNEXT.md"
+        "docs/USING_VNEXT.md"
       ],
       "steps": [
-        "Port the V08 old consumer samples into independently built new samples for text, IdList composition, anchors, local_clear replacement, error handling, subscriptions, and transport receipt commits.",
+        "Create independently built new samples for text, IdList composition, anchors, reset, error handling, subscriptions, and transport receipt commits from the V08 use-case inventory.",
         "Compile a minimal custom OpStream producer/consumer to demonstrate durable receipt versus semantic GC. Show how an external store pairs application recovery with delivery tokens.",
-        "Provide a checklist of old\u2192new symbols/behavior without changing real consumers outside this repository. Include minimum build/link/offset requirements."
+        "Provide supported API/build/link/offset examples without accessing real external consumers. Old/new symbols may be listed as release changes, but no porting shim or data migration is required."
       ],
       "acceptance": [
         "All examples compile against the installed package and exercise restart/duplicate delivery correctly.",
-        "Every public breaking change has a concrete example or migration entry; source compilation success does not imply wire/store compatibility."
+        "Every supported public behavior has a concrete example; samples use only the new package and formats."
       ],
       "verification": "Install a clean build and run all independent consumer examples; use no internal include paths or direct fragment access.",
       "addresses": [
@@ -1931,7 +1893,8 @@
         "G08",
         "A07",
         "E03",
-        "X10"
+        "X10",
+        "A08"
       ],
       "files": [
         "README.md",
@@ -1976,7 +1939,7 @@
       ],
       "steps": [
         "Map F1\u2013F10 and R1\u2013R14 to commits, exact passing tests, and any explicitly user-approved deferrals. Verify no expected-fail marker remains for a promised release feature.",
-        "Review model independence, compatibility exceptions, error paths, single-owner threading, GC certificates, and recovery fallback invariants. Recheck original report probes against new facades.",
+        "Review model independence, fresh-format rejection, error paths, single-owner threading, GC certificates, and recovery fallback invariants. Recheck original report probes against new facades.",
         "Document residual risks and make incomplete tasks visible; a green test runner is insufficient if tasks or policy decisions remain unresolved."
       ],
       "acceptance": [
@@ -2003,25 +1966,25 @@
     },
     {
       "id": "E06",
-      "title": "Prepare a consumer migration release without merging master",
+      "title": "Prepare the fresh release dossier without merging master",
       "phase": 8,
       "depends_on": [
         "E05"
       ],
       "files": [
         "CMakeLists.txt",
-        "docs/MIGRATING_TO_VNEXT.md",
+        "docs/USING_VNEXT.md",
         "docs/releases/vnext.md",
         "docs/reports/vnext-acceptance.md"
       ],
       "steps": [
         "Choose the release version explicitly from the current 0.1.0 baseline and compatibility policy; keep the architecture workstream name v2 distinct from a promise of package version 2.0.",
-        "Create reviewable release notes, package manifests, migration examples, old/new store isolation rules, known limits, and rollback instructions that preserve original stores.",
-        "Keep the breaking branch/worktree available for consumer porting. Prepare any tag/PR/package locally; publishing, external communications, and merging to master require a separate explicit user instruction."
+        "Create reviewable release notes, package manifests, new API examples, format identifiers, known limits, device-retirement instructions, and persistent-undo guarantees. Explicitly state that old prototype formats are unsupported and no production migration is needed.",
+        "Keep the breaking branch/worktree for review and API experiments. Prepare any tag/PR/package locally; publishing, external communications, and merging to master require a separate explicit user instruction."
       ],
       "acceptance": [
-        "Consumers can evaluate/install the new package while the original master API remains available.",
-        "Rollback restores the old untouched store and binary; new edits are exported/reconciled explicitly rather than silently replayed into v1."
+        "The new package installs independently with complete examples and acceptance evidence.",
+        "A clean-store start is documented; no promise of downgrade or old-format replay accompanies the fresh design."
       ],
       "verification": "Validate release metadata against installed-package and acceptance evidence; no external publishing or messaging is performed by this task.",
       "addresses": [
@@ -2030,6 +1993,18 @@
       ],
       "gate": null,
       "status": "not_started"
+    }
+  ],
+  "revised": "2026-10-03",
+  "revision_reason": "User confirmed preproduction fresh start, explicit retirement with advisory reminders, and persistent undo/redo. Backend choice remains pending Rust assessment.",
+  "removed_tasks": [
+    {
+      "id": "E01",
+      "reason": "No existing production stores/history; user explicitly removed data migration requirements on 2026-10-03."
+    },
+    {
+      "id": "E02",
+      "reason": "No existing production stores/history; user explicitly removed data migration requirements on 2026-10-03."
     }
   ]
 }

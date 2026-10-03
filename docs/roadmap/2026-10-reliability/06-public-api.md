@@ -1,6 +1,6 @@
 # 06. Supported public library and Qt integration
 
-Goal: consumers can install a framework-independent engine, optional file transport, and a complete Qt document binding. All porting work remains on the isolated branch. Preserve familiar names only where doing so does not conceal changed semantics.
+Goal: consumers can install a framework-independent engine, optional file transport, and a complete Qt document binding. All work remains on the isolated branch. Design the new API freely; obsolete wrappers need no compatibility shims. Include explicit device-retirement controls and advisory reminders.
 
 Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starting. Task dependencies refer to the [master task registry](TASKS.json). New file paths below are intentional; do not assume they already exist.
 
@@ -133,7 +133,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_callbacks|tst_document_adapter|tst_tra
 
 **Steps:**
 
-1. Preserve legacy local_clear in migration/compatibility documentation as local-only state discard with version retention. Do not use it for history replay or a collaborative reset.
+1. Remove or rename ambiguous local_clear behavior. Specify recovery-state reset independently from collaborative clear; no obsolete source signature or version-retaining discard needs to be preserved.
 2. Expose an explicitly named local-view discard only if consumers need it; collaborative clear produces operations, while replacing a store/checkpoint uses an explicit epoch-aware recovery operation.
 3. Document which callbacks, identity, clocks, anchors, deferred input, and undo groups survive each action. Reject replay into a cleared engine whose preserved coverage would deduplicate required operations.
 
@@ -144,9 +144,9 @@ Run `./tools/verify-roadmap.sh debug 'tst_callbacks|tst_document_adapter|tst_tra
 
 **Verification:**
 
-Run `./tools/verify-roadmap.sh debug 'tst_reset_semantics|tst_idlist|tst_session_recovery'`; compile a port of the V08 local_clear consumer sample.
+Run `./tools/verify-roadmap.sh debug 'tst_reset_semantics|tst_idlist|tst_session_recovery'`; compile new reset examples covering local discard, collaborative clear, and recovery.
 
-## A06 — Install and export the library package with migration adapters
+## A06 — Install and export the fresh public library package
 
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** A04, A05  
@@ -157,18 +157,18 @@ Run `./tools/verify-roadmap.sh debug 'tst_reset_semantics|tst_idlist|tst_session
 - `cmake/CollabTextConfig.cmake.in`
 - `libs/collabtext/CMakeLists.txt`
 - `tests/consumer-smoke/CMakeLists.txt`
-- `docs/MIGRATING_TO_VNEXT.md`
+- `docs/USING_VNEXT.md`
 
 **Steps:**
 
 1. Implement install/export/version package metadata, component dependency discovery, stable target names, and separate public include installs. Test a relocated installation prefix.
-2. Document old→new headers, types, signatures, callback/ack semantics, error paths, ownership, offsets, and reset APIs; include Buffer and IdList plus custom transport porting examples.
-3. Provide limited deprecated adapters only where safe; old scalar GC wrappers cannot create a certificate, and old void push cannot pretend commit success. Mark source and ABI compatibility separately.
+2. Document the new headers, types, callback/ack semantics, error paths, ownership, offsets, and reset APIs; include Buffer, IdList, and custom transport examples. Explain intentional breaks without preserving obsolete signatures.
+3. Remove obsolete public wrappers and install only the supported surface. Do not create deprecated adapters, scalar-GC wrappers, legacy codecs, or void-push compatibility paths. State fresh-format identifiers and incompatible-format errors.
 
 **Acceptance:**
 
 - An independent project finds CollabText through find_package and links without source-tree paths.
-- Migration guide maps every V08 item and has compilable before/after samples; no same-store mixed-version promise unless D01 explicitly selects and implements it.
+- The new usage guide covers every V08 requirement with compilable samples; no old API/ABI/store compatibility is promised.
 
 **Verification:**
 
@@ -200,3 +200,33 @@ Install to a temporary prefix, hide original include tree, relocate prefix, and 
 **Verification:**
 
 Validate workflow syntax locally; run matching Linux jobs locally; require first remote CI results before E06 declares platform support.
+
+## A08 — Add advisory stale-device flags and explicit retirement UI
+
+**Status:** see TASKS.json (initially not started)  
+**Depends on:** G02, A04  
+**Coverage:** R3, R10  
+**Design/decision gate:** Uses the validated G01/G02 retirement protocol; a reminder timeout is never authorization to retire.  
+
+**Files / scope:**
+
+- `libs/collabtext/include/collabtext/DeviceStatus.h`
+- `libs/collabtext/src/ui/DeviceRetirementDialog.cpp`
+- `app/collabedit/CollabPane.cpp`
+- `libs/collabtext/tests/tst_device_retirement_ui.cpp`
+- `docs/USING_VNEXT.md`
+
+**Steps:**
+
+1. Expose advisory last-observed activity and stale_for_review per enrolled device. Provide a configurable reminder age (proposed default 90 days), enable/disable setting, and snooze/dismiss state. Inject a clock for testing; missing timestamps and clock jumps must never change membership or GC eligibility.
+2. Show a nonblocking device-review interface after the reminder age with Keep enrolled, Remind later, and Review retirement actions. Open G02's concrete preview before confirmation; merely opening/dismissing the interface never calls retirement commit.
+3. Explain that indefinite offline operation is supported while enrolled, retirement changes future merge guarantees, and unreceived edits may exist on the offline device. Commit only an explicit confirmation, surface durable errors, and show returning-device export/reconciliation instructions.
+
+**Acceptance:**
+
+- Clock advance beyond the configured age flags a device but leaves membership, undo pins, and GC eligibility unchanged. Keep, snooze, dismissal, disabled reminders, and restart all preserve enrollment.
+- Only explicit confirmation calls the durable retirement API; failure leaves the device enrolled. Successful retirement persists and a returning old-epoch device is routed to rescue/rejoin.
+
+**Verification:**
+
+Run `./tools/verify-roadmap.sh debug 'tst_device_retirement_ui|tst_membership|tst_undo_retirement'` offscreen with fake-clock boundary, snooze/restart, cancellation, and commit-failure cases.

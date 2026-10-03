@@ -163,7 +163,7 @@ Run sequence model, SumTree, seeded convergence, and fast/slow differential test
 
 1. Replace temporary per-character deletion timestamp expansion and sorting with canonical actor/counter intervals; use interval references for undo groups where semantics permit.
 2. Preserve origin identity and parity semantics through overlapping deletes, split runs, mixed Unicode, coalescing, local history persistence, and checkpoint/GcCertificate processing.
-3. Version local-history/checkpoint encoding if intervals alter storage; provide decoder compatibility within the development branch rather than silently changing persisted records.
+3. Version local-history/checkpoint encoding if intervals alter storage; explicitly reject obsolete development formats and recreate test stores. Do not silently reinterpret persisted records or add unnecessary compatibility decoders.
 
 **Acceptance:**
 

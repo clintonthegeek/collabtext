@@ -21,8 +21,11 @@ For implementation turns:
   unavailable skills. Break an oversized task into explicit dependent subtasks.
 - Ask questions in ordinary conversation text; the user cannot use inline
   question controls. Routine authorized work does not require fresh permission.
-- Keep the original stores and checkout available for consumers. Master
-  integration, package publication, external consumer edits, and messages are
+- The user confirmed no production data/stores/history; freely redesign the
+  API and formats without adding migration or compatibility tasks. Devices stay
+  enrolled until explicitly retired; time-based reminders are advisory. Undo
+  and redo persist across reopen. The backend choice remains pending the Rust
+  assessment. Master integration, publication, external consumer edits, and messages are
   separate actions requiring the user's explicit instruction.
 
 The roadmap supersedes the historical OpStream-project scope in `CLAUDE.md` on

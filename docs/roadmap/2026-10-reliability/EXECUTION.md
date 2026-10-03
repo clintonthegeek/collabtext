@@ -6,14 +6,14 @@ This document is intended to let a less-capable executor faithfully implement a 
 
 Execute breaking work only in `/home/clinton/dev/collabtext/.worktrees/reliability-v2`, branch `roadmap/reliability-v2`. Verify `pwd`, `git branch --show-current`, and `git status --short` before editing. Build directories and logs belong in this worktree or task-specific temporary directories. Do not accidentally build against the original checkout's generated files.
 
-The original checkout and master are the legacy consumer baseline. Do not merge/rebase onto master, publish packages, send consumer messages, edit external consumer repositories, or remove original stores as part of a task. A new explicit user instruction is required for external publication or master integration. Routine code changes and local test runs within the selected task do not need repeated permission.
+The original checkout and master are the evaluated source baseline. The user confirmed there are no production stores/history and authorized freely redesigned APIs/formats; do not add migration or compatibility work. Do not merge/rebase onto master, publish packages, send consumer messages, or edit external consumer repositories as part of a task. A new explicit user instruction is required for external publication or master integration. Routine code changes and local test runs within the selected task do not need repeated permission.
 
 These plans supersede old CLAUDE.md restrictions about the completed OpStream extraction **on this isolated branch**. They do not authorize unrelated product features or a backend substitution. There is no dependency on an unavailable Superpowers skill or parallel agent workflow. One executor can follow the serial task order.
 
 ## Choosing the next task
 
 1. Load TASKS.json. Only tasks whose prerequisites have `status=complete` are eligible. A deferred prerequisite is not equivalent to complete; if the user chooses an alternate route, explicitly revise the dependency graph.
-2. Check DECISIONS.md. D01 requires actual answers to Q1–Q4; provisional recommendations are not approved policies.
+2. Check DECISIONS.md. Q1–Q3 are resolved: clean start, explicit offline-device retirement with advisory reminders, and persistent undo/redo. Q4 is the remaining backend choice; read RUST_ASSESSMENT.md and record the actual choice before backend-dependent work. Do not ask resolved questions again.
 3. Check the task's design gate. S03 cannot begin merely because someone wrote an S02 title: the complete specification/model/evidence must exist. The same applies to G01/G02/G06.
 4. Prefer registry order for a serial run. Work on one task at a time. If a task is too broad, split it into new well-defined subtask IDs with dependencies and acceptance criteria before coding; do not silently expand scope.
 5. Mark the task `in_progress`, record the baseline revision and relevant failures, and read every existing file the task will touch. Paths named as new files are not missing prerequisites.
@@ -27,7 +27,7 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 3. Implement the documented steps within the listed scope. Existing analogous code is a reference, not authority to repeat an unsafe behavior identified in the evaluation.
 4. Keep logical operation identity, local history, durable coverage, and derived indexes distinct. Every mutation must honor the task's failure-atomicity and ownership contract.
 5. Re-run the targeted checks, then the affected integration/model suites. Record seed, trace/fixture hash, compiler/configuration, pass counts, and any limits. Do not hide a red suite with a regex exclusion or unconditional skip.
-6. Inspect the diff for unintended API exposure, regenerated artifacts, broad formatting, side effects outside this worktree, and test weakening. Update affected specs and migration mapping if public behavior changed.
+6. Inspect the diff for unintended API exposure, regenerated artifacts, broad formatting, side effects outside this worktree, and test weakening. Update affected specs and the new API guide if public behavior changed.
 7. Commit only the selected task's source, tests, and documentation after required checks pass. Use a conventional task-specific message, for example `fix(storage): replay own history on reopen (L05)`. Do not stage unrelated user edits. If Git metadata is sandbox-protected, use the normal narrowly scoped approval mechanism rather than manipulating .git through a different path.
 8. Update TASKS.json to `complete` only when acceptance is met; add implementation commit(s), verification commands/results, and artifact paths. Write a concise entry in docs/reports/vnext-task-log.md. The Markdown task documents describe initial status; TASKS.json is authoritative.
 
@@ -95,6 +95,8 @@ The full acceptance run at E05 includes all correctness executables, bounded mod
 - Unsupported/corrupt input remains recoverable/quarantined and blocks advancing coverage; it is not silently skipped and forgotten.
 - GC remains disabled until a validated certificate covers membership, durable state, retired undo, and anchor/checkpoint obligations.
 - An offline member contributes missing/old coverage; absence does not automatically remove it from eligibility.
+- A stale-device flag/reminder is advisory. Keep/snooze/dismiss and clock passage never call retirement commit or authorize GC.
+- Actor-local undo AND redo survive reopen within configured step and byte limits.
 - Anchors are boundaries with affinity and context. Unresolvable/wrong-epoch anchors are explicit outcomes.
 - A reference model must not call the production helper whose behavior it is validating.
 - Performance output includes units and correct work counts; content mismatches fail the run.
@@ -113,7 +115,7 @@ Scope: <actual files and behavior>
 Regression: <test that failed before the fix>
 Verification: <exact commands, modes, counts, seeds>
 Artifacts: <logs / traces / reports>
-API/store changes: <migration guide/spec sections or none>
+API/store changes: <new usage guide/spec sections or none>
 Known limits: <material limits, not generic disclaimers>
 Next ready tasks: <IDs whose prerequisites now pass>
 ```

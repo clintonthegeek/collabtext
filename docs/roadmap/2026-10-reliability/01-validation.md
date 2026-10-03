@@ -1,6 +1,6 @@
 # 01. Evidence, containment, and verification
 
-Goal: establish reliable tests and measurements before changing semantics. Keep valid legacy behavior available as a baseline. Known failures are temporary explicit expected-fail cases, never invisible skips. This phase does not implement a new CRDT algorithm.
+Goal: establish reliable tests and measurements before changing semantics. Keep valid behavior and evaluation evidence available as a baseline; no legacy-store compatibility is required. Known failures are temporary explicit expected-fail cases, never invisible skips. This phase does not implement a new CRDT algorithm.
 
 Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starting. Task dependencies refer to the [master task registry](TASKS.json). New file paths below are intentional; do not assume they already exist.
 
@@ -200,7 +200,7 @@ Run selected single-replica, multi-replica, reconnect, and GC benchmark function
 
 Run `./tools/verify-roadmap.sh debug 'tst_store_fault_harness'`; run harness-only ASan tests without treating deliberate worker termination as a library memory defect.
 
-## V08 — Inventory consumers and freeze legacy compatibility fixtures
+## V08 — Inventory the intended API and freeze behavioral fixtures
 
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** V02  
@@ -208,21 +208,21 @@ Run `./tools/verify-roadmap.sh debug 'tst_store_fault_harness'`; run harness-onl
 
 **Files / scope:**
 
-- `docs/roadmap/2026-10-reliability/compatibility-inventory.md`
-- `libs/collabtext/tests/fixtures/legacy-v1/`
+- `docs/roadmap/2026-10-reliability/api-inventory.md`
+- `libs/collabtext/tests/fixtures/behavior/`
 - `tests/consumer-smoke/`
 
 **Steps:**
 
-1. Inventory public headers, actual aliases, callbacks, OpStream methods, CMake target/includes, serialized operations, manifests, anchors, and IdList local_clear behavior. Include Markoff contracts from existing handoff docs without accessing external repositories.
-2. Freeze valid operations/stores with Buffer, IdList, chat/comments, Unicode, multiple producers, restart ID collisions, and known corrupt cases. Record expected legacy visible content using the frozen old engine.
-3. Create a compile-only legacy consumer sample; identify behavior changes independently from source and ABI changes.
+1. Inventory public headers, callbacks, OpStream methods, CMake targets, document/anchor behavior, and IdList reset semantics. Existing handoff contracts describe useful use cases, not compatibility obligations; do not access external repositories.
+2. Freeze logical edit/delivery scenarios for Buffer, IdList, comments, Unicode, multiple producers, restart, and corruption. Separate desired exact outputs from observed defects; do not create legacy-store import fixtures.
+3. List the supported new API requirements and obsolete surfaces to remove. Record source/ABI/format breaks for reviewers without requiring adapters or mixed-version editing.
 
 **Acceptance:**
 
-- Inventory explicitly names every planned compatibility break and old guarantee; fixtures have licenses/provenance and exact expected outputs.
-- No external consumer is modified or contacted. Legacy source is retained for migration comparison.
+- Every supported use case and intended contract is named; behavioral fixtures have provenance and exact expected outputs.
+- There is no requirement to preserve old stores, history, or public types. No external consumer is modified or contacted.
 
 **Verification:**
 
-Build the legacy sample against the original checkout; validate fixture hashes and expected content. Record the base revision `046d375`.
+Review against the evaluation and user fresh-start decision; reproduce behavioral fixtures against revision 046d375 and record known failures separately from desired outputs.

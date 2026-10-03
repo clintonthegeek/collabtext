@@ -1,86 +1,58 @@
-# Decisions and open questions
+# Decisions and remaining backend question
 
-**Status:** Q1–Q4 awaiting user answers in the conversation. The user cannot use inline question controls; ask these as numbered questions in a final response. This file records proposals, not inferred approval.
+**Updated:** 2026-10-03. Q1–Q3 are resolved by the user's reply. Q4 remains pending an informed backend choice; willingness to install a toolchain is not a decision to replace the engine. Questions belong in ordinary conversation text for this user.
 
-## Q1 — Existing consumers and document stores
+## Q1 — Fresh start: resolved
 
-**Question:** Should the new release provide a migration tool while old/new versions edit separate stores, require live collaboration between old/new versions on the same store, or permit a clean break without old-store migration?
+**User statement:** “there is no existing data or stores or history to preserve. this is not in production. we can start totally fresh, however we want.”
 
-**Recommended:** migration tool plus separate stores. Keep the original API/store usable on master while consumers port to the isolated branch. Source/API adapters help porting, but do not make old/new protocols interchangeable. Migrating creates a new store/epoch and leaves the old sidecar/archive untouched.
+**Selected policy:** freely redesign source/API/ABI, identities, algorithms, wire formats, and stores. No legacy decoder, importer, data archive, anchor translation from old stores, compatibility shims, or mixed-version collaboration is required. Existing source and evaluation artifacts remain useful regression evidence; they do not impose old behavior on the replacement design.
 
-**Why the decision matters:** identity widths, ordering semantics, operation schema, ack behavior, and anchor encoding change. Live mixed-version collaboration needs a protocol/semantic bridge, not a handful of overloads. It may not preserve both algorithms' ordering/undo expectations.
+**Plan changes:** remove E01/E02 entirely and their dependency edges; remove legacy fixtures/codec/shim requirements from V08/P01/P06/S04/A05/A06; replace porting requirements with independently compiling new examples in E03 and a fresh release dossier in E06. Retain task IDs E01/E02 in the registry change record so earlier references remain understandable. There are now 62 active tasks, including new A08.
 
-**If the recommendation is selected:** D01/P01/P06/P07/E01–E03 follow their current route. Package version is chosen later; architecture workstream “v2” does not dictate version 2.0.
+**Isolation:** retain the requested breaking-change worktree for review and experiments. No production data migration or consumer porting deadline is needed. Master integration and publication remain separate explicit actions.
 
-**If live mixed-version collaboration is selected:** D01 must produce additional bridge tasks/spec and update dependencies before P01. The present migration-only plan does not claim to solve that requirement. Old/new writers must continue using separate stores until the bridge passes model/recovery tests.
+## Q2 — Explicit device retirement: resolved
 
-**If clean break is selected:** retain E01 diagnostics/rescue and golden fixtures where they validate correctness; E02 migration delivery may be explicitly deferred. E05 must label the omission honestly.
+**User statement:** “forever offline devices need to be explicitly retired. we can introduce a flag and interface asking after a few months.”
 
-**Migration detail requiring explicit acknowledgement:** the safe baseline imports reconstructed legacy visible content and durable annotations into fresh identities, archives legacy history, and starts a new active undo stack. It does not promise to preserve legacy undo/redo groups across changed ordering semantics. Q3 controls undo persistence for subsequent new-release sessions.
+**Selected policy:** an enrolled device may remain offline indefinitely. Missing coverage/retained undo obligations continue to block GC. Only an explicit durable retirement transition changes membership; time, presence expiry, reminder display, and dismissal do not.
 
-## Q2 — Long-offline devices and reclamation
+**Advisory reminder:** add `stale_for_review` and a device-review interface, with a configurable reminder age, enable/disable, and snooze. Proposed implementation default: 90 days, representing “a few months”; this is a revisable UI default, not a GC timeout. Keep enrolled and Remind later preserve membership. Review retirement displays the affected device/documents and consequences, followed by explicit confirmation.
 
-**Question:** Should offline devices remain enrolled until explicitly retired, be automatically retired after a documented timeout, or should distributed GC be deferred while retaining all history?
+**Returning devices:** unseen edits may exist on an offline device and cannot be exported by another machine at retirement time. A retired device must preserve its local branch and enter export/reconciliation/rejoin before new-epoch editing. Do not claim automatic lossless merging of arbitrary old-epoch edits after GC.
 
-**Recommended:** explicit retirement. A device may be offline indefinitely and block GC. It remains entitled to contribute old operations/undo while enrolled. Any retirement changes its later merge guarantees and must preserve/export unsynced work before rejoining a new epoch.
+**Plan changes:** G01/G02 use the selected policy; A08 specifies the flag, reminders, confirmation interface, errors, and fake-clock tests. Reminder age is not a new open product-policy question.
 
-**Why the decision matters:** presence expiry is not causal coverage or consent to forget a peer. Safe GC requires defined membership, undo retirement, durable checkpoints, and anchor retention. Treating a silent peer as absent recreates the evaluated defects.
+## Q3 — Persistent undo and redo: resolved
 
-**If explicit retirement is selected:** G01/G02 specify epoch membership and a tested explicit transition. A current member with missing durable coverage blocks certificate construction. No automatic heartbeat eviction.
+**User statement:** “yes, undo/redo survive.”
 
-**If automatic retirement is selected:** a timeout value, ownership/authorization policy, and returning-device rescue/rebase policy must be added to G01; implement them before G02. Time-based removal still cannot delete the only recoverable copy of unsynced edits.
+**Selected policy:** restore both actor-local undo and redo across close/reopen/crash within configured step and byte limits. Preserve grouping/coalescing, cursor metadata, redo truncation, and durable retirement of trimmed history. Undo reverses the actor's edits and preserves peer changes.
 
-**If indefinite history/deferred GC is selected:** V03 containment remains. Checkpoints can accelerate recovery but covered history is not physically purged. G01–G03 may define future protocols, while G06–G08 are explicitly deferred; no bounded total storage claim.
+**Plan changes:** L06 has one persistence route, with no session-only alternative. L07/G04/G05 and final acceptance test reopening with both stacks. Shared checkpoints do not replace private actor history. Physical GC must honor all still-enrolled actors' retained restoration obligations.
 
-## Q3 — Undo/redo across close and reopen
+## Q4 — Backend route: pending after informed assessment
 
-**Question:** Should local undo/redo survive reopening within configured step/byte limits, or may it reset at session close?
+**Current user position:** interested in Rust benefits/drawbacks, potentially willing to install a toolchain, concerned about language stability. No rewrite or backend adoption has been chosen.
 
-**Recommended:** survive reopening, bounded by both group count and retained bytes. This includes redo tails, coalescing, cursor metadata, and durable retirement of trimmed history. Undo remains local to the actor; peer changes are not undone.
+Read [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md). Stable Rust is suitable for production use; the open issue is project fit and maintenance cost, especially persistent collaborative undo and GC.
 
-**Why the decision matters:** local stacks become recoverable state. GC must account for remote retained groups and trimming/retirement; durable transport receipt alone is insufficient. A single coalesced edit can be huge despite a small step limit.
+**Current implementation route:** native C++20 remains provisional. D01 records the actual choice before backend-dependent work. Baseline evidence tasks remain independent of this answer.
 
-**If persistence is selected:** L06 records local history events and G04/G05 checkpoint private actor-local history without importing another actor's stack from a shared checkpoint.
+**Recommendation:** authorize a small, isolated Yrs/C-ABI feasibility experiment before committing to the extensive native ordering/GC redesign. Test persistent undo/redo and indefinitely offline actors first. Adopt only if the experiment demonstrates the required semantics without maintaining a large private fork. A fresh custom Rust rewrite carries much of the same CRDT design burden as native C++ repair.
 
-**If session-only is selected:** L06 documents/tests reset and publishes a durable retirement decision. Remote obligations cannot be discarded merely because this editor closed. GC still follows G01.
+If a trial is chosen, add its concrete tasks/dependencies before P01 and revise backend-specific identity, operation, checkpoint, GC, and optimization tasks based on evidence. The task list's custom 128-bit actor IDs and internal operation fields are native design choices; an existing backend may require a different internal representation. Do not wrap the two models as though their histories were interchangeable.
 
-## Q4 — Native C++ requirement versus a contingency backend
+## Implementation choices already within scope
 
-**Question:** Is retaining a native C++ engine a firm requirement, or may a mature Rust engine through a C interface be considered if the ordering/GC design becomes disproportionately complex?
+- Keep Qt/C++ presentation, one file reference transport, plain text and IdList use cases.
+- Start with full own/remote replay, then add checkpoints; SQLite is not a prerequisite.
+- Use explicit outcomes, bounded queues, single engine ownership, and real checked durable writes.
+- Keep unsafe physical reclamation disabled until a complete validated protocol exists.
+- Use new versioned formats and reject incompatible input explicitly.
+- Keep signing scope honest: trusted-folder prototype until separately scoped authentication.
+- Verify Linux first and test other claimed platforms rather than inferring portability.
+- Detect observable identity conflicts; ordinary shared-document copies must not copy private writer identity. Arbitrary identical disconnected device clones cannot always be detected before exchange.
 
-**Recommended planning route:** retain native C++20. Keep the Qt presentation and file-sync transport regardless. No backend replacement is implemented by the existing task list.
-
-**Why the decision matters:** S02 can select an improved native algorithm without changing language ownership; external alternatives affect build tooling, FFI, undo/persistence semantics, licensing, and the consumer surface. A comparison benchmark is not authorization to substitute a backend.
-
-**If native C++ is firm:** S02 stays native; X10 external comparisons are informational only. An unsolved native design gate is reported explicitly rather than replaced quietly.
-
-**If a contingency is allowed:** S02 may propose a bounded adapter experiment using the same fixtures and traces. Before adopting it, add a concrete replacement design/task plan and evaluate migration/retention behavior. Existing native plan tasks must be revised where architecture actually changes; do not execute two incompatible implementation routes.
-
-## Implementation choices that do not need another user decision
-
-These choices follow the requested evaluation/recommendations and can proceed once relevant dependencies exist:
-
-- Start recovery with complete own/remote replay, then add checkpoints; do not require SQLite.
-- Make the core C++20/Qt-free, with optional file transport and Qt components.
-- Use persistent 128-bit actor identities, checked uint64 counters, sparse wire vectors, distinct stream/epoch context, and separate Buffer/IdList operation values.
-- Use typed decode/apply/store errors and per-stream receipt/commit semantics; remove destructive use of scalar transport fences.
-- Make GC conservative until a full protocol exists; return explicit unresolved/wrong-epoch anchors and history-unavailable results.
-- Prefer one engine owner and bounded batches before introducing worker threads.
-- Keep file transport as the reference implementation and plain text/IdList as the only CRDT primitives.
-- Keep profile signing explicitly unsupported/trusted-folder-only until a separately scoped authentication feature exists.
-- Claim Linux verification first; document and test other supported platforms rather than inferring portability.
-- Do not promise arbitrary cloned-device identity detection: shared document stores do not include private device actor state; copied device state must be explicitly forked. Detect observable duplicate ownership and conflicts without guessing a merge winner.
-- Counter exhaustion is a typed failure before mutation, not wraparound or silent ID reuse.
-
-## Decision record template
-
-For each Q:
-
-- User answer and date:
-- Exact selected policy:
-- Migration/retirement exceptions acknowledged:
-- Tasks/specifications amended:
-- Required tests added:
-- Status: pending / resolved.
-
-D01 is complete only when Q1–Q4 are resolved and any alternate-route tasks are concrete. Technical algorithm and GC protocol decisions are captured separately by S02/G01 and do not masquerade as user product-policy answers.
+D01 still supplies the complete fresh-format/API contract after the V08 inventory and Q4 decision. Recording Q1–Q3 here does not complete unimplemented tasks or substitute for the technical design/model gates at S02/G01.

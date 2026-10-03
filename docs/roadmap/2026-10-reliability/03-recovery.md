@@ -147,7 +147,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** L05, D01  
 **Coverage:** F1, F2, R10  
-**Design/decision gate:** Q3 determines this task's path; both paths must state migration history policy.  
+**Design/decision gate:** Q3 resolved: persistent actor-local undo AND redo, bounded by step and byte limits.  
 
 **Files / scope:**
 
@@ -158,13 +158,13 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 
 **Steps:**
 
-1. For Q3=persist: durably record local undo groups, coalescing, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.
-2. For Q3=session-only: explicitly close and retire old local history without claiming remote peers can instantly remove referenced state; record the retention decision and implement G01/G03 obligations.
+1. Durably record local undo groups, coalescing boundaries, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.
+2. Restore both undo and redo stacks after reopen/crash without resetting them at session close. Make history and operation commits a consistent transaction; a shared checkpoint must not replace actor-private history. Record retention obligations for G01/G03.
 3. Bound history by steps AND retained bytes, including coalesced entries, inserted keys, and restoration content. Make trim atomic with its retirement record; never drop history silently on allocation/error.
 
 **Acceptance:**
 
-- Selected Q3 policy is tested across close/reopen/crash; restored undo reverses only the owner's edits and preserves peer edits.
+- Undo and redo survive close/reopen/crash within the configured bounds; restored undo reverses only the owner's edits and preserves peer edits.
 - A single huge coalesced edit respects the memory limit; retirement survives crash and never re-enables older undo.
 
 **Verification:**
@@ -193,7 +193,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_persistent_undo|tst_idlist_undo|tst_un
 
 **Acceptance:**
 
-- Actual editor open→type→save→close→open retains own/remote edits and follows Q3 undo semantics.
+- Actual editor open→type→save→close→open retains own/remote edits plus both local undo and redo stacks.
 - Failed saves preserve old data and modified state; shutdown does not discard unflushed operations.
 
 **Verification:**
