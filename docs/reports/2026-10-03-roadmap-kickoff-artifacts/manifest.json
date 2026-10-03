@@ -91,5 +91,55 @@
     "exit_code": 0,
     "source_log": "/tmp/collabtext-v03-release-fast.log",
     "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T213805Z-13"
+  },
+  "v04-debug-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T223349Z-1057935",
+    "selection": "tst_trace_reduction|tst_fuzz|tst_idlist_fuzz"
+  },
+  "v04-release-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T223425Z-1058779",
+    "selection": "tst_trace_reduction|tst_fuzz|tst_idlist_fuzz"
+  },
+  "v04-asan-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T223506Z-1059680",
+    "selection": "tst_trace_reduction|tst_fuzz|tst_idlist_fuzz"
+  },
+  "v04-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T223644Z-1061197",
+    "selection": "53-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v04-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T223715Z-1063615",
+    "selection": "53-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v04-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T223738Z-1065970",
+    "selection": "53-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v04-strict-evaluation": {
+    "exit_code": 6,
+    "command": "COLLABTEXT_STRICT_EVALUATION=1 build-roadmap-debug/libs/collabtext/tst_evaluation_regressions",
+    "log": "v04-strict-evaluation.log"
+  },
+  "v04-seed42-determinism": {
+    "exit_code": 0,
+    "command": "COLLABTEXT_TEST_SEED=42 COLLABTEXT_TRACE_OUTPUT=<dir> build-roadmap-debug/libs/collabtext/tst_fuzz (twice)",
+    "result": "traces byte-identical; evidence in v04-seed42-run-a/, v04-seed42-run-b/, v04-seed42-identical.txt, v04-seed42-differs.txt"
+  },
+  "v04-injected-failure": {
+    "exit_code": 0,
+    "command": "tst_trace_reduction injected-failure rows plus tools/reduce-trace",
+    "result": "42-event trace with one injected lost delivery; reduced to 16 events, replay still diverges; logs and both traces in v04-injected-failure/"
+  },
+  "v04-realistic-compact-red": {
+    "exit_code": 1,
+    "command": "pre-migration tst_realistic networksim_compact_all",
+    "result": "asserted removed > 0; false since V03 containment, hidden by the fast-suite exclusion; now asserts retention"
   }
 }

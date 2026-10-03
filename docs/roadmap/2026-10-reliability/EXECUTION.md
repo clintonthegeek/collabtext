@@ -78,6 +78,47 @@ ctest --test-dir build-roadmap-consumer --output-on-failure
 
 The exact options/paths become authoritative when A01/A06 implement them. The task registry names intended new tests; each creating task must register its executable so verification does not pass with “No tests were found.” The script must fail if a selected regex matches zero tests.
 
+## Randomized test contract (V04)
+
+Every randomized suite takes its entropy from two environment variables, and a
+failure is expected to leave a replayable artifact behind.
+
+```sh
+COLLABTEXT_TEST_SEED=42 \
+  build-roadmap-debug/libs/collabtext/tst_fuzz            # deterministic run
+
+COLLABTEXT_TEST_SEED=random \
+COLLABTEXT_TRACE_OUTPUT=/tmp/collabtext-traces \
+  build-roadmap-debug/libs/collabtext/tst_fuzz            # opt-in campaign
+```
+
+- `COLLABTEXT_TEST_SEED` is a checked uint64 (decimal digits only, no sign or
+  whitespace) or the word `random`. Unset, malformed, and out-of-range values
+  fall back to the documented fixed default `20261003`, and a malformed value is
+  reported once. This is what makes an ordinary `ctest` run a reproducible CI
+  sample rather than an unrepeatable campaign.
+- `COLLABTEXT_TRACE_OUTPUT` names a directory for trace artifacts. Unset, suites
+  record nothing to disk. Set, each scenario writes one trace and a failing
+  scenario writes its trace again with a `failed` suffix.
+- Every migrated scenario prints its campaign seed, effective per-scenario seed,
+  and whether the source was fixed or random.
+
+A trace is versioned, records decisions rather than entropy, and replays without
+rerolling anything. To investigate a failure:
+
+```sh
+build-roadmap-debug/reduce-trace /path/to/trace.trace --replay
+build-roadmap-debug/reduce-trace /path/to/trace.trace \
+  --predicate convergence --out /tmp/reduced.trace
+```
+
+The CLI exits nonzero and explains itself when the trace is unreadable, does not
+fail the predicate, or when a reduction stops reproducing. Record the seed, the
+trace path, and the reduced path in the task's evidence. When changing a
+randomized suite, migrate it onto `TestSeed.h`/`TraceHarness.h` rather than
+reaching for `std::random_device`, and run it twice with the same seed to confirm
+the traces are identical.
+
 Useful existing baseline commands before V01:
 
 ```sh

@@ -1,0 +1,129 @@
+#collabtext-trace 1
+#model buffer
+#label duplicate_ops_stress
+#seed 12707508813122869614
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 72c3a1c3b36569
+edit 0 3 3 c3ade4b98b74
+edit 0 1 1 c3a674f09f999d61e4b897
+edit 0 22 24 e4b98e736268
+edit 0 3 27 e4b8887471f09f9988e4b986
+edit 0 12 15 e4ba8d
+edit 0 0 15 -
+edit 0 1 1 77
+edit 0 2 2 -
+edit 0 2 2 c3a2c3ad
+edit 0 6 6 e4b9a7737074
+edit 0 4 10 -
+edit 0 1 2 -
+edit 0 0 5 76
+edit 0 0 0 f09f9b9462c3b5f09f9f99c3b5
+edit 0 14 14 78c3b074796a
+edit 0 19 20 68c3ab
+edit 0 14 19 c3bb
+edit 0 11 19 64747373e4b9ac
+edit 0 4 15 -
+edit 0 0 0 61f09f9da8f09f9c99
+edit 0 0 1 657176e4b9a2
+edit 0 2 2 e4b8b3e4b881786977
+edit 0 2 27 71e4b8966d7275
+edit 0 12 12 -
+edit 0 9 9 79e4b88d
+edit 0 7 10 -
+edit 0 6 10 -
+edit 0 0 1 -
+edit 0 2 5 -
+deliver 1 24
+deliver 1 1
+deliver 1 12
+deliver 1 28
+deliver 1 13
+deliver 1 20
+deliver 1 18
+deliver 1 19
+deliver 1 11
+deliver 1 10
+deliver 1 0
+deliver 1 16
+deliver 1 27
+deliver 1 14
+deliver 1 29
+deliver 1 10
+deliver 1 27
+deliver 1 23
+deliver 1 3
+deliver 1 8
+deliver 1 16
+deliver 1 14
+deliver 1 2
+deliver 1 18
+deliver 1 8
+deliver 1 26
+deliver 1 5
+deliver 1 27
+deliver 1 13
+deliver 1 21
+deliver 1 6
+deliver 1 5
+deliver 1 28
+deliver 1 27
+deliver 1 29
+deliver 1 4
+deliver 1 19
+deliver 1 8
+deliver 1 7
+deliver 1 2
+deliver 1 0
+deliver 1 17
+deliver 1 8
+deliver 1 0
+deliver 1 0
+deliver 1 13
+deliver 1 5
+deliver 1 7
+deliver 1 0
+deliver 1 17
+deliver 1 17
+deliver 1 22
+deliver 1 27
+deliver 1 8
+deliver 1 7
+deliver 1 25
+deliver 1 26
+deliver 1 20
+deliver 1 9
+deliver 1 28
+deliver 1 5
+deliver 1 1
+deliver 1 29
+deliver 1 26
+deliver 1 9
+deliver 1 17
+deliver 1 18
+deliver 1 10
+deliver 1 2
+deliver 1 7
+deliver 1 15
+deliver 1 2
+deliver 1 20
+deliver 1 7
+deliver 1 24
+deliver 1 1
+deliver 1 13
+deliver 1 15
+deliver 1 12
+deliver 1 10
+deliver 1 23
+deliver 1 13
+deliver 1 5
+deliver 1 6
+deliver 1 6
+deliver 1 16
+deliver 1 26
+deliver 1 26
+deliver 1 2
+deliver 1 17
+deliver 1 16
+deliver 1 18
+settle

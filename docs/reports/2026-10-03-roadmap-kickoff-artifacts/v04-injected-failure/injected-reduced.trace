@@ -1,0 +1,22 @@
+#collabtext-trace 1
+#model buffer
+#label injected-loss
+#seed 42
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+edit 0 0 0 61
+deliver 1 11
+edit 0 1 1 5a
+edit 1 0 0 62
+deliver 0 13

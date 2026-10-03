@@ -1,4 +1,4 @@
-# V01–V03 verification artifacts
+# V01–V04 verification artifacts
 
 These are portable excerpts of actual verification runs on 2026-10-03. See
 [the task log](../vnext-task-log.md) and
@@ -30,6 +30,28 @@ installation requirements.
 | V03 default regression executable | 16 QtTest passes, six XFAIL assertions |
 | V03 entire strict executable | Six remaining failures F3–F8; exits 6 |
 | V03 final Debug / Release fast | 52/52 CTest executables pass in each mode |
+| V04 targeted Debug / Release / sanitizer | 3/3 CTest executables pass in each mode |
+| V04 final Debug / Release fast | 53/53 CTest executables pass in each mode |
+| V04 final sanitizer fast selection | 53/53 pass with ASan, UBSan, and leak checking enabled |
+| V04 seed-42 determinism | Two `tst_fuzz` runs produce byte-identical traces; a third run at seed 20261003 differs in every scenario |
+| V04 injected failure | 42-event trace with one injected lost delivery diverges; reduction removes 26 events and the reduced trace still diverges |
+| V04 strict regression executable | Unchanged: six remaining F3–F8 failures; exits 6 |
+
+### V04 additions
+
+`v04-*-targeted/` and `v04-*-fast/` hold the runner evidence directories for the
+three verification modes. `v04-seed42-run-a/`, `v04-seed42-run-b/`, and
+`v04-seed42-other-seed/` hold the recorded traces from two runs at seed 42 and
+one at the default seed; `v04-seed42-identical.txt` and `v04-seed42-differs.txt`
+are the corresponding `diff` results. `v04-injected-failure/` holds the
+unreduced 42-event artifact, its 16-event reduction, and both the in-test and
+CLI reduction logs. `v04-fuzz-seed42-*.log` are the two campaign runs.
+
+Leak checking was active for every sanitizer row: this environment is not the
+restricted sandbox V01 hit, which was confirmed by observing LeakSanitizer
+report a deliberate leak from a throwaway program. No suppression was used.
+`v04-realistic-compact-red` records a pre-existing failure found during the V04
+migration rather than a passing run.
 
 Sanitizer successes run outside the restricted sandbox with leak checking
 enabled and no leak suppression. The restricted run is retained to explain the
@@ -42,6 +64,8 @@ expectations against V02's old production code. V03's final checks used the
 complete containment change. No production C++ changes followed those checks.
 
 The fast suites exclude only `tst_benchmark` and `tst_realistic`; their results
-are not implied. Randomized tests still use historical randomness until V04.
-These runs do not measure performance, certify other operating systems, prove
-CRDT semantics exhaustively, or complete the remaining roadmap.
+are not implied. V04 made the randomized suites seeded and traced, and
+`tools/verify-roadmap.sh` did not run `tst_realistic` as part of these
+selections: it is exercised separately and takes minutes in Debug. These runs
+do not measure performance, certify other operating systems, prove CRDT
+semantics exhaustively, or complete the remaining roadmap.

@@ -1,0 +1,112 @@
+#collabtext-trace 1
+#model buffer
+#label duplicate_ops_stress
+#seed 12707508813140373967
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 f09f989f70c3b1
+edit 0 7 7 -
+edit 0 7 7 6f
+edit 0 0 7 -
+edit 0 0 1 -
+edit 0 0 0 f09f9dbb6976
+edit 0 0 6 7170e4b883c3bb79
+edit 0 8 8 c3b972c3a470
+edit 0 11 11 e4ba98
+edit 0 10 16 e4b9a8c3ab65c3a9f09f9e8e
+edit 0 22 23 -
+edit 0 1 7 766f65
+edit 0 12 13 -
+edit 0 12 12 75f09f99bc6a61
+edit 0 18 19 f09f9bae
+edit 0 24 28 7a6277c3a763
+edit 0 7 25 -
+edit 0 7 11 -
+edit 0 7 7 -
+edit 0 7 8 726e796af09f99bf
+edit 0 15 15 c3acf09f98b0f09f9d96
+edit 0 1 1 6c6576
+edit 0 4 7 62
+edit 0 6 10 -
+edit 0 2 7 -
+edit 0 3 13 -
+edit 0 7 7 -
+edit 0 7 7 -
+edit 0 3 7 e4bb92c3ae6a77
+edit 0 10 10 -
+deliver 1 0
+deliver 1 14
+deliver 1 11
+deliver 1 13
+deliver 1 20
+deliver 1 19
+deliver 1 5
+deliver 1 28
+deliver 1 27
+deliver 1 22
+deliver 1 2
+deliver 1 5
+deliver 1 7
+deliver 1 1
+deliver 1 26
+deliver 1 16
+deliver 1 5
+deliver 1 10
+deliver 1 25
+deliver 1 26
+deliver 1 14
+deliver 1 12
+deliver 1 26
+deliver 1 24
+deliver 1 6
+deliver 1 9
+deliver 1 25
+deliver 1 13
+deliver 1 15
+deliver 1 11
+deliver 1 4
+deliver 1 3
+deliver 1 14
+deliver 1 3
+deliver 1 11
+deliver 1 21
+deliver 1 2
+deliver 1 13
+deliver 1 12
+deliver 1 13
+deliver 1 1
+deliver 1 0
+deliver 1 26
+deliver 1 6
+deliver 1 21
+deliver 1 25
+deliver 1 0
+deliver 1 6
+deliver 1 15
+deliver 1 15
+deliver 1 16
+deliver 1 15
+deliver 1 7
+deliver 1 10
+deliver 1 17
+deliver 1 18
+deliver 1 2
+deliver 1 16
+deliver 1 29
+deliver 1 4
+deliver 1 6
+deliver 1 8
+deliver 1 3
+deliver 1 0
+deliver 1 10
+deliver 1 21
+deliver 1 3
+deliver 1 5
+deliver 1 16
+deliver 1 26
+deliver 1 7
+deliver 1 11
+deliver 1 25
+deliver 1 10
+deliver 1 23
+settle

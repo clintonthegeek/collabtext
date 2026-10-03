@@ -156,19 +156,45 @@ The test suite includes:
 - **Realistic editing simulation** — Cursor-tracking model (sequential typing, backspace, selection, paste) across multiple clients with simulated network conditions
 - **NetworkSim harness** — Configurable latency, jitter, out-of-order delivery, duplicate operations, disconnect/reconnect, and cascading partition tests
 - **Garbage collection** — Tombstone retention, local/remote undo/redo preservation, and anchor context
+- **Trace replay and reduction** — Recorded event traces replay without rerolling decisions, and a failing trace reduces to a smaller valid reproduction
 
-All tests are seeded and reproducible.
+The randomized suites are seeded and reproducible. Each scenario derives its seed
+from `COLLABTEXT_TEST_SEED` and prints it; the default `20261003` makes an
+ordinary run a deterministic sample, and `random` opts into a fresh campaign.
 
 ```bash
-# Fast suite (13 tests, ~7 seconds)
+# Fast suite
 ctest --test-dir build --output-on-failure -E "tst_realistic|tst_benchmark"
 
-# Realistic multi-client tests (11 tests, ~80 seconds)
+# Realistic multi-client tests (11 tests, minutes in a Debug build)
 ./build/libs/collabtext/tst_realistic
 
 # Fuzz stability (16 tests per run)
 ./build/libs/collabtext/tst_fuzz
 ```
+
+### Reproducing and shrinking a failure
+
+Set `COLLABTEXT_TRACE_OUTPUT` and every scenario records a versioned event trace
+— the decisions it made, not the entropy it drew. A failing scenario also keeps
+its trace under a `failed` name.
+
+```bash
+COLLABTEXT_TEST_SEED=random \
+COLLABTEXT_TRACE_OUTPUT=/tmp/collabtext-traces \
+  ./build/libs/collabtext/tst_fuzz
+
+# Re-run exactly what was recorded
+./build/reduce-trace /tmp/collabtext-traces/ten_replica_chaos-trace.trace --replay
+
+# Shrink it: keeps a removal only while the trace stays valid and still fails
+./build/reduce-trace /tmp/collabtext-traces/ten_replica_chaos-trace.trace \
+  --predicate convergence --out /tmp/reduced.trace
+```
+
+Reduction preserves the failing predicate, not the failure mechanism, so read the
+reduced trace as a starting point for investigation and keep the unreduced
+artifact as the report.
 
 ## Architecture
 

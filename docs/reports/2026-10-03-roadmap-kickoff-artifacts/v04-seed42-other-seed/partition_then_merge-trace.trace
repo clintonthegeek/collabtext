@@ -1,0 +1,191 @@
+#collabtext-trace 1
+#model buffer
+#label partition_then_merge
+#seed 678397646376554959
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 73686172656420696e697469616c207374617465
+deliver 1 0
+disconnect 1
+edit 0 14 18 e4bb9674
+deliver 1 1
+edit 1 10 15 6373c3bac3bc
+deliver 0 2
+edit 0 4 10 7ac3a5696575
+deliver 1 3
+edit 1 14 14 -
+deliver 0 4
+edit 0 18 20 68796f
+deliver 1 5
+edit 1 9 19 -
+deliver 0 6
+edit 0 10 15 -
+deliver 1 7
+edit 1 5 5 6e
+deliver 0 8
+edit 0 8 12 -
+deliver 1 9
+edit 1 0 7 68c3af6de4bb85f09f9f94
+deliver 0 10
+edit 0 18 18 f09f98a6616e
+deliver 1 11
+edit 1 1 12 -
+deliver 0 12
+edit 0 5 8 6275
+deliver 1 13
+edit 1 2 5 76f09f9f8c72e4b98b
+deliver 0 14
+edit 0 1 7 6464e4ba80
+deliver 1 15
+edit 1 3 8 c3acc3b0
+deliver 0 16
+edit 0 15 15 65
+deliver 1 17
+edit 1 3 3 c3b476
+deliver 0 18
+edit 0 13 16 c3a96476
+deliver 1 19
+edit 1 1 5 626e70
+deliver 0 20
+edit 0 10 11 62c3be6f
+deliver 1 21
+edit 1 2 9 7773
+deliver 0 22
+edit 0 23 23 e4baad
+deliver 1 23
+edit 1 0 0 6776e4bab1
+deliver 0 24
+edit 0 28 34 62747572f09f9c89
+deliver 1 25
+edit 1 7 12 66e4babac3b16268
+deliver 0 26
+edit 0 26 31 75
+deliver 1 27
+edit 1 13 14 c3bee4bb8ac3a5
+deliver 0 28
+edit 0 7 25 c3a4
+deliver 1 29
+edit 1 2 8 69e4bb9fe4bba2c3af74
+deliver 0 30
+edit 0 25 31 -
+deliver 1 31
+edit 1 25 25 e4b8bd73c3ace4ba9273
+deliver 0 32
+edit 0 16 19 6bf09f9db1
+deliver 1 33
+edit 1 6 9 -
+deliver 0 34
+edit 0 0 3 -
+deliver 1 35
+edit 1 21 22 f09f9ba8f09f9a9462
+deliver 0 36
+edit 0 40 40 7af09f9abd7a726c
+deliver 1 37
+edit 1 39 40 6df09f98a8
+deliver 0 38
+edit 0 40 51 f09f9daa6d
+deliver 1 39
+edit 1 40 44 -
+deliver 0 40
+edit 0 8 34 78
+deliver 1 41
+edit 1 19 29 6d
+deliver 0 42
+edit 0 16 21 e4baa97a
+deliver 1 43
+edit 1 12 12 e4ba85
+deliver 0 44
+edit 0 16 16 c3a46f
+deliver 1 45
+edit 1 15 15 747373
+deliver 0 46
+edit 0 25 25 6275796876
+deliver 1 47
+edit 1 2 31 -
+deliver 0 48
+edit 0 18 20 68e4b9bee4bab86af09f9a83
+deliver 1 49
+edit 1 2 8 6fc3a7
+deliver 0 50
+edit 0 16 19 -
+deliver 1 51
+edit 1 3 5 e4ba86f09f9f9a66
+deliver 0 52
+edit 0 14 21 67e4b895f09f9c846c7a
+deliver 1 53
+edit 1 3 11 c3a7
+deliver 0 54
+edit 0 34 34 68
+deliver 1 55
+edit 1 0 5 -
+deliver 0 56
+edit 0 3 27 f09f9fac
+deliver 1 57
+edit 1 0 0 636b6af09f9eb86a
+deliver 0 58
+edit 0 2 20 -
+deliver 1 59
+edit 1 3 3 72686f
+deliver 0 60
+reconnect 1
+deliver 0 2
+deliver 0 4
+deliver 0 6
+deliver 0 8
+deliver 0 10
+deliver 0 12
+deliver 0 14
+deliver 0 16
+deliver 0 18
+deliver 0 20
+deliver 0 22
+deliver 0 24
+deliver 0 26
+deliver 0 28
+deliver 0 30
+deliver 0 32
+deliver 0 34
+deliver 0 36
+deliver 0 38
+deliver 0 40
+deliver 0 42
+deliver 0 44
+deliver 0 46
+deliver 0 48
+deliver 0 50
+deliver 0 52
+deliver 0 54
+deliver 0 56
+deliver 0 58
+deliver 0 60
+deliver 1 1
+deliver 1 3
+deliver 1 5
+deliver 1 7
+deliver 1 9
+deliver 1 11
+deliver 1 13
+deliver 1 15
+deliver 1 17
+deliver 1 19
+deliver 1 21
+deliver 1 23
+deliver 1 25
+deliver 1 27
+deliver 1 29
+deliver 1 31
+deliver 1 33
+deliver 1 35
+deliver 1 37
+deliver 1 39
+deliver 1 41
+deliver 1 43
+deliver 1 45
+deliver 1 47
+deliver 1 49
+deliver 1 51
+deliver 1 53
+deliver 1 55
+deliver 1 57
+deliver 1 59
+settle

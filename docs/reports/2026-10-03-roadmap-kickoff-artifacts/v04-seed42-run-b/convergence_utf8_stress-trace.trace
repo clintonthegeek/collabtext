@@ -1,0 +1,221 @@
+#collabtext-trace 1
+#model buffer
+#label convergence_utf8_stress
+#seed 11509049639340877137
+#replicas 3
+#net 50 200 500 1
+edit 2 0 0 6ef09f9aad
+edit 0 0 0 68
+edit 1 0 0 -
+redo 2
+edit 1 0 0 c3a7c3bb
+edit 0 1 1 c3b4e4b98d71c3a8
+edit 0 6 7 -
+edit 1 2 4 -
+redo 0
+edit 2 0 1 6d707269
+redo 2
+edit 0 8 8 63
+edit 0 0 8 c3b1
+deliver 1 8
+deliver 1 1
+deliver 1 5
+undo 2
+undo 0
+redo 1
+edit 0 1 8 c3a0e4b994c3b9f09f9f8fe4b8b6
+edit 2 1 1 756f
+edit 2 1 2 786b6777c3a0
+deliver 1 9
+edit 1 3 3 6de4b8a6
+deliver 0 0
+deliver 0 6
+edit 2 5 8 -
+edit 2 0 5 e4bb88e4baad6de4bbb7c3b3
+redo 1
+edit 2 3 3 6ae4ba9877
+edit 1 1 1 636270f09f9ea3
+redo 0
+undo 0
+redo 2
+edit 2 11 21 e4b99be4b99ef09f9fbe72
+edit 2 21 21 e4ba8e
+deliver 2 11
+deliver 2 6
+deliver 2 9
+deliver 2 19
+deliver 2 15
+edit 2 21 24 6d616b
+edit 1 8 8 c3bee4bab1f09f9f91c3aa
+redo 1
+edit 0 2 6 -
+deliver 1 25
+deliver 1 21
+deliver 1 7
+edit 2 8 17 -
+edit 0 2 10 6cf09f9fa2
+edit 2 0 0 6f75f09f9e87c3b9
+deliver 0 13
+deliver 0 15
+redo 1
+edit 2 20 23 -
+edit 2 15 15 -
+edit 2 21 21 -
+edit 1 1 25 7a
+edit 2 12 15 -
+deliver 2 2
+deliver 2 8
+deliver 2 20
+deliver 2 25
+deliver 2 4
+edit 0 7 7 7169
+edit 1 1 1 c3a7c3b9c3ba
+undo 2
+edit 2 6 21 e4b997c3b579
+deliver 1 29
+deliver 1 36
+deliver 1 13
+deliver 1 28
+edit 1 0 0 -
+deliver 2 35
+deliver 2 34
+edit 0 3 7 -
+deliver 0 30
+deliver 0 36
+deliver 0 28
+deliver 0 26
+deliver 0 7
+edit 2 12 12 -
+edit 1 3 3 62f09f9b8e
+edit 2 6 12 746270c3b865
+undo 1
+deliver 0 21
+deliver 0 16
+edit 2 8 11 e4bba7f09f9f9663
+deliver 2 27
+deliver 2 41
+deliver 2 38
+edit 2 8 8 7477e4bb99
+edit 0 2 8 e4bbbdc3af
+deliver 2 12
+deliver 2 46
+deliver 2 32
+deliver 2 1
+redo 2
+edit 0 5 7 c3bef09f9fa9766f6c
+edit 1 8 8 6d
+edit 0 7 11 e4ba89e4baab6d
+undo 0
+deliver 1 14
+deliver 1 49
+deliver 1 42
+edit 2 31 31 f09f9faf
+edit 2 25 25 -
+edit 1 3 5 -
+deliver 1 34
+deliver 0 19
+deliver 0 52
+deliver 1 47
+deliver 1 44
+deliver 1 20
+edit 2 22 29 e4ba9b65e4bba0
+edit 2 2 19 73
+edit 2 6 10 -
+edit 1 3 7 -
+edit 2 10 15 61
+edit 1 0 1 -
+edit 1 2 2 e4b9a3c3a5
+deliver 1 54
+deliver 1 0
+deliver 1 23
+edit 2 0 11 -
+deliver 0 37
+deliver 0 60
+edit 2 0 0 e4bbbef09f9cad68
+undo 0
+deliver 1 27
+deliver 1 61
+edit 1 1 8 -
+edit 2 7 7 e4ba88e4bbb56a6e7a
+undo 2
+edit 1 6 6 f09f9d9fc3b5f09f9aa7f09f9ba2
+deliver 0 59
+deliver 0 67
+deliver 0 32
+deliver 0 64
+deliver 0 22
+deliver 0 65
+deliver 0 17
+deliver 0 51
+deliver 0 23
+deliver 0 29
+deliver 0 40
+deliver 0 33
+deliver 0 14
+deliver 0 58
+deliver 0 56
+deliver 0 43
+deliver 0 55
+deliver 0 45
+deliver 0 62
+deliver 0 3
+deliver 0 44
+deliver 0 35
+deliver 0 66
+deliver 0 10
+deliver 0 57
+deliver 0 53
+deliver 0 31
+deliver 0 61
+deliver 0 18
+deliver 0 24
+deliver 0 2
+deliver 0 41
+deliver 0 48
+deliver 0 54
+deliver 0 38
+deliver 0 42
+deliver 1 63
+deliver 1 26
+deliver 1 58
+deliver 1 45
+deliver 1 62
+deliver 1 33
+deliver 1 65
+deliver 1 17
+deliver 1 11
+deliver 1 4
+deliver 1 18
+deliver 1 22
+deliver 1 16
+deliver 1 66
+deliver 1 30
+deliver 1 46
+deliver 1 50
+deliver 1 39
+deliver 1 55
+deliver 1 51
+deliver 1 10
+deliver 1 12
+deliver 1 40
+deliver 1 37
+deliver 1 52
+deliver 1 56
+deliver 1 31
+deliver 2 5
+deliver 2 24
+deliver 2 49
+deliver 2 39
+deliver 2 48
+deliver 2 50
+deliver 2 53
+deliver 2 67
+deliver 2 3
+deliver 2 43
+deliver 2 47
+deliver 2 57
+deliver 2 63
+deliver 2 60
+deliver 2 59
+deliver 2 64
+settle

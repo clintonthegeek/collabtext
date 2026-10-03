@@ -74,6 +74,113 @@ F1/F2 data-loss sequences by preserving state; it does not establish bounded
 memory or implement persistent history, recovery, membership, retirement, or a
 GC certificate. Engine state may grow in the meantime.
 
+## 2026-10-03 — V04: replayable, reducible randomized failures
+
+```text
+Task: V04
+Status: complete
+Baseline: cbe72eafd7f8bb324d4056339808ce31489ff160
+Implementation commits: e5eb6f5, 97a306c, plus this documentation commit
+Scope: libs/collabtext/tests/TestSeed.h (new), libs/collabtext/tests/TraceHarness.h
+       (new), libs/collabtext/tests/tst_trace_reduction.cpp (new),
+       tools/reduce-trace.cpp (new), CMakeLists.txt, libs/collabtext/CMakeLists.txt,
+       tst_fuzz.cpp, tst_idlist_fuzz.cpp, tst_realistic.cpp
+Regression: tst_trace_reduction (new) — same-seed trace equality, faithful replay,
+       file round-trip, injected lost delivery that reduces to a smaller valid
+       reproduction; plus the previously hidden tst_realistic
+       networksim_compact_all failure
+Verification: seed 42 twice → byte-identical traces for tst_fuzz, tst_idlist_fuzz
+       and tst_realistic; all 28 recorded scenarios replay and converge;
+       Debug 3/3, Release 3/3, sanitizer 3/3 targeted; Debug 53/53, Release 53/53,
+       sanitizer 53/53 fast; strict evaluation executable still exits 6
+Artifacts: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-*
+API/store changes: none in the library. Trace format v1 is a test-only artifact
+       format described in TraceHarness.h.
+Known limits: reduction preserves the failure predicate, not the mechanism; a
+       smaller trace may diverge for a different reason. Two tst_fuzz scenarios
+       are not traced yet (multi-range local edits; timed pinpoint measurement).
+Next ready tasks: V06, V07, V08 (V05 now has its V04 prerequisite)
+```
+
+### What changed
+
+The three randomized suites drew a fresh `std::random_device` seed per test, so a
+failing run printed a seed that could not reproduce it and left nothing else
+behind. They now derive each scenario's seed from `COLLABTEXT_TEST_SEED`, parsed
+as a checked uint64 (or the word `random`) with the documented fixed default
+`20261003` used by ordinary verification and CI, and print the campaign seed,
+the effective per-scenario seed, and whether the source was fixed or random.
+
+Every edit, delivery, disconnect, reconnect, undo, redo, restart, and GC request
+in those suites is recorded in a versioned event trace. The trace records
+decisions — replica, byte range, visible index, delivered operation index — and
+never entropy, so replay re-executes the same choices and the engine re-derives
+identical Lamport identities. Three models are supported: `buffer`, `idlist`, and
+`networksim`. With `COLLABTEXT_TRACE_OUTPUT` set, each scenario emits its trace,
+which is what makes two runs comparable byte-for-byte; a failing scenario also
+saves its trace even when only the failure path is reached.
+
+Delta reduction removes contiguous event chunks and keeps a removal only when the
+candidate still replays to completion, still delivers to every replica the failing
+trace did, and still fails the chosen predicate. Validity is what preserves
+identity and causality: a candidate whose remaining edit ranges, IdList visible
+indices, or delivery references no longer apply is rejected, never clamped.
+`tools/reduce-trace` exposes this as a CLI with `--replay`, `--predicate`, and
+`--out`, and fails loudly (nonzero exit, distinct codes) rather than reducing a
+passing trace.
+
+### Acceptance evidence
+
+Two runs at seed 42 produced byte-identical traces for all three suites
+(`v04-seed42-run-a/` vs `v04-seed42-run-b/`, `v04-seed42-identical.txt`); a third
+run at the default seed differs in every scenario (`v04-seed42-differs.txt`).
+All 28 recorded scenarios replay through `tools/reduce-trace --replay` to
+completion and converge.
+
+The injected-failure proof is in `v04-injected-failure/`: a 42-event trace with
+one delivery marked lost diverges on replay; reduction removes 26 events; the
+16-event reduction still replays to completion and still diverges; both the
+in-test path and the CLI produce it, and the unreduced trace is saved first.
+
+The fast suite grew from 52 to 53 executables (`tst_trace_reduction` is new) and
+passes 53/53 in Debug, Release, and the sanitizer mode. Leak checking was active
+and unsuppressed: this environment is not the restricted sandbox V01 hit, which
+was confirmed by watching LeakSanitizer report a deliberate leak from a throwaway
+program. `tst_realistic` is excluded from the fast selection and was run
+separately (11/11, about 160 s in Debug).
+
+### A pre-existing failure this migration exposed
+
+`tst_realistic::networksim_compact_all` asserted that compaction removed
+tombstones (`removed > 0`). That has been false since V03 made `compact()` retain
+everything, and it stayed hidden because the long-running suite is excluded from
+the fast CTest selection. It now asserts the containment contract instead —
+tombstones retained, invariants and convergence intact after `collect_garbage()`
+and `compact_all()` — and `long_partition_with_gc` checks the same retention
+property across both replicas.
+
+### Limits
+
+Reduction preserves the failure predicate, not the failure mechanism: a smaller
+trace may diverge for a different reason than the original did, and the retained
+delivery-target rule is a heuristic guard against fully degenerate reductions
+rather than a proof. Reduction is also conservative about causality by design —
+removing an edit invalidates the delivery references that named its operation —
+so a trace whose deliveries all point at late operations cannot shrink far.
+
+`restart` is modelled as replay-based recovery from the replica's own decision
+journal. That reproduces the clock, the undo *and* redo stacks, and the document,
+but it is a harness model: durable segment and checkpoint recovery remain L03 and
+L05, and a scenario that seeds a replica out of band must record that seeding as
+trace events or its replay will not match.
+
+Trace format v1 expresses one byte range per local edit, so
+`rapid_multi_range_edits` (2–3 disjoint ranges in one operation) is not yet
+traced; `large_document_pinpoint_edits` keeps its timing threshold until V06.
+Both remain seeded and announce their seed. Nothing here measures performance,
+certifies another operating system, or completes the remaining roadmap.
+
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest
@@ -84,5 +191,7 @@ commit identifies the tested code. The V03 red runs used the revised tests
 against V02's production code.
 
 The [handoff](../handoff/2026-10-03-reliability-kickoff.md) gives exact commands,
-known failures, settled product decisions, and the next task. Continue with V04;
-do not interpret this kickoff as completing the remaining roadmap.
+known failures, and settled product decisions. V04 has since made the randomized
+suites seeded, traced, and reducible; V05, V06, V07, and V08 are the remaining
+structurally ready tasks in phase 1. Do not interpret any single task as
+completing the remaining roadmap.

@@ -179,7 +179,42 @@
         "R4"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "cbe72eafd7f8bb324d4056339808ce31489ff160",
+      "implementation_commits": [
+        "e5eb6f5",
+        "97a306c"
+      ],
+      "verification_results": {
+        "seed_42_determinism": "tst_fuzz, tst_idlist_fuzz and tst_realistic produce byte-identical traces on two runs; seed 20261003 differs in every scenario",
+        "recorded_scenario_replay": "28/28 recorded scenarios replay to completion and converge via tools/reduce-trace --replay",
+        "injected_failure": "42-event trace with one injected lost delivery diverges; reduction removes 26 events and the 16-event reduction still diverges",
+        "debug_targeted": "3/3 CTest executables pass (tst_trace_reduction, tst_fuzz, tst_idlist_fuzz)",
+        "release_targeted": "3/3 CTest executables pass",
+        "asan_ubsan_lsan_targeted": "3/3 pass; leak checking active, no suppressions",
+        "debug_fast": "53/53 CTest executables pass",
+        "release_fast": "53/53 CTest executables pass",
+        "asan_ubsan_lsan_fast": "53/53 pass with leak checking enabled",
+        "tst_realistic_separate": "11/11 pass in Debug (~160 s); excluded from the fast selection",
+        "strict_evaluation_unchanged": "six remaining F3-F8 failures; entire strict run exits 6",
+        "pre_existing_failure_fixed": "tst_realistic networksim_compact_all asserted removed > 0, false since V03 and hidden by the fast-suite exclusion"
+      },
+      "artifacts": [
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-debug-fast/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-release-fast/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-asan-fast/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-injected-failure/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-seed42-run-a/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-seed42-run-b/"
+      ],
+      "limitations": [
+        "Reduction preserves the failure predicate, not the mechanism; a smaller trace may diverge for a different reason.",
+        "Reduction is conservative about causality: removing an edit invalidates delivery references to its operation.",
+        "Restart is modelled as replay-based recovery from the decision journal, not as a durable store (L03/L05).",
+        "Trace format v1 records one byte range per local edit; tst_fuzz rapid_multi_range_edits is not yet traced.",
+        "large_document_pinpoint_edits keeps its timing threshold until V06.",
+        "These are Linux/GCC runs and make no performance or cross-platform claim."
+      ]
     },
     {
       "id": "V05",

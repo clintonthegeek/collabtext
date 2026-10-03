@@ -1,0 +1,104 @@
+{
+  "backtraceGraph" : 
+  {
+    "commands" : 
+    [
+      "add_test",
+      "add_crdt_test"
+    ],
+    "files" : 
+    [
+      "/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/CMakeLists.txt"
+    ],
+    "nodes" : 
+    [
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 102,
+        "parent" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 90,
+        "parent" : 1
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 103,
+        "parent" : 3
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 90,
+        "parent" : 4
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 134,
+        "parent" : 6
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 90,
+        "parent" : 7
+      }
+    ]
+  },
+  "kind" : "ctestInfo",
+  "tests" : 
+  [
+    {
+      "backtrace" : 2,
+      "name" : "tst_fuzz",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 5,
+      "name" : "tst_trace_reduction",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 8,
+      "name" : "tst_idlist_fuzz",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/libs/collabtext"
+        }
+      ]
+    }
+  ],
+  "version" : 
+  {
+    "major" : 1,
+    "minor" : 0
+  }
+}

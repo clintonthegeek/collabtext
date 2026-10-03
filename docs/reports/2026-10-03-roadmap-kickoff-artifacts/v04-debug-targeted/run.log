@@ -1,0 +1,47 @@
+Root: /home/clinton/dev/collabtext/.worktrees/reliability-v2
+Mode: debug
+Regex: ^(tst_trace_reduction|tst_fuzz|tst_idlist_fuzz)$
+Workers: 2
+-- Configuring done (0.3s)
+-- Generating done (0.4s)
+-- Build files have been written to: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+Selected 3 tests; compiler: c++ (GCC) 16.2.1 20260810
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 93%] Built target collabtext
+[ 93%] Built target tst_fuzz_autogen_timestamp_deps
+[ 93%] Automatic MOC and UIC for target tst_fuzz
+[ 93%] Built target tst_fuzz_autogen
+[100%] Building CXX object libs/collabtext/CMakeFiles/tst_fuzz.dir/tests/tst_fuzz.cpp.o
+[100%] Linking CXX executable tst_fuzz
+[100%] Built target tst_fuzz
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 93%] Built target collabtext
+[ 93%] Built target tst_trace_reduction_autogen_timestamp_deps
+[ 93%] Automatic MOC and UIC for target tst_trace_reduction
+[ 93%] Built target tst_trace_reduction_autogen
+[ 93%] Building CXX object libs/collabtext/CMakeFiles/tst_trace_reduction.dir/tests/tst_trace_reduction.cpp.o
+[100%] Linking CXX executable tst_trace_reduction
+[100%] Built target tst_trace_reduction
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 87%] Built target collabtext
+[ 87%] Built target tst_idlist_fuzz_autogen_timestamp_deps
+[ 93%] Automatic MOC and UIC for target tst_idlist_fuzz
+[ 93%] Built target tst_idlist_fuzz_autogen
+[100%] Building CXX object libs/collabtext/CMakeFiles/tst_idlist_fuzz.dir/tests/tst_idlist_fuzz.cpp.o
+[100%] Linking CXX executable tst_idlist_fuzz
+[100%] Built target tst_idlist_fuzz
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+    Start 10: tst_fuzz
+    Start 42: tst_idlist_fuzz
+1/3 Test #42: tst_idlist_fuzz ..................   Passed    0.18 sec
+    Start 11: tst_trace_reduction
+2/3 Test #11: tst_trace_reduction ..............   Passed    0.25 sec
+3/3 Test #10: tst_fuzz .........................   Passed    3.74 sec
+
+100% tests passed out of 3
+
+Total Test time (real) =   3.74 sec
+Verification exit: 0; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T223349Z-1057935
