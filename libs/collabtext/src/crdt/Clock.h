@@ -69,7 +69,48 @@ public:
     bool observed(Lamport ts) const;
     bool observed_all(const Global &other) const;
     void join(const Global &other);
+
+    /// Nonzero-minimum aggregation. NOT a coverage intersection.
+    ///
+    /// For each component present in `*this`, take the smaller of the two
+    /// values **when the other vector has a nonzero value for that replica**;
+    /// when it does not, leave this vector's value alone. So
+    /// `{1:10}.meet({}) == {1:10}`.
+    ///
+    /// That is the right answer for one narrow question — "what is the largest
+    /// counter that some vector in this set has *not* gone below?" — and the
+    /// wrong answer for "what has every peer seen?", because a peer that has
+    /// never observed replica 1 constrains replica 1's common coverage to zero,
+    /// not to whatever it happens to hold locally. Finding F3 is exactly this
+    /// conflation, and NetworkSim::compact_all() still builds its GC watermark
+    /// this way; it is inert only because V03 made reclamation a no-op.
+    ///
+    /// New code that means "common coverage" must call coverage_intersection().
     void meet(const Global &other);
+
+    /// Coverage intersection: the per-replica minimum over the **union** of
+    /// both vectors, with an absent component counting as zero, and zero
+    /// components canonicalized away.
+    ///
+    /// This is the operation a watermark needs, and it is deliberately not the
+    /// same operation as meet():
+    ///
+    ///   {1:10} ∩ {}      == {}      a peer that never observed replica 1 has
+    ///   {1:10} ∩ {2:5}   == {}      seen none of it, so common coverage of
+    ///   {1:10} ∩ {1:5}   == {1:5}   replica 1 is zero
+    ///   {1:10} ∩ {1:10}  == {1:10}
+    ///
+    /// Laws: commutative, associative, idempotent. There is no identity element
+    /// in this representation — the mathematical identity is "every counter at
+    /// its maximum", which a sparse vector cannot hold — and the empty vector is
+    /// the *absorbing* element, because a peer with no history has seen nothing.
+    /// Folding over a set of peers therefore starts from the local vector and
+    /// intersects each peer in turn; it never starts from empty.
+    [[nodiscard]] Global coverage_intersection(const Global &other) const;
+
+    /// True when the vector holds no component. Because zero components are
+    /// canonicalized away, this is also the emptiness a watermark check wants.
+    [[nodiscard]] bool empty() const noexcept { return m_size == 0; }
 
     bool operator==(const Global &other) const;
 

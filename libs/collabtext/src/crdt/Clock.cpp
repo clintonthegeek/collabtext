@@ -177,6 +177,44 @@ void Global::meet(const Global &other) {
     }
 }
 
+Global Global::coverage_intersection(const Global &other) const {
+    // Walk the union of both sorted pair lists once, taking the minimum, and
+    // drop anything that comes out zero: absence is zero coverage, and a zero
+    // component is not a fact worth carrying.
+    Global result;
+    uint32_t capacity = m_size + other.m_size;
+    result.ensure_capacity(capacity);
+    uint64_t *out = result.data_mut();
+
+    const uint64_t *a = data();
+    const uint64_t *b = other.data();
+    uint32_t i = 0;
+    uint32_t j = 0;
+    while (i < m_size || j < other.m_size) {
+        uint16_t rid;
+        uint32_t left = 0;
+        uint32_t right = 0;
+        if (j >= other.m_size || (i < m_size && unpack_rid(a[i]) < unpack_rid(b[j]))) {
+            rid = unpack_rid(a[i]);
+            left = unpack_val(a[i]);
+            ++i;
+        } else if (i >= m_size || unpack_rid(b[j]) < unpack_rid(a[i])) {
+            rid = unpack_rid(b[j]);
+            right = unpack_val(b[j]);
+            ++j;
+        } else {
+            rid = unpack_rid(a[i]);
+            left = unpack_val(a[i]);
+            right = unpack_val(b[j]);
+            ++i;
+            ++j;
+        }
+        const uint32_t value = left < right ? left : right;
+        if (value > 0) out[result.m_size++] = pack(rid, value);
+    }
+    return result;
+}
+
 bool Global::operator==(const Global &other) const {
     if (m_size != other.m_size) return false;
     return std::memcmp(data(), other.data(),

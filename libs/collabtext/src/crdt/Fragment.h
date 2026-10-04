@@ -13,14 +13,24 @@ namespace CollabText::Crdt {
 // Fragment Summary — aggregate data cached in SumTree nodes
 // ============================================================================
 
+/// The aggregate SumTree nodes cache, and nothing else.
+///
+/// It holds only the four quantities a seek actually reads: two byte counts and
+/// the maximum (locator, origin) pair. P03 removed three version-vector fields
+/// that were written here and read by nobody, and their removal is not only
+/// cheaper — one of them aggregated with Global::meet(), which is a
+/// nonzero-minimum fold and *not* coverage intersection (finding F3). Carrying
+/// it inside a tree summary made a "maybe everyone has seen it" quantity look
+/// like a certainty, and no SumTree dimension consumed it.
+///
+/// The laws this aggregate must satisfy: identity is `zero()`, composition is
+/// associative, and the byte counts and the maximum pair are commutative. See
+/// tst_summary_laws.cpp, which checks them against randomized splice patterns.
 struct FragmentSummary {
     uint32_t visible_bytes = 0;    ///< Total visible bytes in subtree
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
     Locator max_locator;           ///< Maximum fragment Locator in subtree
     Lamport max_origin = Lamport::min(); ///< Origin of fragment with max (locator, origin)
-    Global max_version;            ///< Latest timestamp in subtree
-    Global min_insertion_version;  ///< Earliest insertion version in subtree
-    Global max_insertion_version;  ///< Latest insertion version in subtree
 
     static FragmentSummary zero() { return {}; }
 
@@ -33,9 +43,6 @@ struct FragmentSummary {
             max_locator = other.max_locator;
             max_origin = other.max_origin;
         }
-        max_version.join(other.max_version);
-        min_insertion_version.meet(other.min_insertion_version);
-        max_insertion_version.join(other.max_insertion_version);
     }
 };
 
@@ -184,12 +191,6 @@ struct Fragment {
         }
         s.max_locator = locator;
         s.max_origin = origin;
-        if (length > 0) {
-            s.max_version.observe(Lamport(origin.replica_id, origin.value + length - 1));
-            Lamport ins_ts(origin.replica_id, origin.value);
-            s.min_insertion_version.observe(ins_ts);
-            s.max_insertion_version.observe(ins_ts);
-        }
         return s;
     }
 };

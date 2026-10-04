@@ -157,12 +157,22 @@ private slots:
     }
 
     void f3_absent_actor_constrains_common_coverage() {
+        // P03: coverage intersection is now a distinct operation from
+        // Global::meet(), which remains a nonzero-minimum aggregation and is
+        // still not a watermark. Both behaviours are pinned here so the
+        // distinction cannot quietly disappear again.
         Global observed, empty;
         observed.observe(Lamport(1, 10));
         QCOMPARE(observed.get(1), 10u);
-        observed.meet(empty);
-        EVALUATION_EXPECT_FAIL("", "F3 / P03: a peer with an absent actor must constrain common coverage to zero");
-        QCOMPARE(observed.get(1), 0u);
+
+        // The watermark: a peer with no history has seen none of it.
+        QCOMPARE(observed.coverage_intersection(empty).get(1), 0u);
+        QVERIFY(observed.coverage_intersection(empty).empty());
+
+        // meet() is the other question, and answers differently on purpose.
+        Global aggregated = observed;
+        aggregated.meet(empty);
+        QCOMPARE(aggregated.get(1), 10u);
     }
 
     void f4_sender_restart_delivers_distinct_operation() {

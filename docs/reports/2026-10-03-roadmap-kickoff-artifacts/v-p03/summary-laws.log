@@ -1,0 +1,18 @@
+********* Start testing of TestSummaryLaws *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+[seed] suite=tst_summary_laws scenario=laws campaign_seed=20261003 effective_seed=8084434288122499645 source=fixed kind=summary-laws
+PASS   : TestSummaryLaws::initTestCase()
+PASS   : TestSummaryLaws::absent_actor_constrains_coverage_to_zero()
+PASS   : TestSummaryLaws::disjoint_vectors_intersect_to_nothing()
+PASS   : TestSummaryLaws::overlapping_vectors_take_the_minimum()
+PASS   : TestSummaryLaws::meet_and_coverage_intersection_are_different_operations()
+PASS   : TestSummaryLaws::join_is_a_commutative_associative_idempotent_lattice_join()
+PASS   : TestSummaryLaws::coverage_intersection_is_commutative_associative_and_idempotent()
+PASS   : TestSummaryLaws::intersection_has_no_identity_and_empty_absorbs()
+PASS   : TestSummaryLaws::coverage_never_exceeds_any_participant()
+PASS   : TestSummaryLaws::fragment_summary_is_a_monoid()
+PASS   : TestSummaryLaws::idlist_summary_is_a_monoid()
+PASS   : TestSummaryLaws::visible_text_is_unchanged_across_randomized_splice_patterns()
+PASS   : TestSummaryLaws::cleanupTestCase()
+Totals: 13 passed, 0 failed, 0 skipped, 0 blacklisted, 309ms
+********* Finished testing of TestSummaryLaws *********

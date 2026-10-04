@@ -110,6 +110,7 @@ add_crdt_test(tst_store_fault_harness)
 # reads the same files a reviewer reads rather than a copy.
 add_crdt_test(tst_behavior_fixtures)
 add_crdt_test(tst_actor_identity)
+add_crdt_test(tst_summary_laws)
 target_compile_definitions(tst_behavior_fixtures PRIVATE
     COLLABTEXT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/behavior")
 

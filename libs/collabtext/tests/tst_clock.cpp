@@ -78,6 +78,84 @@ private slots:
         QCOMPARE(a.get(0), 5u);
         QCOMPARE(a.get(1), 20u);
     }
+
+    // P03: meet() is a nonzero-minimum aggregation, which is a different
+    // question from coverage intersection. Pin both, because F3 was the two
+    // being used interchangeably.
+    void global_meet_leaves_absent_components_alone() {
+        Global a;
+        a.observe(Lamport(0, 10));
+        Global b;
+        a.meet(b);
+        QCOMPARE(a.get(0), 10u);
+    }
+
+    void global_coverage_intersection_treats_absence_as_zero() {
+        Global a, b;
+        a.observe(Lamport(0, 10));
+        Global c = a.coverage_intersection(b);
+        QCOMPARE(c.get(0), 0u);
+        QVERIFY(c.empty());
+        QVERIFY(b.coverage_intersection(a).empty());
+    }
+
+    void global_coverage_intersection_is_a_union_fold() {
+        Global a, b, c;
+        a.observe(Lamport(0, 10)); a.observe(Lamport(1, 7));
+        b.observe(Lamport(0, 4));  b.observe(Lamport(2, 9));
+        c.observe(Lamport(1, 2));  c.observe(Lamport(2, 12));
+
+        Global all = a.coverage_intersection(b).coverage_intersection(c);
+        QCOMPARE(all.get(0), 0u);   // present in a and b, minimum 4... then c
+                                    // does not mention replica 0, so it is zero
+        QCOMPARE(all.get(1), 0u);   // a and c only
+        QCOMPARE(all.get(2), 0u);   // b and c only
+        QVERIFY(all.empty());
+
+        // With every replica present in every vector, the minima survive.
+        Global full_a, full_b;
+        full_a.observe(Lamport(0, 10)); full_a.observe(Lamport(1, 7));
+        full_b.observe(Lamport(0, 4));  full_b.observe(Lamport(1, 3));
+        const Global both = full_a.coverage_intersection(full_b);
+        QCOMPARE(both.get(0), 4u);
+        QCOMPARE(both.get(1), 3u);
+        QCOMPARE(both.pair_count(), size_t(2));
+    }
+
+    void global_coverage_intersection_is_commutative_and_idempotent() {
+        Global a, b;
+        a.observe(Lamport(3, 12)); a.observe(Lamport(9, 2));
+        b.observe(Lamport(3, 5));  b.observe(Lamport(7, 8));
+        QCOMPARE(a.coverage_intersection(b), b.coverage_intersection(a));
+        QCOMPARE(a.coverage_intersection(a), a);
+    }
+
+    void global_coverage_intersection_survives_heap_promotion() {
+        // The intersection walks both sorted pair lists directly, so it must
+        // produce identical results whether the result stayed inline or spilled.
+        Global a, b;
+        for (uint16_t replica = 1; replica <= 6; ++replica) {
+            a.observe(Lamport(replica, 100 - replica));
+            b.observe(Lamport(replica, 200 - replica));
+        }
+        const Global small = a.coverage_intersection(b);
+        for (uint16_t replica = 7; replica <= 12; ++replica) {
+            a.observe(Lamport(replica, 100 - replica));
+            b.observe(Lamport(replica, 200 - replica));
+        }
+        const Global large = a.coverage_intersection(b);
+        QVERIFY(large.pair_count() > small.pair_count());
+        QCOMPARE(small.pair_count(), size_t(6));
+        QCOMPARE(large.pair_count(), size_t(12));
+        // The shared components are unchanged by the spill, and the new ones
+        // carry their own minimum.
+        for (uint16_t replica = 1; replica <= 6; ++replica) {
+            QCOMPARE(large.get(replica), small.get(replica));
+            QCOMPARE(large.get(replica), 100u - replica);
+        }
+        for (uint16_t replica = 7; replica <= 12; ++replica)
+            QCOMPARE(large.get(replica), 100u - replica);
+    }
     // Regression: SBO heap-promotion with replica_id forcing capacity past
     // UINT16_MAX truncated m_capacity to 0, corrupting the Global. Reproduces
     // for any replica_id ≥ 32768 (so doubled growth from 4 reaches 65536).

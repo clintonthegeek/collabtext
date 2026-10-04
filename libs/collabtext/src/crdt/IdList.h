@@ -16,14 +16,13 @@ namespace CollabText::Crdt {
 
 static constexpr std::size_t IDLIST_TREE_B = 6;
 
+/// The aggregate IdListTree nodes cache. Holds only what a seek reads; see
+/// FragmentSummary for why the version-vector fields are gone (P03, finding F3).
 struct IdListSummary {
     uint32_t visible_count = 0;
     uint32_t deleted_count = 0;
     Locator max_locator;
     Lamport max_origin = Lamport::min();
-    Global max_version;
-    Global min_insertion_version;
-    Global max_insertion_version;
 
     static IdListSummary zero() { return {}; }
 
@@ -35,9 +34,6 @@ struct IdListSummary {
             max_locator = other.max_locator;
             max_origin = other.max_origin;
         }
-        max_version.join(other.max_version);
-        min_insertion_version.meet(other.min_insertion_version);
-        max_insertion_version.join(other.max_insertion_version);
     }
 };
 
@@ -88,9 +84,6 @@ struct IdListEntry {
         if (visible) s.visible_count = 1; else s.deleted_count = 1;
         s.max_locator = locator;
         s.max_origin = origin;
-        s.max_version.observe(origin);
-        s.min_insertion_version.observe(origin);
-        s.max_insertion_version.observe(origin);
         return s;
     }
 };

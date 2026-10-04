@@ -1,0 +1,33 @@
+********* Start testing of TestEvaluationRegressions *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestEvaluationRegressions::initTestCase()
+PASS   : TestEvaluationRegressions::ordinary_remote_undo_redo(buffer)
+PASS   : TestEvaluationRegressions::ordinary_remote_undo_redo(idlist)
+PASS   : TestEvaluationRegressions::f1_local_gc_preserves_insertion_redo(buffer)
+PASS   : TestEvaluationRegressions::f1_local_gc_preserves_insertion_redo(idlist)
+PASS   : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(buffer)
+PASS   : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(idlist)
+PASS   : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(buffer)
+PASS   : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(idlist)
+PASS   : TestEvaluationRegressions::f3_absent_actor_constrains_common_coverage()
+FAIL!  : TestEvaluationRegressions::f4_sender_restart_delivers_distinct_operation() Compared values are not the same
+   Actual   (b.text()): "a"
+   Expected (a.text()): "ab"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(216)]
+FAIL!  : TestEvaluationRegressions::f5_receiver_restart_recovers_consumed_state() Compared values are not the same
+   Actual   (b.text())          : ""
+   Expected (std::string("abc")): "abc"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(244)]
+FAIL!  : TestEvaluationRegressions::f6_late_segment_is_delivered_in_order() Compared values are not the same
+   Actual   (delivered)                                    : std::vector("second")
+   Expected ((std::vector<std::string>{"first", "second"})): std::vector("first", "second")
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(277)]
+FAIL!  : TestEvaluationRegressions::f7_insertion_obeys_boundary_affinity() Compared values are not the same
+   Actual   (a.resolve_anchor(left)): 2
+   Expected (1u)                    : 1
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(289)]
+FAIL!  : TestEvaluationRegressions::f8_concurrent_passages_remain_contiguous() 'text == "abcXYZ" || text == "XYZabc"' returned FALSE. ()
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(300)]
+PASS   : TestEvaluationRegressions::cleanupTestCase()
+Totals: 11 passed, 5 failed, 0 skipped, 0 blacklisted, 8ms
+********* Finished testing of TestEvaluationRegressions *********

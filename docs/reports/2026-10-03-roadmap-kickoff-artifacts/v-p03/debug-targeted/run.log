@@ -1,0 +1,51 @@
+Root: /home/clinton/dev/collabtext/.worktrees/reliability-v2
+Mode: debug
+Regex: ^(tst_clock|tst_summary_laws|tst_sumtree|tst_evaluation_regressions)$
+Workers: 2
+-- Configuring done (0.8s)
+-- Generating done (1.0s)
+-- Build files have been written to: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+Selected 4 tests; compiler: c++ (GCC) 16.2.1 20260810
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 92%] Built target collabtext
+[ 92%] Built target tst_clock_autogen_timestamp_deps
+[ 92%] Built target tst_clock_autogen
+[100%] Built target tst_clock
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 92%] Built target collabtext
+[ 92%] Built target tst_sumtree_autogen_timestamp_deps
+[ 92%] Automatic MOC and UIC for target tst_sumtree
+[ 92%] Built target tst_sumtree_autogen
+[ 92%] Linking CXX executable tst_sumtree
+[100%] Built target tst_sumtree
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 92%] Built target collabtext
+[ 92%] Built target tst_summary_laws_autogen_timestamp_deps
+[ 92%] Built target tst_summary_laws_autogen
+[100%] Built target tst_summary_laws
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 92%] Built target collabtext
+[ 92%] Built target tst_evaluation_regressions_autogen_timestamp_deps
+[ 92%] Automatic MOC and UIC for target tst_evaluation_regressions
+[ 92%] Built target tst_evaluation_regressions_autogen
+[ 92%] Building CXX object libs/collabtext/CMakeFiles/tst_evaluation_regressions.dir/tests/tst_evaluation_regressions.cpp.o
+[100%] Linking CXX executable tst_evaluation_regressions
+[100%] Built target tst_evaluation_regressions
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+    Start  1: tst_clock
+    Start  5: tst_sumtree
+1/4 Test  #5: tst_sumtree ......................   Passed    0.64 sec
+    Start 21: tst_evaluation_regressions
+2/4 Test #21: tst_evaluation_regressions .......   Passed    0.08 sec
+    Start 16: tst_summary_laws
+3/4 Test  #1: tst_clock ........................   Passed    1.24 sec
+4/4 Test #16: tst_summary_laws .................   Passed    1.04 sec
+
+100% tests passed out of 4
+
+Total Test time (real) =   2.36 sec
+Verification exit: 0; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T014646Z-1255768
