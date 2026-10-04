@@ -1109,6 +1109,87 @@ P05. P03 removed F3's expected-failure marker when it fixed the
 coverage-intersection defect, and the handoff predates it. F4, F5, F6, F7, and F8
 all still fail with the fixing tasks the handoff names.
 
+## 2026-10-04 — P06a gate: the identity order, proven before the engine changes
+
+```text
+Task: P06a (design gate only; steps 2–5 remain)
+Status: in_progress
+Baseline: 2fd5a76 (P05 documentation commit)
+Implementation commits: 4ece11a
+Scope: docs/specs/vnext-identity.md (new),
+       libs/collabtext/tests/tst_identity_ordering_model.cpp (new),
+       libs/collabtext/CMakeLists.txt, 02-protocol.md (P06 split),
+       TASKS.json, validate-plan.py (split-suffix headings)
+Verification: model 14/14; Debug fast suite 61/61; 3 of 3 deliberate comparator
+       mutations caught
+Artifacts: the two new files above; git history carries the mutation results
+API/store changes: none yet. The engine is deliberately untouched by this commit.
+```
+
+### The ordering problem was the whole reason for the gate
+
+I asked whether the identity migration could precede the codecs and initially
+proposed that it could. Measuring it said no, and the reason is worth recording
+because it is not obvious from the API.
+
+The engine orders fragments by `(locator, origin)`, and equal locators are a
+**routine** case, not a corner: `normalize_fragments` exists specifically to
+handle runs of fragments from *different replicas* sharing one locator, and the
+split-relocation path assigns `max(new_locator, sf.locator)`, which leaves two
+locators equal on purpose. When locators tie, origin decides. So the identity
+order is load-bearing for convergence.
+
+That rules out the obvious way to keep identities small. Assign each new ActorId a
+dense local index and store the index: replica A meeting X then Y gives X=0,Y=1,
+while replica B meeting Y then X gives Y=0,X=1. Equal-locator fragments from X and
+Y then tie-break in opposite directions and the two documents diverge
+permanently. `locally_assigned_slots_diverge` demonstrates exactly this so §2.1
+of the spec is a shown counterexample rather than an assertion.
+
+The second reason is serialization: `encode_lamport` writes `replica_id` as an
+integer and `encode_global` writes the version vector, so both the wire format and
+the store format carry the identity. Identity-first would mean changing those
+formats outside the task that owns them, or writing a representation the codec
+task immediately rewrites. Hence the split into P06a/P06b rather than a reorder.
+
+### Testing a contract rather than testing code
+
+The model reimplements the order from the spec text, comparing ActorId bytes
+directly and never calling `ActorId::compare` — the roadmap forbids a reference
+model from calling the helper whose behaviour it validates, so agreement between
+the two is the only way that comparison is evidence rather than tautology.
+
+Three mutations confirm the suite bites: actor-first instead of counter-first, the
+actor comparison truncated to 4 bytes, and a cyclic counter comparison that breaks
+transitivity. Each produced failures; the unmutated file passes 14/14.
+
+I also caught a weakness in my own first draft. `make_set` originally gave every
+identity a distinct counter, which meant the counter alone decided every pairwise
+and triple comparison and the actor tiebreak — the path that can actually diverge —
+was never exercised. The fixture now collides counters (`counter = i % 3`), and
+the transitivity test asserts it has enough ties rather than leaving that to the
+reader's trust. A green law test over a fixture that cannot fail the interesting
+way is worse than no test, because it looks like coverage.
+
+### The number the optimization phase inherits
+
+Measured before any change: `Lamport` 8→24 bytes, `UndoMapKey` 8→24,
+`FragmentSummary` 40→56, `Fragment` 104→120. `FragmentSummary` is the one that
+matters, because the SumTree aggregates one per edit; 1.4x is affordable for
+correctness. The spec names the only acceptable lever if it later stops being
+affordable — stop storing an identity in the summary at all — and explicitly rules
+out the tempting one, since shrinking the identity is what reintroduces divergence.
+
+### Continuation
+
+P06a steps 2–5 are not done and this commit does not pretend otherwise: the laws
+are proven, but they are proven against a standalone reference implementation,
+not yet against the engine's types, because the engine's types have not changed.
+What remains is the wide part — `Clock.h`, `UndoMapKey`, `Buffer(ActorId)`,
+`IdList(ActorId)`, opaque values, then re-measuring — across 56 files and roughly
+140 `Lamport` construction sites in tests. L01 and S01 remain independently ready
+and neither depends on this.
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest
