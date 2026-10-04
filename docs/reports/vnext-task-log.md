@@ -712,6 +712,96 @@ and executable models, and a protocol document that quietly designed them would
 undermine that.
 
 
+## 2026-10-04 — P02: persistent actor identity, writer leases, checked counters
+
+```text
+Task: P02
+Status: complete
+Baseline: e489f29 (P01 documentation commit)
+Implementation commits: ad37a57, plus this documentation commit
+Scope: libs/collabtext/include/collabtext/ActorId.h (new),
+       libs/collabtext/src/identity/ReplicaState.cpp (new),
+       libs/collabtext/tests/tst_actor_identity.cpp (new),
+       libs/collabtext/CMakeLists.txt
+Regression: tst_actor_identity (new), 26 cases — one per way identity handling can
+       lose or duplicate an operation
+Verification: 26/26 identity cases; targeted Debug 4/4 with tst_clock, tst_buffer
+       and tst_idlist; fast suite 57/57 in Debug, Release, and sanitizer mode
+Artifacts: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p02/
+API/store changes: new public header ActorId.h (Result, Error, ActorId,
+       OperationId, OperationContext, CheckedCounter, ReplicaState) and a new
+       private state format `collabtext-replica-state` version 1. No existing
+       signature changed; the engines still take uint16_t ids.
+Known limits: cross-restart counter-rewind detection needs a second witness;
+       engine-wide counter widening is staged, not done
+Next ready tasks: P03, P04, L01, S01
+```
+
+### What changed
+
+Identity was a 16-bit number drawn at construction, stream entries were keyed by
+a counter that restarted at 1 and was never recovered, and a second local writer
+could take the same stream without either noticing. That is finding F4's
+mechanism, in the code the whole protocol sits on.
+
+`ActorId.h` implements what P01 specified: a C++20 `Result<T>` with no throwing
+accessor, a typed error taxonomy that carries context, a 128-bit `ActorId` with
+no default identity, checked per-stream `OperationId`/`OperationContext`, and
+`CheckedCounter`.
+
+`ReplicaState` owns the private per-device state, and its three properties are
+the ones that prevent lost or duplicated operations:
+
+- **Reserve, persist, then hand out.** `next_operation()` writes the reservation
+  before returning the id. When the persist fails the reservation is
+  deliberately *not* rolled back — a skipped id is a numbering gap, a reissued id
+  is a duplicated identity. The first version of this code rolled back and would
+  have reissued.
+- **Corrupt state is reported, never replaced.** Replacing it would mint a new
+  actor while old operations still claim the old one. Parsing is strict: an
+  unknown directive or trailing data is malformed, because a skipped line is a
+  silently dropped counter. A test asserted a rewound counter would be refused;
+  writing that test honestly is what exposed the limit below.
+- **Leases are exclusive and are never stolen.** `O_CREAT|O_EXCL` means two
+  local writers cannot both hold a stream, and a conflict names the holder. There
+  is no timeout takeover, because a lease reclaimed by the clock is a quiet way
+  to lose operations — the same reasoning as C2's membership rule.
+
+Private state lives outside shared document stores, so copying a shared folder
+copies no identity at all (asserted directly against the copied tree). Copying
+*private* state does copy identity, and the only correct answer there is the
+explicit `fork_identity()`, which mints a fresh actor and a fresh numbering
+space. Two identical clones are detected when they meet: a peer claiming our
+actor at a counter we already issued is `actor_conflict`, reported and never
+resolved by last-writer-wins.
+
+26/26 identity cases pass; the fast suite is 57/57 in Debug, Release, and
+sanitizer mode, with `tst_buffer` and `tst_idlist` unaffected — nothing that
+already used an engine identity changed.
+
+### Limits, recorded rather than papered over
+
+**Cross-restart rewind detection is not claimed.** A state file rewound to an
+earlier counter is indistinguishable from a fresh one when that file is the only
+witness. Within a live object `restore()` refuses to rewind, and that is tested;
+across a restart, the second durable witness has to be the own log and checkpoint
+(L03/G04). The first version of this test asserted the stronger claim and was
+wrong.
+
+**Engine-wide widening is staged, not done.** P02's step asked for clocks and
+origin/vector fields to be widened consistently. Doing that means changing
+`Global`'s accessors and the wire codec in `Serialization.cpp`, and every engine
+caller — files this task's scope does not include, and doing it half-way would
+truncate silently. So the widening lands through `CheckedCounter` now, and the
+engine adoption belongs to the tasks that already own those files: P06/P08 for
+the codec and S03 for the engines. `Buffer(uint16_t)` and `IdList(uint16_t)`
+still take a small integer until then.
+
+**Leases cover local processes only**, and stale-lease recovery is deliberately
+absent. **Identical disconnected clones** still cannot always be detected before
+they exchange operations; the conflict surfaces when they meet.
+
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest

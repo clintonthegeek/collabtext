@@ -53,6 +53,10 @@ installation requirements.
 | V08 fixtures at baseline 046d375 | 8/9 hold; the F8 fixture produces `hweolrllod` |
 | V08 final Debug / Release fast | 56/56 CTest executables pass in each mode |
 | V08 final sanitizer fast selection | 56/56 pass with ASan, UBSan, and leak checking enabled |
+| P02 identity suite | 26/26 cases pass |
+| P02 targeted Debug | 4/4 CTest executables pass (identity, clock, buffer, idlist) |
+| P02 final Debug / Release fast | 57/57 CTest executables pass in each mode |
+| P02 final sanitizer fast selection | 57/57 pass with ASan, UBSan, and leak checking enabled |
 | V07 store fault harness, Debug / Release / sanitizer | 24/24 cases pass in each mode; no sanitizer findings |
 | V07 final Debug / Release fast | 55/55 CTest executables pass in each mode |
 | V07 final sanitizer fast selection | 55/55 pass with ASan, UBSan, and leak checking enabled |
@@ -60,6 +64,17 @@ installation requirements.
 | V08 fixtures at baseline 046d375 | 8/9 hold; the F8 fixture produces `hweolrllod` |
 | V08 final Debug / Release fast | 56/56 CTest executables pass in each mode |
 | V08 final sanitizer fast selection | 56/56 pass with ASan, UBSan, and leak checking enabled |
+| P02 identity suite | 26/26 cases pass |
+| P02 targeted Debug | 4/4 CTest executables pass (identity, clock, buffer, idlist) |
+| P02 final Debug / Release fast | 57/57 CTest executables pass in each mode |
+| P02 final sanitizer fast selection | 57/57 pass with ASan, UBSan, and leak checking enabled |
+
+### P02 additions
+
+`v-p02/actor-identity.log` is the full identity suite run and `v-p02/debug-targeted`
+the runner evidence for the four selected executables; `v-p02/{debug,release,asan}-fast/`
+hold the 57-executable fast selection. Collision, randomness-failure, and
+counter-boundary injections are deterministic inputs in the suite, not lucky draws.
 
 ### V08 additions
 
@@ -76,6 +91,13 @@ the 56-executable fast selection.
 the harness in the three modes, and `v07-{debug,release,asan}-fast/` hold the
 55-executable fast selection. The sanitizer harness run reports no findings; the
 terminated crash workers are deliberate and are not library memory defects.
+
+### P02 additions
+
+`v-p02/actor-identity.log` is the full identity suite run and `v-p02/debug-targeted`
+the runner evidence for the four selected executables; `v-p02/{debug,release,asan}-fast/`
+hold the 57-executable fast selection. Collision, randomness-failure, and
+counter-boundary injections are deterministic inputs in the suite, not lucky draws.
 
 ### V08 additions
 

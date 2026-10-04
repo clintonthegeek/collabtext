@@ -254,5 +254,31 @@
     "exit_code": 0,
     "result": "9 fixtures replayed against revision 046d375; 8 meet their declared expectation, buffer_concurrent_passages_stay_contiguous does not (hweolrllod, finding F8)",
     "log": "v08-baseline-fixtures.txt"
+  },
+  "p02-identity-suite": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_actor_identity",
+    "log": "v-p02/actor-identity.log",
+    "result": "26/26"
+  },
+  "p02-debug-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T013038Z-1212467",
+    "selection": "tst_actor_identity|tst_clock|tst_buffer|tst_idlist"
+  },
+  "p02-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T013047Z-1212940",
+    "selection": "57-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p02-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T013146Z-1216461",
+    "selection": "57-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p02-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T013243Z-1220239",
+    "selection": "57-name anchored fast selection excluding tst_benchmark and tst_realistic"
   }
 }

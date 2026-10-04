@@ -1,0 +1,31 @@
+********* Start testing of TestActorIdentity *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+[seed] suite=tst_actor_identity scenario=identity campaign_seed=20261003 effective_seed=6273856443024903866 source=fixed kind=actor-identity
+PASS   : TestActorIdentity::initTestCase()
+PASS   : TestActorIdentity::default_seed_is_the_documented_fixed_value()
+PASS   : TestActorIdentity::default_actor_id_is_invalid_by_construction()
+PASS   : TestActorIdentity::generated_actor_ids_are_128_bit_and_valid()
+PASS   : TestActorIdentity::distinct_devices_get_distinct_actors_offline()
+PASS   : TestActorIdentity::generation_failure_produces_a_typed_error_and_no_state()
+PASS   : TestActorIdentity::an_all_zero_source_is_rejected_rather_than_minted()
+PASS   : TestActorIdentity::malformed_actor_text_is_rejected()
+PASS   : TestActorIdentity::restart_never_reuses_a_durable_operation_id()
+PASS   : TestActorIdentity::counters_are_per_stream()
+PASS   : TestActorIdentity::counter_exhaustion_is_an_error_that_mutates_nothing()
+PASS   : TestActorIdentity::observing_a_peer_raises_the_counter_without_going_backwards()
+PASS   : TestActorIdentity::restoring_a_backwards_counter_is_refused()
+PASS   : TestActorIdentity::operation_ids_reserve_before_returning()
+PASS   : TestActorIdentity::corrupt_state_is_reported_and_never_replaced()
+PASS   : TestActorIdentity::unknown_state_version_is_refused_rather_than_guessed()
+PASS   : TestActorIdentity::an_unknown_directive_is_refused_not_skipped()
+PASS   : TestActorIdentity::restart_resumes_above_the_high_water_mark()
+PASS   : TestActorIdentity::two_local_writers_cannot_both_hold_a_stream()
+PASS   : TestActorIdentity::a_lease_is_per_document_and_stream()
+PASS   : TestActorIdentity::a_peer_claiming_our_actor_is_reported_not_absorbed()
+PASS   : TestActorIdentity::an_identical_clone_is_detected_when_it_meets_us()
+PASS   : TestActorIdentity::copying_private_state_yields_a_clone_until_it_is_forked_explicitly()
+PASS   : TestActorIdentity::copying_a_shared_document_copies_no_writer_identity()
+PASS   : TestActorIdentity::operation_identity_is_actor_plus_checked_counter()
+PASS   : TestActorIdentity::cleanupTestCase()
+Totals: 26 passed, 0 failed, 0 skipped, 0 blacklisted, 15ms
+********* Finished testing of TestActorIdentity *********

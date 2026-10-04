@@ -1,0 +1,146 @@
+{
+  "backtraceGraph" : 
+  {
+    "commands" : 
+    [
+      "add_test",
+      "add_crdt_test"
+    ],
+    "files" : 
+    [
+      "/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/CMakeLists.txt"
+    ],
+    "nodes" : 
+    [
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 95,
+        "parent" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 92,
+        "parent" : 1
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 97,
+        "parent" : 3
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 92,
+        "parent" : 4
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 112,
+        "parent" : 6
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 92,
+        "parent" : 7
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 149,
+        "parent" : 9
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 92,
+        "parent" : 10
+      }
+    ]
+  },
+  "kind" : "ctestInfo",
+  "tests" : 
+  [
+    {
+      "backtrace" : 2,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext/tst_clock"
+      ],
+      "name" : "tst_clock",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 5,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext/tst_buffer"
+      ],
+      "name" : "tst_buffer",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 8,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext/tst_actor_identity"
+      ],
+      "name" : "tst_actor_identity",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 11,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext/tst_idlist"
+      ],
+      "name" : "tst_idlist",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext"
+        }
+      ]
+    }
+  ],
+  "version" : 
+  {
+    "major" : 1,
+    "minor" : 0
+  }
+}
