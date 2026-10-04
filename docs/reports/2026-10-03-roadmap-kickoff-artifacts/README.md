@@ -1,4 +1,4 @@
-# V01–V06 verification artifacts
+# V01–V07 verification artifacts
 
 These are portable excerpts of actual verification runs on 2026-10-03. See
 [the task log](../vnext-task-log.md) and
@@ -46,6 +46,28 @@ installation requirements.
 | V06 final Debug / Release fast | 54/54 CTest executables pass in each mode |
 | V06 final sanitizer fast selection | 54/54 pass with ASan, UBSan, and leak checking enabled |
 | V06 corrected report table | 53 rows with units, work counts, and absent metrics |
+| V07 store fault harness, Debug / Release / sanitizer | 24/24 cases pass in each mode; no sanitizer findings |
+| V07 final Debug / Release fast | 55/55 CTest executables pass in each mode |
+| V07 final sanitizer fast selection | 55/55 pass with ASan, UBSan, and leak checking enabled |
+| V07 store fault harness, Debug / Release / sanitizer | 24/24 cases pass in each mode; no sanitizer findings |
+| V07 final Debug / Release fast | 55/55 CTest executables pass in each mode |
+| V07 final sanitizer fast selection | 55/55 pass with ASan, UBSan, and leak checking enabled |
+
+### V07 additions
+
+`v07-store-fault-harness.log` is the full Debug run of the harness suite.
+`v07-{debug,release,asan}-harness/` hold the single-selection runner evidence for
+the harness in the three modes, and `v07-{debug,release,asan}-fast/` hold the
+55-executable fast selection. The sanitizer harness run reports no findings; the
+terminated crash workers are deliberate and are not library memory defects.
+
+### V07 additions
+
+`v07-store-fault-harness.log` is the full Debug run of the harness suite.
+`v07-{debug,release,asan}-harness/` hold the single-selection runner evidence for
+the harness in the three modes, and `v07-{debug,release,asan}-fast/` hold the
+55-executable fast selection. The sanitizer harness run reports no findings; the
+terminated crash workers are deliberate and are not library memory defects.
 
 ### V06 additions
 

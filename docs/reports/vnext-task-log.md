@@ -373,6 +373,91 @@ selection because it is a long-running suite in Debug (~8 minutes); its Release
 run is about a minute.
 
 
+## 2026-10-04 — V07: store fault-injection and subprocess crash harnesses
+
+```text
+Task: V07
+Status: complete
+Baseline: 1dd6e7c (V06 documentation commit)
+Implementation commits: 5a18f8c, plus this documentation commit
+Scope: libs/collabtext/tests/StoreFaultHarness.h (new),
+       libs/collabtext/tests/tst_store_fault_harness.cpp (new),
+       libs/collabtext/tests/store_crash_worker.cpp (new),
+       libs/collabtext/CMakeLists.txt
+Regression: tst_store_fault_harness (new), 24 cases covering fault reachability,
+       what each fault leaves behind, filesystem fixtures read by the production
+       reader, and fourteen process-crash points
+Verification: 24/24 in Debug, Release, and sanitizer mode (no sanitizer
+       findings); fast suite 55/55 in Debug, Release, and sanitizer mode
+Artifacts: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v07-*
+API/store changes: none in production code. The harness is test-only; the
+       production writer is deliberately untouched, because making its write
+       sequence fault-injectable is L01/L02's job alongside the real fix.
+Known limits: this is not durability evidence; process death is not power loss;
+       F6's skip behaviour is pinned, not fixed
+Next ready tasks: V08
+```
+
+### What changed
+
+A store is durable only if every step of its write sequence can fail without
+leaving something worse than "the write did not happen". Nothing in the suite
+could make a step fail on demand, so a torn record or a cursor that advanced past
+missing data was not a state any test could reach.
+
+`StoreFaultHarness.h` adds a hook before and after each step — write, file sync,
+rename, directory sync, segment seal, cursor publication, checkpoint publication
+— with a default plan that injects nothing, so ordinary use is a no-op. Each hook
+records its arrival with the operation name and the path it touched. Faults can
+pass, fail, abort the process, or truncate a write, and a skip count delays one,
+so a test can say "fail the third write" without keeping state of its own. The
+suite asserts that all fourteen points are reachable and that two runs of the
+same fault produce byte-identical hook logs — determinism and replayability as
+testable properties rather than as an aspiration.
+
+Building the harness corrected the write sequence itself. An append-only tail is
+appended in place; the temp-and-rename discipline belongs to the steps that
+*replace* a file, which is where the rename and directory-sync hooks live. The
+first version renamed the tail on every append and silently discarded the
+previous records — a bug the fixtures caught immediately.
+
+Filesystem fixtures build a stream directory in a known damaged state: missing
+segment, out-of-order arrival, partial tail, corrupt segment, repaired segment,
+failed rename, simulated disk full, contended writer lock. They use the
+production sealed-segment encoding, so the production `SegmentReader` reads them
+back — the fixtures are checked against the real reader, not a convenient one.
+
+`store_crash_worker` is a separate process that dies mid-write at a named point
+with `_exit`, so nothing unwinds and no destructor cleans up. Fourteen
+point/phase combinations are exercised; in every case the surviving tail
+consists of whole newline-terminated records, and a surviving temp file is never
+mistaken for visible content.
+
+### Acceptance evidence
+
+24/24 cases pass in Debug, Release, and sanitizer mode with no sanitizer
+findings. The terminated workers are deliberate and are not treated as library
+memory defects — the sanitizer run reports nothing, which is the claim that
+matters here. The fast suite is 55/55 in Debug, Release, and sanitizer mode.
+
+Two fixture tests pin today's behaviour for finding F6 — a late earlier segment
+is skipped, and a corrupt segment is skipped — with comments saying that skipping
+must become "blocks coverage advancement". That red test belongs to L03; writing
+it here is how the later fix gets a target rather than a hope.
+
+### Limits
+
+This is not durability evidence. The production writer still flushes a
+`std::ofstream` and increments a counter named `fsync_count` without calling
+`fsync` — finding F9, owned by L01/L02, and the reason production code was left
+untouched by this task. A terminated worker proves what happens when user-space
+buffers vanish; it says nothing about losing the page cache, because the kernel
+keeps writing the file. The worker says so on stderr before it dies.
+
+Fault injection covers the write sequence only. Checkpoint validation,
+membership, and quota policy belong to G01/G02.
+
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest
@@ -385,7 +470,8 @@ against V02's production code.
 The [handoff](../handoff/2026-10-03-reliability-kickoff.md) gives exact commands,
 known failures, and settled product decisions. V04 has since made the randomized
 suites seeded, traced, and reducible; V05 has since corrected the simulated
-network's partition and ordering model, and V06 made the benchmarks report
-honest units, timed regions, and asserted convergence. V07 and V08 remain
-structurally ready in phase 1. Do not interpret any single task as
+network's partition and ordering model, V06 made the benchmarks report honest
+units, timed regions, and asserted convergence, and V07 added store fault
+injection with a subprocess crash harness. V08 is the last structurally ready
+task in phase 1. Do not interpret any single task as
 completing the remaining roadmap.
