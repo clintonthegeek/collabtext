@@ -272,7 +272,27 @@ actor) throughout; there is no scalar in this protocol that could be mistaken fo
 cross-stream coverage — which is precisely the failure mode of
 `lowest_peer_acked_lamport()`.
 
+### The review, cited against the code it replaces
+
+Each rule above was checked against the line that violates it, so the contract is
+anchored to the code rather than to a memory of it.
+
+| Rule | Current code that violates it |
+|---|---|
+| §1.2 durable per-(actor, stream) counter | `StreamSync.h:70` `uint64_t next_seq = 1;` and `StreamSync.cpp:205` `uint64_t seq = s.next_seq++;` — not recovered across restart, with the code's own comment at `StreamSync.cpp:209` acknowledging it |
+| §5 contiguous frontier | `SegmentReader.cpp:98` `if (id <= m_last_sealed) continue;` and `SegmentReader.cpp:108` `m_last_sealed = id;` — a high-water mark, so a late earlier segment is skipped forever (F6) |
+| §5 cursor needs a recovery point | `SegmentReader.cpp:60` persists `m_last_sealed` as raw consumption progress, with no reference to any recoverable state (F5) |
+| §3 complete input consumption | `Serialization.cpp:572` `parse_operation()` reads the `t` key and returns a value; nothing requires the remaining input to be empty, so trailing bytes are accepted (F10) |
+| §3 semantic validation | `Serialization.cpp:660` parses the undo variant with the same shape, so an object missing required fields decodes successfully (F10) |
+| §4 no `void apply` | `Buffer::apply_ops(const std::vector<Operation>&)` returns `void`, so duplicate, deferred, and rejected are indistinguishable to a caller |
+| §4 anchor resolution is an outcome | `Buffer::resolve_anchor` returns `uint32_t` and clamps, so an unresolvable anchor is silent (R6) |
+
 **Two of these are also frozen as executable evidence:** the F8 fixture
 (`buffer_concurrent_passages_stay_contiguous`) and the store fixtures in
 `tst_store_fault_harness` that pin the F6 skip behaviour. Their red tests exist;
 this protocol says what must change to make them green.
+
+The multi-stream case is the one with no current violation and no red test,
+because today there is only ever one stream: `StreamSync` mints one sequence per
+replica name. The violation appears the moment a second stream exists, which is
+why §1.2 forbids the scalar by construction rather than by warning.
