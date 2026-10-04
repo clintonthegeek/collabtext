@@ -318,5 +318,47 @@
     "exit_code": 0,
     "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T020996Z-1290791",
     "selection": "58-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p04-decode-validation": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_decode_validation",
+    "log": "v-p04/decode-validation.log",
+    "result": "29/29"
+  },
+  "p04-utf8": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_utf8",
+    "log": "v-p04/utf8.log",
+    "result": "30/30"
+  },
+  "p04-debug-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T024358Z-1346422",
+    "selection": "tst_decode_validation|tst_utf8"
+  },
+  "p04-release-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T024429Z-1350467",
+    "selection": "tst_decode_validation|tst_utf8"
+  },
+  "p04-asan-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T024404Z-1346616",
+    "selection": "tst_decode_validation|tst_utf8"
+  },
+  "p04-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T024516Z-1350874",
+    "selection": "59-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p04-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T024654Z-1355358",
+    "selection": "59-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p04-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T024801Z-1360738",
+    "selection": "59-name anchored fast selection excluding tst_benchmark and tst_realistic"
   }
 }

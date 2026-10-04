@@ -880,6 +880,105 @@ deliberately: rewriting them mechanically would change expectations rather than
 fix a defect. They remain nonzero-minimum aggregates, not watermarks.
 
 
+## 2026-10-04 — P04: a strict bounded JSON reader and UTF-8 validation
+
+```text
+Task: P04
+Status: complete
+Baseline: b2fb7d0 (P03 documentation commit)
+Implementation commits: 9058cc9, plus this documentation commit
+Scope: libs/collabtext/src/codec/{Utf,JsonReader}.{h,cpp} (new),
+       libs/collabtext/tests/tst_decode_validation.cpp (new),
+       libs/collabtext/tests/tst_utf8.cpp (extended), libs/collabtext/CMakeLists.txt,
+       docs/specs/vnext-protocol.md (new section 11)
+Regression: tst_decode_validation (new, 29 cases, fixed 56-entry malformed corpus)
+       and tst_utf8 (extended to 30 cases)
+Verification: targeted Debug/Release/ASan 2/2 each; fast suite 59/59 in Debug,
+       Release, and sanitizer mode; seeded fuzz at 42 and 20261003
+Artifacts: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p04/
+API/store changes: new internal CollabText::Codec namespace (JsonReader, JsonValue,
+       JsonLimits, JsonError, UtfError). No wire format or store format changed.
+Known limits: not yet wired into the existing serializers; per-format bounds not
+       yet varied; Qt moc rejects raw string literals containing braces
+Next ready tasks: P05, L01, S01
+```
+
+### What changed
+
+Finding F10 was that `parse_operation()` returned a value for
+`{"t":"u"}garbage`, and for objects missing fields the decoder needed. A decoder
+that succeeds has to mean something, so now it means: complete consumption, no
+duplicate keys, arbitrary key order, strict numbers, and every malformed input
+rejected with an offset someone can act on.
+
+There is no reviewed JSON dependency recorded in P01, so the reader is written
+here — and the plan's "do not invent a permissive partial parser" is the reason
+it is strict rather than lenient. Every bound in `JsonLimits` is checked before
+the allocation it governs, and the conservative defaults are now normative in
+`docs/specs/vnext-protocol.md` §11. `max_text_bytes` is deliberately in the
+*unescaped* domain, so a short frame of `A` repeats cannot ask for a large
+allocation.
+
+Duplicate keys are rejected rather than last-wins: two writers that disagree about
+a field must not be resolved by whichever happened to be serialized second.
+Key order carries no meaning, and two reordered documents decode to equal values
+— pinned by a recursive canonical rendering rather than `operator==`, so drift in
+one field is visible instead of averaged away.
+
+An unknown `t` identifier or an unsupported `v` is *retained*, not rejected: the
+bytes are valid and a later build may understand them. Discarding them as
+corruption would lose work, which is why `unsupported_version()` is separate from
+`parse()` failing.
+
+UTF-8 validation accepts exactly the Unicode scalar range. Overlong forms,
+encoded surrogates, scalars above U+10FFFF, and truncated tails are errors.
+Checked conversion reports the offset at the start of a scalar or surrogate pair
+rather than manufacturing a position inside one, and a failed conversion leaves
+its output untouched — a half-built string is how a caller ends up applying half
+an operation. `JsonError` carries the underlying `UtfError` whole so an overlong
+encoding and an encoded surrogate stay distinguishable for whoever fixes the
+writer.
+
+### Evidence
+
+`tst_decode_validation` (29 cases) carries a fixed 56-entry malformed corpus in
+which every entry names the rule it protects and no two entries share a rule, plus
+a 200000-deep array proving the depth bound is a bound and not a promise.
+`tst_utf8` (30 cases) covers overlong forms, encoded surrogates, truncation
+offsets, and a sweep of the whole two-byte range. Targeted Debug/Release/ASan all
+pass, the fast selection is 59/59 in three modes, and seeded fuzz passes at 42 and
+20261003.
+
+### Four bugs the tests caught in the reader itself
+
+Each is the kind that survives review, which is the argument for having written
+them first:
+
+- the one-byte lead mask was derived by the wrong formula and mapped `0x61` to
+  `0x21`, so ASCII round-tripped to wrong bytes;
+- the escape scanner treated everything after the first escape as escapes, so
+  `a	b
+c` was rejected;
+- `parse()` did not reset its output value, so a caller reusing one `JsonValue`
+  across two parses got a spurious duplicate key on the second;
+- insignificant whitespace was never skipped, so `{"t":"u"}garbage` and
+  ` {"t":"u"} ` behaved identically.
+
+### Limits
+
+The reader is not yet wired into `Serialization.cpp` or `StreamSerialization.cpp`;
+those still parse with their own code, and P05/P06 are what adopt it. `JsonValue`
+keeps number text verbatim and does no schema validation. The bounds are
+per-parse configuration with fixed defaults — nothing varies them per operation
+format yet, though §11.1 records the defaults for that purpose. `JsonValue::find`
+is a linear scan, which suits envelopes but would need an index for a document
+with thousands of members; `max_container_elements` bounds that rather than
+optimizing it.
+
+One environment note worth keeping: Qt's moc silently drops every test slot in a
+file that contains a raw string literal with braces. The tests therefore use
+escaped literals. That cost P04 about an hour and is now recorded in the registry.
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest

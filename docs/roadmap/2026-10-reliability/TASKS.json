@@ -699,7 +699,37 @@
         "R8"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "b2fb7d0",
+      "implementation_commits": [
+        "9058cc9"
+      ],
+      "verification_results": {
+        "targeted_debug": "tst_decode_validation and tst_utf8 pass (2/2 CTest executables)",
+        "decode_validation": "29/29 cases, including a fixed 56-entry malformed corpus",
+        "utf8": "30/30 cases, including a sweep of the whole two-byte range",
+        "targeted_release_asan": "2/2 pass in each mode",
+        "debug_fast": "59/59 CTest executables pass",
+        "release_fast": "59/59 CTest executables pass",
+        "asan_ubsan_lsan_fast": "59/59 pass with leak checking enabled",
+        "seeded_convergence": "tst_fuzz passes at seeds 42 and 20261003 (16/16 each)"
+      },
+      "artifacts": [
+        "libs/collabtext/src/codec/Utf.h",
+        "libs/collabtext/src/codec/Utf.cpp",
+        "libs/collabtext/src/codec/JsonReader.h",
+        "libs/collabtext/src/codec/JsonReader.cpp",
+        "libs/collabtext/tests/tst_decode_validation.cpp",
+        "docs/specs/vnext-protocol.md (new section 11)",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p04/"
+      ],
+      "limitations": [
+        "The reader is schema-focused but not yet wired into Serialization.cpp or StreamSerialization.cpp; those still use their own parsing. P05/P06 adopt it.",
+        "JsonValue keeps number text verbatim and does no schema validation; there is no operation decoder yet, so nothing yet requires identifiers to be checked for shape.",
+        "The bounds are per-parse configuration with fixed defaults. Nothing yet varies them per operation format; vnext-protocol.md section 11.1 records the defaults as normative for that purpose.",
+        "JsonValue::find is a linear scan, which is the right cost for envelopes but would need an index for a document with thousands of members. max_container_elements bounds it rather than optimizing it.",
+        "Qt's moc silently drops every test slot in a file that contains a raw string literal with braces, so the tests use escaped literals; this cost P04 about an hour and is worth knowing before anyone simplifies them back."
+      ]
     },
     {
       "id": "P05",

@@ -63,6 +63,12 @@ installation requirements.
 | P03 final Debug / Release fast | 58/58 CTest executables pass in each mode |
 | P03 final sanitizer fast selection | 58/58 pass with ASan, UBSan, and leak checking enabled |
 | P03 seeded convergence | tst_fuzz passes at seeds 42 and 20261003 |
+| P04 decode validation / utf8 | 29/29 and 30/30 cases pass |
+| P04 malformed corpus | 56 fixed entries, each naming the rule it protects |
+| P04 targeted Debug / Release / ASan | 2/2 CTest executables pass in each mode |
+| P04 final Debug / Release fast | 59/59 CTest executables pass in each mode |
+| P04 final sanitizer fast selection | 59/59 pass with ASan, UBSan, and leak checking enabled |
+| P04 seeded convergence | tst_fuzz passes at seeds 42 and 20261003 |
 | V07 store fault harness, Debug / Release / sanitizer | 24/24 cases pass in each mode; no sanitizer findings |
 | V07 final Debug / Release fast | 55/55 CTest executables pass in each mode |
 | V07 final sanitizer fast selection | 55/55 pass with ASan, UBSan, and leak checking enabled |
@@ -80,6 +86,19 @@ installation requirements.
 | P03 final Debug / Release fast | 58/58 CTest executables pass in each mode |
 | P03 final sanitizer fast selection | 58/58 pass with ASan, UBSan, and leak checking enabled |
 | P03 seeded convergence | tst_fuzz passes at seeds 42 and 20261003 |
+| P04 decode validation / utf8 | 29/29 and 30/30 cases pass |
+| P04 malformed corpus | 56 fixed entries, each naming the rule it protects |
+| P04 targeted Debug / Release / ASan | 2/2 CTest executables pass in each mode |
+| P04 final Debug / Release fast | 59/59 CTest executables pass in each mode |
+| P04 final sanitizer fast selection | 59/59 pass with ASan, UBSan, and leak checking enabled |
+| P04 seeded convergence | tst_fuzz passes at seeds 42 and 20261003 |
+
+### P04 additions
+
+`v-p04/decode-validation.log` and `v-p04/utf8.log` are the two suites,
+`v-p04/debug-targeted` the two selected executables in Debug, `v-p04/asan-targeted`
+and `v-p04/release-targeted` the same selection in the other two modes, and
+`v-p04/{debug,release,asan}-fast/` the 59-executable fast selection.
 
 ### P03 additions
 
@@ -111,6 +130,13 @@ the 56-executable fast selection.
 the harness in the three modes, and `v07-{debug,release,asan}-fast/` hold the
 55-executable fast selection. The sanitizer harness run reports no findings; the
 terminated crash workers are deliberate and are not library memory defects.
+
+### P04 additions
+
+`v-p04/decode-validation.log` and `v-p04/utf8.log` are the two suites,
+`v-p04/debug-targeted` the two selected executables in Debug, `v-p04/asan-targeted`
+and `v-p04/release-targeted` the same selection in the other two modes, and
+`v-p04/{debug,release,asan}-fast/` the 59-executable fast selection.
 
 ### P03 additions
 
