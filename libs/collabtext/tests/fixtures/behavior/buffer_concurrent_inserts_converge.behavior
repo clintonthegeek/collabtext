@@ -1,0 +1,24 @@
+# behavior 1
+# name: buffer_concurrent_passages_stay_contiguous
+# provenance: CRDT_ENGINE_SPEC.md requires a producer's inserted passage to stay
+#   contiguous; evaluation finding F8 reports that concurrent passages interleave
+#   character by character. Fixed by S01-S07, which are not implemented.
+# status: known-defect
+# scope: multiple producers, buffer
+# expect converged yes
+# expect contains_of 0 68656c6c6f
+# expect contains_of 0 776f726c64
+# note: two producers each insert a passage at position 0 of an empty document.
+#   Which passage lands first is unspecified, so the expectation is that each
+#   survives as a contiguous run rather than interleaved per character — today's
+#   behaviour interleaves them, which is what F8 names.
+#collabtext-trace 1
+#model buffer
+#label f8-concurrent-passages
+#seed 42
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 68656c6c6f
+edit 1 0 0 776f726c64
+deliver 1 0
+deliver 0 1

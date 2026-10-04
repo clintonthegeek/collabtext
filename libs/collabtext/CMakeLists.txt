@@ -104,6 +104,12 @@ add_crdt_test(tst_trace_reduction)
 add_crdt_test(tst_network_sim)
 add_crdt_test(tst_store_fault_harness)
 
+# Behaviour fixtures (V08). The fixture directory is compiled in, so the suite
+# reads the same files a reviewer reads rather than a copy.
+add_crdt_test(tst_behavior_fixtures)
+target_compile_definitions(tst_behavior_fixtures PRIVATE
+    COLLABTEXT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/behavior")
+
 # Crash worker for the store fault harness (V07): a separate process that dies
 # mid-write on purpose. It is a test dependency, not a test itself — registering
 # it with add_test would run a program whose contract is to terminate.

@@ -1,0 +1,18 @@
+# behavior 1
+# name: buffer_lost_delivery_diverges
+# provenance: the transport contract in OpStream.h: receipt is not application.
+#   A lost delivery must leave the replicas honestly different rather than
+#   pretending to converge.
+# status: desired
+# scope: transport loss
+# expect converged no
+# note: one delivery is marked lost (the "x" flag). The replicas disagree, and
+#   that disagreement is the correct outcome — recovery is the transport's job.
+#collabtext-trace 1
+#model buffer
+#label lost-delivery
+#seed 42
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 61
+deliver 1 0 x

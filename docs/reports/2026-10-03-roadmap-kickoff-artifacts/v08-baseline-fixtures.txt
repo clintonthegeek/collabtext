@@ -1,0 +1,22 @@
+buffer_concurrent_passages_stay_contiguous status=known-defect converged=yes r0="hweolrllod" r1="hweolrllod" -> DOES NOT MEET
+buffer_sequential_edits_converge status=desired converged=yes r0="hello world" r1="hello world" -> meets declared expectation
+buffer_lost_delivery_diverges status=desired converged=no r0="a" r1="" -> meets declared expectation
+comment_anchor_tracks_edits status=desired converged=yes r0="abcd" r1="" -> meets declared expectation
+idlist_undo_redo_after_restart status=desired converged=yes r0="201,202,203," r1="" -> meets declared expectation
+idlist_concurrent_operations status=desired converged=yes r0="102," r1="102," -> meets declared expectation
+buffer_partition_then_heal status=desired converged=yes r0="cab" r1="cab" -> meets declared expectation
+buffer_undo_redo_survives_restart status=desired converged=yes r0="abcde" r1="" -> meets declared expectation
+buffer_unicode_boundaries status=desired converged=yes r0="aXéY中🚀" r1="aXéY中🚀" -> meets declared expectation
+summary: desired-met=8 desired-unmet=0 known-defect-fixtures=1
+
+Method: the fixture traces were replayed against revision 046d375 (the evaluated
+source) by compiling tests/TraceHarness.h and tests/TestSeed.h against the
+baseline library and running a small standalone reporter over
+libs/collabtext/tests/fixtures/behavior/. The baseline NetworkSim predates V05's
+link-partition API, so the two block/unblock calls were removed from that
+throwaway copy of the header; no behaviour fixture uses the networksim model.
+
+Reading: eight desired fixtures already hold at the baseline and are frozen as
+regression tests. buffer_concurrent_passages_stay_contiguous does not hold: two
+producers inserting "hello" and "world" at position 0 produce "hweolrllod", which
+is finding F8 character-interleaved. That fixture is the red test for S01-S07.

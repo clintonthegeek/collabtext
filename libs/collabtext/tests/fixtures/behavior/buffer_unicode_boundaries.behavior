@@ -1,0 +1,25 @@
+# behavior 1
+# name: buffer_unicode_boundaries
+# provenance: CRDT_ENGINE_SPEC.md requires edits never to split a UTF-8
+#   sequence; evaluation R8 (UTF-16 tree seeks) and P04 (input validation) own
+#   the surrounding work.
+# status: desired
+# scope: Unicode
+# expect converged yes
+# expect text_of 0 6158c3a959e4b8adf09f9a80
+# expect visible_of 0 12
+# note: a(1) é(2) 中(3) 🚀(4), then "X" inserted at the boundary before the
+#   two-byte character, then after it. Byte offsets must land on character
+#   boundaries only.
+#collabtext-trace 1
+#model buffer
+#label unicode-boundaries
+#seed 42
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 61c3a9e4b8adf09f9a80
+deliver 1 0
+edit 0 1 1 58
+deliver 1 1
+edit 0 4 4 59
+deliver 1 2

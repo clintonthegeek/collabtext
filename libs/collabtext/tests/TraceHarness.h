@@ -27,7 +27,7 @@
 //   #net <min_latency_ms> <max_latency_ms> <duplicate_ppm> <allow_reorder 0|1>
 //   edit <replica> <start> <end> <text>
 //   insert <replica> <index> <id> <l|r>
-//   remove <replica> <index> <l|r>
+//   remove <replica> <index> <l|r>       (a remove carries no payload id)
 //   deliver <replica> <op_index> [x]
 //   undo <replica>
 //   redo <replica>
@@ -425,18 +425,25 @@ inline bool Trace::load(const std::string& path, Trace& out, std::string& error)
             }
             e.kind = EventKind::Edit;
         } else if (verb == "insert" || verb == "remove") {
-            if (!need(5) || !detail::parse_int(tokens[1], e.replica) ||
+            // An insert carries a payload id; a remove does not, so its bias is
+            // the fourth field. Both forms are accepted so a hand-written trace
+            // does not have to invent an id for a deletion.
+            const bool with_id = (tokens.size() == 5);
+            const bool without_id = (verb == "remove" && tokens.size() == 4);
+            if ((!with_id && !without_id) ||
+                !detail::parse_int(tokens[1], e.replica) ||
                 !detail::parse_uint(tokens[2], e.index) ||
-                !detail::parse_uint(tokens[3], e.id)) {
+                (with_id && !detail::parse_uint(tokens[3], e.id))) {
                 if (error.empty()) error = "malformed " + verb + " event";
                 return false;
             }
-            if (tokens[4] != "l" && tokens[4] != "r") {
+            const std::string& bias_token = tokens[with_id ? 4 : 3];
+            if (bias_token != "l" && bias_token != "r") {
                 error = "malformed bias in " + verb + " event";
                 return false;
             }
             e.kind = (verb == "insert") ? EventKind::Insert : EventKind::Remove;
-            e.bias = (tokens[4] == "r") ? Crdt::Bias::Right : Crdt::Bias::Left;
+            e.bias = (bias_token == "r") ? Crdt::Bias::Right : Crdt::Bias::Left;
         } else if (verb == "deliver") {
             if (tokens.size() < 3 || tokens.size() > 4 ||
                 !detail::parse_int(tokens[1], e.replica) ||

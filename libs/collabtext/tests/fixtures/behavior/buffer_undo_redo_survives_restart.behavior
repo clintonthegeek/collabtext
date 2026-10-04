@@ -1,0 +1,25 @@
+# behavior 1
+# name: buffer_undo_redo_survives_restart
+# provenance: DECISIONS.md Q3 — undo AND redo survive close/reopen. The durable
+#   implementation is L06; this fixture freezes the requirement and the restart
+#   model V04 provides.
+# status: desired
+# scope: restart, undo/redo
+# expect converged yes
+# expect text_of 0 6162636465
+# note: three edits, undo the third, restart the replica from its decision
+#   journal, redo. The rebuilt engine must reach the same document as the
+#   uninterrupted run, and redo must still be available afterwards.
+#collabtext-trace 1
+#model buffer
+#label undo-redo-restart
+#seed 42
+#replicas 1
+#net 50 200 500 1
+edit 0 0 0 61
+edit 0 1 1 62
+edit 0 2 2 63
+undo 0
+restart 0
+redo 0
+edit 0 3 3 6465

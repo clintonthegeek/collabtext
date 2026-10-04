@@ -1,0 +1,22 @@
+Root: /home/clinton/dev/collabtext/.worktrees/reliability-v2
+Mode: debug
+Regex: ^tst_behavior_fixtures$
+Workers: 2
+-- Configuring done (0.2s)
+-- Generating done (0.3s)
+-- Build files have been written to: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+Selected 1 tests; compiler: c++ (GCC) 16.2.1 20260810
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 86%] Built target collabtext
+[ 86%] Built target tst_behavior_fixtures_autogen_timestamp_deps
+[ 93%] Built target tst_behavior_fixtures_autogen
+[100%] Built target tst_behavior_fixtures
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+    Start 14: tst_behavior_fixtures
+1/1 Test #14: tst_behavior_fixtures ............   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =   0.02 sec
+Verification exit: 0; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T005320Z-1169882

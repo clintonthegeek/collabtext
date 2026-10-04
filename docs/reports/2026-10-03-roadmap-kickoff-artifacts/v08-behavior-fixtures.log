@@ -1,0 +1,10 @@
+********* Start testing of TestBehaviorFixtures *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestBehaviorFixtures::initTestCase()
+PASS   : TestBehaviorFixtures::every_fixture_declares_provenance_and_expectations()
+PASS   : TestBehaviorFixtures::fixture_directory_covers_the_planned_scenarios()
+PASS   : TestBehaviorFixtures::desired_fixtures_hold()
+PASS   : TestBehaviorFixtures::known_defect_fixtures_still_fail()
+PASS   : TestBehaviorFixtures::cleanupTestCase()
+Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 6ms
+********* Finished testing of TestBehaviorFixtures *********

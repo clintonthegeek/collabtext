@@ -1,0 +1,20 @@
+# behavior 1
+# name: idlist_undo_redo_after_restart
+# provenance: DECISIONS.md Q3 (undo and redo survive reopen) applied to IdList.
+# status: desired
+# scope: IdList, restart
+# expect converged yes
+# note: three inserts, undo the third, restart the replica from its journal,
+#   redo. Both stacks must survive the rebuild.
+#collabtext-trace 1
+#model idlist
+#label idlist-restart
+#seed 42
+#replicas 1
+#net 50 200 500 1
+insert 0 0 201 l
+insert 0 1 202 l
+insert 0 2 203 l
+undo 0
+restart 0
+redo 0
