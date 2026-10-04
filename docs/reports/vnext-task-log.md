@@ -802,6 +802,84 @@ absent. **Identical disconnected clones** still cannot always be detected before
 they exchange operations; the conflict surfaces when they meet.
 
 
+## 2026-10-04 — P03: coverage intersection is not summary aggregation
+
+```text
+Task: P03
+Status: complete
+Baseline: 9d60827 (P02 documentation commit)
+Implementation commits: faa7f5d, plus this documentation commit
+Scope: libs/collabtext/src/crdt/Clock.h, Clock.cpp, Fragment.h, IdList.h,
+       libs/collabtext/tests/tst_clock.cpp,
+       libs/collabtext/tests/tst_summary_laws.cpp (new),
+       libs/collabtext/tests/tst_evaluation_regressions.cpp,
+       libs/collabtext/CMakeLists.txt
+Regression: tst_summary_laws (new, 13 cases) and five new tst_clock cases; the F3
+       expected-failure marker is removed and its assertion now passes
+Verification: targeted Debug 4/4; summary laws 13/13; clock 23/23; seeded fuzz at
+       42 and 20261003; fast suite 58/58 in Debug, Release, and sanitizer mode
+Artifacts: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p03/
+API/store changes: Global gains coverage_intersection() and empty();
+       FragmentSummary and IdListSummary lose three unused version-vector
+       fields. No wire format changed.
+Known limits: NetworkSim::compact_all() still uses meet() as its watermark
+Next ready tasks: P04, L01, S01
+```
+
+### What changed
+
+`Global::meet()` was answering two questions at once. It folds a nonzero
+minimum — *what is the largest counter nothing in this set has gone below?* —
+and it was also being used as *what has every peer seen?* A peer that has never
+observed replica 1 constrains replica 1's common coverage to zero; `meet()` leaves
+it alone. That is finding F3, and the fix is not one line: the two questions need
+different operations with different laws.
+
+`Global::coverage_intersection()` is the watermark operation: the minimum over
+the **union** of both vectors, absence counting as zero, and zero components
+canonicalized away. So `{1:10} ∩ {}` is empty, disjoint vectors intersect to
+nothing, and overlapping ones take the minimum. Its laws are stated with one
+honest gap — there is no identity element in a sparse representation, because the
+mathematical identity is "every counter at its maximum", which cannot be
+encoded; empty is the *absorbing* element, so folding a peer set starts from the
+local vector and never from empty.
+
+`meet()` keeps its behaviour, because the plan says not to change every call site
+mechanically, but its documentation now states what it is and that it is not a
+watermark.
+
+The tree summaries carried three version-vector fields that nothing read. One of
+them aggregated with `meet()`, so a "maybe everyone has seen it" quantity was
+cached in every SumTree node and looked like a certainty. Removing all three is
+cheaper and removes the false certainty: no dimension consumed them.
+
+### Evidence
+
+`tst_summary_laws` pins the laws of both vector operations and both tree
+aggregates — identity, commutativity where meaningful, associativity, and a
+property that safety depends on (intersection can only ever understate coverage,
+never overstate it). It also checks the thing a user would actually notice:
+visible text unchanged across randomized splice patterns, verified against a
+reference string rather than against the aggregate under test. `tst_clock` gains
+the coverage cases including one across the inline/heap boundary.
+
+The F3 marker is removed and both behaviours are pinned side by side, so the
+distinction cannot quietly disappear again. Strict evaluation now exits **5** with
+F4–F8 remaining. Seeded fuzz passes at 42 and 20261003; the fast suite is 58/58
+in Debug, Release, and sanitizer mode.
+
+### Limits
+
+`NetworkSim::compact_all()` still builds its GC watermark with `meet()`. That is
+inert only because V03 made reclamation a no-op, and G06 must replace that call
+with the intersection — recorded as P03's first limitation rather than left for
+someone to discover.
+
+Existing `meet()` call sites in `tst_gc` and `tst_idlist_gc` were left alone
+deliberately: rewriting them mechanically would change expectations rather than
+fix a defect. They remain nonzero-minimum aggregates, not watermarks.
+
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest

@@ -639,7 +639,36 @@
         "R7"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "9d60827",
+      "implementation_commits": [
+        "faa7f5d"
+      ],
+      "verification_results": {
+        "f3_marker": "removed; coverage_intersection satisfies the assertion and strict evaluation now exits 5 (F4-F8 remain)",
+        "targeted_debug": "4/4 CTest executables pass (tst_clock, tst_summary_laws, tst_sumtree, tst_evaluation_regressions)",
+        "summary_laws": "13/13 cases pass, including the randomized splice property",
+        "clock": "23/23 cases pass, including the inline/heap boundary case",
+        "debug_fast": "58/58 CTest executables pass",
+        "release_fast": "58/58 CTest executables pass",
+        "asan_ubsan_lsan_fast": "58/58 pass with leak checking enabled",
+        "seeded_convergence": "tst_fuzz passes at seeds 42 and 20261003 (16/16 each)"
+      },
+      "artifacts": [
+        "libs/collabtext/src/crdt/Clock.h",
+        "libs/collabtext/src/crdt/Clock.cpp",
+        "libs/collabtext/src/crdt/Fragment.h",
+        "libs/collabtext/src/crdt/IdList.h",
+        "libs/collabtext/tests/tst_summary_laws.cpp",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p03/"
+      ],
+      "limitations": [
+        "NetworkSim::compact_all() still builds its GC watermark with Global::meet(), not coverage_intersection. It is inert only because V03 made reclamation a no-op; G06 replaces that call and must use the intersection.",
+        "Existing meet() call sites in tests (tst_gc, tst_idlist_gc) were left alone deliberately: changing them mechanically would rewrite expectations rather than fix a defect. They remain nonzero-minimum aggregates, not watermarks.",
+        "coverage_intersection has no identity element in the sparse representation; empty absorbs. Folding a peer set must start from the local vector.",
+        "The engine still uses 16-bit replica ids with 32-bit counters, so coverage is per small integer for now. The P02 staged widening applies to ReplicaState's own counters, not to Global.",
+        "Removing the three write-only version-vector fields shrinks every SumTree node summary, which is cheaper but is not a measured claim."
+      ]
     },
     {
       "id": "P04",

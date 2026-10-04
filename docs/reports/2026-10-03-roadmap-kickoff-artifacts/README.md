@@ -57,6 +57,12 @@ installation requirements.
 | P02 targeted Debug | 4/4 CTest executables pass (identity, clock, buffer, idlist) |
 | P02 final Debug / Release fast | 57/57 CTest executables pass in each mode |
 | P02 final sanitizer fast selection | 57/57 pass with ASan, UBSan, and leak checking enabled |
+| P03 summary laws / clock | 13/13 and 23/23 cases pass |
+| P03 F3 marker | Removed; strict evaluation now exits 5 (F4–F8 remain) |
+| P03 targeted Debug | 4/4 CTest executables pass |
+| P03 final Debug / Release fast | 58/58 CTest executables pass in each mode |
+| P03 final sanitizer fast selection | 58/58 pass with ASan, UBSan, and leak checking enabled |
+| P03 seeded convergence | tst_fuzz passes at seeds 42 and 20261003 |
 | V07 store fault harness, Debug / Release / sanitizer | 24/24 cases pass in each mode; no sanitizer findings |
 | V07 final Debug / Release fast | 55/55 CTest executables pass in each mode |
 | V07 final sanitizer fast selection | 55/55 pass with ASan, UBSan, and leak checking enabled |
@@ -68,6 +74,20 @@ installation requirements.
 | P02 targeted Debug | 4/4 CTest executables pass (identity, clock, buffer, idlist) |
 | P02 final Debug / Release fast | 57/57 CTest executables pass in each mode |
 | P02 final sanitizer fast selection | 57/57 pass with ASan, UBSan, and leak checking enabled |
+| P03 summary laws / clock | 13/13 and 23/23 cases pass |
+| P03 F3 marker | Removed; strict evaluation now exits 5 (F4–F8 remain) |
+| P03 targeted Debug | 4/4 CTest executables pass |
+| P03 final Debug / Release fast | 58/58 CTest executables pass in each mode |
+| P03 final sanitizer fast selection | 58/58 pass with ASan, UBSan, and leak checking enabled |
+| P03 seeded convergence | tst_fuzz passes at seeds 42 and 20261003 |
+
+### P03 additions
+
+`v-p03/summary-laws.log` and `v-p03/clock.log` are the two law suites,
+`v-p03/strict-evaluation-after-f3.log` is the strict regression run with the F3
+marker removed (five failures remain, F4–F8), `v-p03/debug-targeted` the four
+selected executables, and `v-p03/{debug,release,asan}-fast/` the 58-executable
+fast selection.
 
 ### P02 additions
 
@@ -91,6 +111,14 @@ the 56-executable fast selection.
 the harness in the three modes, and `v07-{debug,release,asan}-fast/` hold the
 55-executable fast selection. The sanitizer harness run reports no findings; the
 terminated crash workers are deliberate and are not library memory defects.
+
+### P03 additions
+
+`v-p03/summary-laws.log` and `v-p03/clock.log` are the two law suites,
+`v-p03/strict-evaluation-after-f3.log` is the strict regression run with the F3
+marker removed (five failures remain, F4–F8), `v-p03/debug-targeted` the four
+selected executables, and `v-p03/{debug,release,asan}-fast/` the 58-executable
+fast selection.
 
 ### P02 additions
 

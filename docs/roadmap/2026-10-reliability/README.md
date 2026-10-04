@@ -4,7 +4,7 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status:** M0 complete (V01–V08); D01, P01, and P02 complete. Continue with P03 from [TASKS.json](TASKS.json); the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md) describes the verified V01–V03 starting point; later task results are in [the task log](../../reports/vnext-task-log.md). All product-policy decisions are resolved; improve the existing C++ engine incrementally.
+**Status:** M0 complete (V01–V08); D01, P01, P02, and P03 complete. Continue with P04 from [TASKS.json](TASKS.json); the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md) describes the verified V01–V03 starting point; later task results are in [the task log](../../reports/vnext-task-log.md). All product-policy decisions are resolved; improve the existing C++ engine incrementally.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **62 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
@@ -13,7 +13,7 @@ All breaking implementation work belongs in the worktree above. The user confirm
 ## Read first
 
 1. Read [DECISIONS.md](DECISIONS.md): all Q1–Q4 are resolved. Retain and improve the native engine; do not reinstate migration work or replacement-backend options.
-2. Read [EXECUTION.md](EXECUTION.md), [DECISIONS.md](DECISIONS.md), the binding [design constraints](../../specs/vnext-design-constraints.md), and the [API guide](../../specs/vnext-public-api.md) and [protocol contract](../../specs/vnext-protocol.md). V01–V08, D01, P01, and P02 are complete: the verification runner exists and the randomized suites are seeded, traced, and reducible (see "Randomized test contract" in EXECUTION.md). Later task artifacts remain planned until their creating tasks complete.
+2. Read [EXECUTION.md](EXECUTION.md), [DECISIONS.md](DECISIONS.md), the binding [design constraints](../../specs/vnext-design-constraints.md), and the [API guide](../../specs/vnext-public-api.md) and [protocol contract](../../specs/vnext-protocol.md). V01–V08, D01, P01, P02, and P03 are complete: the verification runner exists and the randomized suites are seeded, traced, and reducible (see "Randomized test contract" in EXECUTION.md). Later task artifacts remain planned until their creating tasks complete.
 3. Select the next task whose dependencies are complete. Use the registry order as a safe serial execution order; do not treat phase numbering as permission to skip unfinished prerequisites.
 4. Read the complete task in its phase file and its referenced specification before editing.
 5. Update the registry and record evidence after completing the task. See the design gates for work that needs more expertise than routine implementation.
@@ -23,7 +23,7 @@ All breaking implementation work belongs in the worktree above. The user confirm
 | Milestone | Tasks | Deliverable / exit condition | Plan |
 |---|---|---|---|
 | M0: trustworthy baseline | V01–V08 | Complete: reproducible checks, visible regression cases, unsafe GC contained, replayable traces, corrected benchmarks and simulator, store fault injection, behavioural fixtures and API inventory | [01 — validation](01-validation.md) |
-| M1: explicit protocol | D01, P01–P08 | User policies recorded; persistent actors; strict validation; sparse/versioned codecs; transactional transport contract | [02 — protocol](02-protocol.md) |
+| M1: explicit protocol | D01, P01–P08 (P01–P03 done) | User policies recorded; persistent actors; strict validation; sparse/versioned codecs; transactional transport contract | [02 — protocol](02-protocol.md) |
 | M2: reliable lifecycle | L01–L08 | Actual editor survives local/remote replay, close/reopen, failed writes, sender/receiver restart, and segment arrival gaps | [03 — recovery](03-recovery.md) |
 | M3: useful merge semantics | S01–S07 | Spec/model and production agree on contiguous concurrent passages, exact boundary affinity, undo, and supported deltas | [04 — semantics](04-semantics.md) |
 | M4: safe reclamation | G01–G08 | Validated checkpoints, membership/retirement policy, durable per-stream coverage, and certificate-authorized memory/disk reclamation | [05 — reclamation](05-reclamation.md) |
@@ -116,7 +116,12 @@ No recommendation is considered complete merely because it appears in a plan. E0
 
 ## Implementation handoff
 
-- **Next in serial order:** P03. P04, L01, and S01 are also structurally ready.
+- **Next in serial order:** P04. L01 and S01 are also structurally ready.
+- **Coverage and summaries are different questions:** `Global::coverage_intersection()`
+  is the watermark operation (minimum over the union, absence is zero, zeros
+  canonicalized away); `Global::meet()` is a nonzero-minimum aggregation and must
+  not be used as a watermark. `NetworkSim::compact_all()` still does — inert
+  until G06 replaces it.
 - **Identity is durable or it is an error:** [ActorId.h](../../../libs/collabtext/include/collabtext/ActorId.h)
   and `ReplicaState` reserve an operation id before handing it out, refuse to
   replace corrupt private state, and take writer leases exclusively. No engine
