@@ -60,6 +60,7 @@ add_library(collabtext STATIC
     src/identity/IdentityStore.cpp
     src/identity/IdentityProjector.cpp
     src/identity/Signing.cpp
+    src/identity/ReplicaState.cpp
     include/collabtext/CollabDocument.h
     include/collabtext/SyncManager.h
     include/collabtext/Identity.h
@@ -67,6 +68,7 @@ add_library(collabtext STATIC
     include/collabtext/IdListOperations.h
     include/collabtext/Serialization.h
     include/collabtext/OpStream.h
+    include/collabtext/ActorId.h
     include/collabtext/StreamSync.h
 )
 set_target_properties(collabtext PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -107,6 +109,7 @@ add_crdt_test(tst_store_fault_harness)
 # Behaviour fixtures (V08). The fixture directory is compiled in, so the suite
 # reads the same files a reviewer reads rather than a copy.
 add_crdt_test(tst_behavior_fixtures)
+add_crdt_test(tst_actor_identity)
 target_compile_definitions(tst_behavior_fixtures PRIVATE
     COLLABTEXT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/behavior")
 
