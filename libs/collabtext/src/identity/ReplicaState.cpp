@@ -177,6 +177,7 @@ std::string_view to_string(ErrorCode code) {
     case ErrorCode::unresolvable_anchor: return "unresolvable_anchor";
     case ErrorCode::corrupt_record: return "corrupt_record";
     case ErrorCode::io_error: return "io_error";
+    case ErrorCode::unsupported_operation: return "unsupported_operation";
     case ErrorCode::random_source_unavailable: return "random_source_unavailable";
     case ErrorCode::deferred_queue_full: return "deferred_queue_full";
     }

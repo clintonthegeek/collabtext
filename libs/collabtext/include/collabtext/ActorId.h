@@ -59,6 +59,9 @@ enum class ErrorCode {
     // store
     corrupt_record,
     io_error,
+    /// The platform cannot provide the requested guarantee (e.g. asking for a
+    /// directory sync where the OS has none). Reported, never approximated.
+    unsupported_operation,
     random_source_unavailable,
     // limits
     deferred_queue_full,
