@@ -4,7 +4,7 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status:** M0 complete (V01–V08). Continue with D01 from [TASKS.json](TASKS.json); the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md) describes the verified V01–V03 starting point; later task results are in [the task log](../../reports/vnext-task-log.md). All product-policy decisions are resolved; improve the existing C++ engine incrementally.
+**Status:** M0 complete (V01–V08) and D01 complete. Continue with P01 from [TASKS.json](TASKS.json); the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md) describes the verified V01–V03 starting point; later task results are in [the task log](../../reports/vnext-task-log.md). All product-policy decisions are resolved; improve the existing C++ engine incrementally.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **62 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
@@ -13,7 +13,7 @@ All breaking implementation work belongs in the worktree above. The user confirm
 ## Read first
 
 1. Read [DECISIONS.md](DECISIONS.md): all Q1–Q4 are resolved. Retain and improve the native engine; do not reinstate migration work or replacement-backend options.
-2. Read [EXECUTION.md](EXECUTION.md) and the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md). V01–V08 are complete: the verification runner exists and the randomized suites are seeded, traced, and reducible (see "Randomized test contract" in EXECUTION.md). Later task artifacts remain planned until their creating tasks complete.
+2. Read [EXECUTION.md](EXECUTION.md), [DECISIONS.md](DECISIONS.md), and the binding [design constraints](../../specs/vnext-design-constraints.md). V01–V08 and D01 are complete: the verification runner exists and the randomized suites are seeded, traced, and reducible (see "Randomized test contract" in EXECUTION.md). Later task artifacts remain planned until their creating tasks complete.
 3. Select the next task whose dependencies are complete. Use the registry order as a safe serial execution order; do not treat phase numbering as permission to skip unfinished prerequisites.
 4. Read the complete task in its phase file and its referenced specification before editing.
 5. Update the registry and record evidence after completing the task. See the design gates for work that needs more expertise than routine implementation.
@@ -71,7 +71,7 @@ An enrolled device may remain offline indefinitely; only explicit retirement rem
 
 | Gate | Required artifact before implementation | Why it exists |
 |---|---|---|
-| D01 | Accepted native-engine/lifecycle constraints and fresh-format/API contract | All user policies are settled; their written implementation contract must be complete |
+| D01 | Complete: [design constraints](../../specs/vnext-design-constraints.md) turn the settled policies into C1–C14, R1–R10, B1–B8, with an executable scope check | All user policies are settled; their written implementation contract is complete |
 | P01 | Complete stable types, errors, ownership, counter, and version contracts | Partial API decisions create inconsistent consumers and codecs |
 | S02 | Complete incremental ordering repair, transformation map, pseudocode, independent model, fixture/enumeration evidence | Ordering changes need precise invariants and verification within existing engines |
 | G01 | Full membership/epoch/undo/anchor/checkpoint protocol and independent GC model | Durable observation alone does not permit reclamation |
@@ -116,8 +116,13 @@ No recommendation is considered complete merely because it appears in a plan. E0
 
 ## Implementation handoff
 
-- **Next in serial order:** D01, which records the accepted native-engine and
-  fresh-format contract. M0 is complete: verification entry points, evaluation
+- **Next in serial order:** P01, which finalizes the vNext type, error, ownership,
+  counter, and version contracts as a design gate.
+- **The contract is binding:** [vnext-design-constraints.md](../../specs/vnext-design-constraints.md)
+  turns the four resolved policies into citable constraints (C1–C14), the release
+  invariants (R1–R10), and the intended behavior (B1–B8).
+  `check-scope.py --strict` proves no task asks for a Rust rewrite, Yrs adoption, a
+  backend experiment, or legacy-data migration; run it when the registry changes. M0 is complete: verification entry points, evaluation
   regressions, reclamation containment, replayable traces, a correct network
   model, honest benchmarks, store fault injection, and a written API inventory
   with frozen behavioural fixtures.

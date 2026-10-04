@@ -3,8 +3,8 @@
 **Status:** binding on `roadmap/reliability-v2`. Accepted by the user; no further
 product-policy question is open.
 **Task:** D01. **Baseline:** `529b80a` (V08, closing M0).
-**Depends on:** V08's [API inventory](api-inventory.md) and
-[DECISIONS.md](DECISIONS.md).
+**Depends on:** V08's [API inventory](../roadmap/2026-10-reliability/api-inventory.md)
+and [DECISIONS.md](../roadmap/2026-10-reliability/DECISIONS.md).
 
 This document says what the project is committed to building and, just as
 importantly, what it is committed *not* doing. It is the answer to "what may a

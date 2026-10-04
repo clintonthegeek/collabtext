@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04. All Q1–Q4 are resolved by the user's replies. Improve the existing native C++ engine incrementally. No backend choice remains open. Any new questions belong in ordinary conversation text for this user.
 
-**Applied in:** [vnext-design-constraints.md](../specs/vnext-design-constraints.md)
+**Applied in:** [vnext-design-constraints.md](../../specs/vnext-design-constraints.md)
 (D01), which turns each answer below into numbered constraints (C1–C14), the
 release invariants a release must actually have (R1–R10), and the intended
 public behavior (B1–B8). This file remains the record of *what the user decided*;

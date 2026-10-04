@@ -472,8 +472,27 @@
         "R13"
       ],
       "gate": "All product-policy questions resolved. Complete the written design constraints using V08; no additional user backend approval is needed.",
-      "status": "in_progress",
-      "baseline_revision": "529b80a"
+      "status": "complete",
+      "baseline_revision": "529b80a11716d4bdbea7e66cf0012dd002bfa4cd",
+      "implementation_commits": [
+        "bb0f836"
+      ],
+      "verification_results": {
+        "scope_check": "check-scope.py --strict: 62 tasks scanned, 20 sensitive-vocabulary hits, all prohibitive or explicitly allowed (E04 documentation rewrite), 0 needing review",
+        "plan_validation": "validate-plan.py reports a valid acyclic 62-task graph",
+        "question_audit": "Q1-Q4 each map to constraints C1-C4 and release invariants; no open product question remains",
+        "link_check": "all relative markdown links introduced by D01 resolve"
+      },
+      "artifacts": [
+        "docs/specs/vnext-design-constraints.md",
+        "docs/roadmap/2026-10-reliability/check-scope.py"
+      ],
+      "limitations": [
+        "D01 is a contract, not an algorithm specification. S02 and G01 must still produce their own specifications and independent executable models before implementing.",
+        "The scope checker classifies hits by surrounding sentence; a prohibition phrased as a requirement would need the allowed-phrase list extended, which is a reviewable decision rather than a silent pass.",
+        "Release invariants R1-R10 are stated as checkable properties but most are only made mechanically checkable by later tasks; this document does not claim they are verified yet.",
+        "The constraints deliberately leave data-structure choices for the protocol phase to its own tasks."
+      ]
     },
     {
       "id": "P01",

@@ -558,6 +558,76 @@ V05 link-partition API, which did not exist at `046d375`; no fixture uses that
 model.
 
 
+## 2026-10-04 — D01: the accepted design constraints, made binding
+
+```text
+Task: D01
+Status: complete
+Baseline: 529b80a (V08, closing M0)
+Implementation commits: bb0f836, plus this documentation commit
+Scope: docs/specs/vnext-design-constraints.md (new),
+       docs/roadmap/2026-10-reliability/check-scope.py (new), DECISIONS.md
+Regression: none — D01 changes documentation and adds a checker, and
+       documentation-only policy/spec tasks need consistency review rather than
+       tests that mirror their prose
+Verification: check-scope.py --strict clean (62 tasks, 20 hits, 0 to review);
+       validate-plan.py valid; all relative links in the touched files resolve
+Artifacts: docs/specs/vnext-design-constraints.md, check-scope.py
+API/store changes: documentation only. No signature or format is changed here.
+Known limits: the release invariants are stated as checkable properties, not as
+       verified ones; most become mechanically checkable in later tasks
+Next ready tasks: P01 (design gate), then P02
+```
+
+### What changed
+
+Four phases had been executing against decisions recorded in prose, where
+"improve the existing engine" and "no legacy migration" were sentences rather
+than something a task could be held to. `vnext-design-constraints.md` turns them
+into numbered constraints a later task can cite:
+
+- **C1–C4** carry the four user answers forward, each stating what it obliges a
+  task to do and what it forbids.
+- **C5–C7** fix the format rules: per-artifact versioning, explicit rejection of
+  unknown versions, documented hard cuts instead of compatibility layers.
+- **C8–C14** are the repair discipline: narrow transformations, a failing test
+  first, a specification plus an independent model before an algorithm,
+  correctness before performance, no substitution layer, external engines as
+  reference material only, and containment that stays until it is replaced.
+- **R1–R10** are the release invariants as checkable properties — no lost
+  acknowledged work, causal ordering, writer identity across restart, both
+  history stacks, anchor fidelity, reclamation safety, recovery honesty,
+  membership honesty, durability honesty.
+- **B1–B8** are the intended public behavior inherited from V08's inventory.
+
+`DECISIONS.md` keeps the record of what the user decided and now carries a table
+mapping each answer to the constraints it became, so the two documents cannot be
+read as disagreeing.
+
+### The acceptance check is executable
+
+D01's acceptance asks that no task require a Rust rewrite, Yrs adoption, a backend
+experiment, or legacy-data migration. That is mechanical, so `check-scope.py`
+does it: it scans every task's text for the sensitive vocabulary on word
+boundaries — "trusted" is not a Rust rewrite, "migrated fuzz suite" is not data
+migration — classifies each hit by its surrounding sentence, and exits nonzero if
+anything needs a human decision. Its allowed-phrase list is deliberately visible;
+an exception nobody can see is an exception nobody can review.
+
+Result: 62 tasks, 20 hits, all prohibitive or explicitly allowed. The single
+allowed phrase is E04's "rewrite current architecture", which is a documentation
+rewrite. Run it whenever the registry changes.
+
+### What D01 deliberately does not do
+
+It does not design an algorithm, choose data structures, set performance targets,
+or promise a date. C10 keeps S02 and G01 responsible for their own
+specifications and executable models, and states that a design gate which cannot
+be satisfied records a gap and stops rather than redirecting the work into a
+replacement engine. The document is a contract about direction, not a
+specification of behaviour — and it says so, so nobody mistakes it for one.
+
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest
