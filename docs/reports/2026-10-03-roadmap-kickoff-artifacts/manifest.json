@@ -229,5 +229,30 @@
     "exit_code": 0,
     "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T004227Z-1161167",
     "selection": "55-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v08-debug-fixtures": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T005320Z-1169882",
+    "selection": "^tst_behavior_fixtures$"
+  },
+  "v08-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T005321Z-1169934",
+    "selection": "56-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v08-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T005526Z-1174001",
+    "selection": "56-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v08-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T005619Z-1176363",
+    "selection": "56-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v08-baseline-fixtures": {
+    "exit_code": 0,
+    "result": "9 fixtures replayed against revision 046d375; 8 meet their declared expectation, buffer_concurrent_passages_stay_contiguous does not (hweolrllod, finding F8)",
+    "log": "v08-baseline-fixtures.txt"
   }
 }

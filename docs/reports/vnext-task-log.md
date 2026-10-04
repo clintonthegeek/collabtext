@@ -458,6 +458,106 @@ Fault injection covers the write sequence only. Checkpoint validation,
 membership, and quota policy belong to G01/G02.
 
 
+## 2026-10-04 — V08: API inventory and behavioural fixtures
+
+```text
+Task: V08
+Status: complete
+Baseline: fdc6f83 (V07 documentation commit)
+Implementation commits: 37b26db, plus this documentation commit
+Scope: docs/roadmap/2026-10-reliability/api-inventory.md (new),
+       libs/collabtext/tests/fixtures/behavior/*.behavior (new),
+       libs/collabtext/tests/tst_behavior_fixtures.cpp (new),
+       tests/consumer-smoke/README.md (new), libs/collabtext/CMakeLists.txt
+Regression: tst_behavior_fixtures (new) — 9 fixtures with provenance and exact
+       expectations, including a red test for finding F8
+Verification: 6/6 fixture cases pass; fixtures replayed against revision 046d375
+       (8/9 hold there, F8 does not); fast suite 56/56 in Debug, Release, and
+       sanitizer mode
+Artifacts: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v08-*
+API/store changes: documentation only, plus one test executable. The inventory
+       records the breaks P01/A01/A06 are expected to make.
+Known limits: corruption fixtures live in V07's harness; the installed consumer
+       check waits for A01; no fixture uses an old store or format
+Next ready tasks: none in phase 1. D01 is next in registry order.
+```
+
+### What changed
+
+Eight roadmap tasks have now been implementing against an API nobody had written
+down. `api-inventory.md` records, before P01, A01, and A06 start changing it:
+
+- the eight use cases the library must serve, and which of them work today;
+- every public header and its intended role, including the internal types that
+  leak because `src/` is on the public include path;
+- callback ownership, which is implicit today and is finding R9;
+- `IdList::local_clear()`'s real semantics, including the trap that it preserves
+  the version vector, so replaying the original operation log after a clear is a
+  silent no-op rather than a rebuild;
+- the CMake targets, including `Qt6::Test` being linked from the shipped
+  library because `NetworkSim.cpp` calls `QFAIL`;
+- nine API requirements and eight surfaces slated for removal, each with a
+  reason;
+- the source, ABI, and format breaks a reviewer should expect, all acceptable.
+
+Nine behavioural fixtures freeze logical scenarios as versioned event traces plus
+declared expectations, so a fixture is executable evidence rather than a document
+that drifts. Each declares name, provenance, scope, and at least one expectation;
+the suite fails if one is missing, so a fixture cannot be added without saying
+where it came from. A `desired` fixture must hold. A `known-defect` fixture
+asserts what *should* happen and is marked expected, so an unexpected pass fails
+the suite and forces the marker out.
+
+### Two things this task refused to fake
+
+**Corruption.** A damaged file is not a sequence of decisions, so it cannot be a
+replayable trace. Those fixtures live in `tst_store_fault_harness` (V07), which
+builds real damaged directories and reads them back with the production reader.
+The behaviour suite asserts that harness's presence instead of claiming coverage
+it does not have.
+
+**The installed consumer check.** `tests/consumer-smoke/` gets a note explaining
+that it cannot exist until A01 makes the core Qt-free and adds install/export
+rules. Building it now would encode today's broken packaging as the contract and
+then fail loudly when A01 fixes it.
+
+### Baseline reproduction
+
+All nine fixtures were replayed against revision `046d375`, the evaluated source,
+which separates "the engine already does this" from "this is what we want":
+
+- Eight hold at the baseline. They freeze current correct behaviour, which is
+  what makes them regression tests rather than aspirations.
+- `buffer_concurrent_passages_stay_contiguous` does **not**: two producers
+  inserting "hello" and "world" at position 0 produce `hweolrllod`, interleaved
+  per character. That is finding F8, and the fixture is its red test for S01–S07.
+- Nothing else differs between the baseline and this branch, because V01–V07
+  changed verification, network simulation, benchmark honesty, and reclamation
+  containment — not Buffer or IdList semantics. That is the expected result, and
+  it is why freezing these now matters: P01 and S01 are about to edit the same
+  code.
+
+Writing the F8 fixture also corrected it twice. The first version inserted
+single characters, which do not interleave — the defect only appears with
+multi-character passages, which is what "concurrent passages interleave character
+by character" actually describes. The second version asserted an exact merged
+string, which over-specified: which passage lands first is unspecified, so the
+expectation is that each survives as a contiguous run.
+
+6/6 fixture cases pass; the fast suite is 56/56 in Debug, Release, and sanitizer
+mode. No external repository was accessed and no consumer was contacted.
+
+### Limits
+
+Fixtures cover Buffer, IdList, Unicode boundaries, restart with undo and redo,
+partition and heal, transport loss, and comment anchors. Multi-stream and
+`OpStream`-level scenarios are not fixture-covered yet; `tst_opstream_*` covers
+them as executables, not as frozen fixtures. The baseline reproduction compiled
+today's harness headers against the baseline library and removed two calls to the
+V05 link-partition API, which did not exist at `046d375`; no fixture uses that
+model.
+
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest
@@ -472,6 +572,7 @@ known failures, and settled product decisions. V04 has since made the randomized
 suites seeded, traced, and reducible; V05 has since corrected the simulated
 network's partition and ordering model, V06 made the benchmarks report honest
 units, timed regions, and asserted convergence, and V07 added store fault
-injection with a subprocess crash harness. V08 is the last structurally ready
-task in phase 1. Do not interpret any single task as
+injection with a subprocess crash harness, and V08 inventoried the intended API
+and froze behavioural fixtures. Phase 1 (M0) is complete; D01 is next in registry
+order. Do not interpret any single task as
 completing the remaining roadmap.

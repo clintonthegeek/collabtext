@@ -420,7 +420,31 @@
         "R14"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "fdc6f83",
+      "implementation_commits": [
+        "37b26db"
+      ],
+      "verification_results": {
+        "fixture_suite": "6/6 cases pass (9 fixtures: 8 desired holding, 1 known defect marked expected)",
+        "fixture_metadata": "every fixture declares name, provenance, scope, and at least one expectation; the suite fails otherwise",
+        "baseline_reproduction": "8/9 fixtures meet their declared expectation at revision 046d375; buffer_concurrent_passages_stay_contiguous fails there with hweolrllod, reproducing F8",
+        "debug_fast": "56/56 CTest executables pass",
+        "release_fast": "56/56 CTest executables pass",
+        "asan_ubsan_lsan_fast": "56/56 pass with leak checking enabled"
+      },
+      "artifacts": [
+        "docs/roadmap/2026-10-reliability/api-inventory.md",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v08-baseline-fixtures.txt",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v08-behavior-fixtures.log"
+      ],
+      "limitations": [
+        "Corruption fixtures are not behaviour fixtures: a damaged file is not a sequence of decisions. They live in tst_store_fault_harness (V07).",
+        "tests/consumer-smoke/ holds a note, not a build: the installed consumer check needs A01's Qt-free core and install/export rules first.",
+        "The baseline reproduction compiled the current harness headers against the baseline library and removed two calls to the V05 link-partition API; no fixture uses that model.",
+        "Fixtures cover Buffer, IdList, Unicode, restart, partition, transport loss, and comment anchors. Multi-stream and OpStream-level scenarios are not fixture-covered yet.",
+        "The inventory is an intention recorded before P01/A01; it is not a compatibility contract, and nothing in it preserves an existing surface for its own sake."
+      ]
     },
     {
       "id": "D01",

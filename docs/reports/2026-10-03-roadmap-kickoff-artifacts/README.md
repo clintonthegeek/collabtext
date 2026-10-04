@@ -1,4 +1,4 @@
-# V01–V07 verification artifacts
+# V01–V08 verification artifacts
 
 These are portable excerpts of actual verification runs on 2026-10-03. See
 [the task log](../vnext-task-log.md) and
@@ -49,9 +49,25 @@ installation requirements.
 | V07 store fault harness, Debug / Release / sanitizer | 24/24 cases pass in each mode; no sanitizer findings |
 | V07 final Debug / Release fast | 55/55 CTest executables pass in each mode |
 | V07 final sanitizer fast selection | 55/55 pass with ASan, UBSan, and leak checking enabled |
+| V08 behaviour fixtures | 6/6 cases pass over nine fixtures (8 desired holding, 1 known defect) |
+| V08 fixtures at baseline 046d375 | 8/9 hold; the F8 fixture produces `hweolrllod` |
+| V08 final Debug / Release fast | 56/56 CTest executables pass in each mode |
+| V08 final sanitizer fast selection | 56/56 pass with ASan, UBSan, and leak checking enabled |
 | V07 store fault harness, Debug / Release / sanitizer | 24/24 cases pass in each mode; no sanitizer findings |
 | V07 final Debug / Release fast | 55/55 CTest executables pass in each mode |
 | V07 final sanitizer fast selection | 55/55 pass with ASan, UBSan, and leak checking enabled |
+| V08 behaviour fixtures | 6/6 cases pass over nine fixtures (8 desired holding, 1 known defect) |
+| V08 fixtures at baseline 046d375 | 8/9 hold; the F8 fixture produces `hweolrllod` |
+| V08 final Debug / Release fast | 56/56 CTest executables pass in each mode |
+| V08 final sanitizer fast selection | 56/56 pass with ASan, UBSan, and leak checking enabled |
+
+### V08 additions
+
+`v08-behavior-fixtures.log` is the fixture suite run on this branch and
+`v08-baseline-fixtures.txt` is the same nine fixtures replayed against revision
+046d375, with the method and how to read the results. `v08-debug-fixtures/` is
+the single-selection runner evidence and `v08-{debug,release,asan}-fast/` hold
+the 56-executable fast selection.
 
 ### V07 additions
 
@@ -60,6 +76,14 @@ installation requirements.
 the harness in the three modes, and `v07-{debug,release,asan}-fast/` hold the
 55-executable fast selection. The sanitizer harness run reports no findings; the
 terminated crash workers are deliberate and are not library memory defects.
+
+### V08 additions
+
+`v08-behavior-fixtures.log` is the fixture suite run on this branch and
+`v08-baseline-fixtures.txt` is the same nine fixtures replayed against revision
+046d375, with the method and how to read the results. `v08-debug-fixtures/` is
+the single-selection runner evidence and `v08-{debug,release,asan}-fast/` hold
+the 56-executable fast selection.
 
 ### V07 additions
 
