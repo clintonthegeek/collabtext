@@ -1,0 +1,56 @@
+{
+  "backtraceGraph" : 
+  {
+    "commands" : 
+    [
+      "add_test",
+      "add_crdt_test"
+    ],
+    "files" : 
+    [
+      "/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/CMakeLists.txt"
+    ],
+    "nodes" : 
+    [
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 105,
+        "parent" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 90,
+        "parent" : 1
+      }
+    ]
+  },
+  "kind" : "ctestInfo",
+  "tests" : 
+  [
+    {
+      "backtrace" : 2,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext/tst_store_fault_harness"
+      ],
+      "name" : "tst_store_fault_harness",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/libs/collabtext"
+        }
+      ]
+    }
+  ],
+  "version" : 
+  {
+    "major" : 1,
+    "minor" : 0
+  }
+}

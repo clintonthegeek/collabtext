@@ -102,6 +102,16 @@ add_crdt_test(tst_rope)
 add_crdt_test(tst_fuzz)
 add_crdt_test(tst_trace_reduction)
 add_crdt_test(tst_network_sim)
+add_crdt_test(tst_store_fault_harness)
+
+# Crash worker for the store fault harness (V07): a separate process that dies
+# mid-write on purpose. It is a test dependency, not a test itself — registering
+# it with add_test would run a program whose contract is to terminate.
+add_executable(store_crash_worker tests/store_crash_worker.cpp)
+target_link_libraries(store_crash_worker PRIVATE collabtext Qt6::Test)
+target_include_directories(store_crash_worker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+                                                 ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+add_dependencies(tst_store_fault_harness store_crash_worker)
 add_crdt_test(tst_rope_integration)
 add_crdt_test(tst_undomap)
 add_crdt_test(tst_benchmark)
