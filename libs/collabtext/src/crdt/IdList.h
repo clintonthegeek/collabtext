@@ -3,9 +3,12 @@
 #include "crdt/Anchor.h"
 #include "crdt/Clock.h"
 #include "crdt/Locator.h"
+#include "crdt/OperationValidation.h"
 #include "crdt/SumTree.h"
 #include "crdt/UndoMap.h"
 #include "crdt/IdListOperations.h"
+
+#include <collabtext/ApplyOutcome.h>
 
 #include <cstdint>
 #include <functional>
@@ -97,7 +100,28 @@ public:
     IdListOperation insert_after(const Anchor& after, uint64_t id);
     IdListOperation remove_at(const Anchor& target);
 
-    void apply_ops(const std::vector<IdListOperation>& ops);
+    /// Local mutations that refuse an unresolvable anchor instead of asserting.
+    ///
+    /// The plain `insert_after`/`remove_at` above cannot report a failure, so
+    /// they delegate to these and return an empty operation when refused. The
+    /// distinction is not cosmetic: the old code asserted that the anchor had
+    /// been found and then used it anyway, which in a Release build meant
+    /// `remove_at` read one element past the end of the entry vector and
+    /// `insert_after` positioned the new element against a default-constructed
+    /// locator.
+    Result<IdListOperation> try_insert_after(const Anchor& after, uint64_t id);
+    Result<IdListOperation> try_remove_at(const Anchor& target);
+
+    /// Apply remote operations. Returns one outcome per offered operation, in
+    /// order; see Buffer::apply_ops for why this is not `void`.
+    std::vector<ApplyOutcome> apply_ops(const std::vector<IdListOperation>& ops);
+
+    void set_deferred_budget(const DeferredBudget& budget) { m_deferred_budget = budget; }
+    [[nodiscard]] const DeferredBudget& deferred_budget() const { return m_deferred_budget; }
+    [[nodiscard]] size_t deferred_count() const { return m_deferred_count; }
+    [[nodiscard]] const std::vector<QuarantinedIdListOp>& quarantined() const {
+        return m_quarantined;
+    }
 
     std::optional<IdListOperation> undo();
     std::optional<IdListOperation> redo();
@@ -137,10 +161,16 @@ public:
     using LocalOpCallback = std::function<void(const IdListOperation&)>;
     void set_on_local_op(LocalOpCallback cb) { m_on_local_op = std::move(cb); }
 
-    /// Apply a single remote op. Returns true (false reserved for future use;
-    /// deferred ops are handled internally by apply_ops).
-    /// Fires set_on_change; does NOT fire set_on_local_op.
+    /// Apply a single remote op. Reports whether the document changed, which is
+    /// what this legacy signature can express. Prefer apply_ops() or
+    /// apply_remote_op_checked() when the distinction matters.
+    /// Fires set_on_change for an applied op only; does NOT fire
+    /// set_on_local_op.
     bool apply_remote_op(const IdListOperation& op);
+
+    /// As apply_remote_op, but distinguishes applied from duplicate, deferred,
+    /// and rejected.
+    [[nodiscard]] ApplyOutcome apply_remote_op_checked(const IdListOperation& op);
 
     /// Single-replica reset primitive. Drops all entries (visible +
     /// tombstones), the undo stack, and the deferred-op queue.
@@ -186,6 +216,22 @@ private:
     void set_entries(std::vector<IdListEntry>&& entries);
     void insert_entry(std::vector<IdListEntry>& entries, IdListEntry entry) const;
     bool try_apply(const IdListOperation& op);
+
+    /// Validate one operation and report what happened, queueing or refusing
+    /// it as the verdict requires.
+    ApplyOutcome apply_one(const IdListOperation& op);
+
+    /// Queue `op` if the budget allows, otherwise quarantine it with a reason.
+    ApplyOutcome defer_or_quarantine(const IdListOperation& op, Lamport awaiting);
+
+    /// The existing bodies, which assume their anchor was resolved.
+    IdListOperation insert_after_resolved(const Anchor& after, uint64_t id);
+    IdListOperation remove_at_resolved(const Anchor& target);
+
+    /// Index of the entry whose origin matches `target`, or npos.
+    [[nodiscard]] size_t find_origin(const std::vector<IdListEntry>& entries,
+                                     const Anchor& target) const;
+
     void retry_deferred();
     void enqueue_deferred(IdListOpEntry entry);
     void trim_undo_stack();
@@ -195,6 +241,10 @@ private:
     bool apply_concrete(const IdListUndoOpVariant& op);
 
     IdListOperationQueue m_deferred_queue;
+    size_t m_deferred_count = 0;
+    size_t m_deferred_bytes = 0;
+    DeferredBudget m_deferred_budget;
+    std::vector<QuarantinedIdListOp> m_quarantined;
 };
 
 } // namespace CollabText::Crdt

@@ -6,10 +6,14 @@
 #include "crdt/InsertionIndex.h"
 #include "crdt/Locator.h"
 #include "crdt/OperationQueue.h"
+#include "crdt/OperationValidation.h"
 #include "crdt/Operations.h"
 #include "crdt/SumTree.h"
 #include "crdt/UndoMap.h"
 
+#include <collabtext/ApplyOutcome.h>
+
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -42,12 +46,56 @@ public:
     /// Each range is a (start, end) pair denoting bytes to delete.
     /// new_text[i] is the replacement text for ranges[i].
     /// Returns the operation to broadcast.
+    ///
+    /// This entry point cannot report failure, so an invalid request returns a
+    /// default-constructed Operation and mutates nothing. Prefer
+    /// try_apply_local_edit(), which says why it refused. The reason this is
+    /// not simply an assertion is that an assertion disappears in Release:
+    /// mismatched range/text vectors used to read past the end of new_text.
     Operation apply_local_edit(
         const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
         const std::vector<std::string> &new_text);
 
+    /// Local edit that refuses invalid requests instead of asserting.
+    ///
+    /// Validates range/text cardinality, range ordering, overlap, and that
+    /// every offset lies within the visible text before touching the tree, the
+    /// clock, the version vector, or the undo stack.
+    Result<Operation> try_apply_local_edit(
+        const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
+        const std::vector<std::string> &new_text);
+
     /// Apply remote operations (handles causal ordering, deduplication).
-    void apply_ops(const std::vector<Operation> &ops);
+    ///
+    /// Returns one outcome per offered operation, in order. Each is `applied`,
+    /// `duplicate`, `deferred`, or `rejected`, and a `rejected` or `deferred`
+    /// operation has changed nothing at all. This is deliberately not `void`:
+    /// callers must be able to tell "applied" from "waiting" from "will never
+    /// apply", and ignoring the result is still allowed for callers that only
+    /// want the side effect.
+    std::vector<ApplyOutcome> apply_ops(const std::vector<Operation> &ops);
+
+    /// Fired after an operation actually changes the document. Not fired for a
+    /// duplicate, a deferral, or a rejection, so an observer can treat every
+    /// notification as a real reconciliation point.
+    using ChangeCallback = std::function<void()>;
+    void set_on_change(ChangeCallback cb) { m_on_change = std::move(cb); }
+
+    /// Bound on the deferral queue. Reaching the bound is reported to the
+    /// caller as ErrorCode::deferred_queue_full and the operation is retained
+    /// in quarantined() rather than discarded.
+    void set_deferred_budget(const DeferredBudget &budget) { m_deferred_budget = budget; }
+    [[nodiscard]] const DeferredBudget &deferred_budget() const { return m_deferred_budget; }
+
+    /// Operations currently waiting for a causal dependency.
+    [[nodiscard]] size_t deferred_count() const { return m_deferred_count; }
+
+    /// Operations evicted from the deferral queue by the budget, each with the
+    /// reason it was evicted. Retained so that lost work is recoverable
+    /// instead of merely absent.
+    [[nodiscard]] const std::vector<QuarantinedBufferOp> &quarantined() const {
+        return m_quarantined;
+    }
 
     /// Compute the edits (insertions, deletions, replacements) that
     /// transformed the visible text from its state at `since` to the
@@ -179,6 +227,19 @@ private:
     /// Try to apply a single operation; returns true if applied, false if deferred.
     bool try_apply(const Operation& op);
 
+    /// Validate one operation against the current state and report what
+    /// happened, queueing it or refusing it as the verdict requires.
+    ApplyOutcome apply_one(const Operation& op);
+
+    /// Queue `op` if the budget allows, otherwise quarantine it with a reason.
+    /// Never drops it silently: a dropped operation is lost work.
+    ApplyOutcome defer_or_quarantine(const Operation& op, Lamport awaiting);
+
+    /// The existing edit body, which assumes its arguments were validated.
+    Operation apply_validated_local_edit(
+        const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
+        const std::vector<std::string> &new_text);
+
     /// Retry any deferred operations.
     void retry_deferred();
 
@@ -218,6 +279,16 @@ private:
     /// Deferred operations awaiting causal dependencies.
     OperationQueue m_deferred_queue;
     std::set<uint16_t> m_deferred_replicas;
+
+    /// Size of the deferral queue and its approximate retained bytes, tracked
+    /// explicitly because the queue is a tree with no O(1) length.
+    size_t m_deferred_count = 0;
+    size_t m_deferred_bytes = 0;
+    DeferredBudget m_deferred_budget;
+    std::vector<QuarantinedBufferOp> m_quarantined;
+
+    /// Fired only for operations that actually changed the document.
+    ChangeCallback m_on_change;
 
     /// Undo history: each entry tracks the inserted characters and the
     /// deletion-operation IDs that this entry should undo. A normal,

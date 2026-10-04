@@ -531,6 +531,33 @@ Operation Buffer::apply_local_edit(
     const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
     const std::vector<std::string> &new_text)
 {
+    // Kept for callers that cannot handle a failure. A refused edit returns an
+    // empty operation and mutates nothing; it does not assert, because an
+    // assertion is not a behaviour a Release build is allowed to have.
+    auto result = try_apply_local_edit(ranges, new_text);
+    if (!result.ok()) return Operation{};
+    return std::move(result).value();
+}
+
+Result<Operation> Buffer::try_apply_local_edit(
+    const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
+    const std::vector<std::string> &new_text)
+{
+    // Validate against the *current* visible length before any mutation: an
+    // offset outside the document, an inverted range, or a pair of vectors that
+    // disagree in length would otherwise be consumed by the edit walk below,
+    // which assumes all three hold.
+    if (auto valid = validate_local_edit(ranges, new_text, visible_length());
+        !valid.ok()) {
+        return valid.error();
+    }
+    return apply_validated_local_edit(ranges, new_text);
+}
+
+Operation Buffer::apply_validated_local_edit(
+    const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
+    const std::vector<std::string> &new_text)
+{
     assert(ranges.size() == new_text.size());
 
     EditOperation op;
@@ -955,6 +982,8 @@ Operation Buffer::apply_local_edit(
         }
     }
 
+    if (m_on_change) m_on_change();
+
     return op;
 }
 
@@ -1305,26 +1334,95 @@ bool Buffer::try_apply(const Operation& op) {
     }, op);
 }
 
-void Buffer::apply_ops(const std::vector<Operation> &ops) {
-    for (auto &op : ops) {
-        Lamport ts = get_op_timestamp(op);
-        uint16_t replica = ts.replica_id;
+ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Lamport awaiting) {
+    const size_t bytes = estimate_operation_bytes(op);
 
-        if (m_deferred_replicas.count(replica)) {
-            // This replica already has a deferred op — defer this one too.
-            // Since ops from the same replica are causally ordered, if an
-            // earlier op couldn't apply, this one can't either.
-            enqueue_deferred({ts, op});
-            continue;
-        }
+    if (deferred_budget_exhausted(m_deferred_budget, m_deferred_count,
+                                   m_deferred_bytes, bytes)) {
+        // Backpressure, not amnesia. The operation is retained with a reason so
+        // the loss is recoverable and visible; dropping it would make "the
+        // queue was full" indistinguishable from "it never arrived".
+        const Error reason(
+            ErrorCode::deferred_queue_full,
+            "deferral budget exhausted: " + std::to_string(m_deferred_count) +
+                "/" + std::to_string(m_deferred_budget.max_operations) +
+                " operations and " + std::to_string(m_deferred_bytes) + "/" +
+                std::to_string(m_deferred_budget.max_bytes) + " bytes held",
+            "waiting on actor " + std::to_string(awaiting.replica_id) +
+                " counter " + std::to_string(awaiting.value));
+        m_quarantined.push_back(QuarantinedBufferOp{op, reason});
+        return ApplyOutcome::rejected(reason);
+    }
 
-        bool applied = try_apply(op);
-        if (!applied) {
-            m_deferred_replicas.insert(replica);
-            enqueue_deferred({ts, op});
-        }
+    enqueue_deferred({get_op_timestamp(op), op});
+    m_deferred_count += 1;
+    m_deferred_bytes += bytes;
+    return ApplyOutcome::deferred(awaiting);
+}
+
+ApplyOutcome Buffer::apply_one(const Operation& op) {
+    const Lamport ts = get_op_timestamp(op);
+
+    // Identity first, and deliberately before the duplicate check.
+    // `observed()` is vacuously true for counter 0, so asking "have I seen
+    // this?" of an operation with no usable identity reports a duplicate
+    // forever and the malformed record is never refused.
+    if (const ValidationResult identity = validate_operation_identity(op);
+        !identity.ok()) {
+        return ApplyOutcome::rejected(identity.error);
+    }
+
+    // Duplicate. Idempotence has to hold even for an operation we could not
+    // fully validate, because the commonest cause of an unexpected record is a
+    // transport re-delivering one we already applied.
+    if (m_version.observed(ts)) return ApplyOutcome::duplicate();
+
+    // Head-of-line blocking within a replica. Operations from one replica are
+    // causally ordered, so if an earlier one is waiting, this one is too.
+    if (m_deferred_replicas.count(ts.replica_id)) {
+        // The identity this one is ultimately waiting for is the earliest thing
+        // its replica is still missing; the blocked replica's own pending
+        // operation is the honest answer when it is not otherwise derivable.
+        const Lamport awaiting = ts.value > 0 ? Lamport(ts.replica_id, ts.value - 1)
+                                              : ts;
+        m_deferred_replicas.insert(ts.replica_id);
+        return defer_or_quarantine(op, awaiting);
+    }
+
+    // Validity before causality: a record that can never be applied is refused
+    // now rather than parked in the queue behind a dependency that will not
+    // make it valid.
+    const ValidationResult verdict = validate_operation(op, m_version);
+    switch (verdict.verdict) {
+    case ValidationVerdict::rejected:
+        return ApplyOutcome::rejected(verdict.error);
+    case ValidationVerdict::deferred:
+        m_deferred_replicas.insert(ts.replica_id);
+        return defer_or_quarantine(op, *verdict.awaiting);
+    case ValidationVerdict::valid:
+        break;
+    }
+
+    if (!try_apply(op)) {
+        // Validation said this was applicable, so a refusal here means the
+        // engine's own causal gate disagrees. Treat it as a deferral rather
+        // than pretending it applied: the operation is still owed.
+        m_deferred_replicas.insert(ts.replica_id);
+        return defer_or_quarantine(op, ts);
+    }
+
+    if (m_on_change) m_on_change();
+    return ApplyOutcome::applied();
+}
+
+std::vector<ApplyOutcome> Buffer::apply_ops(const std::vector<Operation> &ops) {
+    std::vector<ApplyOutcome> outcomes;
+    outcomes.reserve(ops.size());
+    for (const auto &op : ops) {
+        outcomes.push_back(apply_one(op));
     }
     retry_deferred();
+    return outcomes;
 }
 
 void Buffer::retry_deferred() {
@@ -1334,20 +1432,29 @@ void Buffer::retry_deferred() {
         m_deferred_replicas.clear();
 
         OperationQueue remaining;
+        size_t remaining_count = 0;
+        size_t remaining_bytes = 0;
         m_deferred_queue.for_each([&](const OperationEntry& entry) {
             if (m_deferred_replicas.count(entry.timestamp.replica_id)) {
                 remaining.push_item(entry);
+                ++remaining_count;
+                remaining_bytes += estimate_operation_bytes(entry.op);
                 return;
             }
             bool applied = try_apply(entry.op);
             if (applied) {
                 progress = true;
+                if (m_on_change) m_on_change();
             } else {
                 m_deferred_replicas.insert(entry.timestamp.replica_id);
                 remaining.push_item(entry);
+                ++remaining_count;
+                remaining_bytes += estimate_operation_bytes(entry.op);
             }
         });
         m_deferred_queue = std::move(remaining);
+        m_deferred_count = remaining_count;
+        m_deferred_bytes = remaining_bytes;
     }
 }
 

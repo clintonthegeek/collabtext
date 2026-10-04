@@ -979,6 +979,136 @@ One environment note worth keeping: Qt's moc silently drops every test slot in a
 file that contains a raw string literal with braces. The tests therefore use
 escaped literals. That cost P04 about an hour and is now recorded in the registry.
 
+## 2026-10-04 — P05: semantic operations are validated before anything mutates
+
+```text
+Task: P05
+Status: complete
+Baseline: 225ad23 (P04 documentation commit)
+Implementation commits: PENDING, plus this documentation commit
+Scope: libs/collabtext/src/crdt/OperationValidation.{h,cpp} (new),
+       libs/collabtext/include/collabtext/ApplyOutcome.h (new),
+       libs/collabtext/src/crdt/ApplyOutcome.cpp (new),
+       libs/collabtext/src/crdt/Buffer.{h,cpp}, libs/collabtext/src/crdt/IdList.{h,cpp},
+       libs/collabtext/include/collabtext/ActorId.h (three error codes, Error::operator bool),
+       libs/collabtext/src/identity/ReplicaState.cpp (to_string for those codes),
+       libs/collabtext/tests/tst_operation_validation.cpp (new), libs/collabtext/CMakeLists.txt,
+       docs/specs/vnext-protocol.md (sections 4.1, 4.2, 11.1a),
+       docs/specs/vnext-public-api.md (section 9.1)
+Regression: tst_operation_validation (new, 50 cases)
+Verification: targeted Debug/Release/ASan 4/4 each; fast suite 60/60 in Debug,
+       Release, and sanitizer mode with leak checking; tst_realistic 13/13 and
+       tst_benchmark 21/21 in Release; seeded fuzz at 42 and 20261003
+Artifacts: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p05/
+API/store changes: new public ApplyOutcome/ApplyOutcomeKind; apply_ops returns
+       std::vector<ApplyOutcome> instead of void; try_apply_local_edit /
+       try_insert_after / try_remove_at return Result; Buffer gains a change
+       callback and a deferral budget. No wire or store format changed.
+```
+
+### Two undefined behaviours, confirmed rather than asserted
+
+I did not take the existing `assert`s on faith. Both were compiled with
+`-DNDEBUG` against the parent commit under AddressSanitizer, which is what any
+Release build does:
+
+- `IdList::remove_at` with an anchor naming no entry. The only guard was
+  `assert(idx < entries.size())`, after which the code read `entries[idx]`
+  anyway. ASan: **heap-buffer-overflow, READ of size 8, "0 bytes after" the
+  72-byte entry vector**, at `IdList.cpp:99`.
+- `Buffer::apply_local_edit` with two ranges and one replacement string. The only
+  guard was `assert(ranges.size() == new_text.size())`, after which the edit walk
+  indexed `new_text[i]` regardless. ASan: **heap-buffer-overflow, READ of size 8**,
+  at `Buffer.cpp:743`.
+
+So these were not "assertions that might be too weak". They were assertions
+covering reads that a Release build performed anyway. Both are now refusals with
+a typed error. The reproductions are kept in `v-p05/` so the claim is checkable
+rather than something the next reader has to take on faith.
+
+A third, quieter one: `IdList::apply_concrete(IdListRemoveOp)` asserted that a
+removal's target was present and then observed the clock and version vector
+*anyway*. A removal whose target was missing therefore advanced coverage over
+work that never happened — the F3 shape, in a place the evaluation had not
+looked. It now returns false, so the operation stays owed.
+
+### The order of the checks was not my choice, and it is the interesting part
+
+I wrote the validator validity-first, causality-second, duplicate-last, because
+that is the order the spec's table is in. The tests failed, and the failure was
+instructive rather than cosmetic.
+
+`Global::observed` is `get(replica) >= value`, which is **vacuously true for
+counter 0**. So an operation stamped with counter 0 — which `Global::observe`
+silently discards, and which therefore can never be recorded or deduplicated —
+was being reported as an idempotent *duplicate*. Forever. Never applied, never
+refused, never surfaced: a malformed record that had become invisible by asking a
+question it was not entitled to ask.
+
+"Have I already applied this?" is only a meaningful question of something that
+has an identity, so identity now comes first (`validate_operation_identity`,
+cheap enough to run on every inbound record including re-deliveries). The
+resulting order — identity, duplicate, validity, causality — is written up as
+vnext-protocol.md §4.1 because the reasoning is the part worth keeping. The
+validator rejects a malformed operation *before* queueing it, so `deferred` means
+exactly one thing: well formed, waiting for a dependency.
+
+### What the tests caught in my own code
+
+Worth recording, since it is the argument for having written them first:
+
+- My first cut rejected a counter-0 operation but only *after* the duplicate
+  check, so the identity pre-check above is the fix for a bug the test suite
+  found rather than a design decision I reached by reading.
+- `insertion_origin_interval_overflow_is_rejected` failed on the error *code*,
+  not the verdict: I set the origin to `UINT32_MAX` and the length to 4, so the
+  length/scalar mismatch fired before the interval arithmetic. The test had been
+  asserting two things and checking one.
+- `each_rejection_reason_leaves_engine_state_untouched_data_driven` compared a
+  snapshot taken before payloads were generated, while generating a payload
+  meant a local edit on the buffer under test. It would have passed for the wrong
+  reason. The payloads now come from a separate buffer.
+
+### Deliberate scope calls
+
+**Returning a value rather than renaming the method.** `apply_ops` now returns
+`std::vector<ApplyOutcome>`. It does not become `apply_remote` returning one
+`ApplyOutcome`, which is what vnext-public-api.md §9 asks for. Doing the rename
+and the return-type change together would have made every call site in the tree
+change for two unrelated reasons, and it is not P05's job to decide that.
+Legibility of the diff mattered more than a cosmetic match to the table.
+
+**Keeping the old local-mutation signatures.** Here the reason was not tidiness.
+`insert_after` and `remove_at` cannot report a refusal, so they delegate to
+`try_*` variants and return an empty value; that is a real improvement, but the
+spec's `Result`-returning signature is still owed and is recorded in §9.1.
+
+**Not inventing an epoch.** Step 1 asks for epoch validation. The engine's
+operation value has no epoch in it: replicas are still 16-bit Lamport replica
+ids, not the `ActorId` P02 built. There is nothing to compare, so this is recorded
+as a gap for P06/P07/L04 rather than satisfied by a field that exists only to be
+checked. §9.1 states this plainly, because a validator that appears to check the
+epoch and does not is worse than one that says it cannot.
+
+### Verification notes
+
+LeakSanitizer ran with detection enabled (`ASAN_OPTIONS=detect_leaks=1`), and the
+handoff's warning about this sandbox blocking LSan did not reproduce — the
+sanitizer suite passed. I confirmed instrumentation rather than trusting the
+green result: `-fsanitize=address,undefined` and `-fno-omit-frame-pointer` are in
+the core compile command recorded in the run metadata, and the test binary
+carries 45 distinct sanitizer symbols.
+
+The fast selection excludes `tst_benchmark` and `tst_realistic` for runtime, and
+P05 changes the apply path both exercise. Rather than inherit the exclusion I ran
+them: 13/13 and 21/21 in Release.
+
+One discrepancy worth flagging for whoever reads the handoff next: strict
+evaluation mode exits **5**, not the 6 the kickoff handoff records. That is not
+P05. P03 removed F3's expected-failure marker when it fixed the
+coverage-intersection defect, and the handoff predates it. F4, F5, F6, F7, and F8
+all still fail with the fixing tasks the handoff names.
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest
@@ -992,8 +1122,23 @@ The [handoff](../handoff/2026-10-03-reliability-kickoff.md) gives exact commands
 known failures, and settled product decisions. V04 has since made the randomized
 suites seeded, traced, and reducible; V05 has since corrected the simulated
 network's partition and ordering model, V06 made the benchmarks report honest
-units, timed regions, and asserted convergence, and V07 added store fault
-injection with a subprocess crash harness, and V08 inventoried the intended API
-and froze behavioural fixtures. Phase 1 (M0) is complete; D01 is next in registry
-order. Do not interpret any single task as
-completing the remaining roadmap.
+units, timed regions, and asserted convergence, V07 added store fault injection
+with a subprocess crash harness, V08 inventoried the intended API and froze
+behavioural fixtures, D01 made the design constraints binding, P01 fixed the type
+and error contracts, P02 built persistent actor identity with writer leases and
+checked counters, P03 separated coverage intersection from summary aggregation,
+P04 built the strict bounded reader, and P05 made operations validate themselves
+before anything mutates. Phases 1 and M0 are complete and P01–P05 are done.
+
+**Next in serial order is P06** (versioned sparse codecs and opaque operation
+values). L01 is also structurally ready. Note that P06 is where the largest
+recorded gap closes: the engine still identifies replicas with a 16-bit Lamport
+replica id rather than the persistent `ActorId`, which is why P05 could not check
+epoch/document/stream context.
+
+Two stale statements in the handoff, both corrected above rather than silently
+carried forward: strict evaluation exits 5 known failures, not 6, because P03
+fixed F3; and `tst_operation_validation` is now part of the fast selection, so
+the fast suite is 60 executables rather than 59.
+
+Do not interpret any single task as completing the remaining roadmap.

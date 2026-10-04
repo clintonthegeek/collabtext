@@ -164,6 +164,43 @@ Rules:
 - Applying is single-owner and non-reentrant. A callback fired by an apply may
   not call back into the same engine.
 
+### 4.1 The order of the checks, and why it is load-bearing
+
+Three checks run in a fixed order, and each position is forced by a property of
+the one before it.
+
+**Identity, then `duplicate`, then validity, then causality.**
+
+Identity comes first because of a trap in the coverage test. "Have I already
+applied this?" is answered by comparing the operation's counter against the
+version vector, and a counter of **zero** is satisfied by *every* version vector
+— `get(replica) >= 0` holds unconditionally. An operation stamped 0 would
+therefore be reported as an idempotent duplicate forever: never applied, never
+refused, never surfaced. That is precisely the "accept whatever arrives" failure
+this section exists to prevent, so identity is established before "have I seen
+this?" is even a meaningful question. Counter 0 is `invalid_identity`.
+
+Validity precedes causality because a malformed operation must not be queued. If
+malformed records were deferred first and validated on retry, a record that can
+never become valid would sit in the queue indefinitely, consuming budget and
+appearing to be merely "pending". Deferred therefore means exactly one thing:
+*well formed, waiting for a dependency*.
+
+### 4.2 The deferral budget
+
+The queue is bounded in both operations and bytes, because a peer can otherwise
+drive unbounded memory growth by sending operations whose dependencies never
+arrive. `DeferredBudget` defaults to 4096 operations and 8 MiB.
+
+Exceeding it is **backpressure, not amnesia**: the caller receives
+`rejected(deferred_queue_full)`, and the operation is retained in the engine's
+quarantine with the reason and what it was waiting for. Nothing is discarded
+silently, because "the queue was full" and "it never arrived" are different
+events and a caller cannot tell them apart if the first one loses the bytes.
+
+`duplicate` and `deferred` are not visible changes and fire no change callback,
+so an observer may treat every notification as a real reconciliation point.
+
 ## 5. Coverage and durable progress
 
 Coverage answers "what has been received and applied", per (stream, actor).
@@ -331,6 +368,26 @@ The defaults are generous for real documents — 8 MiB of operation payload, 4 M
 of text, 32 levels of nesting that no real envelope reaches — and small enough
 that a hostile 4 KiB frame cannot ask for a gigabyte. `tst_decode_validation`
 holds a 200000-deep array to prove the depth bound is a bound and not a promise.
+
+### 11.1a Semantic validation bounds
+
+Decoding bounds (above) limit what an *envelope* may contain. Semantic validation
+bounds limit what one decoded *operation* may declare, checked before the
+validator walks the structure for the same reason: a record claiming a million
+deletion runs must be refused before anything iterates them.
+
+| Bound | Default | Governs |
+|---|---|---|
+| `max_ranges` | 65536 | one edit's replacement ranges |
+| `max_inserted_fragments` | 65536 | one edit's inserted fragments |
+| `max_deletion_runs` | 65536 | one edit's deletion runs |
+| `max_split_relocations` | 65536 | one edit's split relocations |
+| `max_undo_targets` | 65536 | one undo's target set |
+
+No real edit comes near these; a single Ctrl-Z undo coalesces keystrokes, not
+tens of thousands of them. They live in `ValidationLimits`
+(`src/crdt/OperationValidation.h`) rather than in the decoder because they
+constrain the *semantic* pass, which happens later and for a different reason.
 
 ### 11.2 Strictness
 

@@ -45,13 +45,17 @@ enum class ErrorCode {
     malformed,
     unknown_format,
     unsupported_version,
+    invalid_unicode,        // invalid UTF-8, lone surrogate, truncated sequence
     // identity and context
     invalid_identity,
     actor_conflict,
     writer_conflict,
     unknown_stream,
+    wrong_epoch,            // operation belongs to another membership era
     counter_regression,
     counter_exhausted,
+    // apply
+    unresolvable_anchor,    // anchor names a position this engine does not have
     // store
     corrupt_record,
     io_error,
@@ -73,6 +77,17 @@ public:
     [[nodiscard]] ErrorCode code() const noexcept { return m_code; }
     [[nodiscard]] std::string_view message() const noexcept { return m_message; }
     [[nodiscard]] std::optional<std::string> context() const { return m_context; }
+
+    /// A default-constructed Error carries no message and is therefore "no
+    /// error". Every Error built from a code and a message is truthy, so this
+    /// is unambiguous and lets a caller write `if (result.error)`.
+    [[nodiscard]] bool empty() const noexcept { return m_message.empty(); }
+    explicit operator bool() const noexcept { return !m_message.empty(); }
+
+    friend bool operator==(const Error& a, const Error& b) {
+        return a.m_code == b.m_code && a.m_message == b.m_message &&
+               a.m_context == b.m_context;
+    }
 
     /// Append context, for wrapping an error as it propagates outward.
     [[nodiscard]] Error with_context(std::string context) const {

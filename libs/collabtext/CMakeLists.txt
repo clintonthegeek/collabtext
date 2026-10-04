@@ -39,6 +39,8 @@ add_library(collabtext STATIC
     src/crdt/SegmentReader.cpp
     src/crdt/FileSync.cpp
     src/crdt/IdList.cpp
+    src/crdt/ApplyOutcome.cpp
+    src/crdt/OperationValidation.cpp
     src/crdt/StreamSerialization.cpp
     src/crdt/StreamSync.cpp
     src/crdt/ChatMessage.cpp
@@ -114,6 +116,7 @@ add_crdt_test(tst_behavior_fixtures)
 add_crdt_test(tst_actor_identity)
 add_crdt_test(tst_summary_laws)
 add_crdt_test(tst_decode_validation)
+add_crdt_test(tst_operation_validation)
 target_compile_definitions(tst_behavior_fixtures PRIVATE
     COLLABTEXT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/behavior")
 

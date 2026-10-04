@@ -761,7 +761,41 @@
         "R9"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "225ad23",
+      "implementation_commits": [
+        "PENDING"
+      ],
+      "verification_results": {
+        "targeted_debug": "tst_operation_validation, tst_opqueue, tst_convergence, tst_idlist_convergence: 4/4 pass",
+        "targeted_release": "4/4 pass",
+        "targeted_asan_ubsan_lsan": "4/4 pass with leak checking enabled (ASAN_OPTIONS=detect_leaks=1); -fsanitize=address,undefined and -fno-omit-frame-pointer confirmed in the core compile command and 45 sanitizer symbols in the test binary",
+        "operation_validation_cases": "50/50 QtTest cases",
+        "debug_fast": "60/60 CTest executables pass (59 before P05, plus tst_operation_validation)",
+        "release_fast": "60/60 pass",
+        "asan_ubsan_lsan_fast": "60/60 pass with leak detection enabled",
+        "excluded_heavy_suites": "tst_realistic 13/13 and tst_benchmark 21/21 pass in Release; these are excluded from the fast selection for runtime, so they were run separately rather than assumed",
+        "seeded_fuzz": "tst_fuzz and tst_idlist_fuzz pass at seeds 42 and 20261003",
+        "strict_evaluation": "exits 5, unchanged by P05. The handoff records 6, which is stale: P03 removed F3's expected-failure marker when it fixed the coverage-intersection defect. Remaining markers are F4, F5, F6, F7, F8 with the fixing tasks the handoff names."
+      },
+      "artifacts": [
+        "libs/collabtext/include/collabtext/ApplyOutcome.h",
+        "libs/collabtext/src/crdt/ApplyOutcome.cpp",
+        "libs/collabtext/src/crdt/OperationValidation.h",
+        "libs/collabtext/src/crdt/OperationValidation.cpp",
+        "libs/collabtext/tests/tst_operation_validation.cpp",
+        "docs/specs/vnext-protocol.md (new sections 4.1, 4.2, 11.1a)",
+        "docs/specs/vnext-public-api.md (new section 9.1)",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p05/"
+      ],
+      "limitations": [
+        "Epoch, document, and stream context are NOT validated, because the engine's operation value carries no epoch to compare: Buffer and IdList still identify replicas with a 16-bit Lamport replica_id rather than the persistent ActorId that P02 built. This is recorded as a concrete gap rather than worked around; it needs P06 (opaque operations), P07 (envelope/transport outcomes), and L04 (persisted envelope identity).",
+        "validate_* takes the engine's current Global to decide deferral, so it reports one missing dependency at a time. A caller wanting the full unmet set must call it again after each arrival.",
+        "estimate_operation_bytes is an approximation used only for the deferral budget's byte bound. It is not an exact accounting of retained memory and is not intended to be.",
+        "The deferral budget is per engine instance and not persisted. A restart resets it, so a peer that can keep an engine permanently over budget across restarts is not addressed here; L02/L05 own durable state.",
+        "ApplyOutcome::awaiting() returns Lamport rather than OperationId as the public API specifies. Documented in vnext-public-api.md section 9.1; P06 changes the type when operations become opaque.",
+        "On budget exhaustion the newest arrival is quarantined rather than the oldest entry being evicted, so the causal prefix retained in the queue can still drain. Both are permitted by vnext-protocol.md section 4; the choice is recorded because it is observable."
+      ]
     },
     {
       "id": "P06",

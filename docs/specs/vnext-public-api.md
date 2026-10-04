@@ -190,6 +190,18 @@ switch (outcome.kind()) {
 }
 ```
 
+Implemented in P05 as `<collabtext/ApplyOutcome.h>`, with one deliberate
+divergence: `awaiting()` returns `std::optional<Crdt::Lamport>` rather than
+`std::optional<OperationId>`, because the engine's operation identity is still
+the Lamport pair. The Lamport is a *witness* for the caller's benefit — "what are
+you waiting for" — and not a key they should store. P06 makes operations opaque
+and `ActorId`-keyed, at which point `awaiting()` becomes `OperationId` with no
+change to callers, who only ever compare or display the value.
+
+The order in which an engine reaches these verdicts is itself part of the
+contract; see vnext-protocol.md §4.1 for why identity is checked before
+`duplicate` and validity before causality.
+
 ## 6. Engine surface
 
 Both primitives expose the same shape. Neither is the other's alias.
@@ -331,6 +343,42 @@ needed and did not have.
 | `collect_garbage()` / `compact(Global)` | replaced by G06's certificate | receipt is not authority (C14) |
 | `src/` on the public include path | internal, `PRIVATE` | internals are not a contract (A01) |
 | `set_on_change` with no removal | `clear_on_change()` | lifecycle must be explicit (R9) |
+
+### 9.1 What P05 has and has not landed from this table
+
+P05 made the *distinguishability* real without yet performing the *rename*, and
+the difference matters for anyone writing against the branch today.
+
+Landed:
+
+- `apply_ops(...)` returns `std::vector<ApplyOutcome>`, one per offered
+  operation. The return value was added rather than the signature replaced,
+  because renaming to `apply_remote` at the same time as changing the return type
+  would have made every call site in the tree change for two unrelated reasons.
+- `ApplyOutcome` exists and is public, with `kind()`, `awaiting()`, and
+  `error()`.
+- Local mutation refuses invalid requests instead of asserting:
+  `try_apply_local_edit`, `try_insert_after`, and `try_remove_at` return
+  `Result<...>`. The old `apply_local_edit` / `insert_after` / `remove_at`
+  remain, now delegating to them and returning an empty value on refusal. This is
+  the one place where keeping the old signature was not merely convenient: it
+  was the difference between a documented refusal and undefined behaviour, since
+  the old bodies asserted and then used the unvalidated value anyway.
+- A change callback on `Buffer`, which had none, firing only for applied
+  operations.
+
+Not landed, and still owed:
+
+- `Buffer(ActorId)` instead of `Buffer(uint16_t)`. P02 built the persistent
+  identity and the checked counter; nothing has moved the engine's internal
+  identity over to it yet. Until that happens, `Buffer` still numbers replicas
+  with 16 bits and epoch/document/stream context cannot be checked at all — the
+  operation value carries no epoch to compare. P05's validator therefore checks
+  the identity fields that exist and records the epoch check as a gap rather
+  than inventing one; it belongs with P06 (opaque operations), P07 (envelope and
+  transport outcomes), and L04 (persisted envelope identity).
+- `undo()`/`redo()` returning `Result`, `resolve_anchor` returning `ApplyOutcome`,
+  and opaque operations — those are P06, S04, and A02.
 
 ## 10. Examples
 

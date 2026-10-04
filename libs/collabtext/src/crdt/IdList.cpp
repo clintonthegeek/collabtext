@@ -8,7 +8,41 @@ IdList::IdList(uint16_t replica_id)
     , m_clock(replica_id, 1)
 {}
 
+size_t IdList::find_origin(const std::vector<IdListEntry>& entries,
+                           const Anchor& target) const {
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (entries[i].origin.replica_id == target.replica_id &&
+            entries[i].origin.value == target.char_value) {
+            return i;
+        }
+    }
+    return static_cast<size_t>(-1);
+}
+
 IdListOperation IdList::insert_after(const Anchor& after, uint64_t id) {
+    // Legacy entry point: cannot report a refused request, so it returns an
+    // empty operation and mutates nothing. See try_insert_after.
+    auto result = try_insert_after(after, id);
+    if (!result.ok()) return IdListOperation{};
+    return std::move(result).value();
+}
+
+Result<IdListOperation> IdList::try_insert_after(const Anchor& after, uint64_t id) {
+    // `Anchor::min()` is the one anchor naming no existing entry: it means
+    // "insert at the head". Every other anchor must resolve, because the new
+    // locator is computed between the predecessor's and successor's positions
+    // and an unresolved anchor left those two at their defaults.
+    if (!after.is_min() && find_origin(get_entries(), after) == static_cast<size_t>(-1)) {
+        return Error(ErrorCode::unresolvable_anchor,
+                     "insert_after: anchor names actor " +
+                         std::to_string(after.replica_id) + " counter " +
+                         std::to_string(after.char_value) +
+                         ", which is not in this list");
+    }
+    return insert_after_resolved(after, id);
+}
+
+IdListOperation IdList::insert_after_resolved(const Anchor& after, uint64_t id) {
     // a. Get entries vector
     auto entries = get_entries();
 
@@ -24,20 +58,12 @@ IdListOperation IdList::insert_after(const Anchor& after, uint64_t id) {
             successor = entries.front().locator;
         }
     } else {
-        // Find the entry matching (after.replica_id, after.char_value)
-        bool found = false;
-        for (size_t i = 0; i < entries.size(); ++i) {
-            if (entries[i].origin.replica_id == after.replica_id &&
-                entries[i].origin.value == after.char_value) {
-                predecessor = entries[i].locator;
-                successor = (i + 1 < entries.size())
-                    ? entries[i + 1].locator
-                    : Locator::max();
-                found = true;
-                break;
-            }
-        }
-        assert(found && "insert_after: anchor not found in entries");
+        const size_t found = find_origin(entries, after);
+        assert(found != static_cast<size_t>(-1) &&
+               "insert_after_resolved: anchor must be resolved first");
+        predecessor = entries[found].locator;
+        successor = (found + 1 < entries.size()) ? entries[found + 1].locator
+                                                 : Locator::max();
     }
 
     // c. Allocate new locator between predecessor and successor
@@ -81,19 +107,36 @@ IdListOperation IdList::insert_after(const Anchor& after, uint64_t id) {
 }
 
 IdListOperation IdList::remove_at(const Anchor& target) {
+    // Legacy entry point; see try_remove_at.
+    auto result = try_remove_at(target);
+    if (!result.ok()) return IdListOperation{};
+    return std::move(result).value();
+}
+
+Result<IdListOperation> IdList::try_remove_at(const Anchor& target) {
+    auto entries = get_entries();
+    const size_t idx = find_origin(entries, target);
+    if (idx == static_cast<size_t>(-1)) {
+        // Previously `assert(idx < entries.size())` followed by `entries[idx]`,
+        // so a Release build read one element past the end of the vector and
+        // then tombstoned whatever happened to be there.
+        return Error(ErrorCode::unresolvable_anchor,
+                     "remove_at: anchor names actor " +
+                         std::to_string(target.replica_id) + " counter " +
+                         std::to_string(target.char_value) +
+                         ", which is not in this list");
+    }
+    return remove_at_resolved(target);
+}
+
+IdListOperation IdList::remove_at_resolved(const Anchor& target) {
     // a. Get entries
     auto entries = get_entries();
 
     // b. Find entry where origin matches target
-    size_t idx = entries.size();
-    for (size_t i = 0; i < entries.size(); ++i) {
-        if (entries[i].origin.replica_id == target.replica_id &&
-            entries[i].origin.value == target.char_value) {
-            idx = i;
-            break;
-        }
-    }
-    assert(idx < entries.size() && "remove_at: target anchor not found in entries");
+    const size_t idx = find_origin(entries, target);
+    assert(idx != static_cast<size_t>(-1) &&
+           "remove_at_resolved: anchor must be resolved first");
 
     // c. Capture target_origin before any moves
     Lamport target_origin = entries[idx].origin;
@@ -132,14 +175,14 @@ IdListOperation IdList::remove_at(const Anchor& target) {
     return op;
 }
 
-void IdList::apply_ops(const std::vector<IdListOperation>& ops) {
+std::vector<ApplyOutcome> IdList::apply_ops(const std::vector<IdListOperation>& ops) {
+    std::vector<ApplyOutcome> outcomes;
+    outcomes.reserve(ops.size());
     for (const auto& op : ops) {
-        if (m_version.observed(get_idlist_op_timestamp(op))) continue; // already applied
-        if (!try_apply(op)) {
-            enqueue_deferred(IdListOpEntry{get_idlist_op_timestamp(op), op});
-        }
+        outcomes.push_back(apply_one(op));
     }
     retry_deferred();
+    return outcomes;
 }
 
 std::optional<IdListOperation> IdList::undo() {
@@ -351,6 +394,9 @@ void IdList::local_clear() noexcept {
     m_undo_stack.clear();
     m_undo_cursor = 0;
     m_deferred_queue = IdListOperationQueue{};
+    m_deferred_count = 0;
+    m_deferred_bytes = 0;
+    m_quarantined.clear();
     // Intentionally preserved: m_replica_id, m_clock, m_version,
     // m_max_undo_depth, m_on_change, m_on_local_op.
     // Intentionally not fired: m_on_change, m_on_local_op.
@@ -366,6 +412,61 @@ void IdList::insert_entry(std::vector<IdListEntry>& entries, IdListEntry entry) 
     entries.insert(it, std::move(entry));
 }
 
+ApplyOutcome IdList::defer_or_quarantine(const IdListOperation& op,
+                                         Lamport awaiting) {
+    const size_t bytes = estimate_operation_bytes(op);
+
+    if (deferred_budget_exhausted(m_deferred_budget, m_deferred_count,
+                                   m_deferred_bytes, bytes)) {
+        const Error reason(
+            ErrorCode::deferred_queue_full,
+            "deferral budget exhausted: " + std::to_string(m_deferred_count) +
+                "/" + std::to_string(m_deferred_budget.max_operations) +
+                " operations and " + std::to_string(m_deferred_bytes) + "/" +
+                std::to_string(m_deferred_budget.max_bytes) + " bytes held",
+            "waiting on actor " + std::to_string(awaiting.replica_id) +
+                " counter " + std::to_string(awaiting.value));
+        m_quarantined.push_back(QuarantinedIdListOp{op, reason});
+        return ApplyOutcome::rejected(reason);
+    }
+
+    enqueue_deferred(IdListOpEntry{get_idlist_op_timestamp(op), op});
+    m_deferred_count += 1;
+    m_deferred_bytes += bytes;
+    return ApplyOutcome::deferred(awaiting);
+}
+
+ApplyOutcome IdList::apply_one(const IdListOperation& op) {
+    const Lamport ts = get_idlist_op_timestamp(op);
+
+    // Identity first, and deliberately before the duplicate check: `observed()`
+    // is vacuously true for counter 0, so an operation with no usable identity
+    // would be reported as a duplicate no-op forever instead of being refused.
+    if (const ValidationResult identity = validate_idlist_operation_identity(op);
+        !identity.ok()) {
+        return ApplyOutcome::rejected(identity.error);
+    }
+
+    if (m_version.observed(ts)) return ApplyOutcome::duplicate();
+
+    // Validity before causality: an operation that can never be applied is
+    // refused now rather than queued behind a dependency that cannot help.
+    const ValidationResult verdict = validate_idlist_operation(op, m_version);
+    switch (verdict.verdict) {
+    case ValidationVerdict::rejected:
+        return ApplyOutcome::rejected(verdict.error);
+    case ValidationVerdict::deferred:
+        return defer_or_quarantine(op, *verdict.awaiting);
+    case ValidationVerdict::valid:
+        break;
+    }
+
+    if (!try_apply(op)) {
+        return defer_or_quarantine(op, ts);
+    }
+    return ApplyOutcome::applied();
+}
+
 bool IdList::try_apply(const IdListOperation& op) {
     // Check causal dependencies satisfied
     if (!m_version.observed_all(get_idlist_op_version(op))) return false;
@@ -379,8 +480,12 @@ void IdList::retry_deferred() {
     while (progress) {
         progress = false;
         IdListOperationQueue remaining;
+        size_t remaining_count = 0;
+        size_t remaining_bytes = 0;
         m_deferred_queue.for_each([&](const IdListOpEntry& entry) {
             if (m_version.observed(get_idlist_op_timestamp(entry.op))) {
+                // Already applied while it waited. Not a visible change, and
+                // apply_concrete would not fire for it either.
                 progress = true;
                 return;
             }
@@ -388,9 +493,13 @@ void IdList::retry_deferred() {
                 progress = true;
             } else {
                 remaining.push_item(entry);
+                ++remaining_count;
+                remaining_bytes += estimate_operation_bytes(entry.op);
             }
         });
         m_deferred_queue = std::move(remaining);
+        m_deferred_count = remaining_count;
+        m_deferred_bytes = remaining_bytes;
     }
 }
 
@@ -421,7 +530,14 @@ bool IdList::apply_concrete(const IdListRemoveOp& op) {
             break;
         }
     }
-    assert(found && "apply_concrete(remove): target_origin not in tree — causal gate should have prevented this");
+    if (!found) {
+        // The causal gate said this removal's target should already be here. If
+        // it is not, the operation is not applicable yet and must not be
+        // recorded as applied: the old code asserted and then observed the
+        // clock and version anyway, which advanced coverage over a removal that
+        // never happened.
+        return false;
+    }
     m_clock.observe(op.timestamp);
     m_version.observe(op.timestamp);
     m_version.join(op.version);
@@ -444,10 +560,20 @@ bool IdList::apply_concrete(const IdListUndoOpVariant& op) {
 }
 
 bool IdList::apply_remote_op(const IdListOperation& op) {
-    apply_ops({op});
-    // Note: apply_ops already fires m_on_change via apply_concrete for each op.
-    // No need to fire it again; and we must NOT fire m_on_local_op (remote op).
-    return true;
+    // Legacy signature: it cannot express four outcomes, so it reports only
+    // "was this refused?". It deliberately still returns true for a duplicate,
+    // because re-delivery is a success from the caller's point of view and
+    // changing that would break callers that treat the result as "accepted".
+    // Use apply_remote_op_checked() to see the distinction.
+    return apply_remote_op_checked(op).kind() != ApplyOutcomeKind::rejected;
+}
+
+ApplyOutcome IdList::apply_remote_op_checked(const IdListOperation& op) {
+    const auto outcomes = apply_ops({op});
+    return outcomes.empty() ? ApplyOutcome::rejected(
+                                  Error(ErrorCode::malformed,
+                                        "apply_remote_op produced no outcome"))
+                            : outcomes.front();
 }
 
 } // namespace CollabText::Crdt

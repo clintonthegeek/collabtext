@@ -166,12 +166,15 @@ std::string_view to_string(ErrorCode code) {
     case ErrorCode::malformed: return "malformed";
     case ErrorCode::unknown_format: return "unknown_format";
     case ErrorCode::unsupported_version: return "unsupported_version";
+    case ErrorCode::invalid_unicode: return "invalid_unicode";
     case ErrorCode::invalid_identity: return "invalid_identity";
     case ErrorCode::actor_conflict: return "actor_conflict";
     case ErrorCode::writer_conflict: return "writer_conflict";
     case ErrorCode::unknown_stream: return "unknown_stream";
+    case ErrorCode::wrong_epoch: return "wrong_epoch";
     case ErrorCode::counter_regression: return "counter_regression";
     case ErrorCode::counter_exhausted: return "counter_exhausted";
+    case ErrorCode::unresolvable_anchor: return "unresolvable_anchor";
     case ErrorCode::corrupt_record: return "corrupt_record";
     case ErrorCode::io_error: return "io_error";
     case ErrorCode::random_source_unavailable: return "random_source_unavailable";
