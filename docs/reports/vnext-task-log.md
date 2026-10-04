@@ -1190,6 +1190,96 @@ What remains is the wide part — `Clock.h`, `UndoMapKey`, `Buffer(ActorId)`,
 140 `Lamport` construction sites in tests. L01 and S01 remain independently ready
 and neither depends on this.
 
+## 2026-10-04 — L01: durable writes that mean what they say
+
+```text
+Task: L01
+Status: complete
+Baseline: 2988a19 (P06a gate documentation commit)
+Implementation commits: 04182ed
+Scope: libs/collabtext/src/storage/DurableFile.{h,cpp} (new),
+       libs/collabtext/tests/tst_durable_file.cpp (new),
+       libs/collabtext/include/collabtext/ActorId.h (unsupported_operation),
+       libs/collabtext/src/identity/ReplicaState.cpp (to_string), libs/collabtext/CMakeLists.txt
+Regression: tst_durable_file (new, 28 cases)
+Verification: 28/28; targeted 2/2 with tst_store_fault_harness in Debug and ASan;
+       fast suite 62/62 in Debug, Release, and ASan/UBSan/LSan with leak detection;
+       5 of 5 deliberate mutations caught
+Artifacts: the three new files; mutation results in git history
+API/store changes: new internal CollabText::Storage namespace (DurableFile,
+       DurableAppendFile, FileOps, FileOpCounts, ProcessLease, StepHook).
+       No wire or store format changed.
+```
+
+### F9 stated plainly
+
+`SegmentWriter::flush()` incremented a counter named `fsync_count` after calling
+`std::ofstream::flush`, which moves bytes from user space into the kernel and no
+further. No `fsync` was ever issued. `SegmentWriter::seal_open_()` renamed a
+temporary over the destination while discarding the `std::error_code`, having
+fsynced neither the temporary nor the containing directory. So a seal that failed
+was indistinguishable from one that succeeded, and the counter named after a
+guarantee counted something else.
+
+`ReplicaState.cpp` already did this correctly in-tree — temp, fsync, rename,
+directory fsync — which is the analogue to mirror rather than a pattern to invent.
+
+### What it promises, and what it refuses to
+
+Four promises: short writes are retried and never silently truncate; the
+destination is never unlinked before its replacement exists; the order
+write → file sync → rename → directory sync is fixed and observable; a failed step
+names itself and changes nothing.
+
+One refusal. There is no power-loss claim, because nothing in user space can make
+one — `fsync` returns once the kernel has accepted the bytes, and a later power cut
+can still lose them without a stronger platform barrier. What is promised is that a
+*process* crash cannot tear a committed write, which is real and testable. The
+forked-writer test says this in a comment, because the tempting misreading is
+exactly the mistake F9 already made at a larger scale.
+
+Windows reports `unsupported_operation` for a directory sync rather than
+pretending. Verified on Linux/GCC only; A07 owns the real platform matrix.
+
+### The tests were wrong first, and this is the part worth keeping
+
+I injected faults at the *step* boundary and asserted the step order from a hook.
+Then I mutated the implementation five ways to check the tests could actually fail.
+**Four of the five passed.** Skipping the real file sync before the rename — the
+precise F9 mistake — was invisible. So was unlinking the destination first,
+skipping the directory sync, and not retrying short writes.
+
+Two distinct reasons, both worth naming:
+
+- A hook fired *around* a step observes **intent**. An implementation that
+  announces a step and does not perform it is exactly the defect under test, so a
+  hook-only test is structurally incapable of catching it.
+- Injected step failures fire *before* the real operation, so the unlink mutation
+  never executed at all. My `failure_at_each_step_preserves_old_contents` test
+  looked thorough and was checking the error path, not the filesystem.
+
+The fix was `FileOps` — the real calls injectable — plus `FileOpCounts` that
+increments only when a call returned success. Then "the file was synced before the
+rename" became checkable, and intercepting `remove()` shows *directly* that the
+destination is never unlinked. Watching only the outcome could never show that,
+since an unlink followed by a rename leaves byte-identical results.
+
+All five mutations are now caught, each by the test that should catch it.
+
+A note on my own method: the first version of the fifth mutation placed an
+increment outside a null guard and produced a segfault. I had it bracketed as
+"caught", which would have been claiming evidence I did not have — a crash is a
+non-zero exit, not a demonstration that the tests check counter accuracy. Redone
+correctly (double-counting an operation), it is caught by the exact-count
+assertions, as it should be.
+
+### Still live
+
+`SegmentWriter` and `FileSync` are not converted yet; that is L02. Until then F9 is
+fixed *in the new primitive* and still live in the two call sites that increment
+the counter without syncing. Saying otherwise would be the same category of
+mistake this task exists to fix.
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest

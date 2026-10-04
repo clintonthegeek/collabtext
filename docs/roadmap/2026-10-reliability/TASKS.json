@@ -980,7 +980,33 @@
         "R13"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "2988a19",
+      "implementation_commits": [
+        "04182ed"
+      ],
+      "verification_results": {
+        "durable_file_cases": "28/28 QtTest cases, including a forked-writer crash test",
+        "targeted_debug": "tst_durable_file and tst_store_fault_harness 2/2",
+        "targeted_asan_ubsan_lsan": "2/2 with leak detection enabled",
+        "debug_fast": "62/62 CTest executables",
+        "release_fast": "62/62",
+        "asan_ubsan_lsan_fast": "62/62 with leak detection enabled",
+        "mutation_checks": "5 of 5 deliberate defects caught: skipped real file sync before rename, destination unlinked before rename, skipped directory sync after rename, short writes not retried, operations double-counted"
+      },
+      "artifacts": [
+        "libs/collabtext/src/storage/DurableFile.h",
+        "libs/collabtext/src/storage/DurableFile.cpp",
+        "libs/collabtext/tests/tst_durable_file.cpp",
+        "docs/reports/vnext-task-log.md"
+      ],
+      "limitations": [
+        "Verified on Linux/GCC only. The Windows and macOS paths exist behind adapters and are compiled nowhere in this environment; Windows reports unsupported_operation for a directory sync and uses MoveFileEx with REPLACE_EXISTING. A07 owns the real platform matrix, so nothing here should be read as cross-platform certification.",
+        "No power-loss claim. fsync returns once the kernel accepts the bytes. The promise is that a process crash cannot tear a committed write, which the forked-writer test covers; nothing here survives losing the page cache, and the test says so in a comment so the next reader does not infer otherwise.",
+        "SegmentWriter and FileSync are NOT yet converted to use these primitives; that is L02. Until then the F9 defect is fixed in the new primitive but still live in SegmentWriter::flush() and seal_open_().",
+        "The injected-fault tests double-count as platform tests on Linux because the real syscalls are exercised; they do not substitute for running the suite on each platform.",
+        "A corrupt or unreadable lease file is treated as not-held so a crash cannot wedge the store permanently, while a lease file that exists but cannot be read is treated as held. That asymmetry is deliberate but is a judgement call, not a derived fact."
+      ]
     },
     {
       "id": "L02",
