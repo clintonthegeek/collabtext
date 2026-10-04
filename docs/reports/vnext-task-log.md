@@ -273,6 +273,106 @@ post-heal convergence, never convergence while partitioned. These are Linux/GCC
 runs and make no performance or cross-platform claim.
 
 
+## 2026-10-04 — V06: honest benchmark timing, units, correctness, memory labels
+
+```text
+Task: V06
+Status: complete
+Baseline: 1a51d44 (V05 documentation commit)
+Implementation commits: 74732ca, plus this documentation commit
+Scope: libs/collabtext/tests/BenchmarkSupport.h (new),
+       libs/collabtext/tests/tst_benchmark.cpp
+Regression: measurement_reports_carry_units_and_honest_availability (new) for the
+       report contract; catch_up_timed_region_contains_the_work (new) for the
+       timing repair; the divergence and reconnect assertions inside
+       multi_replica_convergence, multi_replica_hotspot,
+       realistic_3_client_throughput, and reconnect_sync_cost
+Verification: 21/21 benchmark cases pass in Release (~60 s) and Debug; fast suite
+       54/54 in Debug, Release, and sanitizer mode
+Artifacts: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v06-*
+API/store changes: none. BenchmarkSupport.h is test-only infrastructure.
+Known limits: no corrected figure is comparable to the old mislabelled values;
+       process RSS is not engine memory; reclamation remains disabled, so no GC
+       speedup can be measured
+Next ready tasks: V07, V08
+```
+
+### What changed
+
+The benchmarks emitted numbers that could not be read as measurements.
+
+**Units.** `multi_replica_convergence` and `multi_replica_hotspot` wrote the
+*total* convergence time into a field labelled `ns/op`, so anyone comparing them
+against the genuine per-edit figures was comparing different quantities. Every
+result now reports its wall duration, the named work count it came from, and
+`source_edits` and `remote_applications` as separate counts. "Ops/sec" is
+derived from those two numbers and never printed alone.
+
+**Correctness as an assertion.** Both multi-replica benchmarks printed
+`converged: NO` and still passed. A benchmark that reports a correctness failure
+as a log line is worse than no benchmark, because it reads like evidence. They
+now fail on divergent content, as do the realistic 3-client session and the
+reconnect benchmark.
+
+**Timing regions.** `reconnect_sync_cost` reconnected, ticked, and *then* started
+the clock — it measured the leftovers of work already done, which is why a bulk
+catch-up reported a near-zero "sync cost". The timed region now contains
+reconnect, delivery of everything that piled up while partitioned, and the
+deferred retry, and the benchmark asserts that operations were applied inside
+the region. A new controlled case (`catch_up_timed_region_contains_the_work`)
+recreates an identical partitioned network from a recorded trace, times the
+catch-up, and asserts nonzero work and nonzero duration with **no speed
+threshold** — a threshold on shared CI hardware measures the hardware.
+
+**Memory.** `mem_delta` was zero in every row because nothing ever set it, and
+the RSS helper returned 0 when `/proc` was unreadable, so "no data" printed as
+"0 KB". Metrics are now optional: absent prints as `absent` and `null` in JSON.
+RSS is labelled `process_rss` and never presented as engine memory; engine size
+is reported structurally as fragment/entry, tombstone, and visible/deleted byte
+counts. A sampled RSS difference is labelled a delta, because "no change" is not
+the claim "0 KB of memory".
+
+**Comparisons that compared the wrong things.** The GC before/after benchmark
+measured one buffer before and after the call, conflating the call with a warm
+allocator and a different fragment layout. Both sides now execute the same
+recorded workload on independently recreated engines, and the rebuild is
+verified to reproduce the recorded tombstone and fragment counts — a rebuild that
+silently dropped the tombstones would have compared an empty document with
+itself, which is exactly what happened on the first attempt.
+`gc_under_sustained_editing` was rebuilt the same way: one recorded session, two
+recreated runs.
+
+Timing moved to `steady_clock` throughout.
+
+### Acceptance evidence
+
+A new test asserts the report format itself: units spelled out, work counts
+named, absent metrics null rather than zero. It costs milliseconds and must not
+be weakened to accommodate a measurement.
+
+`gc_effectiveness` had been failing since V03 — it asserted that compaction
+removed tombstones. Like `tst_realistic` before it, it was hidden by the
+fast-suite exclusion. It now asserts the containment contract: nothing is
+reclaimed, fragment and tombstone counts are unchanged, and the benchmark says
+out loud that no reclamation speedup is claimed.
+
+21/21 benchmark cases pass in Release (~60 s) and Debug; the fast suite is 54/54
+in Debug, Release, and sanitizer mode. `v06-report-table.md` holds the corrected
+53-row report table with every unit spelled out, and
+`v06-benchmark-release.log` the raw output.
+
+### Limits
+
+No corrected figure may be compared with the old mislabelled values — the units
+differ, so the comparison would be meaningless rather than merely unflattering.
+Process RSS includes Qt, the allocator, and the harness; engine memory is only
+ever reported as structural counts, not as bytes. Because reclamation is disabled
+until G06, no GC speedup can be measured at all: the benchmark compares two
+identical states and says so. `tst_benchmark` remains outside the fast CTest
+selection because it is a long-running suite in Debug (~8 minutes); its Release
+run is about a minute.
+
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest
@@ -285,6 +385,7 @@ against V02's production code.
 The [handoff](../handoff/2026-10-03-reliability-kickoff.md) gives exact commands,
 known failures, and settled product decisions. V04 has since made the randomized
 suites seeded, traced, and reducible; V05 has since corrected the simulated
-network's partition and ordering model. V06, V07, and V08 remain structurally
-ready in phase 1. Do not interpret any single task as
+network's partition and ordering model, and V06 made the benchmarks report
+honest units, timed regions, and asserted convergence. V07 and V08 remain
+structurally ready in phase 1. Do not interpret any single task as
 completing the remaining roadmap.

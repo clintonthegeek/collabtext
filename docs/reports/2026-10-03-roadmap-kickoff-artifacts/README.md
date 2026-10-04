@@ -1,4 +1,4 @@
-# V01–V05 verification artifacts
+# V01–V06 verification artifacts
 
 These are portable excerpts of actual verification runs on 2026-10-03. See
 [the task log](../vnext-task-log.md) and
@@ -42,6 +42,19 @@ installation requirements.
 | V05 `tst_network_sim` | 16/16 cases pass at the default seed and at seed 42 |
 | V05 realistic, seeds 42 and 20261003 | 13/13 pass; two runs at each seed produce byte-identical traces |
 | V05 recorded scenario replay | 11/11 realistic scenarios replay to completion and converge |
+| V06 benchmark suite, Release / Debug | 21/21 cases pass in each mode |
+| V06 final Debug / Release fast | 54/54 CTest executables pass in each mode |
+| V06 final sanitizer fast selection | 54/54 pass with ASan, UBSan, and leak checking enabled |
+| V06 corrected report table | 53 rows with units, work counts, and absent metrics |
+
+### V06 additions
+
+`v06-benchmark-release.log` is the full Release benchmark output and
+`v06-report-table.md` is the corrected report table extracted from it: every row
+carries its wall duration, work count and label, source-edit and
+remote-application counts, structural engine size, and an explicit
+`absent` where a metric was not measured. `v06-debug-fast/`, `v06-release-fast/`,
+and `v06-asan-fast/` hold the 54-executable fast-selection evidence.
 
 ### V05 additions
 

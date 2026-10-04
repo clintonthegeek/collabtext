@@ -299,7 +299,36 @@
         "R5"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "1a51d44",
+      "implementation_commits": [
+        "74732ca"
+      ],
+      "verification_results": {
+        "benchmark_release": "21/21 cases pass in Release (~60 s)",
+        "benchmark_debug": "21/21 cases pass in Debug (~8 minutes)",
+        "report_contract": "measurement_reports_carry_units_and_honest_availability passes: units spelled out, work counts named, absent metrics null",
+        "timed_region": "catch_up_timed_region_contains_the_work asserts nonzero work and nonzero duration inside the timed region, with no speed threshold",
+        "convergence_asserted": "multi_replica_convergence, multi_replica_hotspot, realistic_3_client_throughput and reconnect_sync_cost now fail on divergent content",
+        "debug_fast": "54/54 CTest executables pass",
+        "release_fast": "54/54 CTest executables pass",
+        "asan_ubsan_lsan_fast": "54/54 pass with leak checking enabled",
+        "pre_existing_failure_fixed": "gc_effectiveness asserted removed > 0, false since V03 containment and hidden by the fast-suite exclusion"
+      },
+      "artifacts": [
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v06-benchmark-release.log",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v06-report-table.md",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v06-debug-fast/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v06-release-fast/",
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v06-asan-fast/"
+      ],
+      "limitations": [
+        "No corrected figure is comparable to the pre-V06 values: their units differed, so the comparison would be meaningless rather than merely unflattering.",
+        "Process RSS includes Qt, the allocator, and the harness; engine memory is reported only as structural counts, never as bytes.",
+        "Reclamation is disabled until G06, so no GC speedup is measurable: the GC comparison runs two identical states and claims nothing.",
+        "tst_benchmark stays outside the fast CTest selection because it is long-running; its Release run is about a minute.",
+        "These are Linux/GCC timings on shared hardware and make no performance claim beyond the reported figures."
+      ]
     },
     {
       "id": "V07",

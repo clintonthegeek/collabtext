@@ -171,5 +171,32 @@
     "exit_code": 0,
     "command": "build-roadmap-debug/reduce-trace --replay over both trace sets",
     "log": "v05-replay-check.txt"
+  },
+  "v06-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T002119Z-1132753",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v06-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T002200Z-1134865",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v06-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T002218Z-1136750",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v06-benchmark-release": {
+    "exit_code": 0,
+    "command": "QT_QPA_PLATFORM=offscreen build-roadmap-release/libs/collabtext/tst_benchmark",
+    "log": "v06-benchmark-release.log",
+    "table": "v06-report-table.md",
+    "result": "21/21 cases; 53 reported rows"
+  },
+  "v06-benchmark-debug": {
+    "exit_code": 0,
+    "command": "QT_QPA_PLATFORM=offscreen build-roadmap-debug/libs/collabtext/tst_benchmark",
+    "result": "21/21 cases; about 8 minutes in Debug"
   }
 }
