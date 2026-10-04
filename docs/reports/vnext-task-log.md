@@ -985,7 +985,7 @@ escaped literals. That cost P04 about an hour and is now recorded in the registr
 Task: P05
 Status: complete
 Baseline: 225ad23 (P04 documentation commit)
-Implementation commits: PENDING, plus this documentation commit
+Implementation commits: 88576ba, plus this documentation commit
 Scope: libs/collabtext/src/crdt/OperationValidation.{h,cpp} (new),
        libs/collabtext/include/collabtext/ApplyOutcome.h (new),
        libs/collabtext/src/crdt/ApplyOutcome.cpp (new),
