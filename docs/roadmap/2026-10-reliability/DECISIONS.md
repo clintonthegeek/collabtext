@@ -1,6 +1,14 @@
 # Accepted design and lifecycle decisions
 
-**Updated:** 2026-10-03. All Q1–Q4 are resolved by the user's replies. Improve the existing native C++ engine incrementally. No backend choice remains open. Any new questions belong in ordinary conversation text for this user.
+**Updated:** 2026-10-04. All Q1–Q4 are resolved by the user's replies. Improve the existing native C++ engine incrementally. No backend choice remains open. Any new questions belong in ordinary conversation text for this user.
+
+**Applied in:** [vnext-design-constraints.md](../specs/vnext-design-constraints.md)
+(D01), which turns each answer below into numbered constraints (C1–C14), the
+release invariants a release must actually have (R1–R10), and the intended
+public behavior (B1–B8). This file remains the record of *what the user decided*;
+the constraints document is the record of *what that means for a task*. Where the
+two could be read differently, the constraints document governs the
+implementation and this file governs the intent.
 
 ## Q1 — Fresh start: resolved
 
@@ -55,4 +63,29 @@
 - Verify Linux first and test other claimed platforms rather than inferring portability.
 - Detect observable identity conflicts; ordinary shared-document copies must not copy private writer identity. Arbitrary identical disconnected device clones cannot always be detected before exchange.
 
-D01 still supplies the complete native-engine/fresh-format/API contract after the V08 inventory. All product choices are settled; documenting them does not complete unimplemented tasks or substitute for the technical design/model gates at S02/G01.
+## Applied, not just recorded (D01)
+
+D01 has carried all four answers forward into a binding contract:
+
+| Answer | Constraints | What a task must do |
+|---|---|---|
+| Q1 fresh start | C1, C5, C6, C7 | Design formats freely; version per artifact; reject unknown versions; add no decoder, importer, shim, or dual-version support |
+| Q2 explicit retirement | C2, R9, R10 | Keep offline members enrolled; only explicit retirement changes membership; reminders are advisory only |
+| Q3 persistent undo and redo | C3, R5, R7 | Both stacks restore across reopen within limits; no reclamation releases a retained obligation |
+| Q4 improve the native engine | C4, C8–C14, R1–R4, R6, R8 | Repair in place behind a failing test and, for algorithms, a specification plus an independent model; optimize after correctness; no substitution layer, vendor, or parallel engine |
+
+The acceptance check for that contract is executable:
+
+```sh
+python3 docs/roadmap/2026-10-reliability/check-scope.py --strict
+```
+
+It scans the task registry for a Rust rewrite, Yrs adoption, a backend
+experiment, or legacy-data migration being *required* rather than prohibited, and
+exits nonzero if any task's text needs a human decision. Current result: 62 tasks,
+20 hits, all prohibitive or explicitly allowed, 0 needing review.
+
+Documenting these decisions does not complete unimplemented tasks and does not
+substitute for the technical design/model gates at S02/G01. Those gates still
+require their specifications and executable models; C10 says so explicitly, and a
+gate may not redirect work into a replacement engine.

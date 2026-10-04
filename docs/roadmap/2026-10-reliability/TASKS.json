@@ -472,7 +472,8 @@
         "R13"
       ],
       "gate": "All product-policy questions resolved. Complete the written design constraints using V08; no additional user backend approval is needed.",
-      "status": "not_started"
+      "status": "in_progress",
+      "baseline_revision": "529b80a"
     },
     {
       "id": "P01",
