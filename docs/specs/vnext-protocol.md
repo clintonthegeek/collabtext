@@ -296,3 +296,85 @@ The multi-stream case is the one with no current violation and no red test,
 because today there is only ever one stream: `StreamSync` mints one sequence per
 replica name. The violation appears the moment a second stream exists, which is
 why §1.2 forbids the scalar by construction rather than by warning.
+
+## 11. Decoder bounds and strictness
+
+P04. This section is normative for every decoder that reads a frame or a store
+file, and it is where F10's first clause becomes checkable.
+
+### 11.1 Bounds are configuration, checked before allocation
+
+A decoder that reads first and complains afterwards has already lost: the bound
+that matters is the one that stops the allocation, not the one that notices it
+afterwards. Every bound is therefore checked *before* the allocation it governs,
+and the bounds are configuration rather than constants so an operation format
+can tighten them without touching the reader.
+
+| Bound | Default | Governs |
+|---|---|---|
+| `max_input_bytes` | 8 MiB | the whole document |
+| `max_nesting_depth` | 32 | nested containers |
+| `max_elements` | 100000 | total values anywhere in the document |
+| `max_container_elements` | 100000 | members of one array or object |
+| `max_text_bytes` | 4 MiB | one string value, **after** unescaping |
+| `max_key_bytes` | 1 KiB | one object key |
+| `max_number_digits` | 20 | significant digits in one number |
+| `max_number_exponent` | 308 | absolute decimal exponent |
+
+Two of these are stated in the unescaped domain on purpose. `max_text_bytes` is
+checked against the decoded value, so a short frame of `A` repeats cannot
+ask for a large allocation; and `max_number_exponent` is separate from
+`max_number_digits` so that `1e999999999` is rejected by an exponent rule rather
+than by a digit count it never reaches.
+
+The defaults are generous for real documents — 8 MiB of operation payload, 4 MiB
+of text, 32 levels of nesting that no real envelope reaches — and small enough
+that a hostile 4 KiB frame cannot ask for a gigabyte. `tst_decode_validation`
+holds a 200000-deep array to prove the depth bound is a bound and not a promise.
+
+### 11.2 Strictness
+
+Every item here is deliberate, and relaxing one is a protocol change:
+
+- **Complete consumption.** The reader requires the whole input to be one value.
+  `{"t":"u"}garbage` is a syntax error. Trailing *whitespace* is insignificant
+  and is the only thing permitted after the root value.
+- **Duplicate object keys are rejected**, not resolved last-wins. A duplicate
+  means two writers disagreed about a field, and silently preferring one of them
+  is how that disagreement becomes invisible.
+- **Key order is arbitrary** and carries no meaning. Two documents that differ
+  only in key order decode to equal values; this is an acceptance criterion, not
+  an accident of a hash-ordered map.
+- **No trailing commas, no comments, no unquoted or single-quoted keys, no
+  `NaN`/`Infinity`, no leading zeros.**
+- **`\u` escapes must form surrogate pairs.** A lone surrogate is an error
+  reported at the high surrogate's own escape. Encoded surrogates in raw text
+  (CESU-8/WTF-8) are errors too, since a "valid" decoder that accepts them is how
+  unpaired surrogates reach a document.
+- **Raw text is validated as UTF-8**, and a truncated sequence is an error rather
+  than a shorter string.
+- **Numbers keep their literal text.** `1.0` and `1` are distinguishable on the
+  wire; a decoder that collapses them has discarded information it will be asked
+  to reproduce on encode.
+- **Raw control characters below 0x20 are rejected in strings**, and every error
+  offset points at the start of the offending scalar, escape, or pair — never at
+  a byte inside one.
+
+### 11.3 Error reporting
+
+Every rejection carries a kind, an absolute byte offset, and a bounded,
+single-line context string, because a decoder that says "no" without saying where
+is barely better than one that says "yes" when it should not. A UTF-8 failure
+keeps the underlying reason whole rather than flattening it to a string: an
+overlong encoding and an encoded surrogate are different bugs for whoever has to
+fix the writer.
+
+### 11.4 Retained versus rejected
+
+A parse failure is one thing; an unknown `t` identifier or an unsupported `v` is
+another. §3 step 2 makes the second *retained* rather than rejected, because the
+bytes are valid and a later build may understand them. The reader therefore
+reports `unsupported_version()` separately from `parse()` failing, and
+`parse_object_envelope()` returns that as a `retained` flag for the transport to
+act on. Throwing away a newer writer's operation as corruption would lose work
+(R1).

@@ -1,0 +1,41 @@
+Root: /home/clinton/dev/collabtext/.worktrees/reliability-v2
+Mode: asan
+Regex: tst_decode_validation|tst_utf8
+Workers: 2
+-- Configuring done (0.2s)
+-- Generating done (0.4s)
+-- Build files have been written to: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan
+Selected 2 tests; compiler: c++ (GCC) 16.2.1 20260810
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Automatic MOC and UIC for target collabtext
+[  0%] Built target collabtext_autogen
+[  6%] Building CXX object libs/collabtext/CMakeFiles/collabtext.dir/src/codec/JsonReader.cpp.o
+[  6%] Building CXX object libs/collabtext/CMakeFiles/collabtext.dir/src/codec/Utf.cpp.o
+[ 13%] Linking CXX static library libcollabtext.a
+[ 93%] Built target collabtext
+[ 93%] Built target tst_utf8_autogen_timestamp_deps
+[ 93%] Automatic MOC and UIC for target tst_utf8
+[ 93%] Built target tst_utf8_autogen
+[100%] Building CXX object libs/collabtext/CMakeFiles/tst_utf8.dir/tests/tst_utf8.cpp.o
+[100%] Linking CXX executable tst_utf8
+[100%] Built target tst_utf8
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 93%] Built target collabtext
+[ 93%] Built target tst_decode_validation_autogen_timestamp_deps
+[ 93%] Automatic MOC and UIC for target tst_decode_validation
+[ 93%] Built target tst_decode_validation_autogen
+[100%] Building CXX object libs/collabtext/CMakeFiles/tst_decode_validation.dir/tests/tst_decode_validation.cpp.o
+[100%] Building CXX object libs/collabtext/CMakeFiles/tst_decode_validation.dir/tst_decode_validation_autogen/mocs_compilation.cpp.o
+[100%] Linking CXX executable tst_decode_validation
+[100%] Built target tst_decode_validation
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan
+    Start  8: tst_utf8
+    Start 17: tst_decode_validation
+1/2 Test #17: tst_decode_validation ............   Passed    0.12 sec
+2/2 Test  #8: tst_utf8 .........................   Passed    0.15 sec
+
+100% tests passed out of 2
+
+Total Test time (real) =   0.15 sec
+Verification exit: 0; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T024404Z-1346616

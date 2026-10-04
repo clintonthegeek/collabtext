@@ -1,0 +1,71 @@
+{
+  "root": "/home/clinton/dev/collabtext/.worktrees/reliability-v2",
+  "revision": "b2fb7d0f432440adc6a28afad6b20b1551daf0c5",
+  "mode": "release",
+  "regex": "tst_decode_validation|tst_utf8",
+  "jobs": 2,
+  "test_count": 2,
+  "tests": [
+    "tst_utf8",
+    "tst_decode_validation"
+  ],
+  "compiler": "/usr/bin/c++",
+  "compiler_version": "c++ (GCC) 16.2.1 20260810\nCopyright (C) 2026 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "representative_compile_command": {
+    "directory": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext",
+    "command": "/usr/bin/c++ -DQT_CORE_LIB -DQT_GUI_LIB -DQT_NO_DEBUG -DQT_TESTCASE_BUILDDIR=\\\"/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext\\\" -DQT_TESTCASE_SOURCEDIR=\\\"/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext\\\" -DQT_TESTLIB_LIB -DQT_WIDGETS_LIB -I/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/collabtext_autogen/include -I/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/include -I/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/src -isystem /usr/include/qt6/QtCore -isystem /usr/include/qt6 -isystem /usr/lib/qt6/mkspecs/linux-g++ -isystem /usr/include/qt6/QtGui -isystem /usr/include/qt6/QtWidgets -isystem /usr/include/qt6/QtTest -O3 -DNDEBUG -std=gnu++20 -fPIC -mno-direct-extern-access -o CMakeFiles/collabtext.dir/src/crdt/Buffer.cpp.o -c /home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/src/crdt/Buffer.cpp",
+    "file": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/src/crdt/Buffer.cpp",
+    "output": "libs/collabtext/CMakeFiles/collabtext.dir/src/crdt/Buffer.cpp.o"
+  },
+  "compile_commands": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/compile_commands.json",
+  "configuration": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CXX_FLAGS": "",
+    "CMAKE_CXX_FLAGS_DEBUG": "-g",
+    "CMAKE_CXX_FLAGS_MINSIZEREL": "-Os -DNDEBUG",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+    "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O2 -g -DNDEBUG",
+    "COLLABTEXT_ENABLE_SANITIZERS": "OFF",
+    "CMAKE_CXX_FLAGS-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_DEBUG-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_MINSIZEREL-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_RELEASE-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_RELWITHDEBINFO-ADVANCED": "1"
+  },
+  "commands": [
+    [
+      "cmake",
+      "-S",
+      "/home/clinton/dev/collabtext/.worktrees/reliability-v2",
+      "-B",
+      "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCOLLABTEXT_ENABLE_SANITIZERS=OFF",
+      "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+    ],
+    [
+      "cmake",
+      "--build",
+      "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release",
+      "--parallel",
+      "2",
+      "--target",
+      "tst_utf8",
+      "tst_decode_validation"
+    ],
+    [
+      "ctest",
+      "--test-dir",
+      "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release",
+      "-R",
+      "tst_decode_validation|tst_utf8",
+      "--parallel",
+      "2",
+      "--output-on-failure",
+      "--no-tests=error"
+    ]
+  ],
+  "test_environment": {
+    "QT_QPA_PLATFORM": "offscreen"
+  }
+}

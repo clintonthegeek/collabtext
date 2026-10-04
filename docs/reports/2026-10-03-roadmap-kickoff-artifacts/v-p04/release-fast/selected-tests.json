@@ -1,0 +1,1778 @@
+{
+  "backtraceGraph" : 
+  {
+    "commands" : 
+    [
+      "add_test",
+      "add_crdt_test"
+    ],
+    "files" : 
+    [
+      "/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/CMakeLists.txt"
+    ],
+    "nodes" : 
+    [
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 97,
+        "parent" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 1
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 98,
+        "parent" : 3
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 4
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 99,
+        "parent" : 6
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 7
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 100,
+        "parent" : 9
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 10
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 101,
+        "parent" : 12
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 13
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 102,
+        "parent" : 15
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 16
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 103,
+        "parent" : 18
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 19
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 104,
+        "parent" : 21
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 22
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 105,
+        "parent" : 24
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 25
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 106,
+        "parent" : 27
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 28
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 107,
+        "parent" : 30
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 31
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 108,
+        "parent" : 33
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 34
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 109,
+        "parent" : 36
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 37
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 113,
+        "parent" : 39
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 40
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 114,
+        "parent" : 42
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 43
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 115,
+        "parent" : 45
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 46
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 116,
+        "parent" : 48
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 49
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 128,
+        "parent" : 51
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 52
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 129,
+        "parent" : 54
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 55
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 131,
+        "parent" : 57
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 58
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 132,
+        "parent" : 60
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 61
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 133,
+        "parent" : 63
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 64
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 134,
+        "parent" : 66
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 67
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 135,
+        "parent" : 69
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 70
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 136,
+        "parent" : 72
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 73
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 138,
+        "parent" : 75
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 76
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 139,
+        "parent" : 78
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 79
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 140,
+        "parent" : 81
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 82
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 141,
+        "parent" : 84
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 85
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 142,
+        "parent" : 87
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 88
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 143,
+        "parent" : 90
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 91
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 144,
+        "parent" : 93
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 94
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 145,
+        "parent" : 96
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 97
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 146,
+        "parent" : 99
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 100
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 147,
+        "parent" : 102
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 103
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 148,
+        "parent" : 105
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 106
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 149,
+        "parent" : 108
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 109
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 150,
+        "parent" : 111
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 112
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 151,
+        "parent" : 114
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 115
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 152,
+        "parent" : 117
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 118
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 153,
+        "parent" : 120
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 121
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 154,
+        "parent" : 123
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 124
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 155,
+        "parent" : 126
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 127
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 156,
+        "parent" : 129
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 130
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 157,
+        "parent" : 132
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 133
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 158,
+        "parent" : 135
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 136
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 159,
+        "parent" : 138
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 139
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 160,
+        "parent" : 141
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 142
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 161,
+        "parent" : 144
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 145
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 162,
+        "parent" : 147
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 148
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 163,
+        "parent" : 150
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 151
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 164,
+        "parent" : 153
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 154
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 165,
+        "parent" : 156
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 157
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 166,
+        "parent" : 159
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 160
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 167,
+        "parent" : 162
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 163
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 1,
+        "file" : 0,
+        "line" : 168,
+        "parent" : 165
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 94,
+        "parent" : 166
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 175,
+        "parent" : 168
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 182,
+        "parent" : 170
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 189,
+        "parent" : 172
+      }
+    ]
+  },
+  "kind" : "ctestInfo",
+  "tests" : 
+  [
+    {
+      "backtrace" : 2,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_clock"
+      ],
+      "name" : "tst_clock",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 5,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_locator"
+      ],
+      "name" : "tst_locator",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 8,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_buffer"
+      ],
+      "name" : "tst_buffer",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 11,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_convergence"
+      ],
+      "name" : "tst_convergence",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 14,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_sumtree"
+      ],
+      "name" : "tst_sumtree",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 17,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_anchor"
+      ],
+      "name" : "tst_anchor",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 20,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_opqueue"
+      ],
+      "name" : "tst_opqueue",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 23,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_utf8"
+      ],
+      "name" : "tst_utf8",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 26,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_rope"
+      ],
+      "name" : "tst_rope",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 29,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_fuzz"
+      ],
+      "name" : "tst_fuzz",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 32,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_trace_reduction"
+      ],
+      "name" : "tst_trace_reduction",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 35,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_network_sim"
+      ],
+      "name" : "tst_network_sim",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 38,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_store_fault_harness"
+      ],
+      "name" : "tst_store_fault_harness",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 41,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_behavior_fixtures"
+      ],
+      "name" : "tst_behavior_fixtures",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 44,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_actor_identity"
+      ],
+      "name" : "tst_actor_identity",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 47,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_summary_laws"
+      ],
+      "name" : "tst_summary_laws",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 50,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_decode_validation"
+      ],
+      "name" : "tst_decode_validation",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 53,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_rope_integration"
+      ],
+      "name" : "tst_rope_integration",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 56,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_undomap"
+      ],
+      "name" : "tst_undomap",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 59,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_gc"
+      ],
+      "name" : "tst_gc",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 62,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_evaluation_regressions"
+      ],
+      "name" : "tst_evaluation_regressions",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 65,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_serialization"
+      ],
+      "name" : "tst_serialization",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 68,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_edits_since"
+      ],
+      "name" : "tst_edits_since",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 71,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_filesync"
+      ],
+      "name" : "tst_filesync",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 74,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_multicursor"
+      ],
+      "name" : "tst_multicursor",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 77,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_identity_json"
+      ],
+      "name" : "tst_identity_json",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 80,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_identity_store"
+      ],
+      "name" : "tst_identity_store",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 83,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_identity_projector"
+      ],
+      "name" : "tst_identity_projector",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 86,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_presence_manager"
+      ],
+      "name" : "tst_presence_manager",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 89,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_identity_widgets"
+      ],
+      "name" : "tst_identity_widgets",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 92,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_collab_plain_text_edit"
+      ],
+      "name" : "tst_collab_plain_text_edit",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 95,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_scroll_stability"
+      ],
+      "name" : "tst_scroll_stability",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 98,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_stream_sync"
+      ],
+      "name" : "tst_stream_sync",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 101,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_opstream_streamsync"
+      ],
+      "name" : "tst_opstream_streamsync",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 104,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_opstream_acks"
+      ],
+      "name" : "tst_opstream_acks",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 107,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_opstream_convergence_buffer"
+      ],
+      "name" : "tst_opstream_convergence_buffer",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 110,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_opstream_convergence_idlist"
+      ],
+      "name" : "tst_opstream_convergence_idlist",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 113,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_opstream_convergence_mixed"
+      ],
+      "name" : "tst_opstream_convergence_mixed",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 116,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_opstream_replay"
+      ],
+      "name" : "tst_opstream_replay",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 119,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_opstream_idempotent"
+      ],
+      "name" : "tst_opstream_idempotent",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 122,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_idlist"
+      ],
+      "name" : "tst_idlist",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 125,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_idlist_anchor"
+      ],
+      "name" : "tst_idlist_anchor",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 128,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_idlist_convergence"
+      ],
+      "name" : "tst_idlist_convergence",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 131,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_idlist_undo"
+      ],
+      "name" : "tst_idlist_undo",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 134,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_idlist_gc"
+      ],
+      "name" : "tst_idlist_gc",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 137,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_idlist_fuzz"
+      ],
+      "name" : "tst_idlist_fuzz",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 140,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_idlist_serialization"
+      ],
+      "name" : "tst_idlist_serialization",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 143,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_idlist_op_api"
+      ],
+      "name" : "tst_idlist_op_api",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 146,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_chat_message"
+      ],
+      "name" : "tst_chat_message",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 149,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_comment"
+      ],
+      "name" : "tst_comment",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 152,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_seed_op"
+      ],
+      "name" : "tst_seed_op",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 155,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_sidecar_manifest"
+      ],
+      "name" : "tst_sidecar_manifest",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 158,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_zstd_util"
+      ],
+      "name" : "tst_zstd_util",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 161,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_segment_format"
+      ],
+      "name" : "tst_segment_format",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 164,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_segment_writer"
+      ],
+      "name" : "tst_segment_writer",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 167,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_segment_reader"
+      ],
+      "name" : "tst_segment_reader",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 169,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_serialization_public"
+      ],
+      "name" : "tst_serialization_public",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 171,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_crdtengine_op_api"
+      ],
+      "name" : "tst_crdtengine_op_api",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    },
+    {
+      "backtrace" : 173,
+      "command" : 
+      [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext/tst_opstream_interface"
+      ],
+      "name" : "tst_opstream_interface",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/libs/collabtext"
+        }
+      ]
+    }
+  ],
+  "version" : 
+  {
+    "major" : 1,
+    "minor" : 0
+  }
+}

@@ -27,6 +27,8 @@ add_library(collabtext STATIC
     src/CollabDocument.cpp
     src/SyncManager.cpp
     src/crdt/Clock.cpp
+    src/codec/Utf.cpp
+    src/codec/JsonReader.cpp
     src/crdt/Locator.cpp
     src/crdt/UndoMap.cpp
     src/crdt/Buffer.cpp
@@ -111,6 +113,7 @@ add_crdt_test(tst_store_fault_harness)
 add_crdt_test(tst_behavior_fixtures)
 add_crdt_test(tst_actor_identity)
 add_crdt_test(tst_summary_laws)
+add_crdt_test(tst_decode_validation)
 target_compile_definitions(tst_behavior_fixtures PRIVATE
     COLLABTEXT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/behavior")
 
