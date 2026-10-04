@@ -7,7 +7,7 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 ## A01 — Split CMake targets and remove runtime test dependencies
 
 **Status:** see TASKS.json (initially not started)  
-**Depends on:** P06, L08  
+**Depends on:** P06b, L08  
 **Coverage:** R2, R7, R13  
 
 **Files / scope:**

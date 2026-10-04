@@ -175,39 +175,77 @@ Run `./tools/verify-roadmap.sh debug 'tst_decode_validation|tst_utf8'` and ASan/
 
 Run `./tools/verify-roadmap.sh debug 'tst_operation_validation|tst_opqueue|tst_convergence|tst_idlist_convergence'`; run boundary corpus under ASan.
 
-## P06 — Implement versioned sparse codecs and opaque operation values
+## P06a — Adopt persistent actor identity in operations and make values opaque
 
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** P05  
-**Coverage:** F10, R2, R5, R13  
+**Coverage:** F4, R1
+
+**Split from P06 on 2026-10-04** — rationale at the end of this section.
 
 **Files / scope:**
 
+- `docs/specs/vnext-identity.md`
+- `libs/collabtext/src/crdt/Clock.h`
+- `libs/collabtext/src/crdt/Clock.cpp`
+- `libs/collabtext/src/crdt/UndoMap.h`
 - `libs/collabtext/include/collabtext/Operations.h`
-- `libs/collabtext/include/collabtext/IdListOperations.h`
+- `libs/collabtext/tests/tst_identity_ordering_model.cpp`
+
+**Steps:**
+
+1. Write the identity contract first: what a Lamport identity becomes (persistent ActorId plus a checked 64-bit counter, per R1), what total order the engine relies on, and which of those uses are convergence-critical rather than merely identifying. Prove the ordering laws against an independent model before touching the engine.
+2. Replace the 16-bit replica_id and 32-bit counter in the engine's identity types. The ordering must remain a deterministic total order that every replica computes identically, because origin breaks ties between fragments that share a locator and normalize_fragments exists to handle exactly that case. A locally assigned slot would diverge here and must not be used.
+3. Measure the cost. Every Lamport is embedded in FragmentSummary, which the SumTree aggregates on every edit, so widening the identity widens the hot path. Record bytes-per-identity before and after so the optimization phase inherits a number rather than a surprise.
+4. Make Buffer and IdList take an ActorId and expose it. Keep the legacy integer constructor only if it cannot silently mint an identity that looks valid; an operation carrying a default-constructed (invalid) ActorId is rejected, per P02.
+5. Opaque operation values: move construction and field layout out of the public header so the fast paths that touch fields do so through internal accessors.
+
+**Acceptance:**
+
+- The independent model and the engine agree on ordering for every generated pair of identities, including equal-locator ties from different actors.
+- Two distinct ActorIds never share an identity, and a default-constructed ActorId is rejected as invalid_identity rather than treated as actor 0.
+- The recorded before/after size of an identity is stated in the task log, and no convergence test regresses.
+
+**Verification:** Run the identity model and Buffer/IdList convergence suites in Debug, Release, and ASan; state the measured sizeof(Lamport) and sizeof(FragmentSummary) before and after.
+
+**Design/decision gate:** Ordering contract and independent model must exist and run before the engine types change.
+
+## P06b — Implement versioned sparse codecs for the new identity and opaque values
+
+**Status:** see TASKS.json (initially not started)  
+**Depends on:** P06a  
+**Coverage:** F10, R2, R5, R13
+
+**Files / scope:**
+
 - `libs/collabtext/include/collabtext/Serialization.h`
 - `libs/collabtext/src/codec/OperationCodec.cpp`
 - `libs/collabtext/tests/tst_serialization_public.cpp`
 
 **Steps:**
 
-1. Implement copy/move opaque operation values and stable OperationId/stream accessors; keep Buffer and IdList variants separate. Move construction/details into internal headers.
-2. Encode canonical sparse actor/counter vectors and explicit payload version; avoid storing replacement text twice. Encode uint64 values exactly without double conversion.
-3. Define and test only the new codecs. Old or unknown format identifiers produce explicit incompatible-format errors before mutation; retain diagnostic input and do not silently skip records. No legacy decoder or conversion mapping is required.
+1. Encode canonical sparse actor/counter vectors and an explicit payload version. The actor set is what the wire size must depend on, never the magnitude of the identity values.
+2. Encode 64-bit counters exactly, with no conversion through double. A counter above 2^53 is a legal value and must round-trip bit for bit.
+3. Define and test only the new codecs. An old or unknown format identifier produces an explicit incompatible-format error before mutation; diagnostic input is retained and no record is skipped silently. No legacy decoder or conversion mapping is required.
 
 **Acceptance:**
 
-- Wire size depends on observed actors/text, not the magnitude of identity values; Buffer/IdList round-trips preserve logical operations.
+- Wire size depends on the number of observed actors and the text, not on the magnitude of identity values; Buffer and IdList round-trips preserve logical operations.
 - Header-only external compilation uses only installed public includes; unknown versions return distinguishable unsupported-version errors.
 
-**Verification:**
+**Verification:** Compare equal-cardinality small/large-valued actor sets and exact uint64 bounds; verify new-format golden round trips and explicit rejection of old and unknown formats.
 
-Run serialization and public-operation tests; compare equal-cardinality small/large-valued actor sets and exact uint64 bounds. Verify new-format golden round trips and explicit rejection of old/unknown formats.
+### Why P06 was split
+
+Split out of P06 on 2026-10-04. P06 asked for opaque values and versioned sparse codecs in one step, but the actor identity is serialized by both the wire codec and the store, so the identity change cannot land before the codecs without either changing those formats outside this task's ownership or introducing a representation the codec task immediately rewrites. The identity work is therefore sequenced first *within* P06 rather than before it, which keeps it a discrete reviewable step without an impossible ordering.
+The identity work is also the larger of the two: it touches 56 files and 140
+construction sites in tests alone, and its risk is concentrated in one place — the
+ordering gate above.
 
 ## P07 — Define transactional transport receipt and commit APIs
 
 **Status:** see TASKS.json (initially not started)  
-**Depends on:** P06, V08  
+**Depends on:** P06b, V08  
 **Coverage:** F2, F5, R2, R9, R13  
 
 **Files / scope:**
@@ -235,7 +273,7 @@ Compile the new interface sample and in-memory test double; run `tst_opstream_in
 ## P08 — Fuzz and bound the complete decoding pipeline
 
 **Status:** see TASKS.json (initially not started)  
-**Depends on:** P06, P07, V04  
+**Depends on:** P06b, P07, V04  
 **Coverage:** F10, R4  
 
 **Files / scope:**

@@ -35,7 +35,7 @@ Review fixture histories against the evaluation and original engine; run fixture
 ## S02 — Specify the ordering repair within the existing C++ engine
 
 **Status:** see TASKS.json (initially not started)  
-**Depends on:** S01, P06, L08  
+**Depends on:** S01, P06b, L08  
 **Coverage:** F8, R12  
 **Design/decision gate:** Requires a complete reviewed incremental repair specification and independent executable model. Unresolved ordering invariants block dependent code changes; replacement engines are outside scope.  
 

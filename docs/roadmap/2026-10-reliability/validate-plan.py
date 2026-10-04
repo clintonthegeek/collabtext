@@ -52,7 +52,10 @@ headings = []
 task_blocks = {}
 for doc in sorted(root.glob('[0-9][0-9]-*.md')):
     contents = doc.read_text()
-    matches = list(re.finditer(r'^## ([A-Z][0-9]{2}) — ', contents, re.M))
+    # A task ID is two digits, optionally followed by a lowercase letter for a
+    # split subtask (P06a, P06b). Splitting a task is explicitly supported by
+    # EXECUTION.md, so the plan reader has to accept it.
+    matches = list(re.finditer(r'^## ([A-Z][0-9]{2}[a-z]?) — ', contents, re.M))
     headings.extend(match.group(1) for match in matches)
     for index, match in enumerate(matches):
         end = matches[index + 1].start() if index + 1 < len(matches) else len(contents)

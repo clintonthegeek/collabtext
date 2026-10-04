@@ -88,7 +88,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_segment_reader|tst_evaluation_regressi
 ## L04 — Persist stream envelope identity and implement transport outcomes
 
 **Status:** see TASKS.json (initially not started)  
-**Depends on:** L03, P06, P07  
+**Depends on:** L03, P06b, P07  
 **Coverage:** F4, F5, R9  
 
 **Files / scope:**
