@@ -628,6 +628,90 @@ replacement engine. The document is a contract about direction, not a
 specification of behaviour — and it says so, so nobody mistakes it for one.
 
 
+## 2026-10-04 — P01: the vNext type and error contracts
+
+```text
+Task: P01
+Status: complete
+Baseline: e2b9024 (D01 documentation commit)
+Implementation commits: f4c0f11, ad5e3d6, plus this documentation commit
+Scope: docs/specs/vnext-protocol.md (new), docs/specs/vnext-public-api.md (new)
+Regression: none — a design-gate task changes specifications, and its verification
+       is the review against the findings plus the examples it hands forward.
+       Type-level behaviour becomes regression tests when P02 implements it.
+Verification: F4/F5/F10 and the multi-stream cases reviewed and, in a follow-up,
+       cited against the current violating lines; six compile-oriented examples
+       written for A02; link check clean
+Artifacts: docs/specs/vnext-protocol.md, docs/specs/vnext-public-api.md
+API/store changes: this *is* the API change, as a specification. The documented
+       breaks are listed in the guide's section 9.
+Known limits: the types do not exist until P02 and later; the examples are not
+       compiled until A02; merge ordering and reclamation stay with their gates
+Next ready tasks: P02 (implementation), then P03
+```
+
+### What changed
+
+Seven tasks were going to be written against types nobody had written down. P01
+fixes them before any caller changes.
+
+**The API guide** defines the C++20 `Result<T>` (no `std::expected`
+requirement, `[[nodiscard]]`, no throwing accessor, so an ignored error is a
+compile error rather than a runtime surprise); 128-bit `ActorId` with no default
+identity, which is what makes "silent fallback to actor 1" impossible to write;
+checked per-(actor, stream) `OperationId`; an operation context carrying
+document, stream, and epoch; opaque non-copyable `BufferOperation` and
+`IdListOperation` whose stable contract is `context()`, `lamport()`, and
+encode/decode round-trip, with direct field access named as the habit being
+removed; an error taxonomy that separates malformed from unknown-format from
+unsupported-version from actor-conflict from wrong-epoch from counter-regression;
+and `ApplyOutcome` as applied/duplicate/deferred/rejected, each carrying its
+reason.
+
+Callbacks get one contract for the whole library: single owner, replacement on
+re-registration, explicit removal, non-reentrant, never invoked holding an
+internal lock, fired only for visible change, one engine per thread.
+
+**The protocol contract** fixes per-artifact version identifiers with fresh
+baselines; three separate decode steps — syntax, schema/version, semantics —
+because conflating them *is* finding F10; complete input consumption and
+surrogate-pair decoding; frontier-based contiguous durable coverage that a gap
+or a quarantine blocks; cursors that are meaningless without a recovery point;
+sender-restart counter resumption above the highest durable value; rebuild before
+write on receiver restart; epoch-bumping retirement; and per-(stream, actor)
+coverage with no scalar that could be mistaken for cross-stream coverage.
+
+### The review, anchored to code
+
+A review that says "this addresses F4" is worth little, so a follow-up commit
+cited the current line that violates each rule: `StreamSync.h:70` and
+`StreamSync.cpp:205` for the non-durable sequence, `SegmentReader.cpp:98` and
+`:108` for the high-water mark, `SegmentReader.cpp:60` for a cursor with no
+recovery point, `Serialization.cpp:572` and `:660` for decode success without
+consumption or validation, `apply_ops` returning `void`, and `resolve_anchor`
+returning a clamped `uint32_t`.
+
+Six of the seven already have a red test or a known-defect marker. The seventh —
+multi-stream coverage — has no violation today only because there is one stream,
+which is exactly why the protocol forbids the scalar by construction instead of
+warning about it.
+
+### Limits
+
+The specifications are target signature: `Result`, `ActorId`, the opaque
+operations, `ApplyOutcome`, and `PollOutcome` do not exist until P02 and later
+implement them, and the guide says so rather than implying the examples are
+verified. A02 compiles the examples; E03 compiles them against the installed
+package. `RecoveryPoint`, `StreamAck`, `ChangeInfo`, `Affinity`, `TextRange`, and
+`Anchor` have their *contracts* fixed here and their internals assigned to
+L03/L04 and A03.
+
+Merge ordering (S02) and reclamation eligibility (G01) are deliberately
+unspecified: D01's C10 assigns them their own gates with their own specifications
+and executable models, and a protocol document that quietly designed them would
+undermine that.
+
+
 ## Evidence and continuation
 
 [Portable artifacts](2026-10-03-roadmap-kickoff-artifacts/README.md) retain CTest

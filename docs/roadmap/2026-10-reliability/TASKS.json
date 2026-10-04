@@ -525,8 +525,29 @@
         "R13"
       ],
       "gate": "Public signatures must be finalized here before changing callers; amendments update the new API guide.",
-      "status": "in_progress",
-      "baseline_revision": "e2b9024"
+      "status": "complete",
+      "baseline_revision": "e2b9024",
+      "implementation_commits": [
+        "f4c0f11",
+        "ad5e3d6"
+      ],
+      "verification_results": {
+        "finding_review": "F4, F5 and F10 each walked explicitly in vnext-protocol.md section 10, plus the multi-stream independent-counter cases",
+        "code_anchored_review": "seven rules cite the current violating line (StreamSync.h:70, StreamSync.cpp:205/209, SegmentReader.cpp:60/98/108, Serialization.cpp:572/660, apply_ops, resolve_anchor)",
+        "api_examples": "six compile-oriented examples for A02 and E03, written to be transcribed exactly; uncompiled because the types do not exist yet, and the guide says so",
+        "callback_contract": "single owner, replacement, explicit removal, non-reentrant, no lock held, visible change only, one engine per thread",
+        "link_check": "all relative links in both specifications resolve"
+      },
+      "artifacts": [
+        "docs/specs/vnext-protocol.md",
+        "docs/specs/vnext-public-api.md"
+      ],
+      "limitations": [
+        "The specifications are target signature: the Result type, ActorId, opaque operations, ApplyOutcome, and PollOutcome do not exist until P02 and later implement them.",
+        "The API examples have not been compiled; A02 compiles them and E03 compiles them against the installed package.",
+        "RecoveryPoint, StreamAck, ChangeInfo, Affinity, TextRange, and Anchor shapes are fixed by contract but their internals belong to L03/L04 and A03.",
+        "Merge ordering (S02) and reclamation eligibility (G01) remain unspecified here by design; D01 constraint C10 assigns them their own gates."
+      ]
     },
     {
       "id": "P02",

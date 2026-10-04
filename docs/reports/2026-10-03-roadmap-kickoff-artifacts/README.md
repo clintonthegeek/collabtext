@@ -1,4 +1,4 @@
-# V01–V08 verification artifacts
+# V01–V08 verification artifacts plus D01 and P01 specification gates
 
 These are portable excerpts of actual verification runs on 2026-10-03. See
 [the task log](../vnext-task-log.md) and
