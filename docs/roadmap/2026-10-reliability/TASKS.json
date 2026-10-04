@@ -525,7 +525,8 @@
         "R13"
       ],
       "gate": "Public signatures must be finalized here before changing callers; amendments update the new API guide.",
-      "status": "not_started"
+      "status": "in_progress",
+      "baseline_revision": "e2b9024"
     },
     {
       "id": "P02",
