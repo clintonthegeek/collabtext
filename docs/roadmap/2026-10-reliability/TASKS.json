@@ -1027,9 +1027,11 @@
         "R13"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "897c95e",
-      "implementation_commits": [],
+      "implementation_commits": [
+        "7406a15"
+      ],
       "verification_results": {
         "core_only": "cmake -DBUILD_QT=OFF -DBUILD_APPS=OFF -DBUILD_TESTS=OFF -DBUILD_FILE_TRANSPORT=OFF -DCMAKE_DISABLE_FIND_PACKAGE_Qt6/zstd/OpenSSL=ON configures, builds and runs collabtext_core_smoke. The only Qt6 entry in the resulting cache is the CMAKE_DISABLE_FIND_PACKAGE_Qt6 we passed; no Qt target exists.",
         "filetransport_no_qt": "FileTransport builds with Qt6 discovery disabled: libcollabtext_core.a + libcollabtext_filetransport.a, no Qt, no app, no test.",
