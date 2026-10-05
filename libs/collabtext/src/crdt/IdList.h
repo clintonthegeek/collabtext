@@ -99,7 +99,7 @@ public:
     /// Takes the allocator this list mints identities from. There is
     /// deliberately no ActorId-only constructor: holding an actor id is not
     /// authority to claim durable allocation (identity spec §3.7).
-    explicit IdList(SharedAllocator allocator);
+    explicit IdList(SharedIdentityAllocator allocator);
 
     IdListOperation insert_after(const Anchor& after, uint64_t id);
     IdListOperation remove_at(const Anchor& target);
@@ -163,7 +163,7 @@ public:
     const ActorId &actor_id() const { return m_allocator->actor(); }
 
     /// The allocator this list borrows.
-    const SharedAllocator &allocator() const { return m_allocator; }
+    const SharedIdentityAllocator &allocator() const { return m_allocator; }
 
     /// Temporarily retains all entries, including restoration/anchor context.
     /// Returns zero until certified reclamation is implemented.
@@ -215,7 +215,7 @@ public:
     void local_clear() noexcept;
 
 private:
-    SharedAllocator m_allocator;
+    SharedIdentityAllocator m_allocator;
     Global m_version;
     UndoMap m_undo_map;
     IdListTree m_entry_tree;

@@ -22,7 +22,7 @@
 #include "crdt/ChatMessage.h"
 #include "crdt/Comment.h"
 #include "crdt/FileSync.h"
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 #include "ui/ChatPanelWidget.h"
 #include "ui/CollabPlainTextEdit.h"
 #include "ui/CommentsPanelWidget.h"
@@ -80,7 +80,7 @@ private:
     CollabText::CheckedCounter m_counter;
 };
 
-Crdt::SharedAllocator harness_counter(uint8_t n) {
+Crdt::SharedIdentityAllocator harness_counter(uint8_t n) {
     return std::make_shared<HarnessCounter>(n);
 }
 
@@ -107,7 +107,7 @@ static std::string now_iso8601() {
 class EditorPane : public QWidget {
     Q_OBJECT
 public:
-    EditorPane(const ProfileIdentity &identity, Crdt::SharedAllocator allocator,
+    EditorPane(const ProfileIdentity &identity, Crdt::SharedIdentityAllocator allocator,
                const std::string &replicaName,
                const std::filesystem::path &sharedFolder,
                QWidget *parent = nullptr)

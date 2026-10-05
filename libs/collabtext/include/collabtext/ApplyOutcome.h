@@ -32,7 +32,7 @@
 
 #include <collabtext/ActorId.h>   // Error, ErrorCode
 
-#include <crdt/Clock.h>           // Identity
+#include <collabtext/Engine.h>     // Identity, Global
 
 #include <optional>
 #include <string_view>

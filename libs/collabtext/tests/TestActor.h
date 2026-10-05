@@ -21,7 +21,7 @@
 #include <collabtext/ActorId.h>
 
 #include "VolatileCounter.h"
-#include "crdt/Clock.h"
+#include <collabtext/Engine.h>
 
 #include <array>
 #include <cstdint>

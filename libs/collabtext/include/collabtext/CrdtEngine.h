@@ -1,8 +1,8 @@
 #pragma once
 
 #include <collabtext/ActorId.h>
+#include <collabtext/Engine.h>
 #include <collabtext/Operations.h>
-#include <crdt/IdentityAllocator.h>
 
 #include <cstdint>
 #include <functional>
@@ -23,7 +23,7 @@ public:
     /// indistinguishable operations. Holding an actor id is not authority to
     /// claim durable allocation, so the allocator is the only way in
     /// (docs/specs/vnext-identity.md §3.7).
-    explicit CrdtEngine(Crdt::SharedAllocator allocator);
+    explicit CrdtEngine(Crdt::SharedIdentityAllocator allocator);
     ~CrdtEngine();
     CrdtEngine(const CrdtEngine &) = delete;
     CrdtEngine &operator=(const CrdtEngine &) = delete;
@@ -60,6 +60,18 @@ public:
     void setOnLocalOp(LocalOpCallback cb);
 
     /// Apply a remote operation to this engine.
+    ///
+    /// Returns true when the operation is now in the document — applied, or a
+    /// duplicate of something already applied. It returns false for an operation
+    /// that is deferred (a causal dependency is missing, so try again later) and
+    /// for one that is rejected.
+    ///
+    /// The bool cannot say *which* of those happened, and that is the honest
+    /// limit of this facade: a caller that must distinguish deferred from
+    /// rejected, or must see what an operation is waiting for, needs the typed
+    /// `ApplyOutcome` that `apply_remote(...)` will return. That rename is A02's
+    /// work. Note that this method used to return true unconditionally, which
+    /// would have told a retrying caller that a rejected operation succeeded.
     ///
     /// Accepts ops that were emitted by another CrdtEngine via its
     /// LocalOpCallback (or decoded from wire bytes via decode_operation()).

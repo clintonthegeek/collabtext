@@ -52,7 +52,7 @@ ActorId simulator_actor(int index) {
 /// counters would outlive the scenario that made them and a rerun would start
 /// from wherever the last one stopped. Durability is exercised where it is real:
 /// against ReplicaState.
-SharedAllocator simulator_allocator(int index) {
+SharedIdentityAllocator simulator_allocator(int index) {
     return std::make_shared<SimulatorCounter>(simulator_actor(index));
 }
 

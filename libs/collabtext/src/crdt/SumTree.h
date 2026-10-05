@@ -1,5 +1,7 @@
 #pragma once
 
+#include <collabtext/Engine.h> // Bias
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -38,12 +40,6 @@ concept DimensionOf = std::totally_ordered<D> && requires(D d, const S& summary)
     { D::zero() } -> std::convertible_to<D>;
     { d.add_summary(summary) };
 };
-
-// ============================================================================
-// Bias
-// ============================================================================
-
-enum class Bias { Left, Right };
 
 // ============================================================================
 // SumTree

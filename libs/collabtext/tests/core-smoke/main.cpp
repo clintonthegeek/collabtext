@@ -20,8 +20,7 @@
 #include <collabtext/Operations.h>
 #include <collabtext/Serialization.h>
 
-#include "crdt/IdentityAllocator.h"
-#include "core/Sha256.h"
+#include <collabtext/Engine.h> // IdentityAllocator, and nothing internal
 
 #include <algorithm>
 #include <cstdio>
@@ -74,11 +73,10 @@ int main() {
     using namespace CollabText;
     namespace Crdt = CollabText::Crdt;
 
-    // --- the portable hash Core depends on ---
-    check(sha256_hex("abc") ==
-              "ba7816bf8f01cfea414140de5dae2223"
-              "b00361a396177a9cb410ff61f20015ad",
-          "sha256 matches the FIPS 180-4 vector");
+    // Note what is *not* here: any include of a `crdt/` or `src/` header. This
+    // program is a consumer of the public surface and nothing else, which is the
+    // property A02a's header-independence check turns into a build. The portable
+    // hash Core uses internally is covered by tst_sha256, not by a consumer.
 
     // --- two engines, one actor each, converging over the wire codec ---
     auto first = std::make_shared<SmokeCounter>(actor(1));

@@ -32,6 +32,7 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(collabtext_core STATIC
     src/CrdtEngine.cpp
+    src/IdListEngine.cpp
     src/core/Sha256.cpp
     src/codec/Utf.cpp
     src/codec/JsonReader.cpp
@@ -70,10 +71,11 @@ set_target_properties(collabtext_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # dependencies is Qt, zstd, a hash provider, a test, or a transport. An
 # include-path leak is visible and annoying; a link dependency is a thing a
 # consumer has to install.
+# src/ is PRIVATE: Core's own sources include crdt/*.h and core/Sha256.h, and
+# nothing outside this target should be able to.
 target_include_directories(collabtext_core
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-)
+    PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # ---------------------------------------------------------------------------
 # FileTransport
@@ -113,12 +115,12 @@ if(COLLABTEXT_BUILD_FILE_TRANSPORT)
     target_link_libraries(collabtext_filetransport
         PUBLIC  collabtext_core
         PRIVATE ${COLLABTEXT_ZSTD_TARGET})
-    # <collabtext/StreamSync.h> includes <crdt/SegmentReader.h>, so the transport
-    # component has the same A02a debt as Core.
+    # The transport has no advertised public header yet: StreamSync's header
+    # names SegmentWriter/SegmentReader, which reach zstd, so it lives under
+    # src/transport and is not exported. A06a owns the exported form.
     target_include_directories(collabtext_filetransport
-        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-               $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-    )
+        PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -135,9 +137,8 @@ if(COLLABTEXT_BUILD_QT)
         target_link_libraries(collabtext_qtadapter PUBLIC collabtext_filetransport)
     endif()
     target_include_directories(collabtext_qtadapter
-        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-               $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-    )
+        PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
     add_library(collabtext_widgets STATIC
         src/CollabDocument.cpp
@@ -158,9 +159,8 @@ if(COLLABTEXT_BUILD_QT)
     target_link_libraries(collabtext_widgets
         PUBLIC collabtext_qtadapter Qt6::Widgets)
     target_include_directories(collabtext_widgets
-        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-               $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-    )
+        PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -189,9 +189,21 @@ endif()
 if(COLLABTEXT_BUILD_TESTS)
     enable_testing()
 
+    if(COLLABTEXT_BUILD_QT)
+        add_library(collabtext_public_headers_qt OBJECT
+            tests/public-headers/only_CollabDocument_h.cpp
+            tests/public-headers/only_PresenceManager_h.cpp
+            tests/public-headers/only_SyncManager_h.cpp
+        )
+        target_link_libraries(collabtext_public_headers_qt PRIVATE collabtext_widgets)
+    endif()
+
     add_library(collabtext_testsupport STATIC
         src/crdt/NetworkSim.cpp
     )
+    # src/ is no longer anyone's public interface, so every in-tree consumer
+    # names it explicitly. Tests are the reason it stays reachable at all.
+    set(COLLABTEXT_INTERNAL_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_library(CollabText::TestSupport ALIAS collabtext_testsupport)
     set_target_properties(collabtext_testsupport PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(collabtext_testsupport
@@ -201,12 +213,12 @@ if(COLLABTEXT_BUILD_TESTS)
     # each other by bare name, so the tests directory is public to tests.
     target_include_directories(collabtext_testsupport
         PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
-        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+        PRIVATE ${COLLABTEXT_INTERNAL_INCLUDES})
 
     function(add_crdt_test name)
         add_executable(${name} tests/${name}.cpp)
         target_link_libraries(${name} PRIVATE CollabText::TestSupport Qt6::Test)
-        target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+        target_include_directories(${name} PRIVATE ${COLLABTEXT_INTERNAL_INCLUDES}
                                                ${CMAKE_CURRENT_SOURCE_DIR}/tests)
         add_test(NAME ${name} COMMAND ${name})
     endfunction()
@@ -220,6 +232,36 @@ endif()
 # inspection of target properties. Built whenever Core is; registered with CTest
 # only when tests are on.
 # ===========================================================================
+# Public-header independence (A02a). One object library per half of the
+# advertised surface, each TU including exactly one public header and nothing
+# else from the library, compiled against the public include tree only. A header
+# that reaches into crdt/ or src/ -- or that pulls Qt into Core -- fails here.
+add_library(collabtext_public_headers_core OBJECT
+    tests/public-headers/only_ActorId_h.cpp
+    tests/public-headers/only_ApplyOutcome_h.cpp
+    tests/public-headers/only_CrdtEngine_h.cpp
+    tests/public-headers/only_Engine_h.cpp
+    tests/public-headers/only_Identity_h.cpp
+    tests/public-headers/only_IdentityProjector_h.cpp
+    tests/public-headers/only_IdentityStore_h.cpp
+    tests/public-headers/only_IdListEngine_h.cpp
+    tests/public-headers/only_IdListOperations_h.cpp
+    tests/public-headers/only_Operations_h.cpp
+    tests/public-headers/only_OpStream_h.cpp
+    tests/public-headers/only_Serialization_h.cpp
+    tests/public-headers/only_Signing_h.cpp
+)
+target_link_libraries(collabtext_public_headers_core PRIVATE collabtext_core)
+
+# The alpha consumer: a plain C++ program that edits text and list content and
+# moves operations between two peers using only public types and public
+# functions. It is the executable form of A02a's acceptance criterion.
+add_executable(collabtext_alpha_consumer tests/alpha-consumer/main.cpp)
+target_link_libraries(collabtext_alpha_consumer PRIVATE collabtext_core)
+if(COLLABTEXT_BUILD_TESTS)
+    add_test(NAME collabtext_alpha_consumer COMMAND collabtext_alpha_consumer)
+endif()
+
 add_executable(collabtext_core_smoke tests/core-smoke/main.cpp)
 target_link_libraries(collabtext_core_smoke PRIVATE collabtext_core)
 if(COLLABTEXT_BUILD_TESTS)

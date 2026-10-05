@@ -13,7 +13,7 @@
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/Operations.h>
 #include <collabtext/Serialization.h>
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 #include <collabtext/OpStream.h>
 
 #include <filesystem>

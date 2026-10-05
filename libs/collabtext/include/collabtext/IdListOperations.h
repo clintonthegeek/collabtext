@@ -40,8 +40,7 @@
 ///
 #pragma once
 
-#include <crdt/Clock.h>
-#include <crdt/Locator.h>
+#include <collabtext/Engine.h>
 
 #include <cstdint>
 #include <variant>

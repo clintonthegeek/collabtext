@@ -10,7 +10,7 @@
 
 #include <QTest>
 #include <QTemporaryDir>
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 #include <collabtext/OpStream.h>
 #include <collabtext/IdListOperations.h>
 #include <collabtext/Serialization.h>

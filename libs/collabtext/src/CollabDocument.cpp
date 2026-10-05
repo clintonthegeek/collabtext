@@ -5,7 +5,7 @@
 
 namespace CollabText {
 
-CollabDocument::CollabDocument(Crdt::SharedAllocator allocator, QObject *parent)
+CollabDocument::CollabDocument(Crdt::SharedIdentityAllocator allocator, QObject *parent)
     : QObject(parent)
     , m_engine(new CrdtEngine(std::move(allocator)))
     , m_qtDoc(new QTextDocument(this))

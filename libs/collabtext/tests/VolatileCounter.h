@@ -18,7 +18,7 @@
 
 #include <collabtext/ActorId.h>
 
-#include "crdt/IdentityAllocator.h"
+#include <collabtext/Engine.h>
 
 #include <cstdint>
 #include <vector>

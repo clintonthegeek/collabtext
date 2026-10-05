@@ -1,7 +1,6 @@
 #pragma once
 
-#include "crdt/Anchor.h"
-#include "crdt/Clock.h"
+#include <collabtext/Engine.h>
 
 #include <cstdint>
 #include <optional>

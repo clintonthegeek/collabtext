@@ -48,7 +48,7 @@ public:
     /// constructor that quietly started a counter at 1 would hand out
     /// identities a relaunch would hand out again (identity spec §3.7). An
     /// engine that cannot be given an allocator cannot mint an identity at all.
-    explicit Buffer(SharedAllocator allocator);
+    explicit Buffer(SharedIdentityAllocator allocator);
 
     /// Local edit: ranges are byte offsets in visible text.
     /// Each range is a (start, end) pair denoting bytes to delete.
@@ -174,7 +174,7 @@ public:
 
     /// The allocator this engine borrows. Exposed for diagnostics and for the
     /// tests that assert *how many* reservations an operation performed.
-    const SharedAllocator &allocator() const { return m_allocator; }
+    const SharedIdentityAllocator &allocator() const { return m_allocator; }
 
     /// Create an Anchor at a visible byte offset.
     Anchor anchor_at(uint32_t byte_offset, Bias bias = Bias::Left) const;
@@ -313,7 +313,7 @@ private:
         const std::vector<EditOperation::DeletionRun>& runs,
         Identity deletion_id);
 
-    SharedAllocator m_allocator;
+    SharedIdentityAllocator m_allocator;
     Global m_version;
     UndoMap m_undo_map;
 

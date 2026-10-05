@@ -1,5 +1,5 @@
 #pragma once
-#include "crdt/StreamSync.h"
+#include "transport/StreamSync.h"
 #include <optional>
 #include <string>
 #include <string_view>

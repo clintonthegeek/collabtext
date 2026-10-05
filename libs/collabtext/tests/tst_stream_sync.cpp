@@ -1,6 +1,6 @@
 #include <QTest>
 #include <QTemporaryDir>
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 #include "crdt/StreamSerialization.h"
 
 using namespace CollabText::Crdt;

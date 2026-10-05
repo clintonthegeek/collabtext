@@ -9,7 +9,7 @@ struct CrdtEngine::Impl {
     ChangeCallback on_change;
     LocalOpCallback on_local_op;
 
-    explicit Impl(Crdt::SharedAllocator allocator) : buffer(std::move(allocator)) {}
+    explicit Impl(Crdt::SharedIdentityAllocator allocator) : buffer(std::move(allocator)) {}
 
     void notify() {
         if (on_change) on_change();
@@ -20,7 +20,7 @@ struct CrdtEngine::Impl {
     }
 };
 
-CrdtEngine::CrdtEngine(Crdt::SharedAllocator allocator)
+CrdtEngine::CrdtEngine(Crdt::SharedIdentityAllocator allocator)
     : m_impl(std::make_unique<Impl>(std::move(allocator)))
 {
 }
@@ -88,8 +88,12 @@ void CrdtEngine::setOnLocalOp(LocalOpCallback cb)
 
 bool CrdtEngine::applyRemoteOp(const Crdt::Operation &op)
 {
-    m_impl->buffer.apply_ops({op});
+    const auto outcomes = m_impl->buffer.apply_ops({op});
+    if (!outcomes.empty() && outcomes.front().kind() != ApplyOutcomeKind::applied)
+        return false;
     m_impl->notify();
+    // Duplicate counts as handled: the operation is already in the document, so
+    // telling a caller to retry it would make it retry forever.
     return true;
 }
 

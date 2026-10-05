@@ -25,7 +25,7 @@ ActorId simulator_actor(int index);
 /// simulated replica is its own stream. Sharing one would be safe but would make
 /// the scenarios depend on allocation order across replicas.
 class SimulatorCounter;
-SharedAllocator simulator_allocator(int index);
+SharedIdentityAllocator simulator_allocator(int index);
 
 /// Network configuration for NetworkSim.
 ///

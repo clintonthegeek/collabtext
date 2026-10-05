@@ -16,7 +16,7 @@ public:
     /// would emit operations indistinguishable from any other process's, which is
     /// the identity collision P02 exists to prevent
     /// (docs/specs/vnext-identity.md §3.7).
-    explicit CollabDocument(Crdt::SharedAllocator allocator,
+    explicit CollabDocument(Crdt::SharedIdentityAllocator allocator,
                             QObject *parent = nullptr);
     ~CollabDocument() override;
 

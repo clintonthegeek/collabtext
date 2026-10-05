@@ -6,7 +6,7 @@
 
 namespace CollabText::Crdt {
 
-Buffer::Buffer(SharedAllocator allocator)
+Buffer::Buffer(SharedIdentityAllocator allocator)
     : m_allocator(std::move(allocator))
 {
     // A null allocator is a programming error: nothing can be minted and there

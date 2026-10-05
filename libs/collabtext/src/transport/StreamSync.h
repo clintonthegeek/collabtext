@@ -1,3 +1,17 @@
+/// src/transport/StreamSync.h — the file-backed transport's header.
+///
+/// Roadmap task A02a moved this out of include/collabtext/. It is here rather
+/// than in the public tree because it names SegmentWriter and SegmentReader in
+/// its members, and those reach zstd — so a Core-only consumer could not have
+/// included it. A02a's rule is that every *advertised* public header compiles
+/// on its own; the file transport is implemented but is not part of this alpha's
+/// advertised surface, and A06a owns its exported form. W02 and W03 verify it
+/// through the installed package.
+///
+/// The alternative was a pimpl here. That is a real answer, but it is A06a's
+/// call rather than A02a's, and doing it now would have meant inventing an
+/// ownership shape nobody has reviewed.
+
 #pragma once
 
 #include <collabtext/OpStream.h>

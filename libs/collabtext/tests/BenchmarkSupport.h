@@ -237,7 +237,7 @@ inline void print(const Measurement& measurement) {
 /// A single-replica edit workload that can be rebuilt identically.
 class Workload {
 public:
-    Workload(Crdt::SharedAllocator allocator, std::string label)
+    Workload(Crdt::SharedIdentityAllocator allocator, std::string label)
         : m_buffer(std::move(allocator)), m_label(std::move(label)) {}
 
     Buffer& buffer() { return m_buffer; }

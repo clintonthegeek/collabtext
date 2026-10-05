@@ -3,7 +3,7 @@
 
 namespace CollabText::Crdt {
 
-IdList::IdList(SharedAllocator allocator)
+IdList::IdList(SharedIdentityAllocator allocator)
     : m_allocator(std::move(allocator))
 {
     // See Buffer's constructor: a null allocator is a programming error, an

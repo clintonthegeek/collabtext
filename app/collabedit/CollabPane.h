@@ -8,7 +8,7 @@
 #include "crdt/Buffer.h"
 #include "crdt/FileSync.h"
 #include "identity/ReplicaAllocator.h"
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 
 #include <QWidget>
 

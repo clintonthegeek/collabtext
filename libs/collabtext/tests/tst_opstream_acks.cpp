@@ -1,7 +1,7 @@
 #include <QTest>
 
 #include <QTemporaryDir>
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/Serialization.h>
 #include <collabtext/Operations.h>
