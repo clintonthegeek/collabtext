@@ -237,8 +237,8 @@ inline void print(const Measurement& measurement) {
 /// A single-replica edit workload that can be rebuilt identically.
 class Workload {
 public:
-    Workload(const ActorId &actor, std::string label)
-        : m_buffer(actor), m_label(std::move(label)) {}
+    Workload(Crdt::SharedAllocator allocator, std::string label)
+        : m_buffer(std::move(allocator)), m_label(std::move(label)) {}
 
     Buffer& buffer() { return m_buffer; }
     const Buffer& buffer() const { return m_buffer; }
@@ -271,7 +271,7 @@ public:
     /// engine. The result is state-identical to the original, with a different
     /// allocation history.
     void rebuild() {
-        Buffer fresh(m_buffer.actor_id());
+        Buffer fresh(m_buffer.allocator());
         std::vector<Operation> produced;
         for (const Event& decision : m_decisions) {
             switch (decision.kind) {

@@ -49,8 +49,8 @@ private slots:
     // remains "hello".
 
     void apply_remote_op_twice_is_idempotent() {
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation& op) {
@@ -84,8 +84,8 @@ private slots:
     // engine2. Applying the undo op a second time leaves engine2 with empty text.
 
     void undo_op_idempotent() {
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation& op) {
@@ -123,8 +123,8 @@ private slots:
     // engine1.
 
     void apply_out_of_order_then_reapply_in_order() {
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation& op) {

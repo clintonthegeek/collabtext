@@ -23,7 +23,7 @@ private slots:
     void start_creates_directory_structure() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         FileSync sync(buf, shared, "laptop-1");
         sync.start();
         QVERIFY(fs::exists(shared / "replicas" / "laptop-1" / "log" / "ops"));
@@ -34,7 +34,7 @@ private slots:
     void no_sequences_json_in_synced_root() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         FileSync sync(buf, shared, "r");
         sync.start();
         auto op = buf.apply_local_edit({{0, 0}}, {"hello"});
@@ -48,7 +48,7 @@ private slots:
     void local_op_lands_in_open_or_sealed_under_log_ops() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         FileSync sync(buf, shared, "r");
         sync.start();
         auto op = buf.apply_local_edit({{0, 0}}, {"hello"});
@@ -69,7 +69,7 @@ private slots:
     void two_replicas_sync_via_shared_folder() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        Buffer bufA(actor(1)), bufB(actor(2));
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         FileSync syncA(bufA, shared, "A");
         FileSync syncB(bufB, shared, "B");
         syncA.start(); syncB.start();
@@ -84,7 +84,7 @@ private slots:
     void bidirectional_sync() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        Buffer bufA(actor(1)), bufB(actor(2));
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         FileSync syncA(bufA, shared, "A");
         FileSync syncB(bufB, shared, "B");
         syncA.start(); syncB.start();
@@ -107,7 +107,7 @@ private slots:
     void file_count_budget_for_small_session() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         FileSync sync(buf, shared, "r");
         sync.start();
         std::string text = "the quick brown fox";

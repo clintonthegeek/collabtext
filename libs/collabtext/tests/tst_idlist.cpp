@@ -10,31 +10,31 @@ class TestIdList : public QObject {
     Q_OBJECT
 private slots:
     void empty_list_has_no_ids() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         QCOMPARE(list.size(), 0u);
         QCOMPARE(list.ids().size(), size_t{0});
     }
 
     void actor_id_round_trips() {
-        IdList list(actor(42));
+        IdList list(CollabText::Test::test_counter(42));
         QCOMPARE(list.actor_id(), actor(42));
     }
 
     void initial_version_is_empty() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         // Version starts unobserved — all entries zero or vector empty
         QVERIFY(list.version().empty());
     }
 
     void insert_into_empty_list() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         QCOMPARE(list.size(), 1u);
         QCOMPARE(list.ids(), std::vector<uint64_t>{0xAA});
     }
 
     void insert_at_start_pushes_existing_back() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);  // list: [0xAA]
         list.insert_after(Anchor::min(), 0xBB);  // list: [0xBB, 0xAA]
         QCOMPARE(list.size(), 2u);
@@ -42,7 +42,7 @@ private slots:
     }
 
     void multiple_inserts_at_start_reverse_order() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 1);
         list.insert_after(Anchor::min(), 2);
         list.insert_after(Anchor::min(), 3);
@@ -50,7 +50,7 @@ private slots:
     }
 
     void same_id_value_can_appear_twice() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         list.insert_after(Anchor::min(), 0xAA);
         QCOMPARE(list.size(), 2u);
@@ -58,7 +58,7 @@ private slots:
     }
 
     void remove_only_element() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);  // origin=(1,1)
         Anchor at_aa(Identity(actor(1), 1), Bias::Left);
         list.remove_at(at_aa);
@@ -68,7 +68,7 @@ private slots:
     }
 
     void remove_middle_keeps_neighbours() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 1);  // origin (1,1) → [1]
         list.insert_after(Anchor::min(), 2);  // origin (1,2) → [2, 1]
         list.insert_after(Anchor::min(), 3);  // origin (1,3) → [3, 2, 1]
@@ -78,7 +78,7 @@ private slots:
     }
 
     void local_clear_empties_the_list() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
         list.insert_after(list.anchor_of(100, Bias::Right), 200);
         QCOMPARE(list.size(), 2u);
@@ -93,7 +93,7 @@ private slots:
     }
 
     void local_clear_preserves_clock_monotonicity() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
         auto op1 = list.insert_after(list.anchor_of(100, Bias::Right), 200);
         const Identity stampBefore = get_idlist_op_identity(op1);
@@ -108,7 +108,7 @@ private slots:
     }
 
     void local_clear_does_not_fire_callbacks() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
 
         int changeCalls = 0;
@@ -128,7 +128,7 @@ private slots:
     }
 
     void local_clear_then_insert_chain_works() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
         list.insert_after(list.anchor_of(100, Bias::Right), 200);
 

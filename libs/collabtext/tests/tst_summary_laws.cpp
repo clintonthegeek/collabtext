@@ -271,7 +271,7 @@ private slots:
         // hardest, because they change fragment boundaries without changing text.
         std::mt19937 rng(static_cast<uint32_t>(effective_seed("splice-property")));
         for (int round = 0; round < 25; ++round) {
-            Buffer buffer(actor(1));
+            Buffer buffer(CollabText::Test::test_counter(1));
             std::string expected;
             for (int i = 0; i < 40; ++i) {
                 const uint32_t at = expected.empty()

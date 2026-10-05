@@ -11,20 +11,20 @@ class TestSeedOp : public QObject {
     Q_OBJECT
 private slots:
     void empty_seed_produces_empty_buffer() {
-        Buffer buf(actor(7));
+        Buffer buf(CollabText::Test::test_counter(7));
         buf.apply_ops({op_for_seed("")});
         QCOMPARE(buf.text(), std::string(""));
     }
 
     void seed_text_visible_after_apply() {
-        Buffer buf(actor(42));
+        Buffer buf(CollabText::Test::test_counter(42));
         buf.apply_ops({op_for_seed("hello world")});
         QCOMPARE(buf.text(), std::string("hello world"));
     }
 
     void seed_is_deterministic_across_replicas() {
-        Buffer a(actor(1));
-        Buffer b(actor(2));
+        Buffer a(CollabText::Test::test_counter(1));
+        Buffer b(CollabText::Test::test_counter(2));
         const std::string seed = "Line one\nLine two\n";
         auto op_a = op_for_seed(seed);
         auto op_b = op_for_seed(seed);
@@ -50,7 +50,7 @@ private slots:
     }
 
     void edits_compose_with_seed() {
-        Buffer buf(actor(5));
+        Buffer buf(CollabText::Test::test_counter(5));
         buf.apply_ops({op_for_seed("abc")});
         buf.apply_local_edit({{3, 3}}, {"def"});
         QCOMPARE(buf.text(), std::string("abcdef"));

@@ -1,7 +1,7 @@
 /// TestActor.h — deterministic actors and identities for tests.
 ///
 /// Roadmap task P06a widened the engine's identity from a 16-bit replica id to a
-/// persistent 128-bit ActorId, which turns every `Buffer(actor(1))` / `Identity(actor(1), 5)`
+/// persistent 128-bit ActorId, which turns every `Buffer(1)` / `Identity(1, 5)`
 /// in the suite into an actor-keyed value. Tests need an actor, and they need it
 /// to be *the same actor on every run* — a real `ActorId::generate()` per case
 /// would make a failure depend on entropy and a test that minted one actor per
@@ -20,10 +20,12 @@
 
 #include <collabtext/ActorId.h>
 
+#include "VolatileCounter.h"
 #include "crdt/Clock.h"
 
 #include <array>
 #include <cstdint>
+#include <memory>
 
 namespace CollabText::Test {
 
@@ -46,6 +48,19 @@ inline ActorId actor64(uint64_t n) {
 /// An identity for convenience: `id(2, 10)` is actor 2 at counter 10.
 inline Crdt::Identity id(uint8_t actor_index, uint64_t counter) {
     return Crdt::Identity{actor(actor_index), counter};
+}
+
+/// The allocator a test engine borrows, over a volatile counter.
+///
+/// Every engine in the suite is constructed through this, which is the visible
+/// half of docs/specs/vnext-identity.md §3.7: an engine is handed an allocator
+/// and learns its actor from it, and a test that wants a throwaway counter says
+/// so by asking for a *volatile* one. A test that needs durability opens a
+/// `ReplicaState` instead — `test_counter` is named to make that distinction at
+/// every call site rather than leaving it to a comment nobody reads.
+inline std::shared_ptr<VolatileCounter> test_counter(uint8_t actor_index,
+                                                     uint64_t start = 1) {
+    return std::make_shared<VolatileCounter>(actor(actor_index), start);
 }
 
 } // namespace CollabText::Test

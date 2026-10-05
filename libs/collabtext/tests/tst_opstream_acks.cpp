@@ -43,7 +43,7 @@ void TestOpStreamAcks::acks_json_written_after_poll() {
     sync2.start();
 
     // Collect encoded op payloads from engine1 and track max Identity
-    CrdtEngine engine1(actor(1));
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
@@ -102,7 +102,7 @@ void TestOpStreamAcks::acks_json_monotone_across_restarts() {
         sync1.start();
         sync2.start();
 
-        CrdtEngine engine1(actor(1));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
         std::vector<std::string> payloads;
         engine1.setOnLocalOp([&](const Operation& op) {
             payloads.push_back(encode_operation(op));
@@ -147,7 +147,7 @@ void TestOpStreamAcks::acks_json_monotone_across_restarts() {
         sync2.start();
 
         // Fresh engine — Identity resets to 1; 2 inserts will produce max < max_lamport_session1
-        CrdtEngine engine_new(actor(1));
+        CrdtEngine engine_new(CollabText::Test::test_counter(1));
         uint64_t max_lamport_session2 = 0;
         std::vector<std::string> payloads;
         engine_new.setOnLocalOp([&](const Operation& op) {
@@ -201,7 +201,7 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_returns_min_across_peers() {
     R3.start();
 
     // Collect encoded op payloads from engine1 and track max Identity
-    CrdtEngine engine1(actor(1));
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
@@ -251,7 +251,7 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_callback_fires_on_advance() {
     std::vector<uint64_t> cb_values;
     R1.set_on_ack_update([&](uint64_t v) { cb_values.push_back(v); });
 
-    CrdtEngine engine1(actor(1));
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport_1 = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
@@ -322,7 +322,7 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_bounded_by_lagging_peer() {
     R2.start();
     R3.start();
 
-    CrdtEngine engine1(actor(1));
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> batch1_payloads;
     uint64_t batch1_max = 0;
 
@@ -412,7 +412,7 @@ void TestOpStreamAcks::silent_peer_never_writes_acks_fence_stays_zero() {
     R1.start();
     R2.start();  // creates replicas/replica-2/ directory but R2 never polls
 
-    CrdtEngine engine1(actor(1));
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     engine1.setOnLocalOp([&](const Operation& op) {
         payloads.push_back(encode_operation(op));
@@ -461,7 +461,7 @@ void TestOpStreamAcks::peer_acks_file_deleted_fence_persists() {
     R1.start();
     R2.start();
 
-    CrdtEngine engine1(actor(1));
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
@@ -520,7 +520,7 @@ void TestOpStreamAcks::peer_reconnects_fence_advances() {
     R1.start();
     R2.start();
 
-    CrdtEngine engine1(actor(1));
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     uint64_t batch1_max = 0;
 
     engine1.setOnLocalOp([&](const Operation& op) {
@@ -611,7 +611,7 @@ void TestOpStreamAcks::three_peer_partition_totally_silent_peer_excluded() {
     R2.start();
     R3.start();  // creates replicas/replica-3/ but R3 never polls
 
-    CrdtEngine engine1(actor(1));
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {

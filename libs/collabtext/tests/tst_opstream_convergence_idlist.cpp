@@ -51,8 +51,8 @@ private slots:
         OpStream* op1 = &sync1;
         OpStream* op2 = &sync2;
 
-        IdList list1(actor(1));
-        IdList list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1));
+        IdList list2(CollabText::Test::test_counter(2));
 
         // Wire list1 → op1 (outbound)
         list1.set_on_local_op([&](const IdListOperation& op) {
@@ -120,8 +120,8 @@ private slots:
         OpStream* op1 = &sync1;
         OpStream* op2 = &sync2;
 
-        IdList list1(actor(1));
-        IdList list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1));
+        IdList list2(CollabText::Test::test_counter(2));
 
         list1.set_on_local_op([&](const IdListOperation& op) {
             op1->push("idlist:structure", encode_idlist_operation(op));
@@ -189,8 +189,8 @@ private slots:
 
         OpStream* op1 = &sync1;
 
-        IdList list1(actor(1));
-        IdList list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1));
+        IdList list2(CollabText::Test::test_counter(2));
 
         // One-directional wiring: list1 → op1 → list2
         list1.set_on_local_op([&](const IdListOperation& op) {

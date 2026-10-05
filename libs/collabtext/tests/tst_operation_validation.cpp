@@ -92,7 +92,7 @@ class TestOperationValidation : public QObject {
     Q_OBJECT
 private slots:
     void overflow_retention_is_bounded_and_drainable_for_both_primitives() {
-        Buffer source(actor(1)), target(actor(2));
+        Buffer source(CollabText::Test::test_counter(1)), target(CollabText::Test::test_counter(2));
         auto blocked = as_edit(source.apply_local_edit({{0, 0}}, {"payload"}));
         blocked.version.observe(Identity(actor(9), 9));
         target.set_deferred_budget({0, 0});
@@ -107,7 +107,7 @@ private slots:
         QCOMPARE(target.apply_ops({Operation{blocked}})[0].kind(), ApplyOutcomeKind::rejected);
         QVERIFY(target.quarantined().empty());
 
-        IdList list_source(actor(1)), list_target(actor(2));
+        IdList list_source(CollabText::Test::test_counter(1)), list_target(CollabText::Test::test_counter(2));
         auto operation = list_source.insert_after(Anchor::min(), 42);
         std::get<IdListInsertOp>(operation).version.observe(Identity(actor(9), 9));
         list_target.set_deferred_budget({0, 0});
@@ -123,7 +123,7 @@ private slots:
     }
 
     void quarantine_does_not_bypass_the_default_pending_operation_bound() {
-        Buffer source(actor(1)), target(actor(2));
+        Buffer source(CollabText::Test::test_counter(1)), target(CollabText::Test::test_counter(2));
         auto blocked = as_edit(source.apply_local_edit({{0, 0}}, {"a"}));
         blocked.version.observe(Identity(actor(9), 9));
         target.set_deferred_budget({0, 0});
@@ -135,7 +135,7 @@ private slots:
     }
 
     void missing_idlist_lookup_has_a_checked_not_found_result() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         QVERIFY(!list.try_anchor_of(100).ok());
         list.insert_after(Anchor::min(), 100);
         QVERIFY(list.try_anchor_of(100).ok());
@@ -148,7 +148,7 @@ private slots:
     void local_utf8_interior_boundaries_are_refused_without_mutation() {
         for (const auto range : {std::pair<uint32_t, uint32_t>{1, 1},
                                  {0, 1}, {1, 2}}) {
-            Buffer buffer(actor(1));
+            Buffer buffer(CollabText::Test::test_counter(1));
             buffer.apply_local_edit({{0, 0}}, {"\xc3\xa9"});
             const auto version = buffer.version();
             const auto depth = buffer.undo_depth();
@@ -164,7 +164,7 @@ private slots:
     void valid_scalar_boundaries_in_fragmented_text_remain_editable() {
         const std::string original = "\xc3\xa9\xf0\x9f\x99\x82Z";
         for (const uint32_t offset : {0u, 2u, 6u, 7u}) {
-            Buffer buffer(actor(1));
+            Buffer buffer(CollabText::Test::test_counter(1));
             QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {original}).ok());
             QVERIFY(buffer.try_apply_local_edit({{2, 2}}, {"q"}).ok());
             QVERIFY(buffer.try_apply_local_edit({{2, 3}}, {""}).ok());
@@ -178,7 +178,7 @@ private slots:
     }
 
     void blocked_replica_does_not_bypass_semantic_validation() {
-        Buffer source(actor(1)), target(actor(2));
+        Buffer source(CollabText::Test::test_counter(1)), target(CollabText::Test::test_counter(2));
         auto first = source.apply_local_edit({{0, 0}}, {"a"});
         auto blocked = source.apply_local_edit({{1, 1}}, {"b"});
         QCOMPARE(target.apply_ops({blocked})[0].kind(), ApplyOutcomeKind::deferred);
@@ -191,7 +191,7 @@ private slots:
     }
 
     void pending_byte_estimate_does_not_depend_on_counter_value() {
-        Buffer source(actor(1));
+        Buffer source(CollabText::Test::test_counter(1));
         auto early = as_edit(source.apply_local_edit({{0, 0}}, {"payload"}));
         auto later = early;
         later.timestamp.counter += 1000000;
@@ -263,7 +263,7 @@ private slots:
         // "hello" is 5 bytes and 5 scalars. Claiming 6 makes the fragment's
         // char count disagree with its bytes, which is what corrupts every
         // downstream index built from Fragment::length.
-        Buffer src(actor(2));
+        Buffer src(CollabText::Test::test_counter(2));
         Operation raw = valid_edit_op(src, "hello");
         EditOperation op = as_edit(raw);
         QVERIFY(!op.inserted_fragments.empty());
@@ -277,7 +277,7 @@ private slots:
     void multibyte_inserted_length_must_equal_scalar_count_not_byte_count() {
         // "e" + U+00E9 (2 bytes) + "e" = 4 bytes, 3 scalars. A decoder that
         // used the byte count would accept length=4 here.
-        Buffer src(actor(2));
+        Buffer src(CollabText::Test::test_counter(2));
         Operation raw = src.apply_local_edit({{0, 0}}, {std::string("e\xC3\xA9") + "e"});
         EditOperation op = as_edit(raw);
         QVERIFY(!op.inserted_fragments.empty());
@@ -295,7 +295,7 @@ private slots:
 
     void non_bmp_inserted_length_is_counted_in_scalars() {
         // U+1F600 is 4 bytes and 1 scalar.
-        Buffer src(actor(2));
+        Buffer src(CollabText::Test::test_counter(2));
         Operation raw = src.apply_local_edit({{0, 0}}, {std::string("\xF0\x9F\x98\x80")});
         EditOperation op = as_edit(raw);
         QVERIFY(!op.inserted_fragments.empty());
@@ -487,8 +487,8 @@ private slots:
     // =======================================================================
 
     void rejected_operation_leaves_engine_state_untouched() {
-        Buffer src(actor(2));
-        Buffer dst(actor(3));
+        Buffer src(CollabText::Test::test_counter(2));
+        Buffer dst(CollabText::Test::test_counter(3));
         dst.apply_local_edit({{0, 0}}, {"base"});
         const BufferState before = snapshot(dst);
 
@@ -508,8 +508,8 @@ private slots:
         // each time, so a new rule cannot be added without this covering it.
         // Payloads come from a separate source buffer: the buffer under test
         // must not be mutated by the setup.
-        Buffer src(actor(2));
-        Buffer dst(actor(3));
+        Buffer src(CollabText::Test::test_counter(2));
+        Buffer dst(CollabText::Test::test_counter(3));
         dst.apply_local_edit({{0, 0}}, {"base"});
         const BufferState before = snapshot(dst);
 
@@ -571,10 +571,10 @@ private slots:
     // =======================================================================
 
     void duplicate_operation_reports_duplicate_and_changes_nothing() {
-        Buffer src(actor(2));
+        Buffer src(CollabText::Test::test_counter(2));
         Operation op = valid_edit_op(src, "hi");
 
-        Buffer dst(actor(3));
+        Buffer dst(CollabText::Test::test_counter(3));
         const auto first = dst.apply_ops({op});
         QCOMPARE(first.size(), std::size_t(1));
         QCOMPARE(first[0].kind(), ApplyOutcomeKind::applied);
@@ -592,7 +592,7 @@ private slots:
 
     void local_edit_with_mismatched_cardinality_is_refused_without_mutation() {
         // Previously guarded only by assert(): undefined behaviour in Release.
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         const BufferState before = snapshot(buf);
 
@@ -603,7 +603,7 @@ private slots:
     }
 
     void local_edit_past_end_is_refused_without_mutation() {
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         const BufferState before = snapshot(buf);
 
@@ -613,7 +613,7 @@ private slots:
     }
 
     void local_edit_with_end_past_start_is_refused_without_mutation() {
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         const BufferState before = snapshot(buf);
 
@@ -624,7 +624,7 @@ private slots:
     }
 
     void local_edit_with_overlapping_ranges_is_refused_without_mutation() {
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         const BufferState before = snapshot(buf);
 
@@ -637,7 +637,7 @@ private slots:
     void local_edit_at_end_boundary_is_accepted() {
         // The insertion point one past the last byte is legal, so refusing it
         // would be a regression rather than a repair.
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         const auto result = buf.try_apply_local_edit({{5, 5}}, {"!"});
         QVERIFY(result.ok());
@@ -645,7 +645,7 @@ private slots:
     }
 
     void local_edit_with_unsorted_ranges_is_refused() {
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         const BufferState before = snapshot(buf);
 
@@ -658,7 +658,7 @@ private slots:
         // The old signature returns a plain Operation and cannot report a
         // failure. It must still refuse to mutate and must not read out of
         // bounds, which is what the assert() used to leave to chance.
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         const BufferState before = snapshot(buf);
 
@@ -672,9 +672,9 @@ private slots:
     // =======================================================================
 
     void out_of_order_valid_operations_still_converge() {
-        Buffer alice(actor(1));
-        Buffer bob(actor(2));
-        Buffer carol(actor(3));
+        Buffer alice(CollabText::Test::test_counter(1));
+        Buffer bob(CollabText::Test::test_counter(2));
+        Buffer carol(CollabText::Test::test_counter(3));
 
         Operation from_alice = alice.apply_local_edit({{0, 0}}, {"A"});
         bob.apply_ops({from_alice});
@@ -699,8 +699,8 @@ private slots:
     void deferred_operation_does_not_fire_a_change_callback() {
         // A deferred operation is not a visible change. Firing the callback
         // would make observers reconcile against a document that has not moved.
-        Buffer src(actor(1));
-        Buffer dst(actor(2));
+        Buffer src(CollabText::Test::test_counter(1));
+        Buffer dst(CollabText::Test::test_counter(2));
         EditOperation op = as_edit(src.apply_local_edit({{0, 0}}, {"X"}));
         op.version.observe(Identity(actor(9), 9));  // never satisfiable here
 
@@ -714,8 +714,8 @@ private slots:
     }
 
     void rejected_operation_does_not_fire_a_change_callback() {
-        Buffer src(actor(1));
-        Buffer dst(actor(2));
+        Buffer src(CollabText::Test::test_counter(1));
+        Buffer dst(CollabText::Test::test_counter(2));
         EditOperation op = as_edit(src.apply_local_edit({{0, 0}}, {"X"}));
         op.inserted_fragments[0].length += 5;
 
@@ -728,10 +728,10 @@ private slots:
     }
 
     void duplicate_operation_does_not_fire_a_change_callback() {
-        Buffer src(actor(1));
+        Buffer src(CollabText::Test::test_counter(1));
         Operation op = src.apply_local_edit({{0, 0}}, {"X"});
 
-        Buffer dst(actor(2));
+        Buffer dst(CollabText::Test::test_counter(2));
         int changes = 0;
         dst.set_on_change([&] { ++changes; });
 
@@ -742,8 +742,8 @@ private slots:
     }
 
     void deferral_beyond_budget_is_reported_and_quarantined_not_dropped() {
-        Buffer src(actor(1));
-        Buffer dst(actor(2));
+        Buffer src(CollabText::Test::test_counter(1));
+        Buffer dst(CollabText::Test::test_counter(2));
 
         // Every operation waits for a dependency that will never arrive.
         std::vector<Operation> blocked;
@@ -780,8 +780,8 @@ private slots:
     }
 
     void byte_budget_also_bounds_the_deferred_queue() {
-        Buffer src(actor(1));
-        Buffer dst(actor(2));
+        Buffer src(CollabText::Test::test_counter(1));
+        Buffer dst(CollabText::Test::test_counter(2));
 
         EditOperation op = as_edit(src.apply_local_edit({{0, 0}}, {"payload"}));
         op.version.observe(Identity(actor(9), 9));
@@ -801,7 +801,7 @@ private slots:
     void idlist_insert_after_unresolvable_anchor_is_refused() {
         // Previously assert(found): in Release the predecessor/successor stayed
         // default-constructed and the insert landed at a fabricated position.
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
         const auto before = list.ids();
 
@@ -814,7 +814,7 @@ private slots:
     void idlist_remove_at_missing_anchor_is_refused_without_out_of_bounds_read() {
         // Previously assert(idx < entries.size()) followed by entries[idx]:
         // an out-of-bounds read on every Release build.
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
         const auto before = list.ids();
 
@@ -824,7 +824,7 @@ private slots:
     }
 
     void idlist_legacy_entry_points_do_not_mutate_on_bad_anchor() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
         const auto before = list.ids();
 
@@ -834,8 +834,8 @@ private slots:
     }
 
     void idlist_rejected_remote_operation_changes_nothing() {
-        IdList alice(actor(1));
-        IdList bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1));
+        IdList bob(CollabText::Test::test_counter(2));
         alice.insert_after(Anchor::min(), 42);
 
         int changes = 0;
@@ -870,9 +870,9 @@ private slots:
     }
 
     void idlist_out_of_order_operations_converge() {
-        IdList alice(actor(1));
-        IdList bob(actor(2));
-        IdList carol(actor(3));
+        IdList alice(CollabText::Test::test_counter(1));
+        IdList bob(CollabText::Test::test_counter(2));
+        IdList carol(CollabText::Test::test_counter(3));
 
         IdListOperation from_alice = alice.insert_after(Anchor::min(), 100);
         bob.apply_ops({from_alice});
@@ -887,8 +887,8 @@ private slots:
     }
 
     void idlist_duplicate_reports_duplicate() {
-        IdList alice(actor(1));
-        IdList bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1));
+        IdList bob(CollabText::Test::test_counter(2));
         IdListOperation op = alice.insert_after(Anchor::min(), 100);
 
         QCOMPARE(bob.apply_ops({op})[0].kind(), ApplyOutcomeKind::applied);

@@ -57,8 +57,16 @@ struct Expectation {
     bool converged = true;
     int replica = 0;
     std::string text;               ///< hex-encoded expectation
-    uint16_t anchor_replica = 0;    ///< comment anchor
-    uint32_t anchor_char = 0;
+    /// Which inserted item the comment's range starts at: the `item_ordinal`th
+    /// item this replica inserted, counting from 1.
+    ///
+    /// Deliberately an ordinal and not a raw identity. V08 froze these fixtures
+    /// against the then-current per-scalar allocation, where the values were
+    /// computable from the trace; P06a's run-interval allocation moved them, and
+    /// the behaviour under test did not change. Naming the position ordinally
+    /// says what the fixture means and keeps it meaning that across allocation
+    /// changes.
+    uint8_t anchor_item_ordinal = 0;   ///< comment anchor
     Bias bias = Bias::Left;
     uint32_t expected_offset = 0;
     std::string describe() const;
@@ -135,13 +143,11 @@ Fixture load_fixture(const std::filesystem::path& path) {
                 std::string verb;
                 std::string bias;
                 int replica = 0;
-                int anchor_replica = 0;
-                int anchor_char = 0;
+                int anchor_ordinal = 0;
                 int offset = 0;
-                fields >> verb >> replica >> anchor_replica >> anchor_char >> bias >> offset;
+                fields >> verb >> replica >> anchor_ordinal >> bias >> offset;
                 expectation.replica = replica;
-                expectation.anchor_replica = static_cast<uint16_t>(anchor_replica);
-                expectation.anchor_char = static_cast<uint32_t>(anchor_char);
+                expectation.anchor_item_ordinal = static_cast<uint8_t>(anchor_ordinal);
                 expectation.bias = bias == "r" ? Bias::Right : Bias::Left;
                 expectation.expected_offset = static_cast<uint32_t>(offset);
             } else {
@@ -212,8 +218,8 @@ std::string Expectation::describe() const {
         return "visible_of " + std::to_string(replica) + " == " +
                std::to_string(expected_offset);
     case ExpectationKind::CommentAnchor:
-        return "comment_anchor (" + std::to_string(anchor_replica) + "," +
-               std::to_string(anchor_char) + ") resolves to " +
+        return "comment_anchor (item " + std::to_string(anchor_item_ordinal) +
+               ") resolves to " +
                std::to_string(expected_offset);
     }
     return {};
@@ -429,7 +435,7 @@ private:
         // Rebuild the document by replaying the trace's edits onto a real
         // Buffer, so the anchor is resolved by the engine rather than by
         // arithmetic on the expected text.
-        Buffer buffer(CollabText::Test::actor(
+        Buffer buffer(CollabText::Test::test_counter(
             static_cast<uint8_t>(expectation.replica + 1)));
         std::vector<Operation> produced;
         for (const Event& event : fixture.trace.events) {
@@ -458,12 +464,21 @@ private:
             }
         }
         // The comment names the range boundaries; the range start is what a
-        // reader resolves to position the comment.
-        const Anchor start(
-            Identity(CollabText::Test::actor(expectation.anchor_replica),
-                     expectation.anchor_char),
-            expectation.bias);
-        return buffer.resolve_anchor(start);
+        // reader resolves to position the comment. Resolved through the engine's
+        // own fragments so the answer comes from the anchor resolution path
+        // rather than from arithmetic on the expected text.
+        std::vector<Identity> inserted;
+        for (const Fragment &frag : buffer.fragments()) {
+            for (uint32_t i = 0; i < frag.length; ++i) {
+                if (!frag.visible) continue;
+                inserted.push_back(frag.item_at(i));
+            }
+        }
+        if (expectation.anchor_item_ordinal == 0 ||
+            expectation.anchor_item_ordinal > inserted.size())
+            return UINT32_MAX;
+        return buffer.resolve_anchor(
+            Anchor(inserted[expectation.anchor_item_ordinal - 1], expectation.bias));
     }
 };
 

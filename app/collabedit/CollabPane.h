@@ -7,6 +7,7 @@
 #include "crdt/Anchor.h"
 #include "crdt/Buffer.h"
 #include "crdt/FileSync.h"
+#include "identity/ReplicaAllocator.h"
 #include <collabtext/StreamSync.h>
 
 #include <QWidget>
@@ -76,6 +77,9 @@ private:
     /// and the per-(actor, stream) counter. Held rather than borrowed, because
     /// it owns an OS lock for as long as this pane is open.
     CollabText::ReplicaState m_replicaState;
+    /// This device's allocator for the text stream. Borrowed by the buffer; the
+    /// pane owns both the state and the handle, and the state outlives them.
+    std::shared_ptr<CollabText::Identity::ReplicaAllocator> m_allocator;
 
     CollabText::Crdt::Buffer m_buffer;
     CollabText::Crdt::FileSync m_sync;

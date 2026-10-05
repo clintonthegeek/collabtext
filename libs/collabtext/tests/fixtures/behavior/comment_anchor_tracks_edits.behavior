@@ -7,12 +7,15 @@
 # status: desired
 # scope: comments
 # expect converged yes
-# expect comment_anchor 0 1 4 l 1
+# expect comment_anchor 0 2 l 1
 # note: the document is built one character at a time, so the comment's range
 #   start can name an entry that exists before the later characters do. The 'b'
-#   is Lamport (1,4) — the clock advances twice per edit — and once the document
-#   is "abcd" that anchor must resolve to offset 1. Fields: buffer replica,
-#   anchor replica id, anchor char value, bias, expected offset.
+#   is the second item this replica inserted, and once the document is "abcd" an
+#   anchor on it must resolve to offset 1. Fields: buffer replica, item ordinal
+#   (1-based, counted over the items that replica inserted), bias, expected
+#   offset. The ordinal replaced a raw Lamport pair when P06a adopted
+#   run-interval allocation: the behaviour under test is unchanged and the
+#   position is now named the way the fixture means it.
 #collabtext-trace 1
 #model buffer
 #label comment-anchor

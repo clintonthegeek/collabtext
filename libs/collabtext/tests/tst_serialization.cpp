@@ -229,7 +229,7 @@ private slots:
 
     void real_engine_roundtrip() {
         // Create a real operation from the engine and roundtrip it
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         auto op = buf.apply_local_edit({{0, 0}}, {"hello world"});
 
         std::string json = encode_operation(op);
@@ -237,13 +237,13 @@ private slots:
         QVERIFY(decoded.has_value());
 
         // Apply the decoded op to a fresh buffer — must produce same text
-        Buffer buf2(actor(2));
+        Buffer buf2(CollabText::Test::test_counter(2));
         buf2.apply_ops({*decoded});
         QCOMPARE(buf2.text(), std::string("hello world"));
     }
 
     void real_engine_edit_delete_undo_roundtrip() {
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         auto op1 = buf.apply_local_edit({{0, 0}}, {"hello world"});
         auto op2 = buf.apply_local_edit({{5, 11}}, {""});  // delete " world"
         auto op3 = buf.undo();
@@ -262,7 +262,7 @@ private slots:
         QVERIFY(d3.has_value());
 
         // Apply to fresh buffer — must converge
-        Buffer buf2(actor(2));
+        Buffer buf2(CollabText::Test::test_counter(2));
         buf2.apply_ops({*d1, *d2, *d3});
         QCOMPARE(buf2.text(), buf.text());
     }

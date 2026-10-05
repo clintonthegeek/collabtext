@@ -9,7 +9,7 @@ struct CrdtEngine::Impl {
     ChangeCallback on_change;
     LocalOpCallback on_local_op;
 
-    explicit Impl(const ActorId &actor) : buffer(actor) {}
+    explicit Impl(Crdt::SharedAllocator allocator) : buffer(std::move(allocator)) {}
 
     void notify() {
         if (on_change) on_change();
@@ -20,8 +20,8 @@ struct CrdtEngine::Impl {
     }
 };
 
-CrdtEngine::CrdtEngine(const ActorId &actor)
-    : m_impl(std::make_unique<Impl>(actor))
+CrdtEngine::CrdtEngine(Crdt::SharedAllocator allocator)
+    : m_impl(std::make_unique<Impl>(std::move(allocator)))
 {
 }
 

@@ -27,7 +27,7 @@ class TestScrollStability : public QObject {
 private slots:
     void remote_insert_above_viewport_preserves_top_anchor() {
         // Set up Alice's buffer and widget, populated with a 100-line doc.
-        Buffer aliceBuf(actor(1));
+        Buffer aliceBuf(CollabText::Test::test_counter(1));
         {
             std::string text;
             for (int i = 0; i < 100; ++i) {
@@ -108,7 +108,7 @@ private slots:
     }
 
     void remote_insert_below_viewport_leaves_top_unchanged() {
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         {
             std::string text;
             for (int i = 0; i < 100; ++i) {

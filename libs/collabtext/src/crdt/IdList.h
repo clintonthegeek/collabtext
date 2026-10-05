@@ -1,6 +1,7 @@
 #pragma once
 
 #include "crdt/Anchor.h"
+#include "crdt/IdentityAllocator.h"
 #include "crdt/Clock.h"
 #include "crdt/Locator.h"
 #include "crdt/OperationValidation.h"
@@ -95,7 +96,10 @@ using IdListTree = SumTree<IdListEntry, IDLIST_TREE_B>;
 
 class IdList {
 public:
-    explicit IdList(const ActorId &actor);
+    /// Takes the allocator this list mints identities from. There is
+    /// deliberately no ActorId-only constructor: holding an actor id is not
+    /// authority to claim durable allocation (identity spec §3.7).
+    explicit IdList(SharedAllocator allocator);
 
     IdListOperation insert_after(const Anchor& after, uint64_t id);
     IdListOperation remove_at(const Anchor& target);
@@ -156,7 +160,10 @@ public:
     int compare_anchors(const Anchor& a, const Anchor& b) const;
 
     const Global& version() const { return m_version; }
-    const ActorId &actor_id() const { return m_actor; }
+    const ActorId &actor_id() const { return m_allocator->actor(); }
+
+    /// The allocator this list borrows.
+    const SharedAllocator &allocator() const { return m_allocator; }
 
     /// Temporarily retains all entries, including restoration/anchor context.
     /// Returns zero until certified reclamation is implemented.
@@ -208,8 +215,7 @@ public:
     void local_clear() noexcept;
 
 private:
-    ActorId m_actor;
-    Identity m_clock;
+    SharedAllocator m_allocator;
     Global m_version;
     UndoMap m_undo_map;
     IdListTree m_entry_tree;
@@ -248,6 +254,12 @@ private:
     /// Index of the entry whose origin matches `target`, or npos.
     [[nodiscard]] size_t find_origin(const std::vector<IdListEntry>& entries,
                                      const Anchor& target) const;
+
+    /// Raise the allocator above an identity observed from a peer. Derived
+    /// state, not durable allocation (identity spec §3.4).
+    void observe_remote(const Identity &id) const {
+        m_allocator->observe(id.counter);
+    }
 
     void retry_deferred();
     void enqueue_deferred(IdListOpEntry entry);

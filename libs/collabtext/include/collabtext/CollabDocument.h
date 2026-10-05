@@ -11,11 +11,13 @@ class CollabDocument : public QObject {
     Q_OBJECT
 
 public:
-    /// The actor this document mints identities for. No default: a document
-    /// constructed with an implicit actor 0 would emit operations indistinguishable
-    /// from any other process's, which is the identity collision P02 exists to
-    /// prevent.
-    explicit CollabDocument(const ActorId &actor, QObject *parent = nullptr);
+    /// Takes the allocator this document mints identities from. No default and no
+    /// ActorId-only constructor: a document constructed with an implicit actor 0
+    /// would emit operations indistinguishable from any other process's, which is
+    /// the identity collision P02 exists to prevent
+    /// (docs/specs/vnext-identity.md §3.7).
+    explicit CollabDocument(Crdt::SharedAllocator allocator,
+                            QObject *parent = nullptr);
     ~CollabDocument() override;
 
     QTextDocument *qtDocument() const { return m_qtDoc; }

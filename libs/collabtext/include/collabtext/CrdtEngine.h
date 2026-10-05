@@ -2,6 +2,7 @@
 
 #include <collabtext/ActorId.h>
 #include <collabtext/Operations.h>
+#include <crdt/IdentityAllocator.h>
 
 #include <cstdint>
 #include <functional>
@@ -12,14 +13,17 @@ namespace CollabText {
 
 class CrdtEngine {
 public:
-    /// The actor this engine mints identities for.
+    /// Takes the allocator this engine mints identities from, which is also where
+    /// it learns its actor.
     ///
-    /// There is no default. The previous signature was
-    /// `CrdtEngine(uint16_t replica_id = 0)`, whose default argument silently
-    /// produced an engine that stamped every operation as actor 0 — and two
-    /// processes constructed that way produced indistinguishable operations.
-    /// A caller must now name a real actor.
-    explicit CrdtEngine(const ActorId &actor);
+    /// There is no ActorId-only constructor, and there never was a safe one. The
+    /// previous signature was `CrdtEngine(uint16_t replica_id = 0)`, whose
+    /// default argument silently produced an engine that stamped every
+    /// operation as actor 0 — and two processes constructed that way produced
+    /// indistinguishable operations. Holding an actor id is not authority to
+    /// claim durable allocation, so the allocator is the only way in
+    /// (docs/specs/vnext-identity.md §3.7).
+    explicit CrdtEngine(Crdt::SharedAllocator allocator);
     ~CrdtEngine();
     CrdtEngine(const CrdtEngine &) = delete;
     CrdtEngine &operator=(const CrdtEngine &) = delete;

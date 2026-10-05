@@ -3,20 +3,18 @@
 **Created:** 2026-10-04, as the design-gate artifact for roadmap task P06a
 **Extended:** 2026-10-05 — §3.1–§3.8 close the allocation-domain gate the review
 required.
-**Measured:** 2026-10-05 — P06a step 3 adopted the types; §5 is now measured
-rather than projected. §3.2's run-interval allocation is *not* yet in the engine:
-allocation is still per-scalar, which is why `apply_validated_local_edit` still
-sets an insert operation's identity to the last item of its own run.
+**Measured:** 2026-10-05 — P06a steps 3 and 4 adopted the types and §3.2's
+run-interval allocation; §5 is now measured rather than projected.
 **Supersedes for identity purposes:** the `Lamport { uint32_t value; uint16_t
 replica_id; }` that used to live in `src/crdt/Clock.h`, which this document
 replaced rather than extended. That type no longer exists: `Clock.h` now defines
 `Crdt::Identity`, and nothing in the engine or the public headers is spelled
 `Lamport` any more.
 
-**Status of each section:** §1–§2 are implemented and enforced by the engine.
-§3.1–§3.8 are specified and proved by independent models, but §3.2's run-interval
-allocation is **not** in the engine yet — allocation is still one counter per
-scalar, which is the legacy behaviour §3.2 replaces. §4 is a constraint on
+**Status of each section:** §1–§3.7 are implemented and enforced by the engine.
+An engine is constructed from an allocator rather than an actor id, reserves one
+interval per local operation, and marks tombstones with the deleting operation's
+own identity. §3.8 is what the independent model proves. §4 is a constraint on
 P07/L04 rather than code here. §5 is measured.
 
 ## 1. What an identity is
@@ -136,11 +134,18 @@ three uses are named, disjoint, and no longer alias.
 
 ### 3.2 Run-interval reservation
 
-The legacy engine answers "which identity does this character get" by ticking its
-clock once per inserted scalar (`Buffer.cpp:864`, `IdList.cpp:73`). One P02
-`next_operation()` reservation per edit cannot supply that range, so vNext
-reserves a **run interval**: one checked reservation covering an operation and
-all of its items.
+The legacy engine answered "which identity does this character get" by ticking its
+clock once per inserted scalar. One P02 `next_operation()` reservation per edit
+cannot supply that range, so vNext reserves a **run interval**: one checked
+reservation covering an operation and all of its items.
+
+**Implemented.** `Crdt::IdentityAllocator::reserve_run(count)` is the single
+allocation path; `Buffer::apply_validated_local_edit` counts the scalars it is
+about to insert *before* mutating anything, reserves `n + 1` once, and hands out
+item identities from that interval run by run. Undo, redo, `IdList` insert and
+`IdList` remove each reserve one value, because they insert no items. An engine
+has no constructor that takes only an `ActorId` — it is handed an allocator and
+learns its actor from it, so it cannot mint identity at all without one (§3.7).
 
 For a local operation inserting `n` scalars in total, the reservation returns a
 base `b` and consumes `n + 1` consecutive values:

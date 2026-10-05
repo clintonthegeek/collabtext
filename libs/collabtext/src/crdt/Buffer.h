@@ -3,6 +3,7 @@
 #include "crdt/Anchor.h"
 #include "crdt/Clock.h"
 #include "crdt/Fragment.h"
+#include "crdt/IdentityAllocator.h"
 #include "crdt/InsertionIndex.h"
 #include "crdt/Locator.h"
 #include "crdt/OperationQueue.h"
@@ -40,7 +41,14 @@ struct TextEdit {
 
 class Buffer {
 public:
-    explicit Buffer(const ActorId &actor);
+    /// Takes the allocator this engine mints identities from.
+    ///
+    /// There is deliberately no constructor that takes only an ActorId. Holding
+    /// an actor id is not authority to claim durable allocation, and a
+    /// constructor that quietly started a counter at 1 would hand out
+    /// identities a relaunch would hand out again (identity spec §3.7). An
+    /// engine that cannot be given an allocator cannot mint an identity at all.
+    explicit Buffer(SharedAllocator allocator);
 
     /// Local edit: ranges are byte offsets in visible text.
     /// Each range is a (start, end) pair denoting bytes to delete.
@@ -160,8 +168,13 @@ public:
     /// Returns the current version vector.
     const Global &version() const;
 
-    /// The persistent actor this buffer mints identities for.
+    /// The persistent actor this buffer mints identities for, which is the
+    /// allocator's actor rather than a constructor argument.
     const ActorId &actor_id() const;
+
+    /// The allocator this engine borrows. Exposed for diagnostics and for the
+    /// tests that assert *how many* reservations an operation performed.
+    const SharedAllocator &allocator() const { return m_allocator; }
 
     /// Create an Anchor at a visible byte offset.
     Anchor anchor_at(uint32_t byte_offset, Bias bias = Bias::Left) const;
@@ -251,9 +264,23 @@ private:
     ApplyOutcome defer_or_quarantine(const Operation& op, Identity awaiting);
 
     /// The existing edit body, which assumes its arguments were validated.
-    Operation apply_validated_local_edit(
+    ///
+    /// Fallsible even though its arguments are not: the identity reservation is
+    /// the first thing it does, and a counter that cannot cover the edit is a
+    /// refusal, not a silent wrap.
+    Result<Operation> try_apply_validated_local_edit(
         const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
         const std::vector<std::string> &new_text);
+
+    /// Raise the allocator above an identity observed from a peer.
+    ///
+    /// Derived state, deliberately not durable (identity spec §3.4): it need not
+    /// be persisted because on reopen the engine replays its own log and
+    /// observes again, and a lost raise cannot cause reuse because no identity
+    /// was issued while it was held.
+    void observe_remote(const Identity &id) const {
+        m_allocator->observe(id.counter);
+    }
 
     /// Retry any deferred operations.
     void retry_deferred();
@@ -271,8 +298,7 @@ private:
         const std::vector<EditOperation::DeletionRun>& runs,
         Identity deletion_id);
 
-    ActorId m_actor;
-    Identity m_clock;
+    SharedAllocator m_allocator;
     Global m_version;
     UndoMap m_undo_map;
 

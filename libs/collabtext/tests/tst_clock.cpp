@@ -289,8 +289,8 @@ private slots:
         constexpr int kEdits = 400;
         const std::string chunk(180, 'a');
 
-        auto run = [&](const ActorId &who) -> qint64 {
-            CollabText::Crdt::Buffer buf(who);
+        auto run = [&](uint8_t who, uint64_t counter_start) -> qint64 {
+            CollabText::Crdt::Buffer buf(CollabText::Test::test_counter(who, counter_start));
             uint32_t cursor = 0;
             QElapsedTimer t;
             t.start();
@@ -302,17 +302,19 @@ private slots:
         };
 
         // Warm-up: avoid the very first run paying allocator/page-fault costs.
-        (void)run(actor(1));
+        (void)run(1, 1);
 
-        const qint64 small = run(actor(1));
-        // A large actor value, not a large actor count: this is the case the
-        // old dense layout was accidentally linear in.
-        const qint64 large = run(actor64(UINT64_MAX - 1));
+        const qint64 small = run(1, 1);
+        // A long-lived session's counter. The old bug was per-edit cost linear in
+        // the magnitude of the identity key; a 128-bit actor has no magnitude to
+        // be large, so the surviving form of the same invariant is that the
+        // counter's magnitude does not leak into the edit path either.
+        const qint64 large = run(1, uint64_t{1} << 40);
 
         const qint64 ceiling = small * 10 + 50'000'000;  // +50 ms slack floor
         QVERIFY2(large <= ceiling,
-                 qPrintable(QString("the large actor took %1 ns vs %2 ns "
-                                    "for actor(1) (ceiling %3 ns)")
+                 qPrintable(QString("a counter starting at 2^40 took %1 ns "
+                                    "vs %2 ns for one starting at 1 (ceiling %3 ns)")
                                 .arg(large)
                                 .arg(small)
                                 .arg(ceiling)));

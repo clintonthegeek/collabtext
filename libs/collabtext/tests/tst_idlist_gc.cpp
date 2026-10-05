@@ -10,7 +10,7 @@ class TestIdListGc : public QObject {
     Q_OBJECT
 private slots:
     void collect_garbage_retains_trimmed_tombstones() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
         list.set_max_undo_depth(0);   // discard all undo entries
@@ -22,7 +22,7 @@ private slots:
     }
 
     void collect_garbage_skips_remote_deletions() {
-        IdList alice(actor(1)), bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op_a});
         auto rm_b = bob.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
@@ -33,7 +33,7 @@ private slots:
     }
 
     void compact_with_watermark_preserves_remote_undo() {
-        IdList alice(actor(1)), bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op_a});
         auto rm_b = bob.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
@@ -56,7 +56,7 @@ private slots:
     }
 
     void gc_protects_entries_in_undo_stack() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));  // deletion id is in undo stack
         QCOMPARE(list.collect_garbage(), size_t{0});  // protected
@@ -70,7 +70,7 @@ private slots:
         // Entry was inserted then undone (no deletion tombstone), only visible=false
         // because its origin is flagged in undo_map. GC must not collect it while
         // the insertion is still in the undo stack (redo would break otherwise).
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);  // origin (1,1), undo entry: inserted_keys={(1,1)}
         list.undo();                              // invisible now, no deletion, but insertion protected
         QCOMPARE(list.size(), size_t{0});

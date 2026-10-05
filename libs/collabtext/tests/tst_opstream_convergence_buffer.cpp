@@ -53,8 +53,8 @@ private slots:
         OpStream* op1 = &sync1;
         OpStream* op2 = &sync2;
 
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         // Wire engine1 → op1 (outbound)
         engine1.setOnLocalOp([&](const Operation& op) {
@@ -130,8 +130,8 @@ private slots:
         OpStream* op1 = &sync1;
         OpStream* op2 = &sync2;
 
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         engine1.setOnLocalOp([&](const Operation& op) {
             op1->push("buf:doc", encode_operation(op));
@@ -195,8 +195,8 @@ private slots:
 
         OpStream* op1 = &sync1;
 
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         // One-directional wiring: engine1 → op1 → engine2 only
         engine1.setOnLocalOp([&](const Operation& op) {

@@ -522,6 +522,48 @@ Result<OperationId> ReplicaState::next_operation(const StreamId& stream_name,
     return id;
 }
 
+Result<uint64_t> ReplicaState::reserve_run(const StreamId& stream_name,
+                                           const DocumentId& document,
+                                           uint64_t epoch,
+                                           uint64_t count) {
+    if (!m_state_lease || m_failed)
+        return Error(ErrorCode::writer_conflict, "replica owner is closed or requires reopen");
+    if (!valid_stream_name(stream_name))
+        return Error(ErrorCode::unknown_stream, "stream name must be a bounded ASCII token");
+    if (document.empty() || document.find('\0') != std::string::npos || epoch == 0)
+        return Error(ErrorCode::malformed, "document id is empty");
+    if (!m_actor.valid())
+        return Error(ErrorCode::invalid_identity, "replica state has no actor identity");
+
+    auto counters_result = this->stream(stream_name);
+    if (!counters_result.ok())
+        return counters_result.error().with_context("creating stream " + stream_name);
+    StreamCounters* counters = counters_result.value();
+
+    auto reserved = counters->counter.reserve_run(count, stream_name);
+    if (!reserved.ok())
+        return reserved.error().with_context("reserving an identity run");
+
+    // One durable write for the whole interval, before any of it is used.
+    if (auto persisted = persist(); !persisted.ok())
+        return persisted.error().with_context("persisting identity run for " +
+                                               stream_name);
+    (void)document;
+    (void)epoch;
+    return reserved.value();
+}
+
+Result<void> ReplicaState::observe_remote(const StreamId& stream_name,
+                                          uint64_t counter) {
+    if (!m_state_lease || m_failed)
+        return Error(ErrorCode::writer_conflict, "replica owner is closed or requires reopen");
+    auto counters_result = this->stream(stream_name);
+    if (!counters_result.ok())
+        return counters_result.error().with_context("creating stream " + stream_name);
+    // In-memory only. See the header: the raise is re-derived on reopen.
+    return counters_result.value()->counter.observe(counter, stream_name);
+}
+
 Result<uint64_t> ReplicaState::peek_stream(const StreamId& stream_name) const {
     for (const auto& [name, counters] : m_streams)
         if (name == stream_name) return counters.counter.peek();

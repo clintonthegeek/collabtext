@@ -521,7 +521,7 @@ private slots:
         uint64_t seed = 0;
         std::mt19937 rng = scenario_rng("rapid_multi_range_edits", &seed);
 
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdefghijklmnopqrstuvwxyz"});
         check_invariants(buf, "initial");
 
@@ -770,7 +770,7 @@ private slots:
         // a(1) é(2) 中(3) 🚀(4) b(1) ñ(2) 日(3) 😀(4)
         std::string text = "a\xc3\xa9\xe4\xb8\xad\xf0\x9f\x9a\x80"
                            "b\xc3\xb1\xe6\x97\xa5\xf0\x9f\x98\x80";
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {text});
         QCOMPARE(buf.text(), text);
         check_invariants(buf, "utf8_mix_initial");
@@ -790,7 +790,7 @@ private slots:
         for (size_t i = boundaries.size(); i > 0; --i) {
             // Work backwards so byte offsets remain valid
             uint32_t pos = boundaries[i - 1];
-            Buffer test_buf(actor(1));
+            Buffer test_buf(CollabText::Test::test_counter(1));
             test_buf.apply_local_edit({{0, 0}}, {text});
             test_buf.apply_local_edit({{pos, pos}}, {"X"});
             check_invariants(test_buf, qPrintable(
@@ -803,7 +803,7 @@ private slots:
 
         // Delete each single character
         for (size_t i = 0; i + 1 < boundaries.size(); ++i) {
-            Buffer test_buf(actor(1));
+            Buffer test_buf(CollabText::Test::test_counter(1));
             test_buf.apply_local_edit({{0, 0}}, {text});
             test_buf.apply_local_edit({{boundaries[i], boundaries[i+1]}}, {""});
             check_invariants(test_buf, qPrintable(

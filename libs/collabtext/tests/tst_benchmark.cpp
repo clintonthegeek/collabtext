@@ -229,7 +229,7 @@ private slots:
         qDebug().noquote() << "\n=== Single-Replica Throughput ===";
         for (uint32_t size : {1000u, 10000u, 100000u}) {
             std::mt19937 rng(42);
-            Buffer buf(actor(1));
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, size, rng);
 
             const int NUM_OPS = 200;
@@ -249,7 +249,7 @@ private slots:
     void single_replica_large_doc() {
         qDebug().noquote() << "\n=== Single-Replica Large Doc (1M) ===";
         std::mt19937 rng(42);
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         build_document(buf, 1000000, rng, 1000);
 
         const int NUM_OPS = 100;
@@ -273,7 +273,7 @@ private slots:
         // --- Sequential (append at end) ---
         {
             std::mt19937 rng(42);
-            Buffer buf(actor(1));
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, DOC_SIZE, rng);
             auto t0 = Clock::now();
             for (int i = 0; i < NUM_OPS; ++i) {
@@ -289,7 +289,7 @@ private slots:
         // --- Random ---
         {
             std::mt19937 rng(42);
-            Buffer buf(actor(1));
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, DOC_SIZE, rng);
             auto t0 = Clock::now();
             for (int i = 0; i < NUM_OPS; ++i)
@@ -302,7 +302,7 @@ private slots:
         // --- Hotspot (bytes [5000, 5100]) ---
         {
             std::mt19937 rng(42);
-            Buffer buf(actor(1));
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, DOC_SIZE, rng);
             auto t0 = Clock::now();
             for (int i = 0; i < NUM_OPS; ++i) {
@@ -331,7 +331,7 @@ private slots:
 
         for (int insert_size : {1, 10, 100, 1000}) {
             std::mt19937 rng(42);
-            Buffer buf(actor(1));
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, DOC_SIZE, rng);
 
             auto t0 = Clock::now();
@@ -357,7 +357,7 @@ private slots:
 
         for (double frac : {0.0, 0.5, 0.9}) {
             std::mt19937 rng(42);
-            Buffer buf(actor(1));
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, 5000, rng);
 
             if (frac > 0.0)
@@ -392,7 +392,7 @@ private slots:
         // Shows whether tombstone cost scales linearly with total fragments.
         for (uint32_t doc_size : {3000u, 5000u, 8000u}) {
             std::mt19937 rng(42);
-            Buffer buf(actor(1));
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, doc_size, rng);
 
             create_tombstones(buf, 0.5, rng);
@@ -425,7 +425,7 @@ private slots:
             // Create K replicas
             std::vector<Buffer> replicas;
             for (int i = 0; i < K; ++i)
-                replicas.emplace_back(CollabText::Test::actor(static_cast<uint8_t>(i + 1)));
+                replicas.emplace_back(CollabText::Test::test_counter(static_cast<uint8_t>(i + 1)));
 
             // Each replica performs edits independently, collecting operations
             std::vector<std::vector<Operation>> all_ops(K);
@@ -487,7 +487,7 @@ private slots:
         // Build shared base on replica 1, then sync to all others
         std::vector<Buffer> replicas;
         for (int i = 0; i < K; ++i)
-            replicas.emplace_back(CollabText::Test::actor(static_cast<uint8_t>(i + 1)));
+            replicas.emplace_back(CollabText::Test::test_counter(static_cast<uint8_t>(i + 1)));
 
         // Replica 0 builds the doc, collecting ops to broadcast
         std::vector<Operation> base_ops;
@@ -562,7 +562,7 @@ private slots:
     void undo_redo_cycle() {
         qDebug().noquote() << "\n=== Undo/Redo Cycle (10K doc) ===";
         std::mt19937 rng(42);
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         build_document(buf, 10000, rng);
 
         const int NUM_EDITS = 500;
@@ -619,7 +619,7 @@ private slots:
 
         for (int N : {100, 500, 1000}) {
             std::mt19937 rng(42);
-            Buffer buf(actor(1));
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, 10000, rng);
 
             // Perform N edits
@@ -649,7 +649,7 @@ private slots:
     void fragment_proliferation() {
         qDebug().noquote() << "\n=== Fragment Proliferation (10K doc + 2K single-char inserts) ===";
         std::mt19937 rng(42);
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         build_document(buf, 10000, rng);
 
         const int TOTAL = 2000;
@@ -695,7 +695,7 @@ private slots:
     void tombstone_undo_interaction() {
         qDebug().noquote() << "\n=== Tombstone-Undo Interaction ===";
         std::mt19937 rng(42);
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         build_document(buf, 2000, rng);
 
         // Delete 80% char-by-char: ~1600 edits, each creating one tombstone.
@@ -741,7 +741,7 @@ private slots:
     void memory_growth() {
         qDebug().noquote() << "\n=== Memory Growth (5000 edits from empty) ===";
         std::mt19937 rng(42);
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
 
         const int TOTAL = 5000;
         const int INTERVAL = 500;
@@ -796,7 +796,7 @@ private slots:
         // conflated the GC call with a warm allocator and a different fragment
         // layout. Recording the setup matters: a rebuild that silently dropped
         // the tombstones would compare an empty document with itself.
-        Workload workload(actor(1), "gc-compare");
+        Workload workload(CollabText::Test::test_counter(1), "gc-compare");
         std::mt19937 rng(42);
         while (workload.buffer().visible_length() < 5000) {
             const uint32_t end = workload.buffer().visible_length();

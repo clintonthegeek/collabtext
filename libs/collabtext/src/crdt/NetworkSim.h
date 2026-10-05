@@ -1,6 +1,7 @@
 #pragma once
 
 #include "crdt/Buffer.h"
+#include "crdt/IdentityAllocator.h"
 #include "crdt/EditStrategy.h"
 #include <functional>
 #include <optional>
@@ -17,6 +18,14 @@ namespace CollabText::Crdt {
 /// reproducible; derived per index so two simulated replicas never share one
 /// identity. Not a device identity — see derived_actor().
 ActorId simulator_actor(int index);
+
+/// A volatile allocator for simulated replica `index`.
+///
+/// One per replica, on purpose: a counter is per (actor, stream) and each
+/// simulated replica is its own stream. Sharing one would be safe but would make
+/// the scenarios depend on allocation order across replicas.
+class SimulatorCounter;
+SharedAllocator simulator_allocator(int index);
 
 /// Network configuration for NetworkSim.
 ///

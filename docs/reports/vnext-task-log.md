@@ -1562,3 +1562,76 @@ from the seed content — same determinism requirement, no shared counter range.
 **Next ready tasks:** A01, W01, S01 (all independently ready). Within P06a:
 run-interval allocation, then the construction-time rejection of an invalid
 ActorId, then opaque operation values.
+
+## P06a step 3b — run-interval allocation from a borrowed counter
+
+**Task:** P06a (still in progress; this is the allocation step)
+**Status:** in progress — steps 3, 3b and 4 done; 5 and 6 remaining
+**Baseline:** `788254e`
+**Implementation commits:** this entry's commit
+**Scope:** a local operation now costs exactly one checked reservation of
+`n + 1` counters instead of one tick per inserted scalar. `Buffer`,
+`IdList`, `CrdtEngine` and `CollabDocument` take a borrowed
+`IdentityAllocator` instead of an `ActorId`; `ReplicaAllocator` binds one
+(document, stream) of a `ReplicaState` to it. A deletion marks its tombstones
+with the deleting operation's own identity, which removes the second
+`deletion_ts` tick. `Buffer`'s and `IdList`'s local Lamport clocks are gone —
+the durable counter is the clock, whose actor half is now persistent.
+
+**Regression:** `tst_identity_allocation_engine.cpp`, 20 cases, written first.
+It did not compile: `Buffer` had no constructor that accepted an allocator.
+
+**Verification:**
+- Debug 65/65 executables.
+- Release 24/24 via `./tools/verify-roadmap.sh release`.
+- ASan/UBSan/LSan 18/18 via `./tools/verify-roadmap.sh asan`, no suppressions.
+- Artifacts: `build-roadmap-release/verification/20261005T062636Z-3388724`,
+  `build-roadmap-asan/verification/20261005T064034Z-3395786`.
+
+**API/store changes:** `Buffer(const ActorId&)` and friends are gone, replaced
+by `Buffer(SharedAllocator)`. `Buffer::allocator()` is new. `ReplicaState`
+gained `reserve_run(stream, document, epoch, count)` — one durable write per
+interval instead of one per value — and `observe_remote`, which raises a counter
+without persisting because §3.4 makes the raise re-derivable.
+
+**Known limits:**
+- The reopen case is a clean close/open, not a crash. Durable behaviour across
+  a real power loss is L02/L08's evidence, and it now matters more than it did: a
+  reservation that is never published burns a whole *interval*, not one value.
+- `NetworkSim`, `tst_*` and `testapp` run on volatile counters, deliberately and
+  by name. Persisted simulator counters would outlive the scenario that made them
+  and a rerun would start where the last one stopped.
+- `StreamEntry::replica_id`, `ChatMessage::replica_id`, `Comment::replica_id`
+  and the ack-frontier key are still 16-bit and are *not* this device's actor.
+  L04's, recorded as an inherited obligation.
+
+**The finding that mattered most was a test failure I caused myself.**
+
+V08's `comment_anchor_tracks_edits` fixture froze a raw `(1, 4)` Lamport pair
+with a note explaining that "the clock advances twice per edit". Run-interval
+allocation changes exactly that, and the fixture stopped resolving. The tempting
+move was to restate the numbers — recompute the new counter, keep the green.
+
+Instead the fixture now names the position ordinally: *the second item this
+replica inserted*. That is what it always meant; the raw pair was an
+implementation detail that happened to be stable when it was written. The
+behavioural expectation (offset 1) is untouched and still asserted. A frozen
+fixture that has to be unfrozen by an unrelated change is a fixture encoding the
+wrong thing.
+
+**One more place a refusal would have been silent.** `undo()` and `redo()`
+decrement `m_undo_cursor` before doing anything else. Adding a fallible
+reservation in front of the body without moving it earlier would have meant an
+exhausted counter returned `nullopt` *after* the cursor had already moved — an
+undo entry vanishing with no error anywhere. Both now reserve first. Nothing
+failed to warn me about that one; it showed up while writing the change, which
+is the only reason it is fixed.
+
+**What this does not claim.** That a migrated engine converges across a
+partition, that identity survives a crash, or that the abandoned-interval gap
+path works. The first is the convergence suites (green here, and re-run by S06
+against the model); the second is L02/L08; the third does not exist yet and is
+P06b/P07/L02's obligation, recorded in TASKS.json.
+
+**Next ready tasks:** A01, W01, S01. Within P06a: rejecting an invalid `ActorId`
+at the public boundary (step 5), then opaque operation values (step 6).

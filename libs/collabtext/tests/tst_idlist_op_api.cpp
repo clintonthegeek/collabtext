@@ -33,7 +33,7 @@ private slots:
     // ── callback fires on insert_after ────────────────────────────────────────
 
     void set_on_local_op_fires_on_insert() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         std::optional<IdListOperation> captured;
         list.set_on_local_op([&](const IdListOperation& op) {
             captured = op;
@@ -48,7 +48,7 @@ private slots:
     // ── callback fires on remove_at ───────────────────────────────────────────
 
     void set_on_local_op_fires_on_remove() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         auto insert_op = list.insert_after(Anchor::min(), 0xAA);
 
         std::optional<IdListOperation> captured;
@@ -66,7 +66,7 @@ private slots:
     // ── callback fires on undo ────────────────────────────────────────────────
 
     void set_on_local_op_fires_on_undo() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
 
         std::optional<IdListOperation> captured;
@@ -82,7 +82,7 @@ private slots:
     // ── callback fires on redo ────────────────────────────────────────────────
 
     void set_on_local_op_fires_on_redo() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         list.undo();
 
@@ -99,7 +99,7 @@ private slots:
     // ── undo with nothing to undo does NOT fire ───────────────────────────────
 
     void set_on_local_op_does_not_fire_on_noop_undo() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         int fire_count = 0;
         list.set_on_local_op([&](const IdListOperation&) { ++fire_count; });
 
@@ -112,7 +112,7 @@ private slots:
     // ── apply_remote_op does NOT fire set_on_local_op ────────────────────────
 
     void apply_remote_op_does_not_fire_local_op_callback() {
-        IdList list1(actor(1)), list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         // Capture ops from list1
         std::vector<IdListOperation> captured_from_1;
@@ -135,7 +135,7 @@ private slots:
     // ── apply_remote_op DOES fire set_on_change ───────────────────────────────
 
     void apply_remote_op_fires_change_callback() {
-        IdList list1(actor(1)), list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         auto op = list1.insert_after(Anchor::min(), 0xAA);
 
@@ -150,7 +150,7 @@ private slots:
     // ── one-way convergence via apply_remote_op ───────────────────────────────
 
     void apply_remote_op_converges_insert() {
-        IdList list1(actor(1)), list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         list1.set_on_local_op([&](const IdListOperation& op) {
@@ -174,7 +174,7 @@ private slots:
     // ── encode/decode round-trip preserves Identity identity ──────────────────
 
     void encode_decode_preserves_lamport() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         std::optional<IdListOperation> captured;
         list.set_on_local_op([&](const IdListOperation& op) {
             if (!captured) captured = op;
@@ -194,7 +194,7 @@ private slots:
     // ── undo round-trip: undo on list 1 propagated to list 2 ─────────────────
 
     void apply_remote_op_undo_roundtrip() {
-        IdList list1(actor(1)), list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         // Collect all ops list1 emits (insert + undo)
         std::vector<std::string> wire_ops;
@@ -226,7 +226,7 @@ private slots:
     // Both should converge to [0xAA, 0xBB].
 
     void two_way_convergence_sequential() {
-        IdList list1(actor(1)), list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> ops_from_1;
         std::vector<std::string> ops_from_2;
@@ -271,7 +271,7 @@ private slots:
     // both see the same ids() after exchanging ops.
 
     void two_way_convergence_concurrent() {
-        IdList list1(actor(1)), list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> ops_from_1;
         std::vector<std::string> ops_from_2;
@@ -307,7 +307,7 @@ private slots:
     // ── apply_remote_op returns true for valid ops ────────────────────────────
 
     void apply_remote_op_returns_true_for_valid_op() {
-        IdList list1(actor(1)), list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::optional<IdListOperation> captured;
         list1.set_on_local_op([&](const IdListOperation& op) {
@@ -324,7 +324,7 @@ private slots:
     // ── multi-op sequence convergence ────────────────────────────────────────
 
     void sequential_multi_op_convergence() {
-        IdList list1(actor(1)), list2(actor(2));
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         list1.set_on_local_op([&](const IdListOperation& op) {

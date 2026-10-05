@@ -52,7 +52,7 @@ private slots:
         sync1.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
         sync1.start();
 
-        CrdtEngine engine1(actor(1));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
         engine1.setOnLocalOp([&](const Operation& op) {
             sync1.push("buf:doc", encode_operation(op));
         });
@@ -70,7 +70,7 @@ private slots:
         sync2.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
         sync2.start();
 
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
         sync2.set_on_inbound([&](const std::string& /*stream*/, uint16_t replica_id,
                                  const std::string& payload) {
             if (replica_id == 2) return;  // skip own ops (none here)
@@ -103,7 +103,7 @@ private slots:
         sync1.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
         sync1.start();
 
-        CrdtEngine engine1(actor(1));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
         engine1.setOnLocalOp([&](const Operation& op) {
             sync1.push("buf:doc", encode_operation(op));
         });
@@ -119,7 +119,7 @@ private slots:
         sync2.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
         sync2.start();
 
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
         int apply_count = 0;
         sync2.set_on_inbound([&](const std::string& /*stream*/, uint16_t replica_id,
                                  const std::string& payload) {

@@ -36,7 +36,7 @@ private:
         // Create independent replicas
         std::vector<Buffer> replicas;
         for (int i = 0; i < num_replicas; ++i)
-            replicas.emplace_back(CollabText::Test::actor(static_cast<uint8_t>(i + 1))); // replica IDs start at 1
+            replicas.emplace_back(CollabText::Test::test_counter(static_cast<uint8_t>(i + 1))); // replica IDs start at 1
 
         // Per-replica incoming queues. Each queue holds ops from OTHER replicas
         // that haven't been delivered yet.

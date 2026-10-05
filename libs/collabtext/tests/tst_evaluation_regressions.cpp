@@ -37,7 +37,7 @@ private slots:
     void ordinary_remote_undo_redo() {
         QFETCH(bool, idlist);
         if (idlist) {
-            IdList a(actor(1)), b(actor(2));
+            IdList a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
             b.apply_ops({a.insert_after(Anchor::min(), 42)});
             QCOMPARE(b.ids(), std::vector<uint64_t>{42});
             auto undo = a.undo();
@@ -52,7 +52,7 @@ private slots:
             QCOMPARE(a.ids(), std::vector<uint64_t>{42});
             QCOMPARE(b.ids(), a.ids());
         } else {
-            Buffer a(actor(1)), b(actor(2));
+            Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
             b.apply_ops({a.apply_local_edit({{0, 0}}, {"abc"})});
             QCOMPARE(b.text(), std::string("abc"));
             auto undo = a.undo();
@@ -73,7 +73,7 @@ private slots:
     void f1_local_gc_preserves_insertion_redo() {
         QFETCH(bool, idlist);
         if (idlist) {
-            IdList a(actor(1));
+            IdList a(CollabText::Test::test_counter(1));
             a.insert_after(Anchor::min(), 42);
             QVERIFY(a.undo().has_value());
             QVERIFY(a.ids().empty());
@@ -81,7 +81,7 @@ private slots:
             QVERIFY(a.redo().has_value());
             QCOMPARE(a.ids(), std::vector<uint64_t>{42}); // passing local IdList control
         } else {
-            Buffer a(actor(1));
+            Buffer a(CollabText::Test::test_counter(1));
             a.apply_local_edit({{0, 0}}, {"abc"});
             QVERIFY(a.undo().has_value());
             QCOMPARE(a.text(), std::string());
@@ -95,7 +95,7 @@ private slots:
     void f1_remote_gc_preserves_insertion_redo() {
         QFETCH(bool, idlist);
         if (idlist) {
-            IdList a(actor(1)), b(actor(2));
+            IdList a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
             b.apply_ops({a.insert_after(Anchor::min(), 42)});
             auto undo = a.undo();
             QVERIFY(undo.has_value());
@@ -108,7 +108,7 @@ private slots:
             QCOMPARE(a.ids(), std::vector<uint64_t>{42});
             QCOMPARE(b.ids(), a.ids());
         } else {
-            Buffer a(actor(1)), b(actor(2));
+            Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
             b.apply_ops({a.apply_local_edit({{0, 0}}, {"abc"})});
             auto undo = a.undo();
             QVERIFY(undo.has_value());
@@ -127,7 +127,7 @@ private slots:
     void f2_compact_preserves_remote_delete_undo() {
         QFETCH(bool, idlist);
         if (idlist) {
-            IdList a(actor(1)), b(actor(2));
+            IdList a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
             b.apply_ops({a.insert_after(Anchor::min(), 42)});
             a.apply_ops({b.remove_at(b.anchor_at_index(0))});
             QVERIFY(a.ids().empty());
@@ -143,7 +143,7 @@ private slots:
             QCOMPARE(b.ids(), std::vector<uint64_t>{42});
             QCOMPARE(a.ids(), b.ids());
         } else {
-            Buffer a(actor(1)), b(actor(2));
+            Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
             b.apply_ops({a.apply_local_edit({{0, 0}}, {"abc"})});
             a.apply_ops({b.apply_local_edit({{0, 3}}, {""})});
             QCOMPARE(a.text(), std::string());
@@ -182,7 +182,7 @@ private slots:
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         const fs::path root(tmp.path().toStdString());
-        Buffer a(actor(1)), b(actor(2));
+        Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
         StreamSync receiver(root, "B", 2);
         receiver.register_stream("doc", StreamSync::StreamType::AppendOnly);
         receiver.start();
@@ -223,14 +223,14 @@ private slots:
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         const fs::path root(tmp.path().toStdString());
-        Buffer a(actor(1));
+        Buffer a(CollabText::Test::test_counter(1));
         StreamSync sender(root, "A", 1);
         sender.register_stream("doc", StreamSync::StreamType::AppendOnly);
         sender.start();
         sender.push("doc", encode_operation(a.apply_local_edit({{0, 0}}, {"abc"})));
         sender.flush();
         for (int session = 0; session != 2; ++session) {
-            Buffer b(actor(2));
+            Buffer b(CollabText::Test::test_counter(2));
             StreamSync receiver(root, "B", 2);
             receiver.register_stream("doc", StreamSync::StreamType::AppendOnly);
             receiver.start();
@@ -281,7 +281,7 @@ private slots:
     }
 
     void f7_insertion_obeys_boundary_affinity() {
-        Buffer a(actor(1));
+        Buffer a(CollabText::Test::test_counter(1));
         a.apply_local_edit({{0, 0}}, {"ab"});
         auto left = a.anchor_at(1, Bias::Left);
         auto right = a.anchor_at(1, Bias::Right);
@@ -293,7 +293,7 @@ private slots:
     }
 
     void f8_concurrent_passages_remain_contiguous() {
-        Buffer a(actor(1)), b(actor(2));
+        Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
         auto first = a.apply_local_edit({{0, 0}}, {"abc"});
         auto second = b.apply_local_edit({{0, 0}}, {"XYZ"});
         a.apply_ops({second}); b.apply_ops({first});

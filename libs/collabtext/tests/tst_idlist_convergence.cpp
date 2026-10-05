@@ -10,7 +10,7 @@ class TestIdListConvergence : public QObject {
     Q_OBJECT
 private slots:
     void two_replicas_converge_on_disjoint_inserts() {
-        IdList alice(actor(1)), bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
 
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         auto op_b = bob.insert_after(Anchor::min(), 0xBB);
@@ -23,7 +23,7 @@ private slots:
     }
 
     void concurrent_inserts_at_same_position_tiebreak() {
-        IdList alice(actor(1)), bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         auto op_b = bob.insert_after(Anchor::min(), 0xBB);
 
@@ -36,7 +36,7 @@ private slots:
     }
 
     void out_of_order_delivery_buffers_then_applies() {
-        IdList alice(actor(1)), bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
         auto op_a1 = alice.insert_after(Anchor::min(), 1);
         Anchor at_a1(Identity(actor(1), 1), Bias::Right);
         auto op_a2 = alice.insert_after(at_a1, 2);  // depends on op_a1
@@ -49,7 +49,7 @@ private slots:
     }
 
     void insert_then_remove_from_other_replica() {
-        IdList alice(actor(1)), bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op_a});  // bob now sees 0xAA at origin (1,1)
 
@@ -63,7 +63,7 @@ private slots:
     }
 
     void concurrent_removes_of_same_element() {
-        IdList alice(actor(1)), bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op_a});
 
@@ -82,7 +82,7 @@ private slots:
     }
 
     void insert_after_concurrently_deleted_anchor() {
-        IdList alice(actor(1)), bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
         auto op_a1 = alice.insert_after(Anchor::min(), 1);
         bob.apply_ops({op_a1});
 
@@ -105,7 +105,7 @@ private slots:
         //        bob's clock observes (1,1) → bumps to value 2 → op_b timestamp (2,2)
         // op_c: carol (replica 3) inserts after op_b; after apply_ops({op_a,op_b}),
         //        carol's clock observes max of (1,1),(2,2) → bumps to value 3 → op_c timestamp (3,3)
-        IdList alice(actor(1)), bob(actor(2)), carol(actor(3));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2)), carol(CollabText::Test::test_counter(3));
         auto op_a = alice.insert_after(Anchor::min(), 1);
         bob.apply_ops({op_a});
         auto op_b = bob.insert_after(Anchor(Identity(actor(1), 1), Bias::Right), 2);
@@ -121,7 +121,7 @@ private slots:
     }
 
     void duplicate_op_delivery_is_noop() {
-        IdList alice(actor(1)), bob(actor(2));
+        IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
         auto op = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op});
         bob.apply_ops({op});  // delivered twice

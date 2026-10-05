@@ -3,10 +3,13 @@
 
 namespace CollabText::Crdt {
 
-IdList::IdList(const ActorId &actor)
-    : m_actor(actor)
-    , m_clock(actor, 1)
-{}
+IdList::IdList(SharedAllocator allocator)
+    : m_allocator(std::move(allocator))
+{
+    assert(m_allocator && "a list without an allocator cannot mint identity");
+    assert(m_allocator->actor().valid() &&
+           "a list cannot mint identity for an invalid actor");
+}
 
 size_t IdList::find_origin(const std::vector<IdListEntry>& entries,
                            const Anchor& target) const {
@@ -68,16 +71,19 @@ IdListOperation IdList::insert_after_resolved(const Anchor& after, uint64_t id) 
     // c. Allocate new locator between predecessor and successor
     Locator new_loc = Locator::between(predecessor, successor);
 
-    // d. Capture origin before bumping clock
-    Identity origin(m_actor, m_clock.counter);
+    // d. Reserve this operation's identity. An insert creates one item, so the
+    // interval is `n + 1 == 1` values and the item identity *is* the operation
+    // identity (§3.2). They stay different domains by construction rather than
+    // by accident: an IdList entry's origin is its item identity, and the
+    // operation that created it is that same value.
+    auto reserved = m_allocator->reserve_run(1);
+    if (!reserved.ok()) return IdListOperation{};
+    const Identity origin(m_allocator->actor(), reserved.value());
 
     // e. Capture version before observing this op
     Global version_before = m_version;
 
-    // f. Bump clock
-    m_clock = Identity(m_actor, m_clock.counter + 1);
-
-    // g. Record this op in the version vector
+    // f. Record this op in the version vector
     m_version.observe(origin);
 
     // h. Create and insert the entry
@@ -140,11 +146,12 @@ IdListOperation IdList::remove_at_resolved(const Anchor& target) {
     // c. Capture target_origin before any moves
     Identity target_origin = entries[idx].origin;
 
-    // d. Allocate deletion identity from current clock value
-    Identity del_id(m_actor, m_clock.counter);
-
-    // e. Bump clock
-    m_clock = Identity(m_actor, m_clock.counter + 1);
+    // d. Reserve this operation's identity. A removal creates no items, so the
+    // interval is one value and the deletion identity *is* the operation
+    // identity (§3.3).
+    auto reserved = m_allocator->reserve_run(1);
+    if (!reserved.ok()) return IdListOperation{};
+    const Identity del_id(m_allocator->actor(), reserved.value());
 
     // f. Capture version before observing this op
     Global version_before = m_version;
@@ -186,12 +193,18 @@ std::vector<ApplyOutcome> IdList::apply_ops(const std::vector<IdListOperation>& 
 
 std::optional<IdListOperation> IdList::undo() {
     if (m_undo_cursor == 0) return std::nullopt;
+
+    // Reserved before the cursor moves: a refused undo that had already
+    // decremented m_undo_cursor would silently drop an entry from the history.
+    auto reserved = m_allocator->reserve_run(1);
+    if (!reserved.ok()) return std::nullopt;
+
     m_undo_cursor--;
     auto& entry = m_undo_stack[m_undo_cursor];
 
     IdListUndoOpVariant op;
     op.version = m_version;
-    op.timestamp = m_clock.tick();
+    op.timestamp = Identity(m_allocator->actor(), reserved.value());
 
     for (auto& key : entry.inserted_keys) {
         const Identity edit_id = key.position;
@@ -216,12 +229,17 @@ std::optional<IdListOperation> IdList::undo() {
 
 std::optional<IdListOperation> IdList::redo() {
     if (m_undo_cursor >= m_undo_stack.size()) return std::nullopt;
+
+    // Reserved before the cursor moves; see undo().
+    auto reserved = m_allocator->reserve_run(1);
+    if (!reserved.ok()) return std::nullopt;
+
     auto& entry = m_undo_stack[m_undo_cursor];
     m_undo_cursor++;
 
     IdListUndoOpVariant op;
     op.version = m_version;
-    op.timestamp = m_clock.tick();
+    op.timestamp = Identity(m_allocator->actor(), reserved.value());
 
     for (auto& key : entry.inserted_keys) {
         const Identity edit_id = key.position;
@@ -403,7 +421,7 @@ void IdList::local_clear() noexcept {
     m_deferred_bytes = 0;
     m_quarantined.clear();
     m_quarantined_bytes = 0;
-    // Intentionally preserved: m_actor, m_clock, m_version,
+    // Intentionally preserved: m_allocator, m_version,
     // m_max_undo_depth, m_on_change, m_on_local_op.
     // Intentionally not fired: m_on_change, m_on_local_op.
 }
@@ -524,7 +542,7 @@ bool IdList::apply_concrete(const IdListInsertOp& op) {
     auto entries = get_entries();
     IdListEntry e(op.timestamp, op.locator, op.id);
     insert_entry(entries, std::move(e));
-    m_clock.observe(op.timestamp);
+    observe_remote(op.timestamp);
     m_version.observe(op.timestamp);
     m_version.join(op.version);
     set_entries(std::move(entries));
@@ -550,7 +568,7 @@ bool IdList::apply_concrete(const IdListRemoveOp& op) {
         // never happened.
         return false;
     }
-    m_clock.observe(op.timestamp);
+    observe_remote(op.timestamp);
     m_version.observe(op.timestamp);
     m_version.join(op.version);
     set_entries(std::move(entries));
@@ -562,7 +580,7 @@ bool IdList::apply_concrete(const IdListUndoOpVariant& op) {
     for (auto& [edit_id, count] : op.counts) {
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
     }
-    m_clock.observe(op.timestamp);
+    observe_remote(op.timestamp);
     m_version.observe(op.timestamp);
     m_version.join(op.version);
     auto entries = get_entries();

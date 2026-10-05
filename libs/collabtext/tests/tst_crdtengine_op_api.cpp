@@ -32,7 +32,7 @@ private slots:
     // ── callback fires on insert ──────────────────────────────────────────────
 
     void setOnLocalOp_fires_on_insert() {
-        CrdtEngine engine(actor(1));
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         std::optional<Operation> captured;
         engine.setOnLocalOp([&](const Operation &op) {
             captured = op;
@@ -48,7 +48,7 @@ private slots:
     // ── callback fires on remove ──────────────────────────────────────────────
 
     void setOnLocalOp_fires_on_remove() {
-        CrdtEngine engine(actor(1));
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         std::optional<Operation> captured;
         engine.setOnLocalOp([&](const Operation &op) {
             captured = op;
@@ -65,7 +65,7 @@ private slots:
     // ── callback fires on undo ────────────────────────────────────────────────
 
     void setOnLocalOp_fires_on_undo() {
-        CrdtEngine engine(actor(1));
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         engine.insert(0, "hello");
 
         std::optional<Operation> captured;
@@ -81,7 +81,7 @@ private slots:
     // ── callback fires on redo ────────────────────────────────────────────────
 
     void setOnLocalOp_fires_on_redo() {
-        CrdtEngine engine(actor(1));
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         engine.insert(0, "hello");
         engine.undo();
 
@@ -98,8 +98,8 @@ private slots:
     // ── one-way convergence: engine 1 inserts, engine 2 applies ──────────────
 
     void applyRemoteOp_converges_insert() {
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation &op) {
@@ -123,7 +123,7 @@ private slots:
     // ── encode/decode round-trip preserves Identity identity ──────────────────
 
     void encode_decode_preserves_lamport() {
-        CrdtEngine engine(actor(1));
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         std::optional<Operation> captured;
         engine.setOnLocalOp([&](const Operation &op) {
             if (!captured) captured = op;
@@ -143,8 +143,8 @@ private slots:
     // ── undo round-trip: undo on engine 1 propagated to engine 2 ─────────────
 
     void applyRemoteOp_undo_roundtrip() {
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         // Collect all ops engine1 emits (insert + undo)
         std::vector<std::string> wire_ops;
@@ -175,8 +175,8 @@ private slots:
     // interleaving that concurrent same-position inserts produce.
 
     void two_way_convergence() {
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> ops_from_1;
         std::vector<std::string> ops_from_2;
@@ -222,8 +222,8 @@ private slots:
     // only assert convergence and total length, not substring order.
 
     void concurrent_insert_convergence() {
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> ops_from_1;
         std::vector<std::string> ops_from_2;
@@ -256,8 +256,8 @@ private slots:
     // ── sequential multi-op convergence ──────────────────────────────────────
 
     void sequential_multi_op_convergence() {
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation &op) {
@@ -281,8 +281,8 @@ private slots:
     // ── applyRemoteOp returns true for well-formed in-domain ops ─────────────
 
     void applyRemoteOp_returns_true_for_valid_op() {
-        CrdtEngine engine1(actor(1));
-        CrdtEngine engine2(actor(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::optional<Operation> captured;
         engine1.setOnLocalOp([&](const Operation &op) {

@@ -96,7 +96,7 @@ class TestIdListFuzz : public QObject {
 private slots:
 
     void invariant_checker_passes_on_valid_list() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         check_invariants(list, "empty");
         list.insert_after(Anchor::min(), 1);
         check_invariants(list, "one-element");

@@ -12,7 +12,7 @@ class TestIdListSerialization : public QObject {
 private slots:
     // β8.1
     void insert_op_round_trip() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         auto op = list.insert_after(Anchor::min(), 0xDEADBEEF);
         std::string encoded = encode_idlist_operation(op);
         auto decoded = decode_idlist_operation(encoded);
@@ -31,7 +31,7 @@ private slots:
 
     // β8.4
     void remove_op_round_trip() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         auto op = list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
         auto encoded = encode_idlist_operation(op);
@@ -41,7 +41,7 @@ private slots:
     }
 
     void undo_op_round_trip() {
-        IdList list(actor(1));
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         auto undo = list.undo();
         QVERIFY(undo.has_value());

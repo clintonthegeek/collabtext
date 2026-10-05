@@ -6,10 +6,12 @@
 
 namespace CollabText::Crdt {
 
-Buffer::Buffer(const ActorId &actor)
-    : m_actor(actor)
-    , m_clock(actor, 1)  // Start at 1; counter 0 is the "unseen" sentinel
+Buffer::Buffer(SharedAllocator allocator)
+    : m_allocator(std::move(allocator))
 {
+    assert(m_allocator && "an engine without an allocator cannot mint identity");
+    assert(m_allocator->actor().valid() &&
+           "an engine cannot mint identity for an invalid actor");
 }
 
 // ---------------------------------------------------------------------------
@@ -331,7 +333,7 @@ const Global &Buffer::version() const {
 }
 
 const ActorId &Buffer::actor_id() const {
-    return m_actor;
+    return m_allocator->actor();
 }
 
 // ---------------------------------------------------------------------------
@@ -570,21 +572,46 @@ Result<Operation> Buffer::try_apply_local_edit(
             return Error(ErrorCode::invalid_unicode,
                          "local edit range splits a UTF-8 scalar");
     }
-    return apply_validated_local_edit(ranges, new_text);
+    return try_apply_validated_local_edit(ranges, new_text);
 }
 
-Operation Buffer::apply_validated_local_edit(
+Result<Operation> Buffer::try_apply_validated_local_edit(
     const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
     const std::vector<std::string> &new_text)
 {
     assert(ranges.size() == new_text.size());
+
+    // One reservation for the whole operation, before anything is mutated
+    // (identity spec §3.2): `n` item identities followed by the operation's own.
+    //
+    // The item count has to be known before the walk, not discovered during it,
+    // because the operation's identity is the *last* value of the reservation
+    // and the deletion identity is that same value (§3.3) — the fragments being
+    // tombstoned need it before the first one is visited.
+    uint64_t inserted_scalars = 0;
+    std::vector<uint32_t> scalar_counts(ranges.size());
+    for (size_t i = 0; i < ranges.size(); ++i) {
+        scalar_counts[i] = count_utf8_chars(
+            new_text[i], static_cast<uint32_t>(new_text[i].size()));
+        inserted_scalars += scalar_counts[i];
+    }
+
+    auto reserved = m_allocator->reserve_run(inserted_scalars + 1);
+    if (!reserved.ok()) {
+        // Exhaustion, or a durable write that failed. Either way nothing has
+        // been touched: the reservation is all-or-nothing and this is the first
+        // statement that mutates anything.
+        return reserved.error().with_context("allocating identities for a local edit");
+    }
+
+    uint64_t next_item = reserved.value();
+    const Identity op_identity(m_allocator->actor(), next_item + inserted_scalars);
 
     EditOperation op;
     op.ranges = ranges;
     op.new_text = new_text;
     op.version = m_version;
     UndoEntry undo_entry;
-    Identity deletion_ts = m_clock.tick();
     bool had_deletions = false;
 
     // Track actually-deleted character timestamps for building deletion_runs.
@@ -621,7 +648,7 @@ Operation Buffer::apply_validated_local_edit(
 
     // Helper: mark a fragment as deleted and record timestamps for op/undo.
     auto mark_deleted = [&](Fragment& f) {
-        f.deletions.push_back(deletion_ts);
+        f.deletions.push_back(op_identity);
         f.visible = false;
         had_deletions = true;
         for (uint32_t c = 0; c < f.length; ++c) {
@@ -859,11 +886,12 @@ Operation Buffer::apply_validated_local_edit(
 
             Locator new_loc = Locator::between(lo, hi);
 
-            uint32_t char_count = count_utf8_chars(
-                replacement, static_cast<uint32_t>(replacement.size()));
-
-            Identity frag_origin = m_clock.tick();
-            for (uint32_t c = 1; c < char_count; ++c) m_clock.tick();
+            // The scalar count was computed before the reservation, so the item
+            // identities are consecutive positions of the one interval this
+            // operation owns — run by run, in document order.
+            const uint32_t char_count = scalar_counts[idx];
+            const Identity frag_origin(m_allocator->actor(), next_item);
+            next_item += char_count;
 
             Fragment frag(frag_origin, new_loc,
                           static_cast<uint32_t>(replacement.size()), char_count,
@@ -895,22 +923,25 @@ Operation Buffer::apply_validated_local_edit(
     new_tree.push_tree(cursor.suffix());
 
     // ---- Identity ----
-    // Still the legacy per-scalar allocation: an insert operation takes the
-    // identity of the last item of its own run, so an operation and one of its
-    // characters share an identity. Run-interval allocation
-    // (docs/specs/vnext-identity.md §3.2) removes that overlap; this pass only
-    // widens the type.
-    if (op.inserted_fragments.empty()) {
-        op.timestamp = m_clock.tick();
-    } else {
-        op.timestamp = Identity(m_actor, m_clock.counter - 1);
-    }
-    op.deletion_id = deletion_ts;
+    // The operation's identity is the last value of the interval reserved above,
+    // so it is strictly above every item identity it created and strictly below
+    // whatever the next reservation returns. An insert operation and one of its
+    // own characters no longer share an identity, and "which operation inserted
+    // this character" is a range-containment question.
+    //
+    // A deletion-only operation reserves exactly one value, and `next_item` was
+    // never advanced, so `op_identity` is that single value.
+    assert(next_item == op_identity.counter);
+    op.timestamp = op_identity;
+    // The deleting operation's own identity marks the tombstone (§3.3). Before
+    // the domains were separated this needed a second counter tick
+    // (`deletion_ts`) because the operation's timestamp could not serve twice.
+    op.deletion_id = op_identity;
     m_version.observe(op.timestamp);
 
     // ---- Undo entry ----
     if (had_deletions)
-        undo_entry.deletion_ids.push_back(deletion_ts);
+        undo_entry.deletion_ids.push_back(op_identity);
     m_undo_stack.resize(m_undo_cursor);
     m_undo_stack.push_back(std::move(undo_entry));
     m_undo_cursor = m_undo_stack.size();
@@ -1008,7 +1039,7 @@ Operation Buffer::apply_validated_local_edit(
 
     if (m_on_change) m_on_change();
 
-    return op;
+    return Result<Operation>(std::move(op));
 }
 
 // ---------------------------------------------------------------------------
@@ -1216,13 +1247,19 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
         m_origin_index[ins.origin.actor][ins.origin.counter] = ins.locator;
     }
 
-    m_clock.observe(op.timestamp);
+    // The raise is derived state, not durable allocation (§3.4): applying a
+    // remote operation lifts the local counter above everything that operation
+    // used, so a later local identity sorts after it. Under §3.2 the operation
+    // identity is the highest value in its interval, so observing it covers the
+    // whole run; the per-run observations below are retained because they are
+    // what makes this correct for an operation minted by a peer that has not
+    // adopted interval allocation.
+    observe_remote(op.timestamp);
     m_version.observe(op.timestamp);
-    m_clock.observe(op.deletion_id);
     m_version.observe(op.deletion_id);
     for (auto &ins : op.inserted_fragments) {
         Identity last_ts(ins.origin.actor, ins.origin.counter + ins.length - 1);
-        m_clock.observe(last_ts);
+        observe_remote(last_ts);
         m_version.observe(last_ts);
     }
     m_version.join(op.version);
@@ -1301,14 +1338,20 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
     }
 
     // Update clock and version
-    m_clock.observe(op.timestamp);
+    // The raise is derived state, not durable allocation (§3.4): applying a
+    // remote operation lifts the local counter above everything that operation
+    // used, so a later local identity sorts after it. Under §3.2 the operation
+    // identity is the highest value in its interval, so observing it covers the
+    // whole run; the per-run observations below are retained because they are
+    // what makes this correct for an operation minted by a peer that has not
+    // adopted interval allocation.
+    observe_remote(op.timestamp);
     m_version.observe(op.timestamp);
-    m_clock.observe(op.deletion_id);
     m_version.observe(op.deletion_id);
 
     for (auto &ins : op.inserted_fragments) {
         Identity last_ts(ins.origin.actor, ins.origin.counter + ins.length - 1);
-        m_clock.observe(last_ts);
+        observe_remote(last_ts);
         m_version.observe(last_ts);
     }
 
@@ -1334,7 +1377,7 @@ bool Buffer::apply_remote_undo(const UndoOperation &op) {
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
     }
 
-    m_clock.observe(op.timestamp);
+    observe_remote(op.timestamp);
     m_version.observe(op.timestamp);
     m_version.join(op.version);
 
@@ -1534,12 +1577,23 @@ std::optional<Operation> Buffer::undo() {
     if (m_undo_cursor == 0)
         return std::nullopt;
 
+    // An undo inserts no items, so it reserves exactly one value: its own
+    // identity (§3.2 with n == 0). The identities it targets are item
+    // identities from a different domain, which is why no undo-map entry can be
+    // confused with the operation that produced it (§3.3).
+    //
+    // Reserved *before* the cursor moves: a refused undo that had already
+    // decremented m_undo_cursor would silently drop an entry from the undo
+    // history.
+    auto reserved = m_allocator->reserve_run(1);
+    if (!reserved.ok()) return std::nullopt;
+
     m_undo_cursor--;
     auto &entry = m_undo_stack[m_undo_cursor];
 
     UndoOperation op;
     op.version = m_version;
-    op.timestamp = m_clock.tick();
+    op.timestamp = Identity(m_allocator->actor(), reserved.value());
 
     for (auto &key : entry.inserted_keys) {
         const Identity edit_id = key.position;
@@ -1570,9 +1624,16 @@ std::optional<Operation> Buffer::redo() {
     auto &entry = m_undo_stack[m_undo_cursor];
     m_undo_cursor++;
 
+    // An undo inserts no items, so it reserves exactly one value: its own
+    // identity (§3.2 with n == 0). The identities it targets are item
+    // identities from a different domain, which is why no undo-map entry can be
+    // confused with the operation that produced it (§3.3).
+    auto reserved = m_allocator->reserve_run(1);
+    if (!reserved.ok()) return std::nullopt;
+
     UndoOperation op;
     op.version = m_version;
-    op.timestamp = m_clock.tick();
+    op.timestamp = Identity(m_allocator->actor(), reserved.value());
 
     for (auto &key : entry.inserted_keys) {
         const Identity edit_id = key.position;

@@ -15,7 +15,7 @@ class TestOpQueue : public QObject {
 private slots:
 
     void empty_queue_noop() {
-        Buffer buf(actor(1));
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_ops({});
         QCOMPARE(buf.text(), std::string(""));
         QCOMPARE(buf.visible_length(), 0u);
@@ -24,11 +24,11 @@ private slots:
     void single_deferred_retries() {
         // Replica 1 inserts "hello", then deletes "ell".
         // Replica 2 receives delete first (deferred), then insert.
-        Buffer bufA(actor(1));
+        Buffer bufA(CollabText::Test::test_counter(1));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         auto op2 = bufA.apply_local_edit({{1, 4}}, {""});
 
-        Buffer bufB(actor(2));
+        Buffer bufB(CollabText::Test::test_counter(2));
         // op2 depends on op1 — should be deferred
         bufB.apply_ops({op2});
         QCOMPARE(bufB.text(), std::string(""));
@@ -41,12 +41,12 @@ private slots:
     void deferred_replica_tracking() {
         // Replica 1 creates 3 ops in sequence: insert "abc", insert "d" at end,
         // delete "a". Send in reverse order to replica 2.
-        Buffer bufA(actor(1));
+        Buffer bufA(CollabText::Test::test_counter(1));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"abc"});
         auto op2 = bufA.apply_local_edit({{3, 3}}, {"d"});
         auto op3 = bufA.apply_local_edit({{0, 1}}, {""});
 
-        Buffer bufB(actor(2));
+        Buffer bufB(CollabText::Test::test_counter(2));
         // Send in reverse: op3, op2, op1
         bufB.apply_ops({op3});
         QCOMPARE(bufB.text(), std::string(""));
@@ -60,9 +60,9 @@ private slots:
     }
 
     void mixed_replicas_partial_delivery() {
-        Buffer bufA(actor(1));
-        Buffer bufB(actor(2));
-        Buffer bufC(actor(3));
+        Buffer bufA(CollabText::Test::test_counter(1));
+        Buffer bufB(CollabText::Test::test_counter(2));
+        Buffer bufC(CollabText::Test::test_counter(3));
 
         auto opA = bufA.apply_local_edit({{0, 0}}, {"aa"});
         auto opB = bufB.apply_local_edit({{0, 0}}, {"bb"});
@@ -86,7 +86,7 @@ private slots:
     }
 
     void stress_reverse_causal_order() {
-        Buffer bufA(actor(1));
+        Buffer bufA(CollabText::Test::test_counter(1));
         std::vector<Operation> ops;
         for (int i = 0; i < 100; ++i) {
             uint32_t pos = bufA.visible_length();
@@ -97,7 +97,7 @@ private slots:
         // Reverse the ops
         std::reverse(ops.begin(), ops.end());
 
-        Buffer bufB(actor(2));
+        Buffer bufB(CollabText::Test::test_counter(2));
         auto start = std::chrono::steady_clock::now();
 
         // Deliver one at a time in reverse order
@@ -119,7 +119,7 @@ private slots:
     void convergence_still_passes() {
         std::mt19937 rng(42);  // Deterministic seed
 
-        Buffer bufA(actor(1)), bufB(actor(2)), bufC(actor(3));
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2)), bufC(CollabText::Test::test_counter(3));
         std::vector<Operation> pendingB, pendingC;
 
         for (int i = 0; i < 30; ++i) {

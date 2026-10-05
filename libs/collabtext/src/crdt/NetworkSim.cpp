@@ -6,12 +6,31 @@
 
 namespace CollabText::Crdt {
 
+/// A checked, in-memory counter. Simulator-only; see simulator_allocator().
+class SimulatorCounter final : public IdentityAllocator {
+public:
+    explicit SimulatorCounter(const ActorId &actor) : m_actor(actor) {}
+
+    [[nodiscard]] Result<uint64_t> reserve_run(uint64_t count) override {
+        return m_counter.reserve_run(count, "simulator counter");
+    }
+    void observe(uint64_t counter) override {
+        (void)m_counter.observe(counter, "simulator counter");
+    }
+    [[nodiscard]] uint64_t peek() const noexcept override { return m_counter.peek(); }
+    [[nodiscard]] const ActorId &actor() const noexcept override { return m_actor; }
+
+private:
+    ActorId m_actor;
+    CheckedCounter m_counter;
+};
+
 NetworkSim::NetworkSim(int num_replicas, NetworkConfig config, uint64_t seed)
     : m_config(config), m_rng(seed)
 {
     m_replicas.reserve(num_replicas);
     for (int i = 0; i < num_replicas; ++i)
-        m_replicas.emplace_back(simulator_actor(i));
+        m_replicas.emplace_back(simulator_allocator(i));
     m_queues.resize(num_replicas);
     m_offline.resize(num_replicas, false);
     m_pending_outbound.resize(num_replicas);
@@ -23,6 +42,18 @@ NetworkSim::NetworkSim(int num_replicas, NetworkConfig config, uint64_t seed)
 ActorId simulator_actor(int index) {
     return derived_actor("collabtext/simulator-actor/v1",
                          std::to_string(index));
+}
+
+/// A volatile allocator per simulated replica.
+///
+/// The simulator is not a device: it exists to make convergence scenarios
+/// reproducible, and its actors are derived from the replica index precisely so
+/// they are stable across runs. So its counters are volatile too — persisted
+/// counters would outlive the scenario that made them and a rerun would start
+/// from wherever the last one stopped. Durability is exercised where it is real:
+/// against ReplicaState.
+SharedAllocator simulator_allocator(int index) {
+    return std::make_shared<SimulatorCounter>(simulator_actor(index));
 }
 
 uint64_t NetworkSim::random_latency() {

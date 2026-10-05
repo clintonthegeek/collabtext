@@ -30,6 +30,7 @@
 #include "ui/ParticipantListWidget.h"
 
 #include "collabtext/ActorId.h"
+#include <crdt/IdentityAllocator.h>
 
 #include <array>
 #include <cstdint>
@@ -50,15 +51,37 @@ using namespace CollabText::Identity;
 // share a word.
 using ProfileIdentity = CollabText::Identity::Identity;
 using CollabText::ActorId;
+namespace Crdt = CollabText::Crdt;
 
-/// The two simulated peers in this harness get fixed synthetic actors. This is
-/// a test app that stands up two engines in one process, so the actors only have
-/// to be distinct and stable, not durable — a real device gets its identity from
-/// ReplicaState, as collabedit does.
-ActorId actor(uint8_t n) {
-    std::array<uint8_t, CollabText::ActorId::kBytes> bytes{};
-    bytes[CollabText::ActorId::kBytes - 1] = n;
-    return CollabText::ActorId::from_bytes(bytes);
+/// The two simulated peers in this harness get fixed synthetic actors and
+/// volatile counters. This is a test app that stands up two engines in one
+/// process, so their identities only have to be distinct and stable — a real
+/// device takes both its actor and its counters from ReplicaState, as collabedit
+/// does. `HarnessCounter` is the app-local equivalent of tests/VolatileCounter.h
+/// and is named for what it is: not durable, and never a production path.
+class HarnessCounter final : public CollabText::Crdt::IdentityAllocator {
+public:
+    explicit HarnessCounter(uint8_t n) {
+        std::array<uint8_t, CollabText::ActorId::kBytes> bytes{};
+        bytes[CollabText::ActorId::kBytes - 1] = n;
+        m_actor = CollabText::ActorId::from_bytes(bytes);
+    }
+    CollabText::Result<uint64_t> reserve_run(uint64_t count) override {
+        return m_counter.reserve_run(count, "harness counter");
+    }
+    void observe(uint64_t counter) override {
+        (void)m_counter.observe(counter, "harness counter");
+    }
+    uint64_t peek() const noexcept override { return m_counter.peek(); }
+    const CollabText::ActorId &actor() const noexcept override { return m_actor; }
+
+private:
+    CollabText::ActorId m_actor;
+    CollabText::CheckedCounter m_counter;
+};
+
+Crdt::SharedAllocator harness_counter(uint8_t n) {
+    return std::make_shared<HarnessCounter>(n);
 }
 
 // ---------------------------------------------------------------------------
@@ -84,14 +107,14 @@ static std::string now_iso8601() {
 class EditorPane : public QWidget {
     Q_OBJECT
 public:
-    EditorPane(const ProfileIdentity &identity, const ActorId &actor,
+    EditorPane(const ProfileIdentity &identity, Crdt::SharedAllocator allocator,
                const std::string &replicaName,
                const std::filesystem::path &sharedFolder,
                QWidget *parent = nullptr)
         : QWidget(parent)
         , m_identity(identity)
         , m_replicaName(replicaName)
-        , m_buffer(actor)
+        , m_buffer(std::move(allocator))
         , m_sync(m_buffer, sharedFolder, replicaName)
         , m_presence(sharedFolder, replicaName, identity.identity_id)
         , m_edit(new CollabPlainTextEdit(this))
@@ -615,8 +638,8 @@ public:
         auto *central = new QWidget(this);
         auto *layout = new QHBoxLayout(central);
 
-        m_paneA = new EditorPane(aliceId, actor(1), "alice", sharedFolder, central);
-        m_paneB = new EditorPane(bobId, actor(2), "bob", sharedFolder, central);
+        m_paneA = new EditorPane(aliceId, harness_counter(1), "alice", sharedFolder, central);
+        m_paneB = new EditorPane(bobId, harness_counter(2), "bob", sharedFolder, central);
         m_paneA->setFollowTargetName(QString::fromStdString(bobId.display_name));
         m_paneB->setFollowTargetName(QString::fromStdString(aliceId.display_name));
         layout->addWidget(m_paneA, 1);

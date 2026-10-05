@@ -391,6 +391,37 @@ public:
                                                      const DocumentId& document,
                                                      uint64_t epoch);
 
+    /// Reserve a whole run of `count` counters for `stream` and return the first,
+    /// persisting the reservation before returning it.
+    ///
+    /// This is the allocation one local operation actually needs: `n` item
+    /// identities followed by the operation's own, from a single durable write
+    /// (docs/specs/vnext-identity.md §3.2). Reserving them one at a time would
+    /// persist `n + 1` times, and a crash in the middle would leave an
+    /// operation's identities partly issued and partly reissuable — which is
+    /// indistinguishable, to a reader, from an operation that never existed.
+    ///
+    /// The whole `count` is consumed or none of it is. A failure after the
+    /// counter moved does not roll back, for the same reason `next_operation`
+    /// does not: a skipped value is a gap, and a reissued value is a duplicated
+    /// identity. Peers resolve the gap across an explicit gap record (L02 owns
+    /// its publication).
+    [[nodiscard]] Result<uint64_t> reserve_run(const StreamId& stream,
+                                               const DocumentId& document,
+                                               uint64_t epoch,
+                                               uint64_t count);
+
+    /// Raise `stream`'s counter above a counter observed from a peer, without
+    /// persisting.
+    ///
+    /// Deliberately not durable (identity spec §3.4). The raise exists so a
+    /// later local identity sorts after what this replica has seen; on reopen
+    /// the engine replays its own log and observes again, and a lost raise
+    /// cannot cause reuse because no identity was issued while it was held.
+    /// Persisting it would be defensible too, but it would turn a cheap
+    /// derived value into a write on the remote-apply path.
+    [[nodiscard]] Result<void> observe_remote(const StreamId& stream, uint64_t counter);
+
     /// Peek without reserving. For tests and diagnostics.
     [[nodiscard]] Result<uint64_t> peek_stream(const StreamId& stream) const;
 
