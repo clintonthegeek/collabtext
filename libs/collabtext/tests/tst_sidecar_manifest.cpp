@@ -41,12 +41,12 @@ private slots:
     }
 
     void sha256_helper_matches_known_value() {
-        QCOMPARE(sha256_hex("abc"), std::string(
+        QCOMPARE(CollabText::sha256_hex("abc"), std::string(
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
     }
 
     void sha256_helper_empty_input() {
-        QCOMPARE(sha256_hex(""), std::string(
+        QCOMPARE(CollabText::sha256_hex(""), std::string(
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"));
     }
 
@@ -59,7 +59,7 @@ private slots:
         m.doc_id         = "01HABC";
         m.enrolled_at    = "2026-04-30T14:22:01Z";
         m.original_filename = "notes.md";
-        m.seed_sha256    = sha256_hex("hello");
+        m.seed_sha256    = CollabText::sha256_hex("hello");
 
         auto path = dir / "manifest.json";
         write_manifest(path, m);

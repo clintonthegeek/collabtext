@@ -1027,7 +1027,28 @@
         "R13"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "in_progress",
+      "baseline_revision": "897c95e",
+      "implementation_commits": [],
+      "verification_results": {
+        "core_only": "cmake -DBUILD_QT=OFF -DBUILD_APPS=OFF -DBUILD_TESTS=OFF -DBUILD_FILE_TRANSPORT=OFF -DCMAKE_DISABLE_FIND_PACKAGE_Qt6/zstd/OpenSSL=ON configures, builds and runs collabtext_core_smoke. The only Qt6 entry in the resulting cache is the CMAKE_DISABLE_FIND_PACKAGE_Qt6 we passed; no Qt target exists.",
+        "filetransport_no_qt": "FileTransport builds with Qt6 discovery disabled: libcollabtext_core.a + libcollabtext_filetransport.a, no Qt, no app, no test.",
+        "link_interfaces": "No production target links collabtext_testsupport, and no non-test target mentions Qt6::Test. Verified by inspecting every link.txt in the full build tree; the only matches are the test executables, reduce-trace and the support target itself.",
+        "debug": "67/67 CTest executables pass (the 65 existing suites plus collabtext_core_smoke and tst_sha256). No test was dropped.",
+        "release": "10/10 via tools/verify-roadmap.sh release (\u2026/20261005T094103Z-3618442)",
+        "asan": "6/6 via tools/verify-roadmap.sh asan (\u2026/20261005T095533Z-3645776), no suppressions; the runner's instrumentation check now samples collabtext_core and confirms -fsanitize=address is on it",
+        "runner_contracts": "zero-match regex still exits 3; the instrumentation assertion passes against the new Core target",
+        "hash_identity": "tst_sha256: FIPS 180-4 vectors, agreement with QCryptographicHash over 512 randomised inputs and the 55/56/57/63/64/65 padding boundaries, and embedded NUL bytes. Segment and manifest digest fixtures pass unchanged, so stored content identity is preserved.",
+        "artifacts": "build-roadmap-debug/verification/20261005T092929Z-3597881; build-roadmap-release/verification/20261005T094103Z-3618442; build-roadmap-asan/verification/20261005T095533Z-3645776"
+      },
+      "gate_evidence": [
+        "Component split: CollabText::Core (25 sources, C++20 only), ::FileTransport (7: zstd, segments, file sync, StreamSync, sidecar manifest), ::QtAdapter (SyncManager), ::Widgets (CollabDocument + 11 ui sources), ::TestSupport (NetworkSim). One-way dependencies; the aggregate CollabText::CollabText interface is retained so the apps and every test keep building unchanged, and A02a retires it.",
+        "storage/DurableFile.cpp is in Core deliberately: ReplicaState's private-state ownership needs portable lease and durable-write primitives, so putting them in FileTransport would make Core link upwards to reach them. That was the specific trap in the task's first step.",
+        "NetworkSim compiles into CollabText::TestSupport, not Core. It was a src/crdt/*.cpp that included <QTest>, so putting it in Core would have put QtTest in the engine's link interface -- exactly the acceptance criterion. Its file path is unchanged; the assignment is what matters, and A02a settles paths.",
+        "QCryptographicHash removed from both portable file-format hashes (SegmentFormat, SidecarManifest) in favour of a dependency-free FIPS 180-4 SHA-256 in Core (src/core/Sha256.cpp). OpenSSL::Crypto was considered: it is the better answer for a consumer who already links OpenSSL, but it cannot be the only answer, because Core needs a digest for actor derivation (DerivedActor) and either the dependency comes back or DerivedActor cannot hash at all. An in-tree implementation also has nothing to export, which is the static-consumer problem the task names. tst_sha256 checks it against Qt's implementation over randomised inputs, so 'unchanged content identity' is evidence rather than a claim.",
+        "src/ is still on Core's BUILD interface because public headers genuinely include from it (<collabtext/Operations.h> includes <crdt/Clock.h>, and so on). Making it private is A02a's self-contained-header work. What this task fixes is the link interface, which is the part a consumer has to install.",
+        "The core smoke caught a wrong assertion of mine rather than a defect: I first asserted that two engines inserting at position 0 would produce contiguous 'hello '/'world', and it produced 'hweolrllod '. That is finding F8 -- convergent, and wrong for prose -- and it is S01/S02/S03's subject. The smoke now asserts the multiset of characters, with a comment saying why asserting contiguity would turn a component test into an ordering gate that is meant to stay red for several more tasks."
+      ]
     },
     {
       "id": "A02a",

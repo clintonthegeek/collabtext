@@ -1,6 +1,6 @@
 #pragma once
 
-#include "crdt/SidecarManifest.h"
+#include "core/Sha256.h"
 
 #include <collabtext/ActorId.h>
 

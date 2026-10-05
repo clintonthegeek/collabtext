@@ -1,7 +1,6 @@
 #include "crdt/SegmentFormat.h"
 #include "crdt/ZstdUtil.h"
-
-#include <QCryptographicHash>
+#include "core/Sha256.h"
 
 #include <cstring>
 
@@ -36,11 +35,21 @@ uint64_t read_u64_le(const char* p) {
 } // namespace
 
 std::array<uint8_t, 32> sha256_bytes(std::string_view input) {
-    QByteArray hash = QCryptographicHash::hash(
-        QByteArray::fromRawData(input.data(), int(input.size())),
-        QCryptographicHash::Sha256);
+    // The portable Core hash rather than QCryptographicHash, so the segment
+    // format builds without Qt (roadmap task A01). Byte-identical output: the
+    // digest is part of the stored segment header, so a change here would
+    // invalidate every existing segment file. tst_sha256 checks the
+    // implementation against Qt's.
+    const std::string hex = CollabText::sha256_hex(input);
     std::array<uint8_t, 32> out{};
-    std::memcpy(out.data(), hash.constData(), 32);
+    const auto nibble = [](char c) -> uint8_t {
+        if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
+        if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(c - 'a' + 10);
+        return 0;
+    };
+    for (size_t i = 0; i < out.size(); ++i)
+        out[i] = static_cast<uint8_t>(
+            static_cast<uint8_t>(nibble(hex[2 * i]) << 4) | nibble(hex[2 * i + 1]));
     return out;
 }
 

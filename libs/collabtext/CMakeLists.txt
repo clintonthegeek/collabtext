@@ -2,102 +2,234 @@ cmake_minimum_required(VERSION 3.19)
 project(collabtext-lib VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_AUTOMOC ON)
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Test)
 
-find_package(zstd CONFIG QUIET)
-if(zstd_FOUND)
-    if(TARGET zstd::libzstd)
-        set(COLLABTEXT_ZSTD_TARGET zstd::libzstd)
-    elseif(TARGET zstd::libzstd_shared)
-        set(COLLABTEXT_ZSTD_TARGET zstd::libzstd_shared)
-    elseif(TARGET zstd::libzstd_static)
-        set(COLLABTEXT_ZSTD_TARGET zstd::libzstd_static)
-    else()
-        message(FATAL_ERROR "zstd CMake config found but no usable target")
-    endif()
-else()
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(ZSTD REQUIRED IMPORTED_TARGET libzstd)
-    set(COLLABTEXT_ZSTD_TARGET PkgConfig::ZSTD)
+if(NOT DEFINED COLLABTEXT_BUILD_FILE_TRANSPORT)
+    set(COLLABTEXT_BUILD_FILE_TRANSPORT ON)
 endif()
 
-add_library(collabtext STATIC
+# ===========================================================================
+# Component inventory (roadmap task A01)
+#
+#   Core           the engine: Buffer, IdList, the SumTree, undo, identity,
+#                  values and codecs. C++20 only. No Qt, no zstd, no hash
+#                  provider, no file transport, no session ownership.
+#   FileTransport  file sync, segments, compression and durable-store
+#                  composition. Depends on Core; Core never depends on it.
+#   QtAdapter      Qt-side integration that is not a widget (SyncManager).
+#                  Depends on Core (and FileTransport where it drives streams).
+#   Widgets        Qt widget layer plus CollabDocument. Depends on the above.
+#   TestSupport    NetworkSim, the trace/fault harness and QtTest. Never linked
+#                  into a production target or exported by one.
+#
+# One-way dependencies only. `storage/DurableFile.cpp` is in Core on purpose:
+# ReplicaState's private-state ownership needs portable lease and durable-write
+# primitives, so they cannot sit in FileTransport without Core linking back
+# upwards to reach them.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Core
+# ---------------------------------------------------------------------------
+add_library(collabtext_core STATIC
     src/CrdtEngine.cpp
-    src/CollabDocument.cpp
-    src/SyncManager.cpp
-    src/crdt/Clock.cpp
+    src/core/Sha256.cpp
     src/codec/Utf.cpp
     src/codec/JsonReader.cpp
+    src/crdt/Clock.cpp
     src/crdt/Locator.cpp
     src/crdt/UndoMap.cpp
     src/crdt/Buffer.cpp
-    src/crdt/Serialization.cpp
-    src/crdt/ZstdUtil.cpp
-    src/crdt/SegmentFormat.cpp
-    src/crdt/SegmentWriter.cpp
-    src/crdt/SegmentReader.cpp
-    src/crdt/FileSync.cpp
     src/crdt/IdList.cpp
+    src/crdt/Serialization.cpp
     src/crdt/ApplyOutcome.cpp
     src/crdt/OperationValidation.cpp
-    src/storage/DurableFile.cpp
     src/crdt/StreamSerialization.cpp
-    src/crdt/StreamSync.cpp
     src/crdt/ChatMessage.cpp
     src/crdt/Comment.cpp
-    src/crdt/NetworkSim.cpp
     src/crdt/SeedOp.cpp
-    src/crdt/SidecarManifest.cpp
-    src/ui/MultiCursorController.cpp
-    src/ui/CollabPlainTextEdit.cpp
-    src/ui/AvatarWidget.cpp
-    src/ui/PresenceIndicator.cpp
-    src/ui/IdentityEditor.cpp
-    src/ui/IdentitySetupDialog.cpp
-    src/ui/IdentityPreferencesPage.cpp
-    src/ui/ParticipantListWidget.cpp
-    src/ui/ChatPanelWidget.cpp
-    src/ui/CommentsPanelWidget.cpp
-    src/ui/CursorLabelWidget.cpp
     src/identity/Identity.cpp
-    src/identity/PresenceManager.cpp
     src/identity/IdentityStore.cpp
     src/identity/IdentityProjector.cpp
+    src/identity/PresenceManager.cpp
     src/identity/Signing.cpp
     src/identity/ReplicaState.cpp
     src/identity/ReplicaAllocator.cpp
-    include/collabtext/CollabDocument.h
-    include/collabtext/SyncManager.h
-    include/collabtext/Identity.h
-    include/collabtext/Operations.h
-    include/collabtext/IdListOperations.h
-    include/collabtext/Serialization.h
-    include/collabtext/OpStream.h
-    include/collabtext/ActorId.h
-    include/collabtext/StreamSync.h
+    src/storage/DurableFile.cpp
 )
-set_target_properties(collabtext PROPERTIES POSITION_INDEPENDENT_CODE ON)
-add_library(CollabText::CollabText ALIAS collabtext)
+add_library(CollabText::Core ALIAS collabtext_core)
+set_target_properties(collabtext_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_include_directories(collabtext
+# include/ is the intended public surface. src/ is still on the *build*
+# interface because several public headers genuinely include from it today --
+# <collabtext/Operations.h> includes <crdt/Clock.h>, <collabtext/CrdtEngine.h>
+# includes <crdt/IdentityAllocator.h>, and so on. Making it private is A02a's
+# job (self-contained public headers); until then, removing it would break every
+# consumer of the installed tree.
+#
+# What this task does fix is the *link* interface: nothing in Core's exported
+# dependencies is Qt, zstd, a hash provider, a test, or a transport. An
+# include-path leak is visible and annoying; a link dependency is a thing a
+# consumer has to install.
+target_include_directories(collabtext_core
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-target_link_libraries(collabtext PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
-target_link_libraries(collabtext PRIVATE ${COLLABTEXT_ZSTD_TARGET})
 
-# Tests
-enable_testing()
+# ---------------------------------------------------------------------------
+# FileTransport
+# ---------------------------------------------------------------------------
+if(COLLABTEXT_BUILD_FILE_TRANSPORT)
+    find_package(zstd CONFIG QUIET)
+    if(zstd_FOUND)
+        if(TARGET zstd::libzstd)
+            set(COLLABTEXT_ZSTD_TARGET zstd::libzstd)
+        elseif(TARGET zstd::libzstd_shared)
+            set(COLLABTEXT_ZSTD_TARGET zstd::libzstd_shared)
+        elseif(TARGET zstd::libzstd_static)
+            set(COLLABTEXT_ZSTD_TARGET zstd::libzstd_static)
+        else()
+            message(FATAL_ERROR "zstd CMake config found but no usable target")
+        endif()
+    else()
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(ZSTD REQUIRED IMPORTED_TARGET libzstd)
+        set(COLLABTEXT_ZSTD_TARGET PkgConfig::ZSTD)
+    endif()
 
-function(add_crdt_test name)
-    add_executable(${name} tests/${name}.cpp)
-    target_link_libraries(${name} PRIVATE collabtext Qt6::Test)
-    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    add_test(NAME ${name} COMMAND ${name})
-endfunction()
+    add_library(collabtext_filetransport STATIC
+        src/crdt/ZstdUtil.cpp
+        src/crdt/SegmentFormat.cpp
+        src/crdt/SegmentWriter.cpp
+        src/crdt/SegmentReader.cpp
+        src/crdt/FileSync.cpp
+        src/crdt/StreamSync.cpp
+        src/crdt/SidecarManifest.cpp
+    )
+    add_library(CollabText::FileTransport ALIAS collabtext_filetransport)
+    set_target_properties(collabtext_filetransport PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    # zstd is PRIVATE deliberately: a consumer of the transport needs the
+    # symbols, but static-library consumers must not have to *find* zstd to
+    # satisfy a link interface. A06a exports the package properly.
+    target_link_libraries(collabtext_filetransport
+        PUBLIC  collabtext_core
+        PRIVATE ${COLLABTEXT_ZSTD_TARGET})
+    # <collabtext/StreamSync.h> includes <crdt/SegmentReader.h>, so the transport
+    # component has the same A02a debt as Core.
+    target_include_directories(collabtext_filetransport
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+               $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    )
+endif()
 
+# ---------------------------------------------------------------------------
+# Qt components
+# ---------------------------------------------------------------------------
+if(COLLABTEXT_BUILD_QT)
+    add_library(collabtext_qtadapter STATIC
+        src/SyncManager.cpp
+    )
+    add_library(CollabText::QtAdapter ALIAS collabtext_qtadapter)
+    set_target_properties(collabtext_qtadapter PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_link_libraries(collabtext_qtadapter PUBLIC collabtext_core Qt6::Core Qt6::Gui)
+    if(TARGET collabtext_filetransport)
+        target_link_libraries(collabtext_qtadapter PUBLIC collabtext_filetransport)
+    endif()
+    target_include_directories(collabtext_qtadapter
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+               $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    )
+
+    add_library(collabtext_widgets STATIC
+        src/CollabDocument.cpp
+        src/ui/AvatarWidget.cpp
+        src/ui/PresenceIndicator.cpp
+        src/ui/IdentityEditor.cpp
+        src/ui/IdentitySetupDialog.cpp
+        src/ui/IdentityPreferencesPage.cpp
+        src/ui/ParticipantListWidget.cpp
+        src/ui/ChatPanelWidget.cpp
+        src/ui/CommentsPanelWidget.cpp
+        src/ui/CursorLabelWidget.cpp
+        src/ui/CollabPlainTextEdit.cpp
+        src/ui/MultiCursorController.cpp
+    )
+    add_library(CollabText::Widgets ALIAS collabtext_widgets)
+    set_target_properties(collabtext_widgets PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_link_libraries(collabtext_widgets
+        PUBLIC collabtext_qtadapter Qt6::Widgets)
+    target_include_directories(collabtext_widgets
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+               $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    )
+endif()
+
+# ---------------------------------------------------------------------------
+# Aggregate alias
+#
+# Kept so existing consumers -- the dogfood apps, tools and every test -- keep
+# building unchanged. A02a is what retires it in favour of naming components.
+# ---------------------------------------------------------------------------
+add_library(collabtext INTERFACE)
+add_library(CollabText::CollabText ALIAS collabtext)
+target_link_libraries(collabtext INTERFACE collabtext_core)
+if(TARGET collabtext_filetransport)
+    target_link_libraries(collabtext INTERFACE collabtext_filetransport)
+endif()
+if(COLLABTEXT_BUILD_QT)
+    target_link_libraries(collabtext INTERFACE collabtext_widgets collabtext_qtadapter)
+endif()
+
+# ===========================================================================
+# Tests and test support
+#
+# TestSupport is where NetworkSim, the trace harness and QtTest live. It is a
+# separate target so that no production target and no exported link interface
+# mentions a test dependency: `CollabText::Core`'s interface is Core, full stop.
+# ===========================================================================
+if(COLLABTEXT_BUILD_TESTS)
+    enable_testing()
+
+    add_library(collabtext_testsupport STATIC
+        src/crdt/NetworkSim.cpp
+    )
+    add_library(CollabText::TestSupport ALIAS collabtext_testsupport)
+    set_target_properties(collabtext_testsupport PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_link_libraries(collabtext_testsupport
+        PUBLIC collabtext Qt6::Core Qt6::Test)
+    # NetworkSim lives under src/crdt/ and is compiled into test support, so the
+    # internal include path is PRIVATE here. Test fixtures and harnesses include
+    # each other by bare name, so the tests directory is public to tests.
+    target_include_directories(collabtext_testsupport
+        PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tests>
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+    function(add_crdt_test name)
+        add_executable(${name} tests/${name}.cpp)
+        target_link_libraries(${name} PRIVATE CollabText::TestSupport Qt6::Test)
+        target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+                                               ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+        add_test(NAME ${name} COMMAND ${name})
+    endfunction()
+endif()
+
+# ===========================================================================
+# Core smoke
+#
+# A plain C++ executable with no QtTest, no Qt and no test support, so that
+# "Core builds and links on its own" is an executable fact rather than an
+# inspection of target properties. Built whenever Core is; registered with CTest
+# only when tests are on.
+# ===========================================================================
+add_executable(collabtext_core_smoke tests/core-smoke/main.cpp)
+target_link_libraries(collabtext_core_smoke PRIVATE collabtext_core)
+if(COLLABTEXT_BUILD_TESTS)
+    add_test(NAME collabtext_core_smoke COMMAND collabtext_core_smoke)
+endif()
+
+# ===========================================================================
+# The suites
+# ===========================================================================
+if(COLLABTEXT_BUILD_TESTS)
 add_crdt_test(tst_clock)
 add_crdt_test(tst_locator)
 add_crdt_test(tst_buffer)
@@ -123,6 +255,7 @@ add_crdt_test(tst_identity_ordering_model)
 add_crdt_test(tst_identity_allocation_model)
 add_crdt_test(tst_identity_types)
 add_crdt_test(tst_identity_allocation_engine)
+add_crdt_test(tst_sha256)
 add_crdt_test(tst_durable_file)
 target_compile_definitions(tst_behavior_fixtures PRIVATE
     COLLABTEXT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/behavior")
@@ -131,7 +264,7 @@ target_compile_definitions(tst_behavior_fixtures PRIVATE
 # mid-write on purpose. It is a test dependency, not a test itself — registering
 # it with add_test would run a program whose contract is to terminate.
 add_executable(store_crash_worker tests/store_crash_worker.cpp)
-target_link_libraries(store_crash_worker PRIVATE collabtext Qt6::Test)
+target_link_libraries(store_crash_worker PRIVATE CollabText::TestSupport Qt6::Test)
 target_include_directories(store_crash_worker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
                                                  ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 add_dependencies(tst_store_fault_harness store_crash_worker)
@@ -181,19 +314,21 @@ add_crdt_test(tst_segment_reader)
 # to prove that <collabtext/Serialization.h>, <collabtext/Operations.h>, and
 # <collabtext/IdListOperations.h> are self-sufficient.
 add_executable(tst_serialization_public tests/tst_serialization_public.cpp)
-target_link_libraries(tst_serialization_public PRIVATE collabtext Qt6::Test)
+target_link_libraries(tst_serialization_public PRIVATE CollabText::TestSupport Qt6::Test)
 add_test(NAME tst_serialization_public COMMAND tst_serialization_public)
 
 # CrdtEngine public op-API test — excludes internal src/ include path to
 # prove that <collabtext/CrdtEngine.h>, <collabtext/Operations.h>, and
 # <collabtext/Serialization.h> are self-sufficient.
 add_executable(tst_crdtengine_op_api tests/tst_crdtengine_op_api.cpp)
-target_link_libraries(tst_crdtengine_op_api PRIVATE collabtext Qt6::Test)
+target_link_libraries(tst_crdtengine_op_api PRIVATE CollabText::TestSupport Qt6::Test)
 add_test(NAME tst_crdtengine_op_api COMMAND tst_crdtengine_op_api)
 
 # OpStream interface smoke test — excludes internal src/ include path to
 # prove that <collabtext/OpStream.h> is self-sufficient with no Qt or internal
 # dependencies.
 add_executable(tst_opstream_interface tests/tst_opstream_interface.cpp)
-target_link_libraries(tst_opstream_interface PRIVATE collabtext Qt6::Test)
+target_link_libraries(tst_opstream_interface PRIVATE CollabText::TestSupport Qt6::Test)
 add_test(NAME tst_opstream_interface COMMAND tst_opstream_interface)
+
+endif() # COLLABTEXT_BUILD_TESTS -- the suites

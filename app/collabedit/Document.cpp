@@ -156,7 +156,7 @@ QString Document::openInCollabMode(const QString &path) {
     if (!sf) return tr("Sidecar missing seed.txt");
     std::string seed((std::istreambuf_iterator<char>(sf)),
                       std::istreambuf_iterator<char>());
-    if (sha256_hex(seed) != manifest->seed_sha256)
+    if (CollabText::sha256_hex(seed) != manifest->seed_sha256)
         return tr("seed.txt SHA mismatch — sidecar may be corrupt");
 
     m_collab = true;
@@ -228,7 +228,7 @@ QString Document::enableCollab() {
     manifest.doc_id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     manifest.enrolled_at = now_iso8601_utc();
     manifest.original_filename = QFileInfo(m_path).fileName().toStdString();
-    manifest.seed_sha256 = sha256_hex(seedStr);
+    manifest.seed_sha256 = CollabText::sha256_hex(seedStr);
     try {
         write_manifest(sidecar / "manifest.json", manifest);
     } catch (const std::exception &e) {

@@ -1694,3 +1694,70 @@ public boundary.
 
 **Next ready tasks:** A01, W01, S01. Within P06a: step 6, once the above is
 settled with A02.
+
+## A01 — split CMake targets; Core builds with nothing else installed
+
+**Task:** A01 **Status:** in progress **Baseline:** `897c95e`
+**Implementation commits:** this entry's commit
+**Scope:** four exported components — `CollabText::Core` (25 sources, C++20
+only), `::FileTransport` (zstd, segments, file sync, StreamSync, sidecar
+manifest), `::QtAdapter` (SyncManager), `::Widgets` (CollabDocument + 11 widget
+sources) — plus `::TestSupport`, which is where NetworkSim and QtTest live.
+Four new top-level options. `QCryptographicHash` replaced by a dependency-free
+FIPS 180-4 SHA-256 in Core. A plain-C++ `collabtext_core_smoke` that runs with
+Qt6, zstd and OpenSSL discovery all disabled.
+
+**Regression:** `tst_sha256` (FIPS vectors, agreement with Qt's implementation
+over 512 randomised inputs, the padding boundaries, embedded NULs) and
+`collabtext_core_smoke`, which did not build before the split.
+
+**Verification:**
+- Core-only (Qt, apps, tests, transport all off; `CMAKE_DISABLE_FIND_PACKAGE_Qt6/zstd/OpenSSL=ON`):
+  configures, builds, `collabtext_core_smoke` exits 0.
+- FileTransport without Qt: builds; the only Qt6 entry in its cache is the
+  disable flag we passed.
+- Full Debug 67/67 — the 65 existing suites plus the two new ones. No test dropped.
+- Release 10/10 (`…/20261005T094103Z-3618442`); ASan/UBSan/LSan 6/6
+  (`…/20261005T095533Z-3645776`), no suppressions.
+- Link interfaces inspected across the whole build tree: no production target
+  links `collabtext_testsupport`, no non-test target mentions `Qt6::Test`.
+- Runner contracts intact: a zero-match regex still exits 3, and the
+  instrumentation assertion now samples `collabtext_core` and passes.
+
+**Decisions worth recording.**
+
+*Where `DurableFile` went.* Into Core, not FileTransport. `ReplicaState` needs
+portable lease and durable-write primitives for private-state ownership, so
+putting them in FileTransport would make Core link *upwards* to reach them —
+precisely the trap the task's first step warns about.
+
+*Why the hash is in-tree rather than OpenSSL.* OpenSSL::Crypto is the better
+answer for a consumer who already links it. It cannot be the only answer:
+`DerivedActor` needs a digest to derive a seed operation's and a simulated
+replica's actor, so either the crypto dependency comes back into Core or
+`DerivedActor` cannot hash at all. An in-tree implementation also has nothing to
+export, which is the static-consumer problem the task names. The output is
+byte-identical to what it replaced, and that is *checked* against Qt's
+implementation rather than asserted — the digest is inside every stored segment
+header and every manifest, so a subtly wrong hash would silently invalidate
+them.
+
+*What is still leaking.* `src/` remains on Core's build interface because public
+headers genuinely include from it (`<collabtext/Operations.h>` includes
+`<crdt/Clock.h>`). That is A02a's self-contained-header work. What this task
+fixes is the *link* interface, which is the half a consumer has to install.
+
+**The smoke test caught me writing a wrong assertion.** I asserted that two
+engines inserting at position 0 would produce contiguous `hello `/`world`. It
+produced `hweolrllod ` — every character, interleaved. That is finding F8:
+convergent, and wrong for prose. It is S01/S02/S03's subject, and it is *not* a
+packaging defect, so the honest fix was to assert the multiset of characters and
+say why in a comment. Asserting contiguity there would have quietly turned a
+component smoke test into an ordering gate that is meant to stay red for several
+more tasks — the sort of well-meaning assertion that makes a suite lie.
+
+**Environment note, repeated because it will bite again:** `/tmp` is full
+(7.7G tmpfs). The ASan runs use `TMPDIR` inside the worktree.
+
+**Next:** A02a — self-contained public headers over the components that now
+exist. That is Wave's ask 2, and it is the gate on A06a/W01/W02/E07a.

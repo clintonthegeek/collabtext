@@ -1,7 +1,6 @@
 #include "crdt/SidecarManifest.h"
 
-#include <QByteArray>
-#include <QCryptographicHash>
+#include "core/Sha256.h"
 
 #include <cstdio>
 #include <fstream>
@@ -12,13 +11,6 @@
 namespace fs = std::filesystem;
 
 namespace CollabText::Crdt {
-
-std::string sha256_hex(const std::string& data) {
-    QByteArray digest = QCryptographicHash::hash(
-        QByteArray::fromStdString(data),
-        QCryptographicHash::Sha256);
-    return digest.toHex().toStdString();
-}
 
 bool doc_id_less(const std::string& a, const std::string& b) {
     return a < b;

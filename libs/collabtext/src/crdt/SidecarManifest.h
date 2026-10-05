@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/Sha256.h"
+
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -15,7 +17,11 @@ struct SidecarManifest {
 };
 
 /// SHA-256 of arbitrary bytes, lower-case hex.
-std::string sha256_hex(const std::string& data);
+///
+/// Forwarded from <core/Sha256.h>, which is where it lives: Core needs a digest
+/// for actor derivation, so it cannot live only in the file-format component
+/// (roadmap task A01). The output is byte-identical to what this used to
+/// produce through QCryptographicHash.
 
 /// Serialize a manifest to a one-line JSON string.
 std::string manifest_to_json(const SidecarManifest& m);
