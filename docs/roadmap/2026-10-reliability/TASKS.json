@@ -1226,7 +1226,7 @@
    ],
    "baseline_revision": "fcb7e71",
    "implementation_commits": [
-    "PENDING_IMPLEMENTATION_COMMIT"
+    "6e6f78455a8ac184a6af23c5896baafe0a6d4a0c"
    ],
    "verification_results": {
     "fixture_corpus": "14 fixtures, 32 operations, 28 tokens, 58 typed expectations; WP1-WP8 covered",
