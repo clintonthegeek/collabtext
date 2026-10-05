@@ -113,6 +113,17 @@ tools/verify-consumer-package.sh --mode asan --gate live --components core
 - `--output-dir`: optional task-owned path for retained logs/results. Otherwise create a unique ignored worktree verification directory and print its location. Never replace a developer's existing install/build tree silently.
 - `--help`: show options, implemented gates and their owning task IDs. Unknown/missing values and unimplemented gate/component combinations fail with a diagnostic.
 
+Two options beyond the contract above, both added by A06a:
+
+- `--producer-build DIR` installs from an already-configured and built producer
+  tree instead of configuring a new one. It still builds it first, because a
+  stale install is the one failure this script must not have. Without it the gate
+  is the acceptance-tier form, where a from-scratch producer is the point; with it
+  the gate is cheap enough to run on every packaging edit.
+- Exit codes are 0 pass, 2 bad usage, 3 a step failed, 4 an unimplemented gate or
+  component combination. `results.json` records the status the caller saw, not an
+  internal step counter that can disagree with it.
+
 Exit zero means the selected gate's assertions passed, never merely that the
 worker ran. Any configure/build/test failure, missing scenario, zero tests,
 unexpected signal, or strict known_failure/unsupported result returns nonzero.

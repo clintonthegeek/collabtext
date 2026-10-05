@@ -4,7 +4,7 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status:** V01–V08, D01, P01–P05, and L01 complete. P06a is in progress: both design gates now exist and run (identity ordering, and identity allocation), so what remains is the engine migration itself — steps 3–6. A01, W01, and S01 are independently ready; the early consumer route follows the running P06a task. Read the [2026-10-04 progress review](../../reports/2026-10-04-reliability-progress-review.md), [current handoff](../../handoff/2026-10-04-reliability-review.md), and [task registry](TASKS.json). W1–W6 and Wave ask2 are accepted into dependency-gated tasks; the [early consumer lane](00-consumer-integration.md) brings packaging, live positions, probes and alpha preparation forward without claiming implementation.
+**Status (2026-10-05):** V01–V08, D01, P01–P05, L01, W01, S01 and the whole packaging arc — A01, A02a, A06a — complete. P06a is at step 6 of 6 (opaque operation values), blocked on a recorded A02 boundary decision rather than on anything on the critical path; steps 1–5 are done. **Next is S04a**, the design gate for scoped boundary identities, which is on Wave's critical path. Start at the [2026-10-05 state-at-handoff](../../handoff/2026-10-05-state-at-handoff.md); the [2026-10-04 progress review](../../reports/2026-10-04-reliability-progress-review.md) and [2026-10-04 handoff](../../handoff/2026-10-04-reliability-review.md) are historical. W1–W6 and Wave ask2 are accepted into dependency-gated tasks; the [early consumer lane](00-consumer-integration.md) brings packaging, live positions, probes and alpha preparation forward. `TASKS.json` is authoritative for status.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **72 active tasks across eight technical areas plus an early consumer integration lane**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
@@ -59,8 +59,9 @@ flowchart TD
 ```
 
 The diagram groups work and omits some edges; TASKS.json is authoritative. The
-preferred single-executor order is: finish current P06a; A01 → A02a → A06a;
-W01 → W02 → E07a; S01 → S04a; P06b → S04b → W03 → E07b; S02 → S03;
+preferred single-executor order is: S04a → S04b; W02 → E07a; W03 → E07b; S02 → S03;
+(A01, A02a, A06a, W01 and S01 are done. P06a's remaining step 6 is blocked and
+does not gate any of the above.)
 P07 → P08 → L02–L08; then S04–S07 and the remaining G/A/X/E tasks in registry
 order. A blocked current task does not prevent independent ready work.
 
@@ -140,7 +141,7 @@ No recommendation is considered complete merely because it appears in a plan. E0
 
 ## Implementation handoff
 
-- **Next:** P06a steps 3–6 — widen the engine's identity types to the 24-byte identity, allocate per the run-interval contract in vnext-identity.md §3.2 rather than one tick per scalar, then measure the real layout. Both design gates are landed; the migration itself is not. Then follow the early consumer sequence in 00-consumer-integration.md rather than the old full-recovery-first route. A01/W01/S01 can proceed independently; P06b still follows its own identity prerequisite; S04a, S02 and G01 require complete specifications and independent models before their dependent algorithms.
+- **Next:** S04a — specify scoped boundary identities and an independent position model, with executable mint/resolve/compare pseudocode, typed outcomes that separate strict attachment loss from valid caret collapse, canonical token codec rules, and an independent model that detects the mutations “ignore affinity”, “erase scope” and “map a missing id to end”. Those three mutations are the gate: a model that merely agrees with production code proves nothing. S04a is on Wave's critical path, because affinity, typed unresolvable anchors and a persistable position token are the three capabilities `ALPHA_CAPABILITIES.md` lists as *not implemented*. Then S04b implements it, W02 runs the installed baseline probes, and W03 the strict live-position probes. P06a step 6 (opaque operation values) remains open and blocked on the recorded A02 boundary decision; it gates nothing here. S02, S03 and the G-series still require complete specifications and independent models before their dependent algorithms.
 - **Independent review:** the [review report](../../reports/2026-10-04-reliability-progress-review.md) records reproduced defects and fixes in P02/P04/P05/L01, executable evidence, and limitations. The old kickoff handoff is historical.
 - **Identity:** ReplicaState now has one move-only kernel-lease owner per private directory, nonzero counter reservations, strict state directives, and checked atomic persistence. The allocation contract is written and executable (vnext-identity.md §3.1–§3.8, with an independent model and a checked `reserve_run`), including the gap-record obligation a crash between reservation and log append creates. ActorId is still not consumed by the legacy engine; P06a steps 3–6 must finish that adoption.
 - **Validation:** the bounded reader rejects literal/escaped string overflow and duplicate keys; semantic validation also checks actor head-of-line queues. Deferred and diagnostic quarantine queues are separately bounded. The caller/store retains rejected input. Legacy operation serializers remain until P06b; P04/P05 did not complete all of F10.

@@ -1148,9 +1148,37 @@
         "R13"
       ],
       "gate": null,
-      "status": "not_started",
+      "status": "complete",
       "consumer_requirements": [
         "W6"
+      ],
+      "baseline_revision": "8b781e7",
+      "implementation_commits": [
+        "666297b",
+        "b1cfa6c",
+        "f3360c0"
+      ],
+      "verification_results": {
+        "relocation": "verify-consumer-package.sh installs to prefix A, MOVES it to prefix B, and only then configures the consumer against B. The consumer compiles with exactly one include path, prefix-b/include, and links only from prefix B; the script asserts both and fails on any -I or link path into the source tree, the producer build tree, or the moved-away prefix A.",
+        "negative_discovery": "Core-only consumers configure with CMAKE_DISABLE_FIND_PACKAGE_Qt6/zstd/OpenSSL=ON. Core has no link dependencies at all, so this is the check that the headless path is genuinely headless.",
+        "optional_components": "core,file-transport,qt configured together in Debug, Release and ASan, each from a from-scratch producer. Requesting qt or file-transport from a producer built without them fails with a message naming the option that would enable it; requesting an unknown component fails naming the known set.",
+        "header_independence": "tests/consumer-smoke compiles one TU per installed header against the install tree: 13 Core headers with Core alone, 16 with the qt component. StreamSync is absent by design -- its header names zstd-reaching segment types, so it stays unexported.",
+        "failing_paths": "verify-consumer-package.sh --producer-build <unconfigured-dir> exits 3 and records exit_status 3 in results.json. Every unimplemented gate (baseline W02, live W03, final A06/E05) exits 4 naming its owning task; unknown mode or component exits 2.",
+        "debug": "verify-consumer-package.sh --mode debug --gate package --components core,file-transport,qt on the final script: producer from scratch, install to A, move to B, consumer against B with Qt6/zstd/OpenSSL discovery disabled. The consumer's only include path is prefix-b/include and it links only from prefix B; both asserted, not inferred from the tests passing.",
+        "release": "Same gate, --mode release, --components core,file-transport,qt, on the pre-fix script (666297b/b1cfa6c). The later commit f3360c0 added the source-tree-leakage assertion and the finish() status fix; the build/install/relocate/consumer-test steps were identical and verified in Debug on the final script. A confirming release and ASan run on f3360c0 was still in flight at handoff -- see the task-log entry.",
+        "asan": "Same gate, --mode asan, --components core,file-transport,qt, on the pre-fix script. ASan is verified instrumented on both sides: the script refuses an asan run whose producer compile commands lack -fsanitize=address, and passes the sanitizer flags to the separate consumer project too, because the producer's flags do not cross a project boundary and an ASan build whose consumer fails to link with undefined __asan_* symbols is a harness bug, not a packaging one.",
+        "full_sweep": "Debug 69/70. The one failure is tst_benchmark::memory_growth tripping the QtTest watchdog at 307s under a parallel sweep -- a Debug-build timing limit on an uninstrumented measurement, not an assertion failure; no engine source changed. The user asked for it to be skipped rather than tuned.",
+        "checkers": "docs/roadmap/2026-10-reliability/validate-plan.py and check-scope.py both pass (72 tasks, acyclic, F1-F10/R1-R14 covered, W1-W6 consumer coverage, no prohibited direction required).",
+        "artifacts": "build-consumer-verify/<mode>-package-<utc>/{run.log,results.json,steps.txt}, gitignored. Full Debug sweep evidence: build-roadmap-debug/verification/20261005T205130Z-4070185."
+      },
+      "gate_evidence": [
+        "Per-component export sets rather than one combined file. Stricter than CMake requires -- an unused imported target naming Qt6::Widgets is usually harmless -- because a consumer that asked for Core should not have Qt visible anywhere in its configure output, not even as a string it never reads. Static dependency records ride along per component, so find_dependency(zstd) only runs when the file transport was requested.",
+        "Three defects, one shape: every interesting failure was a check that reported success after failing. finish() read $? instead of its argument, so every explicit failure path exited with the status of the preceding echo -- zero -- printing PASS underneath its own error message. The consumer emitted no compile_commands.json, so the leakage check had nothing to inspect and could not run. results.json recorded step_status rather than the exit status the caller saw, so the evidence file could disagree with the exit code. All three are fixed; the lesson is in AGENTS.md.",
+        "The relocation is the check. A consumer inside the source tree compiles happily against an inherited include path, a source-tree -I, or a link against the build directory, and every one of those produces a green build that proves nothing about the install.",
+        "StreamSync stays in src/transport/ and out of the export set. It fails the header-independence test because its header names zstd-reaching segment types. Splitting those types out of the public header would let it ship; that is a transport decision, not something to paper over with a pimpl.",
+        "docs/USING_VNEXT.md -- the consumer how-to: components, targets, exact configure/build/install/find_package commands, the UTF-16 offset convention, the (document, stream) uniqueness scope, and the three not-implemented items a consumer cannot design around.",
+        "Separate work: the verification ritual was rewritten because the full sweep defaulted to two workers and took over an hour, which is most of why it stopped being run. tools/verify-changed.sh routes on the diff (~30s for this task). A path matching no route is reported rather than dropped, and a zero-test selection is an error.",
+        "Manifest corrections A06a made necessary by landing: ReplicaAllocator is not part of the installed surface (naming A06a as its owner would have been false), and StreamSync is implemented but not advertised."
       ]
     },
     {
