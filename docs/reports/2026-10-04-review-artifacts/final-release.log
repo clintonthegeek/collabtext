@@ -1,0 +1,139 @@
+Root: /home/clinton/dev/collabtext/.worktrees/reliability-v2
+Mode: release
+Regex: ^tst_
+Workers: 1
+
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release
+      Start  1: tst_clock
+ 1/64 Test  #1: tst_clock .........................   Passed    0.21 sec
+      Start  2: tst_locator
+ 2/64 Test  #2: tst_locator .......................   Passed    0.15 sec
+      Start  3: tst_buffer
+ 3/64 Test  #3: tst_buffer ........................   Passed    0.08 sec
+      Start  4: tst_convergence
+ 4/64 Test  #4: tst_convergence ...................   Passed    0.97 sec
+      Start  5: tst_sumtree
+ 5/64 Test  #5: tst_sumtree .......................   Passed    0.07 sec
+      Start  6: tst_anchor
+ 6/64 Test  #6: tst_anchor ........................   Passed    0.07 sec
+      Start  7: tst_opqueue
+ 7/64 Test  #7: tst_opqueue .......................   Passed    0.16 sec
+      Start  8: tst_utf8
+ 8/64 Test  #8: tst_utf8 ..........................   Passed    0.15 sec
+      Start  9: tst_rope
+ 9/64 Test  #9: tst_rope ..........................   Passed    0.06 sec
+      Start 10: tst_fuzz
+10/64 Test #10: tst_fuzz ..........................   Passed    0.64 sec
+      Start 11: tst_trace_reduction
+11/64 Test #11: tst_trace_reduction ...............   Passed    0.15 sec
+      Start 12: tst_network_sim
+12/64 Test #12: tst_network_sim ...................   Passed    0.11 sec
+      Start 13: tst_store_fault_harness
+13/64 Test #13: tst_store_fault_harness ...........   Passed    0.37 sec
+      Start 14: tst_behavior_fixtures
+14/64 Test #14: tst_behavior_fixtures .............   Passed    0.05 sec
+      Start 15: tst_actor_identity
+15/64 Test #15: tst_actor_identity ................   Passed    0.06 sec
+      Start 16: tst_summary_laws
+16/64 Test #16: tst_summary_laws ..................   Passed    0.23 sec
+      Start 17: tst_decode_validation
+17/64 Test #17: tst_decode_validation .............   Passed    0.14 sec
+      Start 18: tst_operation_validation
+18/64 Test #18: tst_operation_validation ..........   Passed    0.10 sec
+      Start 19: tst_identity_ordering_model
+19/64 Test #19: tst_identity_ordering_model .......   Passed    0.10 sec
+      Start 20: tst_durable_file
+20/64 Test #20: tst_durable_file ..................   Passed    0.16 sec
+      Start 21: tst_rope_integration
+21/64 Test #21: tst_rope_integration ..............   Passed    0.13 sec
+      Start 22: tst_undomap
+22/64 Test #22: tst_undomap .......................   Passed    0.11 sec
+      Start 23: tst_benchmark
+23/64 Test #23: tst_benchmark .....................   Passed  100.66 sec
+      Start 24: tst_gc
+24/64 Test #24: tst_gc ............................   Passed    0.14 sec
+      Start 25: tst_evaluation_regressions
+25/64 Test #25: tst_evaluation_regressions ........   Passed    0.09 sec
+      Start 26: tst_serialization
+26/64 Test #26: tst_serialization .................   Passed    0.05 sec
+      Start 27: tst_edits_since
+27/64 Test #27: tst_edits_since ...................   Passed    0.06 sec
+      Start 28: tst_filesync
+28/64 Test #28: tst_filesync ......................   Passed    0.03 sec
+      Start 29: tst_multicursor
+29/64 Test #29: tst_multicursor ...................   Passed    0.04 sec
+      Start 30: tst_realistic
+30/64 Test #30: tst_realistic .....................   Passed   15.56 sec
+      Start 31: tst_identity_json
+31/64 Test #31: tst_identity_json .................   Passed    0.07 sec
+      Start 32: tst_identity_store
+32/64 Test #32: tst_identity_store ................   Passed    0.08 sec
+      Start 33: tst_identity_projector
+33/64 Test #33: tst_identity_projector ............   Passed    0.08 sec
+      Start 34: tst_presence_manager
+34/64 Test #34: tst_presence_manager ..............   Passed    0.05 sec
+      Start 35: tst_identity_widgets
+35/64 Test #35: tst_identity_widgets ..............   Passed    0.54 sec
+      Start 36: tst_collab_plain_text_edit
+36/64 Test #36: tst_collab_plain_text_edit ........   Passed    0.16 sec
+      Start 37: tst_scroll_stability
+37/64 Test #37: tst_scroll_stability ..............   Passed    0.22 sec
+      Start 38: tst_stream_sync
+38/64 Test #38: tst_stream_sync ...................   Passed    0.08 sec
+      Start 39: tst_opstream_streamsync
+39/64 Test #39: tst_opstream_streamsync ...........   Passed    0.05 sec
+      Start 40: tst_opstream_acks
+40/64 Test #40: tst_opstream_acks .................   Passed    0.11 sec
+      Start 41: tst_opstream_convergence_buffer
+41/64 Test #41: tst_opstream_convergence_buffer ...   Passed    0.19 sec
+      Start 42: tst_opstream_convergence_idlist
+42/64 Test #42: tst_opstream_convergence_idlist ...   Passed    0.15 sec
+      Start 43: tst_opstream_convergence_mixed
+43/64 Test #43: tst_opstream_convergence_mixed ....   Passed    0.13 sec
+      Start 44: tst_opstream_replay
+44/64 Test #44: tst_opstream_replay ...............   Passed    0.07 sec
+      Start 45: tst_opstream_idempotent
+45/64 Test #45: tst_opstream_idempotent ...........   Passed    0.11 sec
+      Start 46: tst_idlist
+46/64 Test #46: tst_idlist ........................   Passed    0.06 sec
+      Start 47: tst_idlist_anchor
+47/64 Test #47: tst_idlist_anchor .................   Passed    0.05 sec
+      Start 48: tst_idlist_convergence
+48/64 Test #48: tst_idlist_convergence ............   Passed    0.06 sec
+      Start 49: tst_idlist_undo
+49/64 Test #49: tst_idlist_undo ...................   Passed    0.03 sec
+      Start 50: tst_idlist_gc
+50/64 Test #50: tst_idlist_gc .....................   Passed    0.03 sec
+      Start 51: tst_idlist_fuzz
+51/64 Test #51: tst_idlist_fuzz ...................   Passed    0.06 sec
+      Start 52: tst_idlist_serialization
+52/64 Test #52: tst_idlist_serialization ..........   Passed    0.03 sec
+      Start 53: tst_idlist_op_api
+53/64 Test #53: tst_idlist_op_api .................   Passed    0.02 sec
+      Start 54: tst_chat_message
+54/64 Test #54: tst_chat_message ..................   Passed    0.04 sec
+      Start 55: tst_comment
+55/64 Test #55: tst_comment .......................   Passed    0.02 sec
+      Start 56: tst_seed_op
+56/64 Test #56: tst_seed_op .......................   Passed    0.03 sec
+      Start 57: tst_sidecar_manifest
+57/64 Test #57: tst_sidecar_manifest ..............   Passed    0.02 sec
+      Start 58: tst_zstd_util
+58/64 Test #58: tst_zstd_util .....................   Passed    0.02 sec
+      Start 59: tst_segment_format
+59/64 Test #59: tst_segment_format ................   Passed    0.03 sec
+      Start 60: tst_segment_writer
+60/64 Test #60: tst_segment_writer ................   Passed    0.02 sec
+      Start 61: tst_segment_reader
+61/64 Test #61: tst_segment_reader ................   Passed    0.02 sec
+      Start 62: tst_serialization_public
+62/64 Test #62: tst_serialization_public ..........   Passed    0.02 sec
+      Start 63: tst_crdtengine_op_api
+63/64 Test #63: tst_crdtengine_op_api .............   Passed    0.02 sec
+      Start 64: tst_opstream_interface
+64/64 Test #64: tst_opstream_interface ............   Passed    0.02 sec
+
+100% tests passed out of 64
+
+Total Test time (real) = 123.65 sec
+Verification exit: 0; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T223405Z-2

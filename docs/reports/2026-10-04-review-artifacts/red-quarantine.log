@@ -1,0 +1,78 @@
+Root: /home/clinton/dev/collabtext/.worktrees/reliability-v2
+Mode: debug
+Regex: ^tst_operation_validation$
+Workers: 2
+
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+    Start 18: tst_operation_validation
+1/1 Test #18: tst_operation_validation .........***Failed    0.19 sec
+********* Start testing of TestOperationValidation *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestOperationValidation::initTestCase()
+FAIL!  : TestOperationValidation::quarantine_does_not_bypass_the_default_pending_operation_bound() 'target.quarantined().size() <= DeferredBudget{}.max_operations' returned FALSE. ()
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_operation_validation.cpp(100)]
+PASS   : TestOperationValidation::missing_idlist_lookup_has_a_checked_not_found_result()
+PASS   : TestOperationValidation::local_utf8_interior_boundaries_are_refused_without_mutation()
+PASS   : TestOperationValidation::blocked_replica_does_not_bypass_semantic_validation()
+PASS   : TestOperationValidation::pending_byte_estimate_does_not_depend_on_counter_value()
+PASS   : TestOperationValidation::zero_counter_operation_is_rejected()
+PASS   : TestOperationValidation::valid_counter_operation_passes_validation()
+PASS   : TestOperationValidation::insertion_origin_interval_overflow_is_rejected()
+PASS   : TestOperationValidation::deletion_run_interval_overflow_is_rejected()
+PASS   : TestOperationValidation::split_relocation_interval_overflow_is_rejected()
+PASS   : TestOperationValidation::inserted_length_must_equal_utf8_scalar_count()
+PASS   : TestOperationValidation::multibyte_inserted_length_must_equal_scalar_count_not_byte_count()
+PASS   : TestOperationValidation::non_bmp_inserted_length_is_counted_in_scalars()
+PASS   : TestOperationValidation::invalid_utf8_in_inserted_content_is_rejected()
+PASS   : TestOperationValidation::overlong_utf8_in_inserted_content_is_rejected()
+PASS   : TestOperationValidation::surrogate_encoded_as_utf8_is_rejected()
+PASS   : TestOperationValidation::sentinel_locator_is_not_a_valid_insertion_position()
+PASS   : TestOperationValidation::ordinary_locator_is_accepted()
+PASS   : TestOperationValidation::range_and_text_cardinality_must_match()
+PASS   : TestOperationValidation::inverted_range_is_rejected()
+PASS   : TestOperationValidation::overlapping_ranges_are_rejected()
+PASS   : TestOperationValidation::unsorted_ranges_are_rejected()
+PASS   : TestOperationValidation::adjacent_and_empty_ranges_are_accepted()
+PASS   : TestOperationValidation::undo_with_zero_counter_target_is_rejected()
+PASS   : TestOperationValidation::undo_with_self_referential_target_is_rejected()
+PASS   : TestOperationValidation::well_formed_undo_is_accepted()
+PASS   : TestOperationValidation::unmet_causal_dependency_defers_with_the_missing_identity()
+PASS   : TestOperationValidation::met_causal_dependency_is_not_a_deferral()
+PASS   : TestOperationValidation::malformed_operation_is_rejected_even_when_dependencies_are_missing()
+PASS   : TestOperationValidation::rejected_operation_leaves_engine_state_untouched()
+PASS   : TestOperationValidation::each_rejection_reason_leaves_engine_state_untouched_data_driven()
+PASS   : TestOperationValidation::duplicate_operation_reports_duplicate_and_changes_nothing()
+PASS   : TestOperationValidation::local_edit_with_mismatched_cardinality_is_refused_without_mutation()
+PASS   : TestOperationValidation::local_edit_past_end_is_refused_without_mutation()
+PASS   : TestOperationValidation::local_edit_with_end_past_start_is_refused_without_mutation()
+PASS   : TestOperationValidation::local_edit_with_overlapping_ranges_is_refused_without_mutation()
+PASS   : TestOperationValidation::local_edit_at_end_boundary_is_accepted()
+PASS   : TestOperationValidation::local_edit_with_unsorted_ranges_is_refused()
+PASS   : TestOperationValidation::legacy_local_edit_entry_point_stays_non_UB_on_bad_input()
+PASS   : TestOperationValidation::out_of_order_valid_operations_still_converge()
+PASS   : TestOperationValidation::deferred_operation_does_not_fire_a_change_callback()
+PASS   : TestOperationValidation::rejected_operation_does_not_fire_a_change_callback()
+PASS   : TestOperationValidation::duplicate_operation_does_not_fire_a_change_callback()
+PASS   : TestOperationValidation::deferral_beyond_budget_is_reported_and_quarantined_not_dropped()
+PASS   : TestOperationValidation::byte_budget_also_bounds_the_deferred_queue()
+PASS   : TestOperationValidation::idlist_insert_after_unresolvable_anchor_is_refused()
+PASS   : TestOperationValidation::idlist_remove_at_missing_anchor_is_refused_without_out_of_bounds_read()
+PASS   : TestOperationValidation::idlist_legacy_entry_points_do_not_mutate_on_bad_anchor()
+PASS   : TestOperationValidation::idlist_rejected_remote_operation_changes_nothing()
+PASS   : TestOperationValidation::idlist_sentinel_locator_is_rejected()
+PASS   : TestOperationValidation::idlist_valid_operation_is_accepted()
+PASS   : TestOperationValidation::idlist_out_of_order_operations_converge()
+PASS   : TestOperationValidation::idlist_duplicate_reports_duplicate()
+PASS   : TestOperationValidation::cleanupTestCase()
+Totals: 54 passed, 1 failed, 0 skipped, 0 blacklisted, 136ms
+********* Finished testing of TestOperationValidation *********
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   0.19 sec
+
+The following tests FAILED:
+	 18 - tst_operation_validation (Failed)
+Errors while running CTest
+Verification exit: 8; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T214053Z-2

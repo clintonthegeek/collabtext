@@ -18,7 +18,7 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 4. Prefer registry order for a serial run. Work on one task at a time. If a task is too broad, split it into new well-defined subtask IDs with dependencies and acceptance criteria before coding; do not silently expand scope.
 5. Mark the task `in_progress`, record the baseline revision and relevant failures, and read every existing file the task will touch. Paths named as new files are not missing prerequisites.
 
-`validate-plan.py --ready` lists structurally ready tasks. It cannot establish technical review or user approval; the executor must still check the decision/design artifacts. After the V01–V03 kickoff, V04 is next in serial order; V06, V07, and V08 are also structurally ready. Read the [handoff](../../handoff/2026-10-03-reliability-kickoff.md) before continuing.
+`validate-plan.py --ready` lists structurally ready tasks. It cannot establish technical review or user approval; the executor must still check the decision/design artifacts. V01–V08, D01, P01–P05, and L01 are complete. Continue unfinished P06a (model gate landed; engine migration pending); S01 is separately ready. Read the [current handoff](../../handoff/2026-10-04-reliability-review.md) and [external consumer requirements](../../specs/vnext-external-position-contract.md) before continuing. Acceptance must include the W-series cases assigned to each task; a test name in a spec is not implementation evidence.
 
 ## Implementing the selected task
 

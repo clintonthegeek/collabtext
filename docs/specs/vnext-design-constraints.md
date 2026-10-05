@@ -32,9 +32,13 @@ in production. we can start totally fresh, however we want."
 - **In practice:** new source, ABI, wire, and store formats may be designed
   freely. Version numbers are per artifact. Obsolete and unknown versions are
   rejected explicitly rather than guessed at.
-- **Forbids:** legacy-store decoders, importers, data archives, anchor
+- **Forbids:** legacy-store decoders, importers, pre-vNext data archives, anchor
   translation from old stores, compatibility shims, mixed-version editing,
   porting deadlines, and "support both old and new" APIs.
+- Fresh-start permission covers the pre-vNext experimental data. Once a vNext
+  token format is published for external canonical logs, its supported readers
+  and live-pin translations are retention obligations under
+  [W1/W3](vnext-external-position-contract.md), independent of C++ layout.
 - Existing source and evaluation artifacts remain *regression evidence*, not
   compatibility obligations. `tests/fixtures/behavior/` and the V02 findings are
   evidence; the defect they document does not bind the new behavior.
@@ -136,7 +140,8 @@ anchor, malformed, and unsupported-format input (P01 defines the type).
   coverage as though the data had been read.
 - **C7** Because there is nothing to preserve (C1), an incompatible format
   change is permitted and is recorded as a documented hard cut. It is not
-  accompanied by a compatibility layer.
+  accompanied by a pre-vNext compatibility layer. This clean-start rule does not
+  cancel the supported persisted-token contract after publication (W1/W3).
 
 ---
 
@@ -236,7 +241,7 @@ data migration), classifies each hit by its surrounding sentence, and lists the
 hits that need a human decision. Its allowed-phrase list is deliberately visible:
 an exception nobody can see is an exception nobody can review.
 
-**Current result:** 62 tasks scanned, 20 hits, all in prohibitive or explicitly
+**Review result (2026-10-04):** 63 tasks scanned, 22 hits, all in prohibitive or explicitly
 allowed context, 0 needing review. The one allowed phrase is E04's "rewrite
 current architecture", which is a documentation rewrite.
 

@@ -79,6 +79,19 @@ coverage = {x for task in tasks for x in task['addresses']}
 for item in [f'F{i}' for i in range(1, 11)] + [f'R{i}' for i in range(1, 15)]:
     if item not in coverage:
         errors.append(f'Missing coverage: {item}')
+consumer_requirements = set(data.get('consumer_requirements', []))
+consumer_coverage = set()
+for task in tasks:
+    requirements = set(task.get('consumer_requirements', []))
+    consumer_coverage.update(requirements)
+    if requirements - consumer_requirements:
+        errors.append(f'{task["id"]}: unknown consumer requirement')
+    if requirements and 'docs/specs/vnext-external-position-contract.md' not in task['files']:
+        errors.append(f'{task["id"]}: missing normative external-position scope')
+for item in sorted(consumer_requirements - consumer_coverage):
+    errors.append(f'Missing consumer coverage: {item}')
+if consumer_requirements and not (root / data.get('consumer_contract', '')).is_file():
+    errors.append('Missing consumer contract')
 for doc in root.glob('*.md'):
     for target in re.findall(r'\]\(([^)]+)\)', doc.read_text()):
         if target.startswith(('https://', 'http://', '#')):
@@ -90,6 +103,8 @@ if errors:
     print('\n'.join(errors), file=sys.stderr)
     sys.exit(1)
 print(f'Valid: {len(tasks)} tasks; acyclic graph; serial order; all F1–F10/R1–R14 covered.')
+if consumer_requirements:
+    print(f'Consumer coverage: {", ".join(sorted(consumer_requirements))}; normative contract exists.')
 if args.ready:
     ready = [t for t in tasks if t['status'] == 'not_started'
              and all(by_id[d]['status'] == 'complete' for d in t['depends_on'])]

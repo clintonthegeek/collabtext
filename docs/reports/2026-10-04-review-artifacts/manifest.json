@@ -1,0 +1,100 @@
+{
+  "baseline-debug": {
+    "exit_code": 0,
+    "selected_tests": 62,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T211725Z-13"
+  },
+  "baseline-release": {
+    "exit_code": 0,
+    "selected_tests": 62,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T211725Z-13"
+  },
+  "red-validation": {
+    "exit_code": 8,
+    "selected_tests": 2,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T212145Z-2"
+  },
+  "red-storage-identity": {
+    "exit_code": 8,
+    "selected_tests": 2,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T212711Z-2"
+  },
+  "red-quarantine": {
+    "exit_code": 8,
+    "selected_tests": 1,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T214053Z-2"
+  },
+  "intermediate-debug-boundary-regression": {
+    "exit_code": 8,
+    "selected_tests": 62,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T215425Z-2"
+  },
+  "intermediate-asan-boundary-regression": {
+    "exit_code": 8,
+    "selected_tests": 62,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T215432Z-2682055"
+  },
+  "red-state-link-and-boundary-control": {
+    "exit_code": 8,
+    "selected_tests": 2,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T223054Z-2"
+  },
+  "targeted-corrected-integration": {
+    "exit_code": 0,
+    "selected_tests": 9,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T223237Z-2"
+  },
+  "sanitizer-load-failure": {
+    "exit_code": 8,
+    "selected_tests": 62,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T223408Z-2710985"
+  },
+  "final-debug": {
+    "exit_code": 0,
+    "selected_tests": 62,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T223405Z-2"
+  },
+  "final-release": {
+    "exit_code": 0,
+    "selected_tests": 64,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T223405Z-2"
+  },
+  "final-asan": {
+    "exit_code": 0,
+    "selected_tests": 62,
+    "original_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T224719Z-2739048"
+  },
+  "evaluation_default": {
+    "exit_code": 0,
+    "xfail_count": 5
+  },
+  "evaluation_strict": {
+    "exit_code": 5,
+    "failed_cases": 5
+  },
+  "source": {
+    "reviewed_baseline": "fac1ecbb428c92acca8ed805d6a45fcc42d32951",
+    "description": "All final runs exercised this baseline plus the review source diff; HEAD metadata alone is not the code version.",
+    "sha256": {
+      "libs/collabtext/include/collabtext/ActorId.h": "e127669f75e73e5e7cf39853ebffdec88ec37c2e406933c9380d1313f8f1a925",
+      "libs/collabtext/src/codec/JsonReader.cpp": "b8292cf0784a7205cf26bcf38fb4a6108a876ae092a8b666efa92e804645f495",
+      "libs/collabtext/src/codec/JsonReader.h": "fec68c123f3fac94673b6c8ab84527d0b31117f0d37e460f8126040699295585",
+      "libs/collabtext/src/crdt/Buffer.cpp": "8e82d9ec564b3a0c77864639b7498fa08ad7197d14aa684902372735b9e460ba",
+      "libs/collabtext/src/crdt/Buffer.h": "2989e8728e19b10218ffb3bb0ccd42531143b9fb10c2310c14969f14b0072d58",
+      "libs/collabtext/src/crdt/IdList.cpp": "31084e7f757b654ac0ea0617a39bbdf5d9882a41a5dfbbdcde42590b3e1c8cde",
+      "libs/collabtext/src/crdt/IdList.h": "e1c3e0a5a55aafb177ba85aeee5f943366938272044e91599b66155f62a65f5c",
+      "libs/collabtext/src/crdt/OperationValidation.cpp": "29250c99551d4bb89ef979e3a1b55b5e3dc17d58ce824e1a0ddb14a9593793b2",
+      "libs/collabtext/src/identity/ReplicaState.cpp": "524978ae164228dcb25ab8e9e8495c7033c0d83143233db40037c60419f21b81",
+      "libs/collabtext/src/storage/DurableFile.cpp": "0964f52921ee713655596efa9f127543c7cb4b910628b2fec4473def0214f88c",
+      "libs/collabtext/src/storage/DurableFile.h": "b375d47ae84381b697a664a98bf9565024377371640c47edd86cbd152d1499bc",
+      "libs/collabtext/tests/tst_actor_identity.cpp": "6243e90f580b9b9ed3334a6b766a5caa0481ea6a10702d5de61ce1e7c3cc4a9d",
+      "libs/collabtext/tests/tst_decode_validation.cpp": "31b63ece69a522fcd864144ceb0560c1f199263938330d3834f31a2b83f18e44",
+      "libs/collabtext/tests/tst_durable_file.cpp": "b4f5b9fcbd47f34eb7bf9df6edfee4852e0fbb02046a266e89148af11cea2c0c",
+      "libs/collabtext/tests/tst_operation_validation.cpp": "8c4fcc929d2cbb979d1ee59e91bbad78be7492c47a6e13f344d1682fea74b5f5"
+    },
+    "implementation_commits": [
+      "b3f4f20675eee6cc42fffce8ccf7f5183ff01003",
+      "bbe8434ce979258e61d9b680203e84fc7aea9d61"
+    ]
+  }
+}

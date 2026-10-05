@@ -126,21 +126,25 @@ Run `./tools/verify-roadmap.sh debug 'tst_transport_commit_contract|tst_opstream
 - `libs/collabtext/src/DocumentSession.cpp`
 - `libs/collabtext/src/crdt/FileSync.cpp`
 - `libs/collabtext/tests/tst_session_recovery.cpp`
+- `docs/specs/vnext-external-position-contract.md`
+- `docs/specs/vnext-consumer-session.md`
 
 **Steps:**
 
 1. Own the engines, producer lease, log, and transport binding in one single-thread owner. Opening loads seed/context, replays ALL own and remote durable logs, and drains dependencies; do not use previously persisted incremental cursors to bootstrap empty state.
 2. Recover the own actor clock from accepted own operations before enabling new local edits. Missing causal data remains a visible recovery/incomplete state; never render it as complete and acknowledge it.
 3. After baseline replay, derive incremental read state from the recovered coverage and keep it paired with the recoverable logs. Expose open/recover/apply/save/close results and logical visible deltas.
+4. Define W5 headless embedding under a consumer-owned Document seam: engine operations/pins are idempotent projections of canonical events, local journals/outboxes are recoverable pending state, and accepted event history is never rewound. Specify server rejection and pending-outbox reconciliation without ID reuse. Support read-only historical projection without minting operations; after S05, recover external pins to a declared consumer frontier before any GC can run. Add the consumer_commit_pin_crash_matrix recovery hooks here; S05/G08 complete its pin and GC cases.
 
 **Acceptance:**
 
 - Own-only, mixed-peer, duplicate, reordered, copied, and restart fixtures recover exact CRDT state, not just visible text.
 - F5 receiver-restart failure passes; stale cursors cannot suppress recovery. Opening does not manufacture fresh operations or callbacks for replayed local edits.
+- Headless recovery tests cover canonical replay, pending outbox restart/reconciliation, and isolated historical playback without allocating new IDs. The session exposes the recovery frontier needed for subsequent S05 pin projection; per-session save is not advertised as a multi-block conversation transaction.
 
 **Verification:**
 
-Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regressions|tst_opstream_replay'`; restart the same temp store twice and continue editing after each open.
+Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regressions|tst_opstream_replay'`; restart the same temp store twice and continue editing after each open. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
 
 ## L06 — Persist local undo policy and bounded history events
 
@@ -155,21 +159,24 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 - `libs/collabtext/src/crdt/Buffer.cpp`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/tests/tst_persistent_undo.cpp`
+- `docs/specs/vnext-external-position-contract.md`
 
 **Steps:**
 
 1. Durably record local undo groups, coalescing boundaries, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.
 2. Restore both undo and redo stacks after reopen/crash without resetting them at session close. Make history and operation commits a consistent transaction; a shared checkpoint must not replace actor-private history. Record retention obligations for G01/G03.
 3. Bound history by steps AND retained bytes, including coalesced entries, inserted keys, and restoration content. Make trim atomic with its retirement record; never drop history silently on allocation/error.
+4. Expose durable compensating operations and stable local undo group metadata to a consumer-owned append-only event log (W5). Specify event correlation and failure/retry ordering so undo is a new event and accepted canonical events are never deleted. Keep multi-block history orchestration in the consumer layer.
 
 **Acceptance:**
 
 - Undo and redo survive close/reopen/crash within the configured bounds; restored undo reverses only the owner's edits and preserves peer edits.
 - A single huge coalesced edit respects the memory limit; retirement survives crash and never re-enables older undo.
+- Reopened undo/redo emits idempotently correlated compensating operations while preserving canonical accepted history; engine history limits do not implicitly release external reply pins.
 
 **Verification:**
 
-Run `./tools/verify-roadmap.sh debug 'tst_persistent_undo|tst_idlist_undo|tst_undomap|tst_session_recovery'`; test undo→close→reopen→redo and trim crash points.
+Run `./tools/verify-roadmap.sh debug 'tst_persistent_undo|tst_idlist_undo|tst_undomap|tst_session_recovery'`; test undo→close→reopen→redo and trim crash points. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
 
 ## L07 — Wire the dogfood editor to the supported durable session
 

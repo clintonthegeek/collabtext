@@ -103,6 +103,37 @@ replicas would implement differently.
   `invalid_identity` rejection; it is restated here because the wider counter
   makes the sentinel even easier to hit by accident.
 
+### 3.1 Allocation domains still required before engine adoption
+
+The comparator model proves ordering laws for supplied identities; it does not
+yet specify how the engine allocates every identity. P06a must close these issues
+with a written mapping and independent fixtures before changing production types:
+
+- Legacy Buffer allocates a deletion timestamp and advances its clock for each
+  inserted scalar; split fragments derive `origin + scalar_offset`. One P02
+  `next_operation()` reservation per edit does not reserve that whole range.
+  Specify separate operation/item domains or a checked, durably reserved interval,
+  with non-overlapping run/split/deletion/undo identities and overflow behavior.
+  Do not mechanically substitute single operation counters for character IDs.
+- Legacy Lamport ordering advances on remote observation; private P02 counters
+  advance on local reservation. Specify how operation identity, character identity,
+  and causal/tie-break clock relate, including multiple documents sharing one
+  private actor/stream owner. They must not alias or silently change ordering.
+  Specify the allocator/owner connection and explicit volatile test usage:
+  passing ActorId to a constructor alone is not authority to restart a private
+  counter at 1 or to claim durable allocation.
+- A crash can consume a private reservation before its operation enters a durable
+  log. The future contiguous coverage contract must represent an unused reservation
+  or explicitly account for gaps; a maximum observed counter is not proof that
+  every intervening operation was applied. Define the reservation/log interface
+  here and carry its publication/recovery semantics into P06b/P07/L02.
+
+Required independent cases include multi-scalar insert → split → delete → undo/
+redo → restart, multiple documents/streams, remote clock advance, failed or
+abandoned reservations, and exhaustion at each interval boundary. State what the
+model validates and what later lifecycle tests must establish. The existing
+comparator gate remains useful evidence, but alone does not unlock this adoption.
+
 ## 4. Epoch, document, and stream are not in here
 
 `Identity` deliberately carries no epoch, document, or stream. Those belong to
@@ -116,11 +147,14 @@ refused by the envelope or transport layer *before* it reaches ordering. If it
 reaches ordering, the engine has no way to know and will order it like any other
 operation. P07 and L04 own that refusal.
 
-## 5. Measured cost
+## 5. Baseline sizes and projected cost
 
-Taken on this branch before the change (`x86_64`, GCC 16.2):
+The baseline was measured on this branch (`x86_64`, GCC 16.2). The proposed
+24-byte identity is exercised by the gate model; the widened production summary
+and fragment sizes below are projected, not measurements of a migrated engine.
+P06a is still in progress and must measure real layouts after adoption:
 
-| Type | Before | After | Ratio |
+| Type | Current bytes | Proposed/projected bytes | Projected ratio |
 |---|---|---|---|
 | `Lamport` → identity | 8 | 24 | 3.0x |
 | `UndoMapKey` | 8 | 24 | 3.0x |
@@ -128,7 +162,7 @@ Taken on this branch before the change (`x86_64`, GCC 16.2):
 | `Fragment` | 104 | 120 | 1.15x |
 
 `FragmentSummary` is the one that matters: the SumTree aggregates one per edit,
-so this is the hot path. 1.4x on the summary is affordable for correctness, and
+so this is the hot path. The projected 1.4x summary cost is a design tradeoff to verify after adoption, and
 it is recorded here so that X02–X09 inherit a number rather than discovering the
 regression. The threefold identity growth does not multiply into the summary,
 because the summary holds one identity, not one per fragment.

@@ -45,21 +45,24 @@ Configure all-option and core-only builds; use a plain C++ core smoke executable
 - `libs/collabtext/src/crdt/`
 - `tests/consumer-smoke/`
 - `docs/specs/vnext-public-api.md`
+- `docs/specs/vnext-external-position-contract.md`
 
 **Steps:**
 
 1. Move stable public ActorId, OperationId, Anchor, outcome/config types, and engine APIs into self-contained public headers. Keep fragments, locators, raw variants, Global/tree layouts, and writers private.
 2. Ensure Buffer and IdList consumer entry points remain accessible through documented facades, including anchors, undo limits, batch apply, and session integration. A facade must not silently remove required capabilities.
 3. Remove src from PUBLIC include paths. Public tests compile with only installed headers and libraries, not source-tree includes inherited from the target.
+4. Expose W1/W2 opaque token encode/decode, checked mint/lookup, and typed text/list resolution in self-contained installed headers. Publish supported token-version handling and exact offset units; keep consumer outer envelopes independent of internal object layout. Add foreign/version/missing-ID installed tests.
 
 **Acceptance:**
 
 - Every public header compiles independently; no public include references crdt/ or src internals.
 - Consumer smoke exercises Buffer/IdList equivalent facades and an external OpStream implementation using stable types only.
+- Installed clients can persist and resolve tokens without any internal headers or layout assumptions, and distinguish unresolved/foreign/unsupported outcomes from a real end position.
 
 **Verification:**
 
-Compile each installed header in a separate translation unit and run the external consumer sample. Inspect compiler include paths for accidental source-tree exposure.
+Compile each installed header in a separate translation unit and run the external consumer sample. Inspect compiler include paths for accidental source-tree exposure. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
 
 ## A03 — Implement a single complete Qt document adapter
 
@@ -158,21 +161,25 @@ Run `./tools/verify-roadmap.sh debug 'tst_reset_semantics|tst_idlist|tst_session
 - `libs/collabtext/CMakeLists.txt`
 - `tests/consumer-smoke/CMakeLists.txt`
 - `docs/USING_VNEXT.md`
+- `docs/specs/vnext-external-position-contract.md`
+- `tests/consumer-smoke/wave-contract/`
 
 **Steps:**
 
 1. Implement install/export/version package metadata, component dependency discovery, stable target names, and separate public include installs. Test a relocated installation prefix.
 2. Document the new headers, types, callback/ack semantics, error paths, ownership, offsets, and reset APIs; include Buffer, IdList, and custom transport examples. Explain intentional breaks without preserving obsolete signatures.
 3. Remove obsolete public wrappers and install only the supported surface. Do not create deprecated adapters, scalar-GC wrappers, legacy codecs, or void-push compatibility paths. State fresh-format identifiers and incompatible-format errors.
+4. Add the self-contained W6 installed_headless_wave_contract consumer fixture using a consumer-owned Document adapter and canonical-log envelope. Exercise external_token_roundtrip_reopen, pin registration/recovery, compensating undo, historical_projection_resolves_its_own_tokens, and explicit failures. Build from a relocated install with Qt Widgets/Test disabled and no sibling Wave checkout. Formatting is consumer-owned; demonstrate span endpoints only, with no new formatting CRDT.
 
 **Acceptance:**
 
 - An independent project finds CollabText through find_package and links without source-tree paths.
 - The new usage guide covers every V08 requirement with compilable samples; no old API/ABI/store compatibility is promised.
+- A headless installed consumer passes the W1-W6 in-scope contract without source paths, Qt Widgets/Test, or a Wave checkout; its coverage identifies later certified-GC cases that E05 reruns.
 
 **Verification:**
 
-Install to a temporary prefix, hide original include tree, relocate prefix, and configure/build/run external samples for Core, FileTransport, and QtAdapter.
+Install to a temporary prefix, hide original include tree, relocate prefix, and configure/build/run external samples for Core, FileTransport, and QtAdapter. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
 
 ## A07 — Add compiler/platform/package verification in CI
 

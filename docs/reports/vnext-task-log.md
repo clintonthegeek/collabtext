@@ -1313,3 +1313,58 @@ fixed F3; and `tst_operation_validation` is now part of the fast selection, so
 the fast suite is 60 executables rather than 59.
 
 Do not interpret any single task as completing the remaining roadmap.
+
+
+## 2026-10-04 — Independent progress review and Wave consumer amendment
+
+```text
+Status: review corrections complete; future tasks remain incomplete
+Baseline: fac1ecbb428c92acca8ed805d6a45fcc42d32951
+Implementation commits: b3f4f20 (P04/P05 validation), bbe8434 (P02/L01 ownership/durability)
+Regression: 16 failing baseline-defect slots, plus positive controls and a corrected review-introduced boundary regression
+Verification: Debug fast 62/62; Release all 64/64; ASan/UBSan/LSan fast 62/62 without suppressions
+Seed: fixed default 20261003
+Strict evaluation: exit 5; F4-F8 remain; default has five XFAILs
+Artifacts: docs/reports/2026-10-04-review-artifacts/
+Next: finish P06a's allocation-domain gate and engine adoption; S01 independently ready
+```
+
+The [independent report](2026-10-04-reliability-progress-review.md) records the
+focal review, exact failures, repairs, scope, and remaining gates. Baseline
+Debug/Release already passed 62/62: green totals missed private-state counter
+ownership, duplicate/injectable directives, state-link replacement, literal JSON
+limits, UTF-8 source boundaries, validation bypass on blocked actors, fictitious
+pending bytes, unbounded overflow retention, short-write/count/close/cleanup
+errors, missing first-append directory barriers, uncertain publication, and an
+unsafe PID/stale-lease protocol. New regressions and controls now cover them.
+
+Review testing caught an initially wrong SumTree seek bias in the review's own
+UTF-8 patch. Its broad failures and the subsequent positive control remain in
+the artifacts; the original assertions were preserved and the lookup corrected.
+An overlapping-build sanitizer run exceeded two unchanged wall-clock limits;
+the final full sanitizer run after Release passed. No failing suite was excluded.
+
+Historical L01 entry correction: fsync requests stable storage from the
+filesystem/device stack; it does not mean merely “accepted into the kernel.”
+Containing-directory sync is a distinct name barrier. Process-kill tests are
+not power-loss certification. A post-rename directory failure now returns
+commit_uncertain because complete new contents are already visible. PID records
+are diagnostic; persistent-inode OS locks establish local ownership. The old
+private-state helper was not entirely correct (shared temporary/ownership gaps)
+and now uses the repaired L01 primitive. SegmentWriter/session conversion and
+end-to-end F9 remain L02–L08, rather than complete at L01.
+
+The [Wave reply draft](../handoff/2026-10-04-reply-to-wave.md) is saved for the user
+to relay; no Wave edit or external message occurred. [W1–W6](../specs/vnext-external-position-contract.md)
+extend 13 existing dependency-gated tasks with stable encoded tokens, exact
+affinity/scoped boundaries, explicit errors, durable external pins and consumer
+frontiers, historical projections, and installed headless tests. Formatting is
+explicitly consumer-owned. No backend, replacement engine, or rich-text CRDT was
+added. P06a separately gained an allocation-domain gate: comparator laws alone
+do not establish safe run/character identities or abandoned-reservation coverage.
+
+Registry statuses remain honest: V01–V08, D01, P01–P05, L01 complete; P06a in
+progress; 63 active tasks after its earlier split. Updated executor orientation
+and API/protocol guides supersede stale kickoff status. Plan checks pass with
+F1–F10/R1–R14/W1–W6 coverage and zero unreviewed scope hits. Source stays isolated
+on roadmap/reliability-v2; master receives discovery docs only.

@@ -4,16 +4,16 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status:** M0 complete (V01–V08); D01 and P01–P04 complete. Continue with P05 from [TASKS.json](TASKS.json); the [kickoff handoff](../../handoff/2026-10-03-reliability-kickoff.md) describes the verified V01–V03 starting point; later task results are in [the task log](../../reports/vnext-task-log.md). All product-policy decisions are resolved; improve the existing C++ engine incrementally.
+**Status:** V01–V08, D01, P01–P05, and L01 complete. P06a is in progress: its independent ordering gate exists, engine migration remains. S01 is independently ready. Read the [2026-10-04 progress review](../../reports/2026-10-04-reliability-progress-review.md), [current handoff](../../handoff/2026-10-04-reliability-review.md), and [task registry](TASKS.json). W1–W6 external consumer requirements are accepted into existing tasks; they are not implemented merely by this amendment.
 
-This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **62 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
+This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **63 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
 All breaking implementation work belongs in the worktree above. The user confirmed there is no production data, store, or history to preserve; the new API and formats can start fresh. A copy of these plans is kept in the original checkout's `docs/` for discovery; the worktree is the authoritative implementation copy. The user authorized implementation on this branch. A merge, publication, consumer-repository changes, or external messages require a separate instruction.
 
 ## Read first
 
 1. Read [DECISIONS.md](DECISIONS.md): all Q1–Q4 are resolved. Retain and improve the native engine; do not reinstate migration work or replacement-backend options.
-2. Read [EXECUTION.md](EXECUTION.md), [DECISIONS.md](DECISIONS.md), the binding [design constraints](../../specs/vnext-design-constraints.md), and the [API guide](../../specs/vnext-public-api.md) and [protocol contract](../../specs/vnext-protocol.md). V01–V08, D01, and P01–P04 are complete: the verification runner exists and the randomized suites are seeded, traced, and reducible (see "Randomized test contract" in EXECUTION.md). Later task artifacts remain planned until their creating tasks complete.
+2. Read [EXECUTION.md](EXECUTION.md), [DECISIONS.md](DECISIONS.md), the binding [design constraints](../../specs/vnext-design-constraints.md), and the [API guide](../../specs/vnext-public-api.md) and [protocol contract](../../specs/vnext-protocol.md). V01–V08, D01, P01–P05, and L01 are complete: the verification runner exists and the randomized suites are seeded, traced, and reducible (see "Randomized test contract" in EXECUTION.md). Later task artifacts remain planned until their creating tasks complete.
 3. Select the next task whose dependencies are complete. Use the registry order as a safe serial execution order; do not treat phase numbering as permission to skip unfinished prerequisites.
 4. Read the complete task in its phase file and its referenced specification before editing.
 5. Update the registry and record evidence after completing the task. See the design gates for work that needs more expertise than routine implementation.
@@ -23,8 +23,8 @@ All breaking implementation work belongs in the worktree above. The user confirm
 | Milestone | Tasks | Deliverable / exit condition | Plan |
 |---|---|---|---|
 | M0: trustworthy baseline | V01–V08 | Complete: reproducible checks, visible regression cases, unsafe GC contained, replayable traces, corrected benchmarks and simulator, store fault injection, behavioural fixtures and API inventory | [01 — validation](01-validation.md) |
-| M1: explicit protocol | D01, P01–P08 (P01–P04 done) | User policies recorded; persistent actors; strict validation; sparse/versioned codecs; transactional transport contract | [02 — protocol](02-protocol.md) |
-| M2: reliable lifecycle | L01–L08 | Actual editor survives local/remote replay, close/reopen, failed writes, sender/receiver restart, and segment arrival gaps | [03 — recovery](03-recovery.md) |
+| M1: explicit protocol | D01, P01–P08, including P06a/P06b (P01–P05 done) | User policies recorded; persistent actors; strict validation; sparse/versioned codecs; transactional transport contract | [02 — protocol](02-protocol.md) |
+| M2: reliable lifecycle | L01–L08 (L01 primitives done) | Actual editor survives local/remote replay, close/reopen, failed writes, sender/receiver restart, and segment arrival gaps | [03 — recovery](03-recovery.md) |
 | M3: useful merge semantics | S01–S07 | Spec/model and production agree on contiguous concurrent passages, exact boundary affinity, undo, and supported deltas | [04 — semantics](04-semantics.md) |
 | M4: safe reclamation | G01–G08 | Validated checkpoints, membership/retirement policy, durable per-stream coverage, and certificate-authorized memory/disk reclamation | [05 — reclamation](05-reclamation.md) |
 | M5: reusable library | A01–A08 | Qt-free installable core, optional transport/Qt targets, complete document adapter, installed consumers, CI, and advisory device-retirement UI | [06 — public API](06-public-api.md) |
@@ -116,41 +116,16 @@ No recommendation is considered complete merely because it appears in a plan. E0
 
 ## Implementation handoff
 
-- **Next in serial order:** P05. L01 and S01 are also structurally ready.
-- **Decoding is strict before it is useful:** the bounded reader
-  (`libs/collabtext/src/codec/`) requires complete consumption, rejects duplicate
-  object keys, validates raw text as UTF-8, and checks every limit before the
-  allocation it governs. `vnext-protocol.md` §11 is normative for it. It is not
-  yet wired into the existing serializers — P05 and P06 do that.
-- **Coverage and summaries are different questions:** `Global::coverage_intersection()`
-  is the watermark operation (minimum over the union, absence is zero, zeros
-  canonicalized away); `Global::meet()` is a nonzero-minimum aggregation and must
-  not be used as a watermark. `NetworkSim::compact_all()` still does — inert
-  until G06 replaces it.
-- **Identity is durable or it is an error:** [ActorId.h](../../../libs/collabtext/include/collabtext/ActorId.h)
-  and `ReplicaState` reserve an operation id before handing it out, refuse to
-  replace corrupt private state, and take writer leases exclusively. No engine
-  consumes `ActorId` yet — that adoption is deliberately staged.
-- **The API is written down:** [vnext-public-api.md](../../specs/vnext-public-api.md)
-  fixes `Result<T>`, `ActorId`, opaque operations, `ApplyOutcome`, and the
-  callback contract; [vnext-protocol.md](../../specs/vnext-protocol.md) fixes the
-  wire formats, decode stages, contiguous coverage frontier, and lifecycle
-  sequences. Changes to either are changes to the plan.
-- **The contract is binding:** [vnext-design-constraints.md](../../specs/vnext-design-constraints.md)
-  turns the four resolved policies into citable constraints (C1–C14), the release
-  invariants (R1–R10), and the intended behavior (B1–B8).
-  `check-scope.py --strict` proves no task asks for a Rust rewrite, Yrs adoption, a
-  backend experiment, or legacy-data migration; run it when the registry changes. M0 is complete: verification entry points, evaluation
-  regressions, reclamation containment, replayable traces, a correct network
-  model, honest benchmarks, store fault injection, and a written API inventory
-  with frozen behavioural fixtures.
-- **Store faults are injectable:** `tests/StoreFaultHarness.h` hooks every step of the durable write sequence, and `store_crash_worker` dies mid-write on purpose. It is not durability evidence — production still calls no `fsync` (F9), and process death is not power loss.
-- **Benchmarks report honestly or not at all:** every figure carries its unit and work count, an unmeasured metric is absent rather than zero, convergence is asserted, and RSS is never presented as engine memory. Two long-running suites (`tst_benchmark`, `tst_realistic`) are excluded from the fast selection and both hid stale expectations — run them when touching their subject area.
-- **NetworkSim is now honest about partitions:** `disconnect` blocks both directions and queues a disconnected replica's work, `allow_reorder` implements per-producer monotonicity, and asymmetric loss has its own `block_link` API. A scenario can no longer pass by not noticing a partition.
-- **All product choices settled:** D01 writes their implementation contract after V08; it does not require another backend question or user confirmation.
-- **Algorithm/protocol blocked until designed:** S03 depends on S02; G02 depends on G01; physical GC depends on all G06 prerequisites.
-- **Completed kickoff:** reproducible build/test modes, F1–F8 regressions, and conservative GC containment are committed. The worktree contains C++/CMake changes; master remains at the evaluated revision.
-- **Integration:** complete installed examples and release evidence before proposing a merge to master. No production porting deadline or legacy-data migration is needed.
+- **Next:** finish P06a without treating its model as an engine migration. Follow P06b only after its prerequisites. S01 fixtures can proceed independently; S02 and G01 still require complete specifications and independent models before dependent algorithms.
+- **Independent review:** the [review report](../../reports/2026-10-04-reliability-progress-review.md) records reproduced defects and fixes in P02/P04/P05/L01, executable evidence, and limitations. The old kickoff handoff is historical.
+- **Identity:** ReplicaState now has one move-only kernel-lease owner per private directory, nonzero counter reservations, strict state directives, and checked atomic persistence. ActorId is still not consumed by the legacy engine; P06a must finish that adoption.
+- **Validation:** the bounded reader rejects literal/escaped string overflow and duplicate keys; semantic validation also checks actor head-of-line queues. Deferred and diagnostic quarantine queues are separately bounded. The caller/store retains rejected input. Legacy operation serializers remain until P06b; P04/P05 did not complete all of F10.
+- **Coverage:** Global::coverage_intersection is a durable-watermark intersection; Global::meet is a nonzero-min summary fold. The latter cannot authorize GC. F3's marker was removed for the intended API; an old probe calling meet is not the new coverage contract.
+- **Durability:** L01 provides checked file primitives, first-append directory barriers, unique temporary files, kernel leases, and explicit uncertain publication outcomes. SegmentWriter/StreamSync/session/save wiring remains L02–L08; F9 is not yet solved end to end. Process-kill evidence is not power-loss/platform certification.
+- **Known gates:** F4–F8 remain explicit expected failures. Affinity/end/context/token retention, contiguous concurrent passages, persisted undo/redo, safe checkpoints/GC, headless package exports, and final callback batching/reentry all remain required work. Physical reclamation stays disabled until G06.
+- **External consumers:** [W1–W6](../../specs/vnext-external-position-contract.md) require stable library-owned token bytes, typed positions, durable external pins and recovery frontiers, historical projection rules, and installed-only tests. Formatting remains consumer-owned. [Reply to Wave](../../handoff/2026-10-04-reply-to-wave.md) is a draft for the user to relay; no external message or consumer edit was made.
+- **Verification:** run the runner and both plan checks from EXECUTION.md. Full final review evidence includes the expensive Release benchmark/realistic suites; fast tests exclude only those two. Read the actual named cases and known limits, not only CTest totals.
+- **Integration:** all breaking implementation stays on this worktree. Master remains the evaluated source revision; merge/publication is a separate user instruction. Copies in master docs are for discovery; execute against this branch's registry.
 
 ## Plan revision record
 
@@ -163,3 +138,12 @@ Implementation then began on the isolated branch: V01 (`9d5541b`), V02 (`cebabc3
 the red test for F8. TASKS.json records verification and evidence.
 
 Two failures that predate their discovery hid in the excluded suites: `tst_realistic`'s `networksim_compact_all` and `tst_benchmark`'s `gc_effectiveness` both asserted that reclamation removes tombstones, which has been false since V03's containment change. Both now assert retention. Treat the fast-suite exclusion list as a place where failures hide, and run the excluded suites when touching their subject area.
+
+
+On 2026-10-04 P06 was split into P06a (engine identity adoption) and P06b (opaque
+codecs); the active count is 63. P05 and L01 subsequently landed. Independent
+review corrected ownership, validation limits, overflow retention, and durable
+filesystem behavior. Wave's requests were integrated as W1–W6 into 13 existing
+tasks, with no dependency bypass or completed-status promotion. The supported
+published vNext token contract is a future persisted-data obligation; the user's
+permission to discard pre-vNext experimental stores remains unchanged.

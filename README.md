@@ -4,7 +4,7 @@ A conflict-free plain text engine for offline-first collaborative editing.
 
 collabtext is a CRDT text engine designed for a world where collaborators aren't always online at the same time. Instead of requiring a server or real-time connection, it produces compact operations that can travel over any file transport — Syncthing, Dropbox, a shared drive, a USB stick. Edits merge automatically. Documents converge. No conflicts, no "conflicted copy" files, no manual resolution.
 
-On the `roadmap/reliability-v2` branch, implementation has begun with V01–V03. See the [kickoff handoff](docs/handoff/2026-10-03-reliability-kickoff.md) for verification, remaining known failures, and the next task. Both primitives currently retain all state on GC/compaction requests until certified reclamation is implemented; memory can grow in the meantime.
+On `roadmap/reliability-v2`, V01–V08, D01, P01–P05, and L01 have landed; P06a is in progress. See the [independent progress review](docs/reports/2026-10-04-reliability-progress-review.md) and [current handoff](docs/handoff/2026-10-04-reliability-review.md). Stable external position tokens, session durability, and installed headless consumption remain dependency-gated work. Both primitives currently retain all state on GC/compaction requests until certified reclamation is implemented; memory can grow in the meantime.
 
 ## The problem
 

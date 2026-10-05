@@ -76,21 +76,25 @@ Validate local links and API examples; compare each advertised guarantee to a na
 - `docs/roadmap/2026-10-reliability/TASKS.json`
 - `docs/reports/vnext-acceptance.md`
 - `libs/collabtext/tests/tst_evaluation_regressions.cpp`
+- `docs/specs/vnext-external-position-contract.md`
+- `tests/consumer-smoke/wave-contract/`
 
 **Steps:**
 
 1. Map F1–F10 and R1–R14 to commits, exact passing tests, and any explicitly user-approved deferrals. Verify no expected-fail marker remains for a promised release feature.
 2. Review model independence, fresh-format rejection, error paths, single-owner threading, GC certificates, and recovery fallback invariants. Recheck original report probes against new facades.
 3. Document residual risks and make incomplete tasks visible; a green test runner is insufficient if tasks or policy decisions remain unresolved.
+4. Map W1-W6 and every named external-position case to implementation commits and executable evidence. Rerun installed_headless_wave_contract with completed G-series reclamation and supported token-version readers. Report formatting as explicitly consumer-owned outside this plain-text release; a requirement document or passing historical probe cannot substitute for the new public-API gate.
 
 **Acceptance:**
 
 - Every recommendation is implemented/validated or visibly deferred by a recorded user decision.
 - No evaluation defect is claimed fixed solely through disabling its test or narrowing an advertised guarantee without documenting the limitation.
+- The final acceptance dossier contains exact installed token/pin/reopen/compensation/GC/epoch tests for W1-W3/W5-W6 and an explicit W4 formatting scope statement; no Wave readiness claim is based solely on task checkboxes.
 
 **Verification:**
 
-Run the complete Debug/Release correctness suite, bounded model/fuzz campaigns, ASan/UBSan, installed-consumer checks, and selected performance suite; retain acceptance logs.
+Run the complete Debug/Release correctness suite, bounded model/fuzz campaigns, ASan/UBSan, installed-consumer checks, and selected performance suite; retain acceptance logs. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
 
 ## E06 — Prepare the fresh release dossier without merging master
 

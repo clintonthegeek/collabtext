@@ -14,7 +14,7 @@ implementation and this file governs the intent.
 
 **User statement:** “there is no existing data or stores or history to preserve. this is not in production. we can start totally fresh, however we want.”
 
-**Selected policy:** freely redesign source/API/ABI, identities, algorithms, wire formats, and stores. No legacy decoder, importer, data archive, anchor translation from old stores, compatibility shims, or mixed-version collaboration is required. Existing source and evaluation artifacts remain useful regression evidence; they do not impose old behavior on the repaired engine.
+**Selected policy:** freely redesign source/API/ABI, identities, algorithms, wire formats, and stores. No legacy decoder, importer, pre-vNext data archive, anchor translation from old stores, compatibility shims, or mixed-version collaboration is required. Existing source and evaluation artifacts remain useful regression evidence; they do not impose old behavior on the repaired engine.
 
 **Plan changes:** remove E01/E02 entirely and their dependency edges; remove legacy fixtures/codec/shim requirements from V08/P01/P06/S04/A05/A06; replace porting requirements with independently compiling new examples in E03 and a fresh release dossier in E06. Retain task IDs E01/E02 in the registry change record so earlier references remain understandable. There are now 62 active tasks, including new A08.
 
@@ -82,10 +82,23 @@ python3 docs/roadmap/2026-10-reliability/check-scope.py --strict
 
 It scans the task registry for a Rust rewrite, Yrs adoption, a backend
 experiment, or legacy-data migration being *required* rather than prohibited, and
-exits nonzero if any task's text needs a human decision. Current result: 62 tasks,
-20 hits, all prohibitive or explicitly allowed, 0 needing review.
+exits nonzero if any task's text needs a human decision. The current registry has 63 tasks after splitting P06. Run the command above
+for the current classified-hit count; the review requires 0 needing review.
 
 Documenting these decisions does not complete unimplemented tasks and does not
 substitute for the technical design/model gates at S02/G01. Those gates still
 require their specifications and executable models; C10 says so explicitly, and a
 gate may not redirect work into a replacement engine.
+
+
+## External consumer amendment — 2026-10-04
+
+Wave's reply-anchor requests fit the selected engine and are integrated into
+existing S/L/G/A/E tasks as [W1–W6](../../specs/vnext-external-position-contract.md).
+External canonical logs require library-owned versioned token bytes and explicit
+durable pins, with recovery-before-GC and independent object/device lifetimes.
+Historical playback requires matching archived/projection state. This adds no
+legacy-data conversion requirement: future published vNext tokens carry the
+supported reader/translation obligation. Plain-text/IdList scope is retained;
+Wave owns formatting and its canonical authorization/event-log protocol.
+There is no new backend decision or automatic retirement policy.

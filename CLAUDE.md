@@ -5,8 +5,9 @@
 On branch `roadmap/reliability-v2`, read `AGENTS.md` and
 `docs/roadmap/2026-10-reliability/README.md` first. That roadmap supersedes the
 historical OpStream scope below for this branch. Implementation has started:
-V01–V03 are complete; continue from
-`docs/handoff/2026-10-03-reliability-kickoff.md` with V04. All product-policy questions are resolved
+V01–V08, D01, P01–P05, and L01 are complete; P06a remains in progress.
+Continue from `docs/handoff/2026-10-04-reliability-review.md` and the registry;
+W1–W6 external consumer requirements are in `docs/specs/vnext-external-position-contract.md`. All product-policy questions are resolved
 in its `DECISIONS.md`: improve the existing C++ engine incrementally. No Rust
 rewrite, Yrs adoption, or replacement-engine trial is in scope. No Superpowers
 skill or subagent workflow is required.

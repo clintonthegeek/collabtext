@@ -6,9 +6,11 @@ The evaluated source checkout is `/home/clinton/dev/collabtext`, branch `master`
 Read `docs/roadmap/2026-10-reliability/README.md`, `DECISIONS.md`, and
 `EXECUTION.md` before implementing a roadmap task. `TASKS.json` is the
 authoritative dependency/status registry; the numbered Markdown files contain
-the human-readable tasks. Implementation has started: V01–V03 are complete.
-Read `docs/handoff/2026-10-03-reliability-kickoff.md` for the verified starting
-point and next task, V04.
+the human-readable tasks. V01–V08, D01, P01–P05, and L01 are complete,
+with independent review corrections recorded on 2026-10-04. P06a is in progress;
+its model gate is landed, its engine migration is unfinished. S01 is independently
+ready. Read `docs/handoff/2026-10-04-reliability-review.md` for current evidence
+and `docs/specs/vnext-external-position-contract.md` for W1–W6 consumer cases.
 
 For implementation turns:
 

@@ -15,6 +15,7 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 
 - `docs/specs/vnext-membership-gc.md`
 - `libs/collabtext/tests/reference/GcModel.h`
+- `docs/specs/vnext-external-position-contract.md`
 
 **Steps:**
 
@@ -22,15 +23,17 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 2. Define a certificate binding stream, epoch, membership hash, common durable coverage, per-actor undo-retirement coverage, retained anchor translations, and durable checkpoint hash. Require all still-enrolled actors, including silent ones, to contribute; no scalar-max substitution.
 3. Specify the full state machine for checkpoint proposal, coverage confirmation, epoch transition, interruption, competing proposals, and returning retired peers. Preserve a returning peer's unsynced branch for explicit reconciliation; do not pretend replay into a new epoch is automatically valid.
 4. Implement a slow model and complete eligibility predicate. Include no available peers, unknown actor, missing ack, restored stale ack, remote redo, concurrent enrollment, retirement, and checkpoint corruption.
+5. Model W3 external pin obligations, consumer projection frontiers, crash/orphan retention, pin release, original token-version readers, and epoch translations. Explicit device retirement removes device obligations only; it cannot release another live document object. Include consumer_commit_pin_crash_matrix and retire_device_preserves_live_reply_pin before implementing certificates.
 
 **Acceptance:**
 
 - There is a complete implementable protocol; every physical deletion has a certificate and no permitted future undo/anchor request needs removed data.
 - If an enrolled actor retains a relevant undo group or has insufficient coverage, GC blocks until a validated explicit retirement/epoch transition removes that obligation. A stale-device flag does not alter membership.
+- Eligibility refuses reclamation with an incomplete external-pin projection or missing translation. Live reply pins survive author retirement; unlimited live references have an explicitly measured metadata obligation rather than an unconditional bounded-memory claim.
 
 **Verification:**
 
-Run GcModel against all F1/F2/F3 histories and adversarial membership traces; publish the eligibility predicate and state transition table before G02 starts.
+Run GcModel against all F1/F2/F3 histories and adversarial membership traces; publish the eligibility predicate and state transition table before G02 starts. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
 
 ## G02 — Implement durable membership and undo-retirement publication
 
@@ -157,21 +160,24 @@ Run `./tools/verify-roadmap.sh debug 'tst_checkpoint_recovery|tst_store_lifecycl
 - `libs/collabtext/src/crdt/UndoMap.cpp`
 - `libs/collabtext/tests/tst_gc.cpp`
 - `libs/collabtext/tests/tst_idlist_gc.cpp`
+- `docs/specs/vnext-external-position-contract.md`
 
 **Steps:**
 
 1. Remove public compact(Global) as a destructive entry point and expose DocumentSession-managed certificate reclamation only; no compatibility wrapper is required.
 2. Share eligibility policy across Buffer/IdList, not their entire storage implementations. Protect local and remote undo/redo, insertions without deletion IDs, and pinned anchors; retain boundary stubs/translation entries where the approved algorithm requires them.
 3. Reclaim UndoMap entries only when no retained item/history/pin or supported historical query requires them. Maintain the documented edits_since floor. Count content, metadata, indexes, and retention bytes separately.
+4. Enforce W3 pinned_token_survives_checkpoint_epoch_translation using the original encoded bytes across certified reclamation. Without necessary history/translation return typed unavailable/wrong-epoch/unresolvable results, never fabricated end. Test released and unregistered tokens where reclamation actually removes their context; absence of registration alone does not invalidate context that still exists.
 
 **Acceptance:**
 
 - All local/remote restoration cases remain correct after GC; no missing anchor jumps to end; both primitives obey the same policy.
 - Memory reclamation includes eligible undo metadata and never relies only on local stack protection.
+- Pinned external tokens remain resolvable through approved GC/epoch transitions; unsupported unprotected historical tokens fail explicitly after their required context is removed.
 
 **Verification:**
 
-Run `./tools/verify-roadmap.sh debug 'tst_gc|tst_idlist_gc|tst_anchor_retention|tst_gc_certificate|tst_evaluation_regressions'`; differential-check permitted post-GC operations against unreclaimed engines.
+Run `./tools/verify-roadmap.sh debug 'tst_gc|tst_idlist_gc|tst_anchor_retention|tst_gc_certificate|tst_evaluation_regressions'`; differential-check permitted post-GC operations against unreclaimed engines. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
 
 ## G07 — Reclaim covered log segments and old checkpoints safely
 
@@ -210,18 +216,21 @@ Run `./tools/verify-roadmap.sh debug 'tst_store_compaction|tst_checkpoint_recove
 
 - `libs/collabtext/tests/tst_long_lived_store.cpp`
 - `docs/reports/vnext-reclamation-milestone.md`
+- `docs/specs/vnext-external-position-contract.md`
 
 **Steps:**
 
 1. Exercise many edit/undo/redo/coalesce/trim cycles, durable comments, offline devices, explicit retirement, checkpointing, and reconnect with both CRDT primitives.
 2. Measure engine allocations, UndoMap/history/pin bytes, checkpoint sizes, retained logs, and RSS separately. Demonstrate a plateau only in workloads meeting retirement/retention assumptions.
 3. Publish final GC invariants, blocked-case diagnostics, seed/trace identities, and limits; do not promise history-free arbitrary offline return after retirement.
+4. Run the W3 consumer_commit_pin_crash_matrix, external_pin_recovery_before_gc, retire_device_preserves_live_reply_pin, pinned_token_survives_checkpoint_epoch_translation, and unregistered_or_released_token_is_explicit campaigns against both primitives. Measure the retention cost of indefinitely live reply pins and separate it from reclaimable text and bounded undo.
 
 **Acceptance:**
 
 - Logical state and permitted future operations match unreclaimed reference engines throughout the trace.
 - Eligible workloads have bounded retained state; ineligible workloads preserve correctness and report unbounded obligations rather than deleting them.
+- Every external-pin crash prefix either recovers a protected live reference or blocks GC explicitly. Retiring an author does not discard live reply references; only eligible workloads claim a plateau.
 
 **Verification:**
 
-Run bounded long-lived Debug/Release campaigns and ASan; publish counts and actual byte metrics, with explicit campaign time/memory budgets.
+Run bounded long-lived Debug/Release campaigns and ASan; publish counts and actual byte metrics, with explicit campaign time/memory budgets. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.

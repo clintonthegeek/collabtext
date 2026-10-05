@@ -76,9 +76,10 @@ epoch (C2).
 
 ## 2. Formats and versions
 
-Each artifact family has its own explicit version field. A version is *not* a
-compatibility promise: it exists so that a reader can refuse a record it does not
-understand rather than misread it (C6, C7).
+Each artifact family has its own explicit version field. A reader refuses an
+unsupported version rather than misreading it (C6, C7). Pre-vNext experimental
+formats have no conversion obligation. Published supported vNext token versions
+carry the external persisted-data contract in W1/W3; versioning does not cancel it.
 
 | Artifact | Identifier | Baseline version | Notes |
 |---|---|---|---|
@@ -161,8 +162,9 @@ Rules:
 - Failure atomicity: a rejected or deferred operation mutates nothing — not the
   document, not the version vector, not the undo stack, not the coverage
   watermark.
-- Applying is single-owner and non-reentrant. A callback fired by an apply may
-  not call back into the same engine.
+- Applying is single-owner. A04 detects and refuses mutation reentry before
+  state changes; read-only inspection and callback removal are defined. Final
+  callback batching/reentry checks remain planned after P05.
 
 ### 4.1 The order of the checks, and why it is load-bearing
 
@@ -193,10 +195,15 @@ drive unbounded memory growth by sending operations whose dependencies never
 arrive. `DeferredBudget` defaults to 4096 operations and 8 MiB.
 
 Exceeding it is **backpressure, not amnesia**: the caller receives
-`rejected(deferred_queue_full)`, and the operation is retained in the engine's
-quarantine with the reason and what it was waiting for. Nothing is discarded
-silently, because "the queue was full" and "it never arrived" are different
-events and a caller cannot tell them apart if the first one loses the bytes.
+`rejected(deferred_queue_full)` without advancing clocks or coverage. The offered
+operation remains caller-owned. The transport/store must retain the source record
+and stop/retry explicitly rather than acknowledge it as applied.
+
+The engine's diagnostic quarantine has its own bounded count/byte budget (default
+4096 / 8 MiB). It retains a copy only while that budget allows; it is not a durable
+source log. `set_quarantine_budget` cannot reduce below held state, and
+`take_quarantined` drains it. Refusal is always returned even when no diagnostic
+copy fits. An unbounded overflow vector would defeat the deferral budget itself.
 
 `duplicate` and `deferred` are not visible changes and fire no change callback,
 so an observer may treat every notification as a real reconciliation point.
@@ -435,3 +442,19 @@ reports `unsupported_version()` separately from `parse()` failing, and
 `parse_object_envelope()` returns that as a `retained` flag for the transport to
 act on. Throwing away a newer writer's operation as corruption would lose work
 (R1).
+
+
+## External position and durable-publication amendments (2026-10-04)
+
+[W1–W6](vnext-external-position-contract.md) add an independently versioned
+position token, checked affinity/context, explicit resolution positions/errors,
+and durable external pins. No pre-vNext conversion is required; future supported
+published token bytes are a persisted contract. Device retirement does not release
+a live reply's pin. Pin projections must recover to their declared consumer
+frontier before GC; current pins do not supply unlimited historical playback.
+
+The storage sequence includes checked temporary close before rename, unique owned
+temporaries, and parent-directory sync for the first append barrier after open.
+A directory-sync failure after publication returns `commit_uncertain`. L02–L08
+must reconcile publication/tail state rather than assert rollback. Local private
+counter state uses a single kernel lease owner and nonzero fresh reservations.

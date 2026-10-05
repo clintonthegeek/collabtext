@@ -597,16 +597,28 @@
         "libs/collabtext/include/collabtext/ActorId.h",
         "libs/collabtext/src/identity/ReplicaState.cpp",
         "libs/collabtext/tests/tst_actor_identity.cpp",
-        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p02/"
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p02/",
+        "docs/reports/2026-10-04-review-artifacts/"
       ],
       "limitations": [
         "A rewound state file is indistinguishable from a fresh one when that file is the only witness. The second durable witness is the own log and checkpoint (L03/G04), so cross-restart rewind detection is not claimed here.",
         "The engine's Lamport/Global fields are still 16-bit replica ids with 32-bit values. Widening them consistently needs Serialization.cpp plus Buffer.h/IdList.h, which are outside this task's file scope; P02 stages the widening through CheckedCounter and the engine adoption belongs to P06/P08 (codec) and S03 (engines).",
         "ReplicaState is a new component; no engine consumes ActorId yet. Buffer(uint16_t) and IdList(uint16_t) still take a small integer until the task that adopts the new identity in the engines.",
-        "Writer leases are per-device-state-directory and cover local processes only. Stale-lease recovery is deliberately absent: no timeout takeover.",
+        "One move-only private-state owner covers all local documents; kernel process death releases its local lock. Persistent lease files are never unlinked. These local leases do not retire offline devices or solve disconnected copied identities.",
         "Identical disconnected clones still cannot always be detected before they exchange operations; the conflict is detected when they meet.",
-        "Linux/GCC only; no cross-platform claim for the fsync/rename/O_EXCL paths."
-      ]
+        "Linux/GCC only; no cross-platform claim for private state randomness, lock, file-sync, or directory-barrier paths."
+      ],
+      "review_commits": [
+        "bbe8434ce979258e61d9b680203e84fc7aea9d61"
+      ],
+      "review_date": "2026-10-04",
+      "review_verification": {
+        "debug_fast": "62/62 CTest executables",
+        "release_all": "64/64 including tst_benchmark and tst_realistic",
+        "asan_ubsan_lsan_fast": "62/62, leak checking enabled, no suppressions; timing assertions unchanged",
+        "strict_evaluation": "Expected exit 5 for F4-F8; normal run retains five XFAIL markers",
+        "source_version": "Reviewed baseline fac1ecbb plus b3f4f20 and bbe8434; exact source hashes in artifact manifest"
+      }
     },
     {
       "id": "P03",
@@ -721,7 +733,8 @@
         "libs/collabtext/src/codec/JsonReader.cpp",
         "libs/collabtext/tests/tst_decode_validation.cpp",
         "docs/specs/vnext-protocol.md (new section 11)",
-        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p04/"
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p04/",
+        "docs/reports/2026-10-04-review-artifacts/"
       ],
       "limitations": [
         "The reader is schema-focused but not yet wired into Serialization.cpp or StreamSerialization.cpp; those still use their own parsing. P05/P06 adopt it.",
@@ -729,7 +742,18 @@
         "The bounds are per-parse configuration with fixed defaults. Nothing yet varies them per operation format; vnext-protocol.md section 11.1 records the defaults as normative for that purpose.",
         "JsonValue::find is a linear scan, which is the right cost for envelopes but would need an index for a document with thousands of members. max_container_elements bounds it rather than optimizing it.",
         "Qt's moc silently drops every test slot in a file that contains a raw string literal with braces, so the tests use escaped literals; this cost P04 about an hour and is worth knowing before anyone simplifies them back."
-      ]
+      ],
+      "review_commits": [
+        "b3f4f20675eee6cc42fffce8ccf7f5183ff01003"
+      ],
+      "review_date": "2026-10-04",
+      "review_verification": {
+        "debug_fast": "62/62 CTest executables",
+        "release_all": "64/64 including tst_benchmark and tst_realistic",
+        "asan_ubsan_lsan_fast": "62/62, leak checking enabled, no suppressions; timing assertions unchanged",
+        "strict_evaluation": "Expected exit 5 for F4-F8; normal run retains five XFAIL markers",
+        "source_version": "Reviewed baseline fac1ecbb plus b3f4f20 and bbe8434; exact source hashes in artifact manifest"
+      }
     },
     {
       "id": "P05",
@@ -786,7 +810,8 @@
         "libs/collabtext/tests/tst_operation_validation.cpp",
         "docs/specs/vnext-protocol.md (new sections 4.1, 4.2, 11.1a)",
         "docs/specs/vnext-public-api.md (new section 9.1)",
-        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p05/"
+        "docs/reports/2026-10-03-roadmap-kickoff-artifacts/v-p05/",
+        "docs/reports/2026-10-04-review-artifacts/"
       ],
       "limitations": [
         "Epoch, document, and stream context are NOT validated, because the engine's operation value carries no epoch to compare: Buffer and IdList still identify replicas with a 16-bit Lamport replica_id rather than the persistent ActorId that P02 built. This is recorded as a concrete gap rather than worked around; it needs P06 (opaque operations), P07 (envelope/transport outcomes), and L04 (persisted envelope identity).",
@@ -794,8 +819,19 @@
         "estimate_operation_bytes is an approximation used only for the deferral budget's byte bound. It is not an exact accounting of retained memory and is not intended to be.",
         "The deferral budget is per engine instance and not persisted. A restart resets it, so a peer that can keep an engine permanently over budget across restarts is not addressed here; L02/L05 own durable state.",
         "ApplyOutcome::awaiting() returns Lamport rather than OperationId as the public API specifies. Documented in vnext-public-api.md section 9.1; P06 changes the type when operations become opaque.",
-        "On budget exhaustion the newest arrival is quarantined rather than the oldest entry being evicted, so the causal prefix retained in the queue can still drain. Both are permitted by vnext-protocol.md section 4; the choice is recorded because it is observable."
-      ]
+        "On deferral budget exhaustion the newest arrival is refused explicitly; a diagnostic copy is retained only within a separately bounded count/byte quarantine. The source remains caller-owned and must remain in the transport/store; draining diagnostics is not application acknowledgement."
+      ],
+      "review_commits": [
+        "b3f4f20675eee6cc42fffce8ccf7f5183ff01003"
+      ],
+      "review_date": "2026-10-04",
+      "review_verification": {
+        "debug_fast": "62/62 CTest executables",
+        "release_all": "64/64 including tst_benchmark and tst_realistic",
+        "asan_ubsan_lsan_fast": "62/62, leak checking enabled, no suppressions; timing assertions unchanged",
+        "strict_evaluation": "Expected exit 5 for F4-F8; normal run retains five XFAIL markers",
+        "source_version": "Reviewed baseline fac1ecbb plus b3f4f20 and bbe8434; exact source hashes in artifact manifest"
+      }
     },
     {
       "id": "P06a",
@@ -810,10 +846,12 @@
         "libs/collabtext/src/crdt/Clock.cpp",
         "libs/collabtext/src/crdt/UndoMap.h",
         "libs/collabtext/include/collabtext/Operations.h",
-        "libs/collabtext/tests/tst_identity_ordering_model.cpp"
+        "libs/collabtext/tests/tst_identity_ordering_model.cpp",
+        "libs/collabtext/tests/reference/IdentityAllocationModel.h"
       ],
       "steps": [
         "Write the identity contract first: what a Lamport identity becomes (persistent ActorId plus a checked 64-bit counter, per R1), what total order the engine relies on, and which of those uses are convergence-critical rather than merely identifying. Prove the ordering laws against an independent model before touching the engine.",
+        "Complete vnext-identity.md section 3.1 before production adoption: specify operation/item/causal-clock domains, checked durable run-interval reservation or explicit subidentity, split/deletion/undo mapping, and unused-reservation recovery under contiguous coverage. Add independent multi-scalar/split/undo/restart, multi-document/stream, remote-clock, gap, and exhaustion fixtures. A comparator-only model does not authorize mechanically replacing character timestamps with one counter per operation.",
         "Replace the 16-bit replica_id and 32-bit counter in the engine's identity types. The ordering must remain a deterministic total order that every replica computes identically, because origin breaks ties between fragments that share a locator and normalize_fragments exists to handle exactly that case. A locally assigned slot would diverge here and must not be used.",
         "Measure the cost. Every Lamport is embedded in FragmentSummary, which the SumTree aggregates on every edit, so widening the identity widens the hot path. Record bytes-per-identity before and after so the optimization phase inherits a number rather than a surprise.",
         "Make Buffer and IdList take an ActorId and expose it. Keep the legacy integer constructor only if it cannot silently mint an identity that looks valid; an operation carrying a default-constructed (invalid) ActorId is rejected, per P02.",
@@ -822,14 +860,15 @@
       "acceptance": [
         "The independent model and the engine agree on ordering for every generated pair of identities, including equal-locator ties from different actors.",
         "Two distinct ActorIds never share an identity, and a default-constructed ActorId is rejected as invalid_identity rather than treated as actor 0.",
-        "The recorded before/after size of an identity is stated in the task log, and no convergence test regresses."
+        "The recorded before/after size of an identity is stated in the task log, and no convergence test regresses.",
+        "The identity-allocation contract and independent fixtures prove non-aliasing across character runs/splits/deletions/undo and specify reservation/log failure semantics; P06b/P07/L02 inherit those obligations. A checked scalar counter by itself does not satisfy this gate."
       ],
       "verification": "Run the identity model and Buffer/IdList convergence suites in Debug, Release, and ASan; state the measured sizeof(Lamport) and sizeof(FragmentSummary) before and after.",
       "addresses": [
         "F4",
         "R1"
       ],
-      "gate": "Ordering contract and independent model must exist and run before the engine types change.",
+      "gate": "Ordering and identity-allocation contracts and independent models must exist and run before engine types change; comparator-only evidence leaves allocation/recovery obligations incomplete.",
       "status": "in_progress",
       "split_rationale": "Split out of P06 on 2026-10-04. P06 asked for opaque values and versioned sparse codecs in one step, but the actor identity is serialized by both the wire codec and the store, so the identity change cannot land before the codecs without either changing those formats outside this task's ownership or introducing a representation the codec task immediately rewrites. The identity work is therefore sequenced first *within* P06 rather than before it, which keeps it a discrete reviewable step without an impossible ordering.",
       "baseline_revision": "2fd5a76",
@@ -837,7 +876,7 @@
         "4ece11a"
       ],
       "gate_evidence": [
-        "docs/specs/vnext-identity.md -- the contract: what an identity is, the order and the three places it is used, why locally assigned slots diverge, the seven laws, counter rules, why epoch is deliberately not here, and the measured cost.",
+        "docs/specs/vnext-identity.md -- the contract: what an identity is, the order and the three places it is used, why locally assigned slots diverge, the seven laws, counter rules, why epoch is deliberately not here, and baseline/projected cost. Section 3.1 allocation-domain requirements were added by review and remain unfinished.",
         "libs/collabtext/tests/tst_identity_ordering_model.cpp -- 14 cases, independent implementation, registered in CMake and part of the fast selection.",
         "Mutation-checked: actor-first, actor comparison truncated to 4 bytes, and a cyclic counter comparison each produce failures; the unmutated file passes 14/14."
       ],
@@ -847,10 +886,11 @@
         "mutation_checks": "3 of 3 deliberate comparator defects caught"
       },
       "remaining_scope": [
-        "Step 2: replace the 16-bit replica_id and 32-bit counter in Clock.h/Clock.cpp and UndoMapKey. The gate's laws are proven but not yet enforced against the engine's types, because the engine's types have not changed.",
-        "Step 3: re-measure sizeof after the change and compare against the recorded before figures.",
-        "Step 4: Buffer(ActorId) and IdList(ActorId), rejecting a default-constructed ActorId as invalid_identity.",
-        "Step 5: opaque operation values; move field layout out of the public header.",
+        "Step 2: complete the allocation/causal-clock/run-identity mapping and independent fixtures in vnext-identity.md section 3.1; comparator tests alone do not establish this contract.",
+        "Step 3: replace the 16-bit replica_id and 32-bit counter in Clock.h/Clock.cpp and UndoMapKey. The gate's laws are proven but not yet enforced against the engine's types, because the engine's types have not changed.",
+        "Step 4: re-measure sizeof after the change and compare against the recorded before figures.",
+        "Step 5: Buffer(ActorId) and IdList(ActorId), rejecting a default-constructed ActorId as invalid_identity.",
+        "Step 6: opaque operation values; move field layout out of the public header.",
         "Roughly 140 Lamport construction sites in tests and 56 files referencing replica_id."
       ]
     },
@@ -998,15 +1038,27 @@
         "libs/collabtext/src/storage/DurableFile.h",
         "libs/collabtext/src/storage/DurableFile.cpp",
         "libs/collabtext/tests/tst_durable_file.cpp",
-        "docs/reports/vnext-task-log.md"
+        "docs/reports/vnext-task-log.md",
+        "docs/reports/2026-10-04-review-artifacts/"
       ],
       "limitations": [
         "Verified on Linux/GCC only. The Windows and macOS paths exist behind adapters and are compiled nowhere in this environment; Windows reports unsupported_operation for a directory sync and uses MoveFileEx with REPLACE_EXISTING. A07 owns the real platform matrix, so nothing here should be read as cross-platform certification.",
-        "No power-loss claim. fsync returns once the kernel accepts the bytes. The promise is that a process crash cannot tear a committed write, which the forked-writer test covers; nothing here survives losing the page cache, and the test says so in a comment so the next reader does not infer otherwise.",
+        "Sync calls request stable storage from the filesystem/device stack, including a containing-directory barrier. Linux process-kill tests exercise committed replacement and local lease recovery; they do not certify power-loss or other platforms.",
         "SegmentWriter and FileSync are NOT yet converted to use these primitives; that is L02. Until then the F9 defect is fixed in the new primitive but still live in SegmentWriter::flush() and seal_open_().",
         "The injected-fault tests double-count as platform tests on Linux because the real syscalls are exercised; they do not substitute for running the suite on each platform.",
-        "A corrupt or unreadable lease file is treated as not-held so a crash cannot wedge the store permanently, while a lease file that exists but cannot be read is treated as held. That asymmetry is deliberate but is a judgement call, not a derived fact."
-      ]
+        "Local process ownership uses a kernel lock on a persistent inode. PID text may be empty or stale and does not grant ownership. Missing/inaccessible files fail explicitly; never unlink a lease file to reclaim ownership."
+      ],
+      "review_commits": [
+        "bbe8434ce979258e61d9b680203e84fc7aea9d61"
+      ],
+      "review_date": "2026-10-04",
+      "review_verification": {
+        "debug_fast": "62/62 CTest executables",
+        "release_all": "64/64 including tst_benchmark and tst_realistic",
+        "asan_ubsan_lsan_fast": "62/62, leak checking enabled, no suppressions; timing assertions unchanged",
+        "strict_evaluation": "Expected exit 5 for F4-F8; normal run retains five XFAIL markers",
+        "source_version": "Reviewed baseline fac1ecbb plus b3f4f20 and bbe8434; exact source hashes in artifact manifest"
+      }
     },
     {
       "id": "L02",
@@ -1115,24 +1167,32 @@
         "libs/collabtext/include/collabtext/DocumentSession.h",
         "libs/collabtext/src/DocumentSession.cpp",
         "libs/collabtext/src/crdt/FileSync.cpp",
-        "libs/collabtext/tests/tst_session_recovery.cpp"
+        "libs/collabtext/tests/tst_session_recovery.cpp",
+        "docs/specs/vnext-external-position-contract.md",
+        "docs/specs/vnext-consumer-session.md"
       ],
       "steps": [
         "Own the engines, producer lease, log, and transport binding in one single-thread owner. Opening loads seed/context, replays ALL own and remote durable logs, and drains dependencies; do not use previously persisted incremental cursors to bootstrap empty state.",
         "Recover the own actor clock from accepted own operations before enabling new local edits. Missing causal data remains a visible recovery/incomplete state; never render it as complete and acknowledge it.",
-        "After baseline replay, derive incremental read state from the recovered coverage and keep it paired with the recoverable logs. Expose open/recover/apply/save/close results and logical visible deltas."
+        "After baseline replay, derive incremental read state from the recovered coverage and keep it paired with the recoverable logs. Expose open/recover/apply/save/close results and logical visible deltas.",
+        "Define W5 headless embedding under a consumer-owned Document seam: engine operations/pins are idempotent projections of canonical events, local journals/outboxes are recoverable pending state, and accepted event history is never rewound. Specify server rejection and pending-outbox reconciliation without ID reuse. Support read-only historical projection without minting operations; after S05, recover external pins to a declared consumer frontier before any GC can run. Add the consumer_commit_pin_crash_matrix recovery hooks here; S05/G08 complete its pin and GC cases."
       ],
       "acceptance": [
         "Own-only, mixed-peer, duplicate, reordered, copied, and restart fixtures recover exact CRDT state, not just visible text.",
-        "F5 receiver-restart failure passes; stale cursors cannot suppress recovery. Opening does not manufacture fresh operations or callbacks for replayed local edits."
+        "F5 receiver-restart failure passes; stale cursors cannot suppress recovery. Opening does not manufacture fresh operations or callbacks for replayed local edits.",
+        "Headless recovery tests cover canonical replay, pending outbox restart/reconciliation, and isolated historical playback without allocating new IDs. The session exposes the recovery frontier needed for subsequent S05 pin projection; per-session save is not advertised as a multi-block conversation transaction."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regressions|tst_opstream_replay'`; restart the same temp store twice and continue editing after each open.",
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regressions|tst_opstream_replay'`; restart the same temp store twice and continue editing after each open. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F5",
         "R3"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W3",
+        "W5"
+      ]
     },
     {
       "id": "L06",
@@ -1146,25 +1206,31 @@
         "libs/collabtext/src/storage/LocalHistoryLog.cpp",
         "libs/collabtext/src/crdt/Buffer.cpp",
         "libs/collabtext/src/crdt/IdList.cpp",
-        "libs/collabtext/tests/tst_persistent_undo.cpp"
+        "libs/collabtext/tests/tst_persistent_undo.cpp",
+        "docs/specs/vnext-external-position-contract.md"
       ],
       "steps": [
         "Durably record local undo groups, coalescing boundaries, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.",
         "Restore both undo and redo stacks after reopen/crash without resetting them at session close. Make history and operation commits a consistent transaction; a shared checkpoint must not replace actor-private history. Record retention obligations for G01/G03.",
-        "Bound history by steps AND retained bytes, including coalesced entries, inserted keys, and restoration content. Make trim atomic with its retirement record; never drop history silently on allocation/error."
+        "Bound history by steps AND retained bytes, including coalesced entries, inserted keys, and restoration content. Make trim atomic with its retirement record; never drop history silently on allocation/error.",
+        "Expose durable compensating operations and stable local undo group metadata to a consumer-owned append-only event log (W5). Specify event correlation and failure/retry ordering so undo is a new event and accepted canonical events are never deleted. Keep multi-block history orchestration in the consumer layer."
       ],
       "acceptance": [
         "Undo and redo survive close/reopen/crash within the configured bounds; restored undo reverses only the owner's edits and preserves peer edits.",
-        "A single huge coalesced edit respects the memory limit; retirement survives crash and never re-enables older undo."
+        "A single huge coalesced edit respects the memory limit; retirement survives crash and never re-enables older undo.",
+        "Reopened undo/redo emits idempotently correlated compensating operations while preserving canonical accepted history; engine history limits do not implicitly release external reply pins."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_persistent_undo|tst_idlist_undo|tst_undomap|tst_session_recovery'`; test undo\u2192close\u2192reopen\u2192redo and trim crash points.",
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_persistent_undo|tst_idlist_undo|tst_undomap|tst_session_recovery'`; test undo\u2192close\u2192reopen\u2192redo and trim crash points. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F1",
         "F2",
         "R10"
       ],
       "gate": "Q3 resolved: persistent actor-local undo AND redo, bounded by step and byte limits.",
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W5"
+      ]
     },
     {
       "id": "L07",
@@ -1242,24 +1308,30 @@
       ],
       "files": [
         "docs/specs/vnext-sequence-semantics.md",
-        "libs/collabtext/tests/fixtures/sequence-semantics/"
+        "libs/collabtext/tests/fixtures/sequence-semantics/",
+        "docs/specs/vnext-external-position-contract.md"
       ],
       "steps": [
         "State exact properties: convergence, duplicate safety, causal integration, contiguous concurrent passages, intended left/right insertion affinity, selective local undo, and explicit behavior for concurrent replacements.",
         "Create finite fixtures for whole-run paste, per-character forward typing, reverse typing, nested insertions, deleting a neighbor concurrently, undo and reinsert, and editing inside a merged run. Include Buffer and IdList ties; stable expected order derives from actor/operation order and the chosen algorithm.",
-        "Keep plain text and IdList only. Do not claim arbitrary semantic merge intent or maximal non-interleaving unless the selected algorithm/spec establishes it."
+        "Keep plain text and IdList only. Do not claim arbitrary semantic merge intent or maximal non-interleaving unless the selected algorithm/spec establishes it.",
+        "Add W2 fixtures named boundary_affinity_ab_insert_X, scoped_empty_start_end_tokens, shared_token_concurrent_boundary_inserts, and deleted_neighbors_explicit_collapse. Record the same minted token, its causal state, affinity, exact offsets, and later token comparisons; include all scalar boundaries and list lookup misses. Semantic paragraph recognition after arbitrary replacement is outside the contract."
       ],
       "acceptance": [
         "F8 fixture accepts only abcXYZ or XYZabc according to the specified tie rule, never aXbYcZ.",
-        "Every example has operation IDs, causal edges, and exact expected content, not just equality between replicas."
+        "Every example has operation IDs, causal edges, and exact expected content, not just equality between replicas.",
+        "External-position fixtures specify exact left/right and collapse expectations, including empty/end boundaries; equality of separately minted tokens is insufficient."
       ],
-      "verification": "Review fixture histories against the evaluation and original engine; run fixture parsing tests. No production algorithm change in this task.",
+      "verification": "Review fixture histories against the evaluation and original engine; run fixture parsing tests. No production algorithm change in this task. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F8",
         "R4"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W2"
+      ]
     },
     {
       "id": "S02",
@@ -1273,24 +1345,30 @@
       "files": [
         "docs/specs/vnext-sequence-algorithm.md",
         "docs/reports/vnext-ordering-design.md",
-        "libs/collabtext/tests/reference/SequenceModel.h"
+        "libs/collabtext/tests/reference/SequenceModel.h",
+        "docs/specs/vnext-external-position-contract.md"
       ],
       "steps": [
         "Trace each S01 failing history through existing Buffer/IdList insertion integration, origins, run splitting, Locator ordering, and undo visibility. Identify the first violated invariant and specify the smallest representation/integration repair that satisfies the complete fixtures. Retain current engine components and storage structures where their invariants hold.",
         "Write changed operation fields (if any), integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and anchor boundary interpretation. Include a current\u2192repaired transformation map with exact helper/file scope and justify each changed invariant. Existing origin-neighbor algorithms may inform the repair; do not implement a replacement CRDT/backend.",
-        "Implement a deliberately simple independent vector/reference interpreter for the repaired semantics. Validate the full fixture and bounded-history corpus. If it fails, record the smallest counterexample and refine this repair specification; do not launch a Rust/backend experiment or ask a routine executor to invent missing rules."
+        "Implement a deliberately simple independent vector/reference interpreter for the repaired semantics. Validate the full fixture and bounded-history corpus. If it fails, record the smallest counterexample and refine this repair specification; do not launch a Rust/backend experiment or ask a routine executor to invent missing rules.",
+        "Specify W2 boundary interpretation in the independent model: scoped empty/start/end values, same-token concurrent inserts under every causally valid delivery order, deleted-neighbor collapse reporting, later comparison, and separate UTF-8 byte/list-index units. Review these fixtures before unlocking S03/S04; do not infer semantic attachment intent from convergence."
       ],
       "acceptance": [
         "The repair includes implementable pseudocode, a transformation map within current components, and an independent reference interpreter passing S01.",
-        "Technical review checks nested/concurrent runs, reverse insertion, post-merge edits, undo, and reuse of existing storage. A superficial comparator tweak or an incomplete specification does not unlock S03."
+        "Technical review checks nested/concurrent runs, reverse insertion, post-merge edits, undo, and reuse of existing storage. A superficial comparator tweak or an incomplete specification does not unlock S03.",
+        "The independent interpreter passes all W2 named fixtures and specifies representable boundary context and typed placement results; missing rules keep the implementation gate closed."
       ],
-      "verification": "Run the reference interpreter on all S01 fixtures and bounded enumerations; retain exact traces and implementation-independent expected outputs.",
+      "verification": "Run the reference interpreter on all S01 fixtures and bounded enumerations; retain exact traces and implementation-independent expected outputs. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F8",
         "R12"
       ],
       "gate": "Requires a complete reviewed incremental repair specification and independent executable model. Unresolved ordering invariants block dependent code changes; replacement engines are outside scope.",
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W2"
+      ]
     },
     {
       "id": "S03",
@@ -1333,29 +1411,39 @@
         "libs/collabtext/src/crdt/Anchor.h",
         "libs/collabtext/src/crdt/Buffer.cpp",
         "libs/collabtext/src/crdt/IdList.cpp",
-        "libs/collabtext/tests/tst_anchor.cpp"
+        "libs/collabtext/tests/tst_anchor.cpp",
+        "docs/specs/vnext-external-position-contract.md",
+        "libs/collabtext/tests/tst_anchor_codec.cpp",
+        "libs/collabtext/tests/tst_idlist_anchor.cpp"
       ],
       "steps": [
         "Represent boundaries and affinity according to S02 using sufficient left/right identity context; cover start/end, empty document, deleted neighbors, and subsequent concurrent insertions.",
         "Return explicit unresolved/wrong-epoch results rather than silently returning document end. Specify IdList element anchors separately from text insertion boundaries.",
-        "Encode anchors with their own version, document/stream/epoch context, and checked affinity. Reject obsolete formats explicitly; no legacy-anchor conversion is required."
+        "Encode anchors with their own version, document/stream/primitive/epoch context, and checked affinity. Reject unknown or unsupported formats explicitly. Keep readers for supported published vNext token versions; no pre-vNext anchor conversion is required.",
+        "Implement W1/W2 via the public opaque token codec and typed position results carrying UTF-8 byte offsets or list indices plus specified collapse placement. Add checked IdList lookup. Bind document/stream/primitive/epoch/affinity, reject foreign/malformed/unknown tokens without mutation, and round-trip original bytes after reopen and replica replay. Freeze the published token version and its supported-reader contract; pre-vNext anchors require no conversion."
       ],
       "acceptance": [
         "In ab\u2192aXb, preexisting left/right anchors at 1 resolve to 1/2; start/end affinity and remote exact-position tests pass.",
-        "Deleted-neighbor anchors remain meaningful before reclamation; foreign-stream/epoch anchors cannot resolve accidentally. F7 marker is removed."
+        "Deleted-neighbor anchors remain meaningful before reclamation; foreign-stream/epoch anchors cannot resolve accidentally. F7 marker is removed.",
+        "Named cases external_token_roundtrip_reopen, boundary_affinity_ab_insert_X, scoped_empty_start_end_tokens, shared_token_concurrent_boundary_inserts, deleted_neighbors_explicit_collapse, foreign_or_unsupported_token_is_explicit, and missing_list_id_is_not_an_end_anchor pass through library-owned encode/decode. Resolution returns an actual typed position or error, never an application outcome without an offset."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_anchor|tst_idlist_anchor|tst_sequence_semantics|tst_evaluation_regressions'`; assert exact positions through undo/redo and concurrent inserts.",
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_anchor_codec|tst_anchor|tst_idlist_anchor|tst_sequence_semantics|tst_evaluation_regressions'`; assert exact positions through undo/redo and concurrent inserts.",
       "addresses": [
         "F7",
         "R2",
         "R13"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W6"
+      ]
     },
     {
       "id": "S05",
-      "title": "Specify retained anchors and historical delta validity",
+      "title": "Define and implement retained external anchors and history policy",
       "phase": 4,
       "depends_on": [
         "S04",
@@ -1366,24 +1454,33 @@
         "libs/collabtext/src/DocumentSession.cpp",
         "libs/collabtext/src/crdt/Comment.cpp",
         "libs/collabtext/src/crdt/ChatMessage.cpp",
-        "libs/collabtext/tests/tst_anchor_retention.cpp"
+        "libs/collabtext/tests/tst_anchor_retention.cpp",
+        "docs/specs/vnext-external-position-contract.md",
+        "libs/collabtext/tests/fixtures/external-position/"
       ],
       "steps": [
-        "Classify ephemeral cursors separately from durable comments/bookmarks/undo selections. Persist explicit durable anchor pins; pins must be retired by an operation, not by presence timeout.",
+        "Classify ephemeral cursors separately from durable internal and external comments/bookmarks/replies/undo selections. Implement explicit durable anchor pins and their typed outcomes; pins are released through the specified durable lifecycle, never through a device presence timeout.",
         "Specify which versions edits_since may query and how a checkpoint/GC floor invalidates older queries. Return HistoryUnavailable instead of silently producing an incorrect delta.",
-        "Make comment/chat anchor ingestion reject wrong document/epoch and preserve unresolved anchors for later causal resolution. Define anchor translation for epoch transitions before G06 can remove identities."
+        "Make comment/chat anchor ingestion reject wrong document/epoch and preserve unresolved anchors for later causal resolution. Define anchor translation for epoch transitions before G06 can remove identities.",
+        "Implement W3 external durable pin registration/lookup/release keyed by stable consumer reference IDs, independent of author device lifetime. Specify idempotent replay, concurrent release and release-undo policy, recovery-before-GC, and the external canonical-log frontier/orphan protocol. A decoded or externally stored token does not register a pin. Preserve supported original token bytes through approved epoch translations. Document current-state reconstruction separately from isolated historical playback and HistoryUnavailable below the engine floor."
       ],
       "acceptance": [
         "A durable comment on deleted text survives permitted undo and restart; stale ephemeral cursors do not pin history indefinitely.",
-        "Querying a version older than the supported retention floor reports an explicit error."
+        "Querying a version older than the supported retention floor reports an explicit error.",
+        "Tests cover externally stored reply tokens, durable pin recovery before GC, partial consumer-log/pin commits, release/replay, and retiring the author while its reply remains live. Pin obligations and translation requirements are executable inputs to G01; historical projections resolve against their own epoch/state, and live pins do not promise unlimited historical text."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_anchor_retention|tst_comment|tst_chat_message|tst_edits_since|tst_persistent_undo'`.",
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_anchor_retention|tst_comment|tst_chat_message|tst_edits_since|tst_persistent_undo'`. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F7",
         "R10"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W3",
+        "W5"
+      ]
     },
     {
       "id": "S06",
@@ -1396,25 +1493,31 @@
       "files": [
         "libs/collabtext/tests/tst_sequence_model.cpp",
         "libs/collabtext/tests/reference/SequenceModel.h",
-        "libs/collabtext/tests/fixtures/reduced-traces/"
+        "libs/collabtext/tests/fixtures/reduced-traces/",
+        "docs/specs/vnext-external-position-contract.md"
       ],
       "steps": [
         "Enumerate 2\u20133 actors and small histories under all causally valid delivery orders, duplicates, deferred retry, forward/reverse insertion, deletion, undo/redo, and anchors.",
         "Compare production visible content, resolved boundaries, operation coverage, and future edit behavior to the S02 interpreter. Reduce and retain every discrepancy.",
-        "Provide bounded CI limits and a longer deterministic campaign; clearly state that bounded enumeration is evidence, not a general proof."
+        "Provide bounded CI limits and a longer deterministic campaign; clearly state that bounded enumeration is evidence, not a general proof.",
+        "Include W2 same-token boundary histories in differential enumeration, with encode/decode, restart, duplicate delivery, scoped empty/end values, and later-token comparisons. Compare exact resolved offsets and collapse outcomes as well as text; retain reduced counterexamples."
       ],
       "acceptance": [
         "No mismatch in the checked domain; histories reproduce from artifacts and have exact resource/runtime bounds.",
-        "New ordering/anchor regression traces are included permanently; model does not call production ordering helpers."
+        "New ordering/anchor regression traces are included permanently; model does not call production ordering helpers.",
+        "Every checked W2 history agrees with the independent model for the same persisted token across delivery orders and restart, with exact domain/count/runtime limits."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_sequence_model|tst_sequence_semantics'` and a bounded ASan campaign; retain enumeration limits and counts.",
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_sequence_model|tst_sequence_semantics'` and a bounded ASan campaign; retain enumeration limits and counts. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F7",
         "F8",
         "R4"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W2"
+      ]
     },
     {
       "id": "S07",
@@ -1457,19 +1560,22 @@
       ],
       "files": [
         "docs/specs/vnext-membership-gc.md",
-        "libs/collabtext/tests/reference/GcModel.h"
+        "libs/collabtext/tests/reference/GcModel.h",
+        "docs/specs/vnext-external-position-contract.md"
       ],
       "steps": [
         "Define immutable epoch membership, explicit enrollment/retirement events, producer identities, and how new actors join without invalidating an already published common frontier. Devices stay enrolled indefinitely until explicitly retired; elapsed time, reminders, and presence are advisory and never acknowledgements.",
         "Define a certificate binding stream, epoch, membership hash, common durable coverage, per-actor undo-retirement coverage, retained anchor translations, and durable checkpoint hash. Require all still-enrolled actors, including silent ones, to contribute; no scalar-max substitution.",
         "Specify the full state machine for checkpoint proposal, coverage confirmation, epoch transition, interruption, competing proposals, and returning retired peers. Preserve a returning peer's unsynced branch for explicit reconciliation; do not pretend replay into a new epoch is automatically valid.",
-        "Implement a slow model and complete eligibility predicate. Include no available peers, unknown actor, missing ack, restored stale ack, remote redo, concurrent enrollment, retirement, and checkpoint corruption."
+        "Implement a slow model and complete eligibility predicate. Include no available peers, unknown actor, missing ack, restored stale ack, remote redo, concurrent enrollment, retirement, and checkpoint corruption.",
+        "Model W3 external pin obligations, consumer projection frontiers, crash/orphan retention, pin release, original token-version readers, and epoch translations. Explicit device retirement removes device obligations only; it cannot release another live document object. Include consumer_commit_pin_crash_matrix and retire_device_preserves_live_reply_pin before implementing certificates."
       ],
       "acceptance": [
         "There is a complete implementable protocol; every physical deletion has a certificate and no permitted future undo/anchor request needs removed data.",
-        "If an enrolled actor retains a relevant undo group or has insufficient coverage, GC blocks until a validated explicit retirement/epoch transition removes that obligation. A stale-device flag does not alter membership."
+        "If an enrolled actor retains a relevant undo group or has insufficient coverage, GC blocks until a validated explicit retirement/epoch transition removes that obligation. A stale-device flag does not alter membership.",
+        "Eligibility refuses reclamation with an incomplete external-pin projection or missing translation. Live reply pins survive author retirement; unlimited live references have an explicitly measured metadata obligation rather than an unconditional bounded-memory claim."
       ],
-      "verification": "Run GcModel against all F1/F2/F3 histories and adversarial membership traces; publish the eligibility predicate and state transition table before G02 starts.",
+      "verification": "Run GcModel against all F1/F2/F3 histories and adversarial membership traces; publish the eligibility predicate and state transition table before G02 starts. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F1",
         "F2",
@@ -1478,7 +1584,10 @@
         "R10"
       ],
       "gate": "Q2/Q3 resolved: explicit retirement and persistent undo/redo. The protocol still requires complete independent review/model checks; incomplete certificates never unlock physical GC.",
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W3"
+      ]
     },
     {
       "id": "G02",
@@ -1625,18 +1734,21 @@
         "libs/collabtext/src/crdt/IdList.cpp",
         "libs/collabtext/src/crdt/UndoMap.cpp",
         "libs/collabtext/tests/tst_gc.cpp",
-        "libs/collabtext/tests/tst_idlist_gc.cpp"
+        "libs/collabtext/tests/tst_idlist_gc.cpp",
+        "docs/specs/vnext-external-position-contract.md"
       ],
       "steps": [
         "Remove public compact(Global) as a destructive entry point and expose DocumentSession-managed certificate reclamation only; no compatibility wrapper is required.",
         "Share eligibility policy across Buffer/IdList, not their entire storage implementations. Protect local and remote undo/redo, insertions without deletion IDs, and pinned anchors; retain boundary stubs/translation entries where the approved algorithm requires them.",
-        "Reclaim UndoMap entries only when no retained item/history/pin or supported historical query requires them. Maintain the documented edits_since floor. Count content, metadata, indexes, and retention bytes separately."
+        "Reclaim UndoMap entries only when no retained item/history/pin or supported historical query requires them. Maintain the documented edits_since floor. Count content, metadata, indexes, and retention bytes separately.",
+        "Enforce W3 pinned_token_survives_checkpoint_epoch_translation using the original encoded bytes across certified reclamation. Without necessary history/translation return typed unavailable/wrong-epoch/unresolvable results, never fabricated end. Test released and unregistered tokens where reclamation actually removes their context; absence of registration alone does not invalidate context that still exists."
       ],
       "acceptance": [
         "All local/remote restoration cases remain correct after GC; no missing anchor jumps to end; both primitives obey the same policy.",
-        "Memory reclamation includes eligible undo metadata and never relies only on local stack protection."
+        "Memory reclamation includes eligible undo metadata and never relies only on local stack protection.",
+        "Pinned external tokens remain resolvable through approved GC/epoch transitions; unsupported unprotected historical tokens fail explicitly after their required context is removed."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_gc|tst_idlist_gc|tst_anchor_retention|tst_gc_certificate|tst_evaluation_regressions'`; differential-check permitted post-GC operations against unreclaimed engines.",
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_gc|tst_idlist_gc|tst_anchor_retention|tst_gc_certificate|tst_evaluation_regressions'`; differential-check permitted post-GC operations against unreclaimed engines. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F1",
         "F2",
@@ -1646,7 +1758,10 @@
         "R10"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W3"
+      ]
     },
     {
       "id": "G07",
@@ -1689,18 +1804,21 @@
       ],
       "files": [
         "libs/collabtext/tests/tst_long_lived_store.cpp",
-        "docs/reports/vnext-reclamation-milestone.md"
+        "docs/reports/vnext-reclamation-milestone.md",
+        "docs/specs/vnext-external-position-contract.md"
       ],
       "steps": [
         "Exercise many edit/undo/redo/coalesce/trim cycles, durable comments, offline devices, explicit retirement, checkpointing, and reconnect with both CRDT primitives.",
         "Measure engine allocations, UndoMap/history/pin bytes, checkpoint sizes, retained logs, and RSS separately. Demonstrate a plateau only in workloads meeting retirement/retention assumptions.",
-        "Publish final GC invariants, blocked-case diagnostics, seed/trace identities, and limits; do not promise history-free arbitrary offline return after retirement."
+        "Publish final GC invariants, blocked-case diagnostics, seed/trace identities, and limits; do not promise history-free arbitrary offline return after retirement.",
+        "Run the W3 consumer_commit_pin_crash_matrix, external_pin_recovery_before_gc, retire_device_preserves_live_reply_pin, pinned_token_survives_checkpoint_epoch_translation, and unregistered_or_released_token_is_explicit campaigns against both primitives. Measure the retention cost of indefinitely live reply pins and separate it from reclaimable text and bounded undo."
       ],
       "acceptance": [
         "Logical state and permitted future operations match unreclaimed reference engines throughout the trace.",
-        "Eligible workloads have bounded retained state; ineligible workloads preserve correctness and report unbounded obligations rather than deleting them."
+        "Eligible workloads have bounded retained state; ineligible workloads preserve correctness and report unbounded obligations rather than deleting them.",
+        "Every external-pin crash prefix either recovers a protected live reference or blocks GC explicitly. Retiring an author does not discard live reply references; only eligible workloads claim a plateau."
       ],
-      "verification": "Run bounded long-lived Debug/Release campaigns and ASan; publish counts and actual byte metrics, with explicit campaign time/memory budgets.",
+      "verification": "Run bounded long-lived Debug/Release campaigns and ASan; publish counts and actual byte metrics, with explicit campaign time/memory budgets. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F1",
         "F2",
@@ -1711,7 +1829,10 @@
         "R10"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W3"
+      ]
     },
     {
       "id": "A01",
@@ -1759,24 +1880,32 @@
         "libs/collabtext/include/collabtext/",
         "libs/collabtext/src/crdt/",
         "tests/consumer-smoke/",
-        "docs/specs/vnext-public-api.md"
+        "docs/specs/vnext-public-api.md",
+        "docs/specs/vnext-external-position-contract.md"
       ],
       "steps": [
         "Move stable public ActorId, OperationId, Anchor, outcome/config types, and engine APIs into self-contained public headers. Keep fragments, locators, raw variants, Global/tree layouts, and writers private.",
         "Ensure Buffer and IdList consumer entry points remain accessible through documented facades, including anchors, undo limits, batch apply, and session integration. A facade must not silently remove required capabilities.",
-        "Remove src from PUBLIC include paths. Public tests compile with only installed headers and libraries, not source-tree includes inherited from the target."
+        "Remove src from PUBLIC include paths. Public tests compile with only installed headers and libraries, not source-tree includes inherited from the target.",
+        "Expose W1/W2 opaque token encode/decode, checked mint/lookup, and typed text/list resolution in self-contained installed headers. Publish supported token-version handling and exact offset units; keep consumer outer envelopes independent of internal object layout. Add foreign/version/missing-ID installed tests."
       ],
       "acceptance": [
         "Every public header compiles independently; no public include references crdt/ or src internals.",
-        "Consumer smoke exercises Buffer/IdList equivalent facades and an external OpStream implementation using stable types only."
+        "Consumer smoke exercises Buffer/IdList equivalent facades and an external OpStream implementation using stable types only.",
+        "Installed clients can persist and resolve tokens without any internal headers or layout assumptions, and distinguish unresolved/foreign/unsupported outcomes from a real end position."
       ],
-      "verification": "Compile each installed header in a separate translation unit and run the external consumer sample. Inspect compiler include paths for accidental source-tree exposure.",
+      "verification": "Compile each installed header in a separate translation unit and run the external consumer sample. Inspect compiler include paths for accidental source-tree exposure. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "R2",
         "R13"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W6"
+      ]
     },
     {
       "id": "A03",
@@ -1885,24 +2014,36 @@
         "cmake/CollabTextConfig.cmake.in",
         "libs/collabtext/CMakeLists.txt",
         "tests/consumer-smoke/CMakeLists.txt",
-        "docs/USING_VNEXT.md"
+        "docs/USING_VNEXT.md",
+        "docs/specs/vnext-external-position-contract.md",
+        "tests/consumer-smoke/wave-contract/"
       ],
       "steps": [
         "Implement install/export/version package metadata, component dependency discovery, stable target names, and separate public include installs. Test a relocated installation prefix.",
         "Document the new headers, types, callback/ack semantics, error paths, ownership, offsets, and reset APIs; include Buffer, IdList, and custom transport examples. Explain intentional breaks without preserving obsolete signatures.",
-        "Remove obsolete public wrappers and install only the supported surface. Do not create deprecated adapters, scalar-GC wrappers, legacy codecs, or void-push compatibility paths. State fresh-format identifiers and incompatible-format errors."
+        "Remove obsolete public wrappers and install only the supported surface. Do not create deprecated adapters, scalar-GC wrappers, legacy codecs, or void-push compatibility paths. State fresh-format identifiers and incompatible-format errors.",
+        "Add the self-contained W6 installed_headless_wave_contract consumer fixture using a consumer-owned Document adapter and canonical-log envelope. Exercise external_token_roundtrip_reopen, pin registration/recovery, compensating undo, historical_projection_resolves_its_own_tokens, and explicit failures. Build from a relocated install with Qt Widgets/Test disabled and no sibling Wave checkout. Formatting is consumer-owned; demonstrate span endpoints only, with no new formatting CRDT."
       ],
       "acceptance": [
         "An independent project finds CollabText through find_package and links without source-tree paths.",
-        "The new usage guide covers every V08 requirement with compilable samples; no old API/ABI/store compatibility is promised."
+        "The new usage guide covers every V08 requirement with compilable samples; no old API/ABI/store compatibility is promised.",
+        "A headless installed consumer passes the W1-W6 in-scope contract without source paths, Qt Widgets/Test, or a Wave checkout; its coverage identifies later certified-GC cases that E05 reruns."
       ],
-      "verification": "Install to a temporary prefix, hide original include tree, relocate prefix, and configure/build/run external samples for Core, FileTransport, and QtAdapter.",
+      "verification": "Install to a temporary prefix, hide original include tree, relocate prefix, and configure/build/run external samples for Core, FileTransport, and QtAdapter. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "R2",
         "R13"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+        "W5",
+        "W6"
+      ]
     },
     {
       "id": "A07",
@@ -2374,18 +2515,22 @@
       "files": [
         "docs/roadmap/2026-10-reliability/TASKS.json",
         "docs/reports/vnext-acceptance.md",
-        "libs/collabtext/tests/tst_evaluation_regressions.cpp"
+        "libs/collabtext/tests/tst_evaluation_regressions.cpp",
+        "docs/specs/vnext-external-position-contract.md",
+        "tests/consumer-smoke/wave-contract/"
       ],
       "steps": [
         "Map F1\u2013F10 and R1\u2013R14 to commits, exact passing tests, and any explicitly user-approved deferrals. Verify no expected-fail marker remains for a promised release feature.",
         "Review model independence, fresh-format rejection, error paths, single-owner threading, GC certificates, and recovery fallback invariants. Recheck original report probes against new facades.",
-        "Document residual risks and make incomplete tasks visible; a green test runner is insufficient if tasks or policy decisions remain unresolved."
+        "Document residual risks and make incomplete tasks visible; a green test runner is insufficient if tasks or policy decisions remain unresolved.",
+        "Map W1-W6 and every named external-position case to implementation commits and executable evidence. Rerun installed_headless_wave_contract with completed G-series reclamation and supported token-version readers. Report formatting as explicitly consumer-owned outside this plain-text release; a requirement document or passing historical probe cannot substitute for the new public-API gate."
       ],
       "acceptance": [
         "Every recommendation is implemented/validated or visibly deferred by a recorded user decision.",
-        "No evaluation defect is claimed fixed solely through disabling its test or narrowing an advertised guarantee without documenting the limitation."
+        "No evaluation defect is claimed fixed solely through disabling its test or narrowing an advertised guarantee without documenting the limitation.",
+        "The final acceptance dossier contains exact installed token/pin/reopen/compensation/GC/epoch tests for W1-W3/W5-W6 and an explicit W4 formatting scope statement; no Wave readiness claim is based solely on task checkboxes."
       ],
-      "verification": "Run the complete Debug/Release correctness suite, bounded model/fuzz campaigns, ASan/UBSan, installed-consumer checks, and selected performance suite; retain acceptance logs.",
+      "verification": "Run the complete Debug/Release correctness suite, bounded model/fuzz campaigns, ASan/UBSan, installed-consumer checks, and selected performance suite; retain acceptance logs. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F1",
         "F2",
@@ -2401,7 +2546,15 @@
         "R11"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+        "W5",
+        "W6"
+      ]
     },
     {
       "id": "E06",
@@ -2434,8 +2587,8 @@
       "status": "not_started"
     }
   ],
-  "revised": "2026-10-03",
-  "revision_reason": "All user policies resolved: improve existing native C++ engine incrementally; no Rust rewrite, Yrs adoption, or replacement trial. Retain fresh formats, explicit device retirement, and persistent undo/redo.",
+  "revised": "2026-10-04",
+  "revision_reason": "Retain the native C++ plan; P06 split yields 63 tasks. Independent progress review adds W1-W6 external consumer requirements to existing dependency-gated tasks, with formatting explicitly consumer-owned.",
   "removed_tasks": [
     {
       "id": "E01",
@@ -2445,5 +2598,14 @@
       "id": "E02",
       "reason": "No existing production stores/history; user explicitly removed data migration requirements on 2026-10-03."
     }
+  ],
+  "consumer_contract": "../../specs/vnext-external-position-contract.md",
+  "consumer_requirements": [
+    "W1",
+    "W2",
+    "W3",
+    "W4",
+    "W5",
+    "W6"
   ]
 }

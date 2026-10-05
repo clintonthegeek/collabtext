@@ -177,11 +177,10 @@ Run `./tools/verify-roadmap.sh debug 'tst_operation_validation|tst_opqueue|tst_c
 
 ## P06a — Adopt persistent actor identity in operations and make values opaque
 
-**Status:** see TASKS.json (initially not started)  
-**Depends on:** P05  
+**Status:** see TASKS.json (in progress)
+**Depends on:** P05
 **Coverage:** F4, R1
-
-**Split from P06 on 2026-10-04** — rationale at the end of this section.
+**Design/decision gate:** Ordering and identity-allocation contracts and independent models must exist and run before engine types change; comparator-only evidence leaves allocation/recovery obligations incomplete.
 
 **Files / scope:**
 
@@ -191,24 +190,27 @@ Run `./tools/verify-roadmap.sh debug 'tst_operation_validation|tst_opqueue|tst_c
 - `libs/collabtext/src/crdt/UndoMap.h`
 - `libs/collabtext/include/collabtext/Operations.h`
 - `libs/collabtext/tests/tst_identity_ordering_model.cpp`
+- `libs/collabtext/tests/reference/IdentityAllocationModel.h`
 
 **Steps:**
 
 1. Write the identity contract first: what a Lamport identity becomes (persistent ActorId plus a checked 64-bit counter, per R1), what total order the engine relies on, and which of those uses are convergence-critical rather than merely identifying. Prove the ordering laws against an independent model before touching the engine.
-2. Replace the 16-bit replica_id and 32-bit counter in the engine's identity types. The ordering must remain a deterministic total order that every replica computes identically, because origin breaks ties between fragments that share a locator and normalize_fragments exists to handle exactly that case. A locally assigned slot would diverge here and must not be used.
-3. Measure the cost. Every Lamport is embedded in FragmentSummary, which the SumTree aggregates on every edit, so widening the identity widens the hot path. Record bytes-per-identity before and after so the optimization phase inherits a number rather than a surprise.
-4. Make Buffer and IdList take an ActorId and expose it. Keep the legacy integer constructor only if it cannot silently mint an identity that looks valid; an operation carrying a default-constructed (invalid) ActorId is rejected, per P02.
-5. Opaque operation values: move construction and field layout out of the public header so the fast paths that touch fields do so through internal accessors.
+2. Complete vnext-identity.md section 3.1 before production adoption: specify operation/item/causal-clock domains, checked durable run-interval reservation or explicit subidentity, split/deletion/undo mapping, and unused-reservation recovery under contiguous coverage. Add independent multi-scalar/split/undo/restart, multi-document/stream, remote-clock, gap, and exhaustion fixtures. A comparator-only model does not authorize mechanically replacing character timestamps with one counter per operation.
+3. Replace the 16-bit replica_id and 32-bit counter in the engine's identity types. The ordering must remain a deterministic total order that every replica computes identically, because origin breaks ties between fragments that share a locator and normalize_fragments exists to handle exactly that case. A locally assigned slot would diverge here and must not be used.
+4. Measure the cost. Every Lamport is embedded in FragmentSummary, which the SumTree aggregates on every edit, so widening the identity widens the hot path. Record bytes-per-identity before and after so the optimization phase inherits a number rather than a surprise.
+5. Make Buffer and IdList take an ActorId and expose it. Keep the legacy integer constructor only if it cannot silently mint an identity that looks valid; an operation carrying a default-constructed (invalid) ActorId is rejected, per P02.
+6. Opaque operation values: move construction and field layout out of the public header so the fast paths that touch fields do so through internal accessors.
 
 **Acceptance:**
 
 - The independent model and the engine agree on ordering for every generated pair of identities, including equal-locator ties from different actors.
 - Two distinct ActorIds never share an identity, and a default-constructed ActorId is rejected as invalid_identity rather than treated as actor 0.
 - The recorded before/after size of an identity is stated in the task log, and no convergence test regresses.
+- The identity-allocation contract and independent fixtures prove non-aliasing across character runs/splits/deletions/undo and specify reservation/log failure semantics; P06b/P07/L02 inherit those obligations. A checked scalar counter by itself does not satisfy this gate.
 
-**Verification:** Run the identity model and Buffer/IdList convergence suites in Debug, Release, and ASan; state the measured sizeof(Lamport) and sizeof(FragmentSummary) before and after.
+**Verification:**
 
-**Design/decision gate:** Ordering contract and independent model must exist and run before the engine types change.
+Run the identity model and Buffer/IdList convergence suites in Debug, Release, and ASan; state the measured sizeof(Lamport) and sizeof(FragmentSummary) before and after.
 
 ## P06b — Implement versioned sparse codecs for the new identity and opaque values
 

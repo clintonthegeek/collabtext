@@ -18,7 +18,7 @@ a caller knows what to expect.
 C++23's `std::expected` is not required. The project ships a small C++20 type.
 
 ```cpp
-namespace collabtext {
+namespace CollabText {
 
 template <class T>
 class Result {
@@ -27,19 +27,23 @@ public:
     Result(Error error);              // implicit: failure
 
     [[nodiscard]] bool ok() const noexcept;
-    [[nodiscard]] const T& value() const;   // precondition ok()
+    [[nodiscard]] const T& value() const &; // precondition ok()
+    [[nodiscard]] T& value() &;
+    [[nodiscard]] T&& value() &&;           // permits move-only operation values
     [[nodiscard]] const Error& error() const; // precondition !ok()
 
     template <class U> T value_or(U fallback) const;
 
-    // No throwing accessor on purpose: a caller that ignores an error gets a
-    // compile error, not a runtime surprise.
+    // value()/error() require the caller to check the corresponding outcome.
+    // [[nodiscard]] requests a diagnostic; it does not force a compile error.
 };
 
-}  // namespace collabtext
+}  // namespace CollabText
 ```
 
-`Result` is `[[nodiscard]]`, movable, and never allocates. Errors are values, so
+`Result` is `[[nodiscard]]` and movable. Its optional-value wrapper does not
+allocate separately, but a stored value or Error owns memory and may allocate.
+Errors are values, so
 they can be inspected, counted, and asserted on in tests without a framework.
 
 ## 2. Identity and counters
@@ -130,9 +134,11 @@ enum class ErrorCode {
     invalid_identity, actor_conflict, wrong_epoch, unknown_stream,
     counter_regression, counter_exhausted,
     // apply
-    unresolvable_anchor,
+    unresolvable_anchor, history_unavailable, reentrant_mutation,
     // store
     corrupt_record, missing_recovery_point, coverage_gap, io_error,
+    commit_uncertain,       // published; durability not confirmed; reconcile
+    unsupported_operation, // platform cannot supply requested guarantee
     // limits
     deferred_queue_full, retired_member,
 };
@@ -195,8 +201,8 @@ divergence: `awaiting()` returns `std::optional<Crdt::Lamport>` rather than
 `std::optional<OperationId>`, because the engine's operation identity is still
 the Lamport pair. The Lamport is a *witness* for the caller's benefit — "what are
 you waiting for" — and not a key they should store. P06 makes operations opaque
-and `ActorId`-keyed, at which point `awaiting()` becomes `OperationId` with no
-change to callers, who only ever compare or display the value.
+and `ActorId`-keyed, at which point `awaiting()` becomes `OperationId`. This is a source break for
+callers naming the provisional witness type; callers must not persist it.
 
 The order in which an engine reaches these verdicts is itself part of the
 contract; see vnext-protocol.md §4.1 for why identity is checked before
@@ -205,6 +211,14 @@ contract; see vnext-protocol.md §4.1 for why identity is checked before
 ## 6. Engine surface
 
 Both primitives expose the same shape. Neither is the other's alias.
+S04 implements the opaque Anchor encode/decode API and the position contract in
+[vnext-external-position-contract.md](vnext-external-position-contract.md).
+`ResolvedTextPosition` carries an actual UTF-8 byte offset on a scalar boundary;
+`ResolvedListPosition` carries an actual element index. Both report boundary
+placement/collapse under S02's exact rules. Errors distinguish unavailable causal
+context, foreign/unsupported tokens, and unavailable history. The final type names
+and fields are frozen at S04/A02; an ApplyOutcome with no position cannot satisfy
+resolution. Scoped start/end/empty anchors are values, not universal sentinels.
 
 ```cpp
 class Buffer {
@@ -219,14 +233,14 @@ public:
     [[nodiscard]] Result<BufferOperation> undo();
     [[nodiscard]] Result<BufferOperation> redo();
 
-    // Remote application. Never throws; always says what happened.
+    // Remote application reports applied/duplicate/deferred/rejected explicitly.
     [[nodiscard]] ApplyOutcome apply_remote(const BufferOperation& op);
 
     [[nodiscard]] std::string_view text() const;
 
     // Anchors
     [[nodiscard]] Result<Anchor> anchor_at(uint32_t byte_offset, Affinity) const;
-    [[nodiscard]] ApplyOutcome resolve_anchor(const Anchor&);   // explicit failure
+    [[nodiscard]] Result<ResolvedTextPosition> resolve_anchor(const Anchor&) const;
 };
 
 class IdList {
@@ -240,7 +254,8 @@ public:
 
     [[nodiscard]] ApplyOutcome apply_remote(const IdListOperation& op);
     [[nodiscard]] std::vector<uint64_t> ids() const;
-    [[nodiscard]] Anchor anchor_of(uint64_t id, Affinity) const;
+    [[nodiscard]] Result<Anchor> anchor_of(uint64_t id, Affinity) const;
+    [[nodiscard]] Result<ResolvedListPosition> resolve_anchor(const Anchor&) const;
 };
 ```
 
@@ -248,10 +263,10 @@ Two consequences worth stating:
 
 - `undo`/`redo` return `Result`, because after C3 they persist: failing to record
   the new history entry is a real failure, not something to swallow.
-- `resolve_anchor` returns an outcome, not an integer, because an unresolvable or
-  wrong-epoch anchor is an explicit outcome (R6). Today's
-  `uint32_t resolve_anchor(...)` that silently clamps to the document end is the
-  behaviour this replaces.
+- `resolve_anchor` returns `Result<ResolvedTextPosition>` or
+  `Result<ResolvedListPosition>`: success contains a position and failure contains
+  an error (R6). Today's integer fallback to document end is the behavior replaced.
+  Encoding/decoding a token does not register a retention pin.
 
 `IdList::local_clear()` keeps its current semantics (documented in
 `api-inventory.md` §4) and returns a `Result` so a caller can tell a failed clear
@@ -281,9 +296,12 @@ The rules, stated once for every callback in the library:
 
 1. **Single owner.** One callback per event. Registering a second replaces the
    first; there is no list and no fan-out inside the engine.
-2. **Non-reentrant.** A callback must not call back into the engine or its
-   transport. Doing so is undefined behaviour, not a deadlock to be diagnosed.
-   To act on a change, return from the callback and then act.
+2. **Non-reentrant mutation.** A04 must detect and reject mutation of the same
+   engine/transport during notification with a typed outcome before changing
+   state. Read-only inspection and callback removal are defined; dispatch uses a
+   stable callback snapshot. Defer follow-up mutation until notification returns.
+   A reentrant caller is not permitted to corrupt the engine through undefined
+   behavior. These checks are planned, not implemented by P05.
 3. **Lifetimes.** The engine owns the `std::function`. A callback capturing a raw
    pointer to an object that dies first is a caller bug; the library does not
    keep the object alive and does not check.
@@ -337,7 +355,7 @@ needed and did not have.
 | `Buffer(uint16_t replica_id)` | `Buffer(ActorId)` | 16-bit ids cannot survive offline enrollment (R1) |
 | `apply_ops(...)` returning `void` | `apply_remote(...) -> ApplyOutcome` | duplicate/deferred/rejected must be distinguishable (R1) |
 | `undo()/redo()` returning `optional<Operation>` | `Result<BufferOperation>` | persistence can fail (C3) |
-| `uint32_t resolve_anchor(...)` | `ApplyOutcome resolve_anchor(...)` | unresolvable is an explicit outcome (R6) |
+| `uint32_t resolve_anchor(...)` | `Result<ResolvedTextPosition>` / `Result<ResolvedListPosition>` | success carries a position; failure never fabricates end (R6) |
 | `Operation` with public fields | opaque `BufferOperation` | field layout is not a contract |
 | `OpStream::lowest_peer_acked_lamport()` | `receipts()` per stream | a scalar cannot mean cross-stream coverage |
 | `collect_garbage()` / `compact(Global)` | replaced by G06's certificate | receipt is not authority (C14) |
@@ -365,7 +383,12 @@ Landed:
   was the difference between a documented refusal and undefined behaviour, since
   the old bodies asserted and then used the unvalidated value anyway.
 - A change callback on `Buffer`, which had none, firing only for applied
-  operations.
+  operations. Final visible-change batch filtering/removal/reentrancy remains A04.
+- Review amendments: `IdList::try_anchor_of` returns a typed miss; local text edits
+  reject UTF-8 interior boundaries; blocked operations still undergo semantic
+  validation. Deferred and diagnostic quarantine queues have separate count/byte
+  budgets; `take_quarantined()` drains diagnostic retention. The caller retains
+  ownership of rejected input and the transport/store must preserve its bytes.
 
 Not landed, and still owed:
 
@@ -377,7 +400,7 @@ Not landed, and still owed:
   the identity fields that exist and records the epoch check as a gap rather
   than inventing one; it belongs with P06 (opaque operations), P07 (envelope and
   transport outcomes), and L04 (persisted envelope identity).
-- `undo()`/`redo()` returning `Result`, `resolve_anchor` returning `ApplyOutcome`,
+- `undo()`/`redo()` returning `Result`, typed position resolution,
   and opaque operations — those are P06, S04, and A02.
 
 ## 10. Examples
@@ -390,33 +413,35 @@ against the installed package. They are written to be transcribed exactly.
 ```cpp
 #include <collabtext/Buffer.h>
 #include <collabtext/Result.h>
+#include <array>
+#include <string_view>
+#include <utility>
 
-collabtext::Result<collabtext::BufferOperation> type(const std::string& where) {
-    const collabtext::ActorId actor = collabtext::ActorId::generate().value();
-    collabtext::Buffer buffer(actor);
-
-    // Local mutation reports failure instead of pretending to succeed.
-    const auto edited = buffer.apply_local_edit({{{0, 0}}}, {"hello"});
+// buffer belongs to a session with a durable ReplicaState owner.
+CollabText::Result<CollabText::BufferOperation> type(CollabText::Buffer& buffer) {
+    const std::array<CollabText::TextRange, 1> ranges{{{0, 0}}};
+    const std::array<std::string_view, 1> replacements{{"hello"}};
+    auto edited = buffer.apply_local_edit(ranges, replacements);
     if (!edited.ok()) return edited.error();
-    return edited.value();
+    return std::move(edited).value(); // the operation is move-only
 }
 ```
 
 ### 10.2 Applying remote operations, with every outcome handled
 
 ```cpp
-void on_inbound(collabtext::Buffer& buffer, const collabtext::BufferOperation& op) {
-    const collabtext::ApplyOutcome outcome = buffer.apply_remote(op);
+void on_inbound(CollabText::Buffer& buffer, const CollabText::BufferOperation& op) {
+    const CollabText::ApplyOutcome outcome = buffer.apply_remote(op);
     switch (outcome.kind()) {
-        case collabtext::ApplyOutcomeKind::applied:
+        case CollabText::ApplyOutcomeKind::applied:
             redraw(buffer.text());
             break;
-        case collabtext::ApplyOutcomeKind::duplicate:
+        case CollabText::ApplyOutcomeKind::duplicate:
             break;                       // idempotent; not an error
-        case collabtext::ApplyOutcomeKind::deferred:
+        case CollabText::ApplyOutcomeKind::deferred:
             note_pending(*outcome.awaiting());
             break;
-        case collabtext::ApplyOutcomeKind::rejected:
+        case CollabText::ApplyOutcomeKind::rejected:
             quarantine(*outcome.error());
             break;
     }
@@ -427,21 +452,28 @@ void on_inbound(collabtext::Buffer& buffer, const collabtext::BufferOperation& o
 
 ```cpp
 // A scalar maximum would be wrong here: these two counters are unrelated.
-const auto text_op    = buffer.apply_local_edit({{{0, 0}}}, {"a"}).value();
-const auto comment_op = comments.insert_after(anchor, 42).value();
-
-assert(text_op.context().id.counter == 1);
-assert(comment_op.context().id.counter == 1);   // separate space, same value
-assert(text_op.context().stream != comment_op.context().stream);
+const std::array<CollabText::TextRange, 1> ranges{{{0, 0}}};
+const std::array<std::string_view, 1> replacements{{"a"}};
+auto text = buffer.apply_local_edit(ranges, replacements);
+auto comment = comments.insert_after(anchor, 42);
+if (!text.ok()) { report(text.error()); return; }
+if (!comment.ok()) { report(comment.error()); return; }
+assert(text.value().context().id.counter == 1);
+assert(comment.value().context().id.counter == 1); // fresh, independent streams
+assert(text.value().context().stream != comment.value().context().stream);
 ```
 
 ### 10.4 A structural list, with reset semantics stated
 
 ```cpp
-collabtext::Result<collabtext::IdListOperation> append(collabtext::IdList& list,
+CollabText::Result<CollabText::IdListOperation> append(CollabText::IdList& list,
                                                         uint64_t id) {
-    const auto anchor = list.anchor_of(list.ids().back(), collabtext::Affinity::Left);
-    return list.insert_after(anchor, id);
+    const auto ids = list.ids();
+    if (ids.empty()) return CollabText::Error(
+        CollabText::ErrorCode::unresolvable_anchor, "append example requires an element");
+    auto anchor = list.anchor_of(ids.back(), CollabText::Affinity::Left);
+    if (!anchor.ok()) return anchor.error();
+    return list.insert_after(anchor.value(), id);
 }
 
 // A clear is local, is not a collaboration operation, and can fail visibly.
@@ -454,12 +486,12 @@ if (const auto cleared = list.local_clear(); !cleared.ok()) {
 
 ```cpp
 // A named callback, so the example is unambiguous about who owns it.
-void show_visible_text(const collabtext::ChangeInfo& info) {
+void show_visible_text(const CollabText::ChangeInfo& info) {
     // Only visible change arrives here, and only outside internal locks.
     if (info.visible_change()) status_line().showText(info.text());
 }
 
-const collabtext::Buffer::ChangeCallback on_change = show_visible_text;
+const CollabText::Buffer::ChangeCallback on_change = show_visible_text;
 
 buffer.set_on_change(on_change);
 
@@ -489,3 +521,29 @@ Where this guide names a type they will define — `RecoveryPoint`, `StreamAck`,
 `ChangeInfo`, `Affinity`, `TextRange`, `Anchor` — it fixes the *shape of the
 contract* (what it means, when it may fail, who owns it), not the internals.
 Amendments to this guide are amendments to the plan and update both documents.
+
+
+## 11. Review amendments: durable ownership and external consumers
+
+P02 private ReplicaState is a move-only, single-owner object; one owner serves
+all its documents. Close it before reopening the same private directory. Kernel
+leases persist as files but ownership ends with descriptor close/process death.
+Operation counters start at 1 (zero is invalid); UINT64_MAX is exhaustion.
+Current state-file stream names are ASCII `[A-Za-z0-9_.:-]`, at most 128 bytes.
+Current per-document lease keys allow nonempty document IDs without NUL up to 80
+bytes and stream names up to 32 bytes, encoded as collision-free hex path parts.
+These are provisional P02 file-layout limits, not limits consumers may infer for
+future arbitrary Wave block IDs. L05/A02 must publish the final key policy.
+
+L01 errors after a rename/directory barrier may be `commit_uncertain`: complete
+new contents are already visible, so retry/recovery must reconcile rather than
+assume rollback. Append errors can leave a partial tail; L02 framing/recovery owns
+that case. L01 primitives do not yet give the editor or DocumentSession a working
+save/reopen guarantee. Linux tests do not establish Windows/macOS support.
+
+[External consumer requirements W1–W6](vnext-external-position-contract.md) are
+normative amendments for S04/S05, L05/L06, G01/G06/G08, A02/A06, and E05.
+Published supported vNext position-token bytes must remain readable independently
+of C++ layout. External storage does not create a pin; pin recovery precedes GC.
+Historical playback uses its own matching projection/archive. Formatting is
+explicitly consumer-owned outside the active plain-text/IdList release scope.
