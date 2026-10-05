@@ -43,6 +43,18 @@ class VerificationTests(unittest.TestCase):
         routes, _ = verify.route(['libs/collabtext/tests/tst_identity_allocation_model.cpp'])
         self.assertEqual(next(iter(routes.values())), 'tst_identity_allocation_model')
 
+    def test_boundary_model_change_is_narrow_and_fixture_changes_are_executable(self):
+        routes, package = verify.route(['libs/collabtext/tests/reference/BoundaryModel.h',
+                                       'libs/collabtext/tests/reference/BoundaryApiContract.h'])
+        self.assertEqual(set(routes.values()), {'tst_boundary_model'})
+        self.assertFalse(package)
+        routes, package = verify.route(['libs/collabtext/tests/fixtures/external-position/wp2-strict-referent-delete.json',
+                                       'libs/collabtext/tests/fixtures/external-position/model/retained-orders.json'])
+        for regex in routes.values():
+            for test in ('tst_boundary_model','tst_anchor','tst_anchor_codec','tst_idlist_anchor'):
+                self.assertRegex(test,'^'+regex+'$')
+        self.assertFalse(package)
+
     def test_public_headers_require_package_and_behavior(self):
         routes, package = verify.route(['libs/collabtext/include/collabtext/Engine.h'])
         self.assertTrue(package)

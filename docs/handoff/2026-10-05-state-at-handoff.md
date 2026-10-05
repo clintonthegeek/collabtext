@@ -7,43 +7,38 @@ and registry dependencies; a prose assertion does not complete a task.
 
 ## Completed work
 
-- V01–V08, D01, P01–P05 and L01: validation, independent models, primitive
-  foundations and checked filesystem primitives.
-- A01/A02a/A06a: independent Core/FileTransport/QtAdapter/Widgets build components,
-  installed public headers/capability manifest, relocation and consumer checks.
-  Core-only consumers do not discover Qt. Read `docs/USING_VNEXT.md`.
-- P06a **steps 1–5**, not the whole task: 128-bit actors, uint64 counters,
-  checked run allocation, caller-supplied allocators and invalid-identity refusal.
-- S01: `docs/specs/vnext-sequence-semantics.md`, 17 versioned JSON histories,
-  46 operations and 29 arrival permutations, plus a schema/history validator.
-  Exact desired content, boundary offsets and later token comparisons are
-  specified. This does not implement F8 ordering or F7 position tokens.
+V01–V08, D01, P01–P06a, L01, S01, W01, S04a and packaging A01/A02a/A06a.
+P06a includes the final public operation-opacity step (`01614af`, `d52dceb`),
+with immutable shared values and affected Debug/Release/leak-enabled sanitizers.
+S04a supplies a full scoped-boundary contract, implementation map, compile-checked
+target signatures and independent model. Exact W01 collapse/restoration rules are
+resolved; corrected WP2/WP8 fixtures select the actual referent. F7/F8 production
+fixes, public token bytes, durable undo/pins and store recovery remain pending.
 
 ## Next implementation work
 
-1. **W01:** follow `00-consumer-integration.md`. Create the eight-probe fixture
-   corpus, provenance and schema validator named by its task. The external
-   position contract exists; its executable probe corpus does not. S01's sequence
-   fixtures are useful inputs, not a substitute for WP1–WP8.
-2. **P06a step 6:** finish opaque operation values through internal construction
-   and accessors. P01's public API specification already chooses opacity. This is
-   unfinished implementation, not a missing user-policy answer. Do not silently
-   declare the visible variants an accepted permanent interface.
-3. **S04a**, only after W01/P06a/S01 are complete in the registry: scoped
-   boundary specification, exact outcomes, bounded canonical token codec contract
-   and an independent mint/resolve/compare model. Trace ignored bias, missing
-   text anchors resolving to end, and unscoped end sentinels. The model must
-   detect ignored affinity, erased scope and missing IDs mapped to end; include
-   both legacy and desired repaired item orders. Neighbors alone are insufficient
-   without model evidence. This is the gate for S04b.
-4. Continue S04b, W02/W03, S02/S03 and early alpha preparation following actual
-   dependency edges, not just this abbreviated lane. Keep durable undo/pins,
-   recovery and certified GC obligations explicit.
+1. **P06b:** versioned sparse operation codecs and typed failures. Today's public
+   Serialization.h still says warn-and-skip, and optional-only decoding cannot
+   distinguish unsupported versions. Reuse the bounded JsonReader; retain failed
+   input in the caller, with no advance of coverage. Review allocation/gap-record
+   obligations in vnext-identity.md §3.6 alongside the codec task.
+2. **S04b** after P06b: implement vnext-boundary-semantics.md and the checked facade
+   signatures, with the actual native fragment/entry storage. Golden bytes and
+   a fresh-process replay establish public codec evidence. Follow its expanded
+   file scope including facades/typed errors and clear-history invalidation.
+3. **W02/S02** are independently ready. W02 establishes installed baseline probes;
+   S02 must generate S04a's supplied orders and prove stable relative order of
+   already integrated retained items before S03 can change integration.
+4. W03/E07b and later recovery/order/pin tasks follow registry dependencies.
+   No product-policy question is outstanding. No backend substitution, consumer
+   edits/messages, publication or master integration is authorized by these tasks.
 
-The registry currently depends on **all of P06a** for S04a. No partial-step
-prerequisite was added. Do not invent one in a handoff or start dependent code.
-The user has resolved all product questions in DECISIONS.md. Work on the existing
-native plaintext/IdList engine, retaining transport independence.
+The model ran 21 token-bearing fixtures (50 minted gaps, 48 exact placements,
+24 comparisons), 472 supplied orders and 75,328 visibility states, with two
+identical fixed-seed traces. Debug/Release/ASan/UBSan/LSan pass. This is independent
+boundary evidence over supplied orders; it is not production integration proof.
+The current fixture validator rejects 37 corruption kinds / 362 applications.
+Details and artifacts belong to TASKS.json / vnext-task-log.md.
 
 ## Verification cadence
 
@@ -89,4 +84,4 @@ is implemented but not advertised as an installed self-sufficient public class.
 
 Publications, master integration, edits to Wave/Markoff and messages to consumers
 are separate actions requiring explicit user instruction. Prepare reviewable
-alpha artifacts locally. This turn changes no production integration algorithm.
+alpha artifacts locally. S04a changes no production integration algorithm.

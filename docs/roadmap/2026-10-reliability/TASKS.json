@@ -1439,7 +1439,13 @@
     "libs/collabtext/tests/reference/BoundaryModel.h",
     "libs/collabtext/tests/tst_boundary_model.cpp",
     "libs/collabtext/tests/fixtures/external-position/",
-    "docs/specs/vnext-external-position-contract.md"
+    "docs/specs/vnext-external-position-contract.md",
+    "libs/collabtext/CMakeLists.txt",
+    "tools/validate-consumer-fixtures.py",
+    "libs/collabtext/tests/reference/BoundaryApiContract.h",
+    "docs/specs/vnext-consumer-probes.md",
+    "tools/verify_changed.py",
+    "tools/test_verify_changed.py"
    ],
    "steps": [
     "Trace current anchor_at/resolve_anchor and IdList lookup through origin intervals, fragment splitting, visibility/UndoMap changes, sentinel handling, and ignored bias. Record the exact unsafe helpers and a narrow implementation map for S04b. Use the P06a operation/item allocation domains and per-stream context; never mint a token from a transient fragment pointer, locator, local actor slot, or visible integer offset alone.",
@@ -1463,7 +1469,7 @@
     "R13"
    ],
    "gate": "A complete boundary specification, implementation map, and independent executable model must pass before S04b. An API value declaration or comparator test alone does not satisfy this gate.",
-   "status": "not_started",
+   "status": "in_progress",
    "consumer_requirements": [
     "W1",
     "W2",
@@ -1523,7 +1529,14 @@
     "docs/specs/vnext-boundary-semantics.md",
     "docs/specs/vnext-public-api.md",
     "docs/specs/vnext-alpha-capabilities.md",
-    "docs/specs/vnext-external-position-contract.md"
+    "docs/specs/vnext-external-position-contract.md",
+    "libs/collabtext/include/collabtext/ActorId.h",
+    "libs/collabtext/include/collabtext/CrdtEngine.h",
+    "libs/collabtext/include/collabtext/IdListEngine.h",
+    "libs/collabtext/src/CrdtEngine.cpp",
+    "libs/collabtext/src/IdListEngine.cpp",
+    "libs/collabtext/tests/reference/BoundaryApiContract.h",
+    "libs/collabtext/CMakeLists.txt"
    ],
    "steps": [
     "Implement the reviewed S04a boundary representation and helpers within the existing Buffer/IdList engines. Start with a straightforward checked traversal; preserve item identities through split/deletion/undo and avoid adding a second production sequence engine or an optimization project.",

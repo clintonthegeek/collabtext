@@ -96,3 +96,34 @@ Implementation `01614af` passed Debug bounded 72/72 plus installed Core
 consumer, Release selected 9/9 and unrestricted ASan/UBSan/LSan selected 9/9.
 The restricted sanitizer run passed assertions but failed process inspection and
 is not counted as acceptance. Exact artifacts are recorded in TASKS.json. No benchmarks are run with tests.
+
+
+## Boundary gate completed in the takeover
+
+S04a now supplies [the full contract](../specs/vnext-boundary-semantics.md):
+scoped retained-order fences plus mint coverage, exact affinity, typed
+awaiting/history/scope failures, loss flags, strict selected-referent detachment,
+and restoration of the same token when actual visibility returns. A local clear
+invalidates position history even for an empty token. The native transformation
+map and checked target signatures make S04b concrete; no production marker is
+removed by specification/model work.
+
+The independent model caught WP2's a/c range mislabeled as a caret gap. It also
+caught WP8 selecting surviving a while claiming deleted b. Both now mint a/b
+and explicitly select b for strict attachment. The validator rejects those
+original mistakes, plus missing exact collapse/restoration fields. Its expanded
+self-test rejects 37 corruption kinds applied 362 times. WP6 prose now agrees
+with S01's chosen exact native tie (`abcXYZ`); the consumer did not choose that tie.
+
+Model verification: 21 fixture histories, 50 minted gaps, 48 exact placements,
+24 comparisons; 472 supplied text/list orders, 75,328 visibility states, both
+affinities and selected deletion/undo/redo, with three reduced mutation cases.
+Debug/Release and leak-enabled ASan/UBSan pass. Repeated seed 20261003 traces
+are identical. Full sequence integration, actual token codec, store reopen,
+persistent undo and pins/GC remain their implementation tasks. No benchmark ran.
+
+Next codec review found a stale public warn-and-skip instruction and optional-only
+version errors. P06b must replace them with bounded, typed versioned decoding and
+retain failures at its callers. Do not conceal that behavior behind a round-trip
+pass. The codec also owns allocation/gap representation under identity §3.6;
+P07/L02 own integration/publication, which remains separate.

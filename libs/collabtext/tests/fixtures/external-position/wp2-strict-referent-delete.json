@@ -91,7 +91,7 @@
    ],
    "between": [
     "A/1",
-    "A/5"
+    "A/3"
    ],
    "affinity": "left"
   },
@@ -102,7 +102,7 @@
    ],
    "between": [
     "A/1",
-    "A/5"
+    "A/3"
    ],
    "affinity": "left"
   }
@@ -126,26 +126,20 @@
    "token": "caret-same-place",
    "collapsed": true,
    "source": "roadmap_inference",
-   "citation": "W2"
-  },
-  {
-   "id": "strict_collapse_placement_rule",
-   "kind": "design_pending",
-   "token": "strict-around-b",
-   "pending_rule": "collapse_placement",
-   "owner": "S04a",
-   "note": "Which neighbouring boundary a strict attachment collapses to is unresolved by design. The mandatory observable outcome above is that loss is surfaced, never a bare relocated offset.",
-   "source": "roadmap_inference",
-   "citation": "W2; 00-consumer-integration.md"
+   "citation": "W2; vnext-boundary-semantics.md \u00a73",
+   "offset": 1
   },
   {
    "id": "undo_restores_deleted_referent",
-   "kind": "design_pending",
-   "pending_rule": "undo_restore_of_referent",
-   "owner": "S04a",
-   "note": "Whether undo can restore a deleted referent is a design gate decision, not an assumption this fixture may bake in.",
+   "kind": "restored_after_undo",
+   "token": "strict-around-b",
+   "referent": "A/3",
+   "operation": "A/8",
+   "offset": 1,
+   "collapsed": false,
    "source": "roadmap_inference",
-   "citation": "W2"
+   "citation": "vnext-boundary-semantics.md \u00a73",
+   "note": "A valid selective undo of the sole deletion makes b visible again; resolve the original following-referent token, without reminting. A redo detaches it again."
   }
  ],
  "ownership": {
@@ -179,7 +173,20 @@
    "A/3"
   ],
   "text": "ac",
-  "positions": {},
-  "comparisons": []
+  "positions": {
+   "caret-same-place": {
+    "offset": 1,
+    "state": "collapsed"
+   }
+  },
+  "comparisons": [],
+  "retained_order": [
+   "A/1",
+   "A/3",
+   "A/5"
+  ]
+ },
+ "strict_sides": {
+  "strict-around-b": "following"
  }
 }

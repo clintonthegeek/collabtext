@@ -4,7 +4,7 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status (2026-10-05):** V01–V08, D01, P01–P05, L01, S01 and packaging A01/A02a/A06a are complete. P06a steps 1–5 have landed; opaque operation values in step 6 remain. W01's consumer probe corpus is not implemented. **Next: W01 and the remaining P06a work, then S04a once its registry dependencies are complete.** Previous handoff claims that W01/S01 were already done and S04a was ready were incorrect. See the corrected [state at handoff](../../handoff/2026-10-05-state-at-handoff.md) and [development throughput review](../../reports/2026-10-05-development-throughput-review.md). W1–W6 and Wave ask2 remain accepted into the [early consumer lane](00-consumer-integration.md). `TASKS.json` is authoritative. Benchmarks run separately from tests; engine optimization is deferred while consumer correctness advances.
+**Status (2026-10-05):** V01–V08, D01, P01–P06a, L01, S01, W01, S04a and packaging A01/A02a/A06a are complete. P06a opacity is verified. S04a specifies and model-checks scoped boundaries, exact collapse/strict restoration and a candidate token codec; it does not implement production positions. **Next: P06b, then S04b; W02 and S02 are independently ready.** See [takeover review](../../reports/2026-10-05-takeover-review.md), [boundary contract](../../specs/vnext-boundary-semantics.md) and TASKS.json. Benchmarks remain separate; engine optimization is deferred.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **72 active tasks across eight technical areas plus an early consumer integration lane**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
@@ -37,7 +37,7 @@ Read [00 — early consumer integration](00-consumer-integration.md) for the pre
 
 ```mermaid
 flowchart TD
-    V["Completed validation / public contracts"] --> P["P06a: finish identity adoption"]
+    V["Completed validation / public contracts"] --> P["P06a: identity adoption complete"]
     V --> A["A01 / A02a / A06a: installed alpha package"]
     V --> W["W01: versioned probe fixtures"]
     A --> B["W02 / E07a: baseline probes + package candidate"]
@@ -59,11 +59,11 @@ flowchart TD
 ```
 
 The diagram groups work and omits some edges; TASKS.json is authoritative. The
-preferred single-executor order is: S04a → S04b; W02 → E07a; W03 → E07b; S02 → S03;
-(A01, A02a, A06a, W01 and S01 are done. P06a's remaining step 6 is blocked and
-does not gate any of the above.)
-P07 → P08 → L02–L08; then S04–S07 and the remaining G/A/X/E tasks in registry
-order. A blocked current task does not prevent independent ready work.
+preferred single-executor order is: P06b → S04b → W03 → E07b;
+W02 → E07a; S02 → S03; P07 → P08 → L02–L08; then S04–S07 and
+remaining G/A/X/E tasks in registry order. A01/A02a/A06a, W01/S01,
+P06a and S04a are complete. Follow actual dependencies; S04b still requires
+P06b despite its now-complete boundary gate.
 
 Baseline/alpha preparation does not complete recovery, persistent undo/redo,
 durable pins, or repaired ordering. Live positions are usable before those gates
@@ -141,9 +141,9 @@ No recommendation is considered complete merely because it appears in a plan. E0
 
 ## Implementation handoff
 
-- **Next:** Complete W01's probe corpus and P06a step 6, then S04a. The existing P01 specification chooses opaque operation values; no fresh product decision is required. S04a must supply boundary pseudocode, typed outcomes, canonical token rules and an independent model detecting ignored affinity, erased scope and missing IDs mapped to end. Only then begin S04b and installed probes according to TASKS.json. S02/S03 and reclamation likewise retain their design/model gates.
+- **Next:** P06b supplies checked versioned operation codecs, then S04b implements the reviewed live-position contract and token bytes. W02 and S02 are also ready. The S04a model passes its exact/bounded cases; no production F7/F8 marker was removed.
 - **Independent review:** the [review report](../../reports/2026-10-04-reliability-progress-review.md) records reproduced defects and fixes in P02/P04/P05/L01, executable evidence, and limitations. The old kickoff handoff is historical.
-- **Identity:** ReplicaState now has one move-only kernel-lease owner per private directory, nonzero counter reservations, strict state directives, and checked atomic persistence. The allocation contract is written and executable (vnext-identity.md §3.1–§3.8, with an independent model and a checked `reserve_run`), including the gap-record obligation a crash between reservation and log append creates. The engine now consumes ActorId and a supplied checked allocator; P06a step 6 must finish public operation opacity.
+- **Identity:** ReplicaState now has one move-only kernel-lease owner per private directory, nonzero counter reservations, strict state directives, and checked atomic persistence. The allocation contract is written and executable (vnext-identity.md §3.1–§3.8, with an independent model and a checked `reserve_run`), including the gap-record obligation a crash between reservation and log append creates. The engine now consumes ActorId and a supplied checked allocator; P06a step 6 has completed public operation opacity with immutable shared values.
 - **Validation:** the bounded reader rejects literal/escaped string overflow and duplicate keys; semantic validation also checks actor head-of-line queues. Deferred and diagnostic quarantine queues are separately bounded. The caller/store retains rejected input. Legacy operation serializers remain until P06b; P04/P05 did not complete all of F10.
 - **Coverage:** Global::coverage_intersection is a durable-watermark intersection; Global::meet is a nonzero-min summary fold. The latter cannot authorize GC. F3's marker was removed for the intended API; an old probe calling meet is not the new coverage contract.
 - **Durability:** L01 provides checked file primitives, first-append directory barriers, unique temporary files, kernel leases, and explicit uncertain publication outcomes. SegmentWriter/StreamSync/session/save wiring remains L02–L08; F9 is not yet solved end to end. Process-kill evidence is not power-loss/platform certification.

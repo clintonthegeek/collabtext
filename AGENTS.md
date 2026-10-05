@@ -13,20 +13,19 @@ W1–W6 consumer cases.
 
 ## Where the work is, as of 2026-10-05
 
-**Done:** V01–V08, D01, P01–P06a, L01, S01, W01 and packaging
+**Done:** V01–V08, D01, P01–P06a, L01, S01, W01, S04a and packaging
 A01/A02a/A06a. Registry count: 72. S01/W01 are validated desired histories and
 probe fixtures, not production F7/F8 fixes. P06a's final operation-opacity step
 has passed affected Debug/Release/sanitizer and installed-consumer checks.
 
-**Do next: S04a**, scoped boundary specification and independent reference model.
-Its complete P06a/S01/W01 prerequisites are now met. The takeover review records
-Wave source integration findings and a pending fixture's range/caret distinction.
-Finish exact collapse/strict attachment/undo restoration rules here; these are
-technical design choices within the accepted contract, not new product questions.
-W02 and P06b are separately ready. No comparator-only or draft-API shortcut may
-replace the boundary/order model gates.
+**Do next: P06b**, checked versioned operation codecs, then S04b's live positions.
+S04a is complete: exact scoped boundary semantics, strict selected-referent loss
+and original-token undo restoration, canonical codec candidate and independent
+model. Debug/Release/sanitizer gates passed; production positions remain pending.
+W02/S02 are separately ready. The takeover review records Wave's ASCII token
+wrapping/affinity adapter obligations and corrected W01 fixtures.
 
-**Then:** S04a → S04b, installed W02/W03 probes, S02/S03 and E07a/E07b,
+**Then:** P06b → S04b, installed W02/W03 probes, S02/S03 and E07a/E07b,
 following the actual registry dependencies and the early consumer lane. S04a is
 the independent live-boundary model gate; F7/F8 remain outstanding. Complete
 required design/model gates before production changes.

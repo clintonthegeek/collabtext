@@ -37,7 +37,7 @@ ALL_KINDS = RESOLVED_KINDS | UNRESOLVED_KINDS | {
     'evidence_rule', 'no_fabricated_offset', 'no_mutation_no_abort',
     'no_assert_no_abort', 'consumer_owned_check', 'mutation_refused',
     'scoped_affinity_token', 'unit_declaration', 'reclamation_disabled',
-    'not_a_pin', 'requires_pin', 'provenance_note',
+    'not_a_pin', 'requires_pin', 'provenance_note', 'restored_after_undo',
 }
 
 
@@ -83,13 +83,13 @@ def boundary_range(case, order, token):
     values = case['_values']
 
     def width(item):
-        if item == 'END':
+        if item == 'END' or item in case['expected']['hidden']:
             return 0
         return len(values[item].encode('utf-8')) if case['primitive'] == 'text' else 1
 
     def start_of(target):
         running = 0
-        for item in order:
+        for item in case['expected'].get('retained_order', order):
             if item == target:
                 return running
             running += width(item)
@@ -132,7 +132,37 @@ def validate_expectation(case, spec):
         placement = case['expected']['positions'].get(token)
         require(placement is not None, 'resolved token has no expected position')
         require(placement['offset'] == spec['offset']
-                and placement['state'] == 'resolved', 'expectation contradicts position')
+                and placement['state'] == ('collapsed' if spec['collapsed'] else 'resolved'),
+                'expectation contradicts position')
+    if spec['kind'] == 'detached':
+        require(token in case['_tokens'], 'detachment needs a token')
+        side = case.get('strict_sides', {}).get(token)
+        require(side in ('preceding', 'following'), 'detachment needs a selected strict referent')
+        referent = case['_tokens'][token]['between'][0 if side == 'preceding' else 1]
+        require(referent in case['expected']['hidden'], 'selected referent was not deleted')
+    if spec['kind'] == 'collapsed':
+        require(token in case['_tokens'], 'collapsed expectation needs a token')
+        placement = case['expected']['positions'].get(token)
+        require(placement is not None and placement['state'] == 'collapsed'
+                and type(spec.get('offset')) is int
+                and placement['offset'] == spec['offset']
+                and spec.get('collapsed') is True, 'collapse lacks exact placement')
+    if spec['kind'] == 'restored_after_undo':
+        require(token in case['_tokens'], 'restoration needs original token')
+        referent = spec.get('referent')
+        require(case.get('strict_sides', {}).get(token) == 'following'
+                and case['_tokens'][token]['between'][1] == referent,
+                'restoration must select the original strict referent')
+        deletions = [e for e in case['operations'] if e['kind'] == 'delete'
+                     and referent in e['targets']]
+        require(len(deletions) == 1 and deletions[0]['id'] == spec.get('operation'),
+                'restoration must undo the sole referent deletion')
+        require(referent in case['expected']['hidden'], 'restoration referent is not deleted')
+        restored = copy.deepcopy(case)
+        restored['expected']['hidden'].remove(referent)
+        lo, hi = boundary_range(restored, restored['expected']['order'], case['_tokens'][token])
+        require(type(spec.get('offset')) is int and spec['offset'] == lo == hi
+                and spec.get('collapsed') is False, 'restoration contradicts exact gap')
     if spec['kind'] == 'comparison':
         left, right = spec.get('left'), spec.get('right')
         require(left in case['_tokens'] and right in case['_tokens'],
@@ -294,6 +324,12 @@ def validate(case):
         require(expected['ids'] == [values[i] for i in order],
                 'expected ids contradict the expected order')
 
+    retained = expected.get('retained_order')
+    if retained is not None:
+        require(len(retained) == len(values) and set(retained) == set(values),
+                'invalid retained logical order')
+        require([i for i in retained if i not in hidden] == order,
+                'retained order contradicts visible order')
     case['_values'] = values
     edges = boundaries_of(case, order)
 
@@ -309,6 +345,19 @@ def validate(case):
         for parent in token['after']:
             observed.add(parent)
             observed.update(causal[parent])
+        pair = token['between']
+        require(isinstance(pair, list) and len(pair) == 2, 'token needs two fences')
+        require((pair[0] == 'START' or pair[0] in values)
+                and (pair[1] == 'END' or pair[1] in values), 'wrong scope-edge direction')
+        if retained is not None:
+            deleted_at_mint = {target for eid in observed
+                               if operations[eid]['kind'] == 'delete'
+                               for target in operations[eid]['targets']}
+            visible_at_mint = [i for i in retained
+                               if (owners[i] is None or owners[i] in observed)
+                               and i not in deleted_at_mint]
+            gaps = list(zip(['START'] + visible_at_mint, visible_at_mint + ['END']))
+            require(tuple(pair) in gaps, 'token was not a visible gap at mint')
         for neighbour in token['between']:
             require(neighbour in ('START', 'END') or neighbour in values,
                     'unknown token neighbour')
@@ -322,6 +371,13 @@ def validate(case):
     require(set(kinds) <= set(tokens), 'attachment kind names an unknown token')
     for tid, attachment in kinds.items():
         require(attachment in ('caret', 'strict'), 'invalid attachment kind')
+
+    sides = case.get('strict_sides', {})
+    for tid, side in sides.items():
+        require(tid in tokens and kinds.get(tid) == 'strict'
+                and side in ('preceding', 'following'), 'invalid strict referent side')
+        require(tokens[tid]['between'][0 if side == 'preceding' else 1]
+                not in ('START', 'END'), 'strict referent cannot be a scope edge')
 
     # A token's offset must follow from its neighbours, not merely be restated.
     for tid, token in tokens.items():
@@ -698,6 +754,54 @@ def _(case):
     if 'missing_list_lookup' not in case:
         return None
     case['missing_list_lookup']['value'] = case['expected']['ids'][0]
+    return case
+
+
+@mutation('strict side names a scope edge')
+def _(case):
+    if not case.get('strict_sides'):
+        return None
+    tid = next(iter(case['strict_sides']))
+    next(t for t in case['tokens'] if t['id'] == tid)['between'][1] = 'END'
+    return case
+
+@mutation('collapse has no exact placement')
+def _(case):
+    for spec in case['expectations']:
+        if spec['kind'] == 'collapsed':
+            spec.pop('offset')
+            return case
+    return None
+
+@mutation('undo restoration targets a different referent')
+def _(case):
+    for spec in case['expectations']:
+        if spec['kind'] == 'restored_after_undo':
+            spec['referent'] = 'A/1'
+            return case
+    return None
+
+@mutation('retained order contradicts visibility')
+def _(case):
+    if 'retained_order' not in case['expected']:
+        return None
+    case['expected']['retained_order'].reverse()
+    return case
+
+
+@mutation('strict detachment selects a surviving item')
+def _(case):
+    if not case.get('strict_sides'):
+        return None
+    tid = next(iter(case['strict_sides']))
+    next(t for t in case['tokens'] if t['id'] == tid)['between'] = ['START', case['expected']['order'][0]]
+    return case
+
+@mutation('caret fence pair encloses a visible item at mint')
+def _(case):
+    if case['id'] != 'wp2-strict-referent-delete':
+        return None
+    next(t for t in case['tokens'] if t['id'] == 'caret-same-place')['between'] = ['A/1', 'A/5']
     return case
 
 

@@ -40,9 +40,10 @@ ROUTES = [
     # Shared clocks, queues, trees and operation types affect both engines.
     ('libs/collabtext/src/crdt/*', BROAD),
     ('libs/collabtext/src/*.cpp', BROAD),
+    ('libs/collabtext/tests/reference/Boundary*.h', 'tst_boundary_model'),
     ('libs/collabtext/tests/tst_*.cpp', 'OWN_TEST'),
     ('libs/collabtext/tests/fixtures/sequence-semantics/*', r'tst_(sequence_.*|boundary_.*)'),
-    ('libs/collabtext/tests/fixtures/external-position/*', ''),
+    ('libs/collabtext/tests/fixtures/external-position/*', r'tst_(boundary_model|anchor.*|idlist_anchor)'),
     ('libs/collabtext/tests/*', BROAD),
 ]
 PACKAGE_PATHS = ('CMakeLists.txt', 'libs/collabtext/CMakeLists.txt', 'cmake/*',

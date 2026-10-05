@@ -19,17 +19,14 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 5. Mark the task `in_progress`, record the baseline revision and relevant failures, and read every existing file the task will touch. Paths named as new files are not missing prerequisites.
 
 `validate-plan.py --ready` lists structurally ready tasks. It cannot establish
-technical acceptance: check the referenced artifacts as well. Packaging A01,
-A02a and A06a and identity adoption P06a steps 1–5 have landed. S01 supplies
-checked-in desired sequence histories. W01's consumer probe corpus is still
-missing, and P06a step 6 (opaque operation values) remains implementation work.
-Complete W01 and finish P06a before S04a; the registry depends on the whole
-P06a task, not an unrecorded partial milestone. The existing P01 public API
-specification already requires opaque values; this is not a new user-policy
-question. S04a/S04b then unlock live-position probes on the early consumer lane.
-Read [current handoff](../../handoff/2026-10-05-state-at-handoff.md) and
+technical acceptance: check the referenced artifacts as well. Packaging
+A01/A02a/A06a, P06a, S01/W01 and S04a are complete. The S04a contract/model
+settles affinity, scope, collapse, strict referent restoration and codec rules.
+Continue P06b's versioned codec before S04b's production positions; W02/S02 are
+independently ready. A model/fixture pass is not a production capability pass.
+Read [current handoff](../../handoff/2026-10-05-state-at-handoff.md),
+[boundary contract](../../specs/vnext-boundary-semantics.md) and
 [external requirements](../../specs/vnext-external-position-contract.md).
-A named test in a specification is not implementation evidence.
 
 ## Implementing the selected task
 

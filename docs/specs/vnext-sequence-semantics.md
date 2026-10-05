@@ -70,8 +70,9 @@ Tokens in the fixtures are semantic directives, not an encoding of today's
 Anchor layout. They bind document, stream, primitive and epoch, retain their
 mint causal state, and identify neighboring stable items or scoped START/END.
 That is the input requirement, not a proof that two neighbors alone suffice for
-the full representation. S04a supplies sufficient context, mint/resolve/compare
-pseudocode and the independent boundary model. S04b supplies actual public bytes.
+the full representation. S04a now supplies sufficient context, mint/resolve/compare
+pseudocode and an independent supplied-order model in
+[vnext-boundary-semantics.md](vnext-boundary-semantics.md). S04b supplies actual public bytes.
 
 In `ab`, mint the same boundary at byte 1 before inserting X there: Left resolves
 to 1 and Right to 2 in `aXb`. Minting on an empty document, at start, and at end
@@ -91,8 +92,11 @@ deleting both seeded neighbors yields `X`. The fixture's old gap remains a
 defined caret boundary: Left=0, Right=1, with explicit collapse information
 because original neighbor context was removed. This does not assert that a
 strict content attachment still targets an intact passage. Such a consumer can
-surface detachment from that explicit information. S04a defines the precise
-referent-loss/undo rules and awaiting/unavailable outcomes; wrong-object and
+surface detachment from that explicit information. The S04a contract selects an explicit preceding/following referent for strict
+attachments: selected loss detaches, and actual visibility restoration makes the
+original token resolve again while its identity is retained. It also requires
+relative order preservation of already integrated retained items from S02.
+Awaiting mint state is distinct from unavailable history; wrong-object and
 malformed inputs must always reject explicitly. GC/pins/translation belong to
 S05/G-series tasks and are not implemented or proven here.
 

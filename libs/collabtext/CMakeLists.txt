@@ -314,6 +314,13 @@ add_crdt_test(tst_summary_laws)
 add_crdt_test(tst_decode_validation)
 add_crdt_test(tst_operation_validation)
 add_crdt_test(tst_operation_values)
+# Independent S04a model links QtTest only: no production Core or anchor helpers.
+add_executable(tst_boundary_model tests/tst_boundary_model.cpp)
+target_link_libraries(tst_boundary_model PRIVATE Qt6::Test)
+target_include_directories(tst_boundary_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_definitions(tst_boundary_model PRIVATE
+    COLLABTEXT_BOUNDARY_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+add_test(NAME tst_boundary_model COMMAND tst_boundary_model)
 add_crdt_test(tst_identity_ordering_model)
 add_crdt_test(tst_identity_allocation_model)
 add_crdt_test(tst_identity_types)

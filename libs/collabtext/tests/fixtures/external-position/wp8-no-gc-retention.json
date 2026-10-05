@@ -72,8 +72,8 @@
     "A/4"
    ],
    "between": [
-    "START",
-    "A/1"
+    "A/1",
+    "A/3"
    ],
    "affinity": "left"
   }
@@ -147,6 +147,13 @@
   ],
   "text": "a",
   "positions": {},
-  "comparisons": []
+  "comparisons": [],
+  "retained_order": [
+   "A/1",
+   "A/3"
+  ]
+ },
+ "strict_sides": {
+  "stored-elsewhere": "following"
  }
 }

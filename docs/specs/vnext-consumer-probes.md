@@ -104,15 +104,19 @@ failure from every deletion (`00-consumer-integration.md`):
 | Attachment kind | Requirement | Source |
 |---|---|---|
 | **Caret** (`caret`) | A surviving boundary resolves with an offset. Deleting a *neighbouring* character does not destroy a caret. | W2, `roadmap_inference` |
-| **Caret, referent deleted** | Resolves **with an explicit `collapsed` marker** — a position plus the fact that collapse occurred. | W2 `consumer_asserted` (must report collapse) + placement `design_pending` |
+| **Caret, referent deleted** | Resolves **with an explicit `collapsed` marker** — a position plus the fact that collapse occurred. | W2 `consumer_asserted` (must report collapse) + exact placement S04a |
 | **Strict content** (`strict`) | Surfaces `detached` or `unavailable`. **Never** a bare relocated integer. | W2, `consumer_asserted` |
 
-**`design_pending` (owner S04a):** the exact placement rule when a strict
-attachment's referent is deleted — which neighbouring boundary it collapses to,
-and whether undo can restore the referent. Fixtures record the mandatory
-observable outcome (`collapsed` reported, or `detached`) and tag the offset rule
-`design_pending`. S04a must replace every pending expectation with an exact
-reviewed fixture before S04b unlocks. **We do not invent a fallback integer.**
+**Resolved by S04a:** the exact fixture now mints an actual gap a/b before
+b, selecting the following item for strict attachment. Deleting b yields caret
+byte 1 with explicit collapse; strict resolution yields detached with no usable
+offset. A valid selective undo restoring b makes the **same** token resolve at
+byte 1; redo detaches. This replaces the pending placement/restoration entries.
+The former a/c pair enclosed still-visible b and was not a caret gap.
+[vnext-boundary-semantics.md](vnext-boundary-semantics.md) specifies the rules;
+these choices are tagged roadmap_inference and model-checked, with production
+implementation still assigned to S04b. WP8's strict token likewise now selects
+the actually deleted b, rather than the surviving a.
 
 ## 5. WP3 — Deleted containing block
 
@@ -186,9 +190,10 @@ convergent but each passage destroyed (`F8`). The consumer classifies this as a
 **quality** repair, not divergence.
 
 **Expectation** (`roadmap_inference`, from the S01 histories and the task lane):
-each pasted passage survives as a **contiguous run**. Which passage lands first
-is **unspecified** — asserting a specific merged string would over-specify. The
-fixtures therefore assert contiguity of each passage, not one canonical string.
+each pasted passage survives as a **contiguous run**. The consumer did not choose
+a tie rule; S01 specifies the native actor/root tie for these fixtures, producing
+exactly `abcXYZ`. The fixtures assert both that exact string and contiguity, tagged
+as roadmap_inference. The full S02 interpreter must implement this chosen order.
 Ownership: S01/S02/S03, with S06 enumerating the combined histories. W02/W03
 report `known_failure` until S03 lands; **equality of final text alone is not
 sufficient evidence.**
@@ -255,8 +260,8 @@ G01/G06/G08, gated on `external_pin_recovery_before_gc` and
 This task **specifies cases**. It supplies no engine change, no anchor or
 ordering behaviour, and no evidence that any probe passes. In particular:
 
-- The `design_pending` offset rules in §4 are **unresolved by design** and are
-  S04a's to settle.
+- S04a has settled the pending offset/restoration rules in §4 with an independent
+  model. Production behavior and token bytes remain S04b work.
 - No fixture here is an executable regression against production code. W02
   supplies the executable adapter and result matrix.
 - Third-party observations are attributed historical measurements, reproduced

@@ -122,6 +122,14 @@ Run `./tools/verify-roadmap.sh debug 'tst_sequence_semantics|tst_convergence|tst
 - `libs/collabtext/tests/fixtures/external-position/`
 - `docs/specs/vnext-external-position-contract.md`
 
+- `libs/collabtext/CMakeLists.txt`
+- `tools/validate-consumer-fixtures.py`
+- `libs/collabtext/tests/reference/BoundaryApiContract.h`
+- `docs/specs/vnext-consumer-probes.md`
+
+- `tools/verify_changed.py`
+- `tools/test_verify_changed.py`
+
 **Steps:**
 
 1. Trace current anchor_at/resolve_anchor and IdList lookup through origin intervals, fragment splitting, visibility/UndoMap changes, sentinel handling, and ignored bias. Record the exact unsafe helpers and a narrow implementation map for S04b. Use the P06a operation/item allocation domains and per-stream context; never mint a token from a transient fragment pointer, locator, local actor slot, or visible integer offset alone.
@@ -162,6 +170,14 @@ Run ./tools/verify-roadmap.sh debug tst_boundary_model and Release/ASan equivale
 - `docs/specs/vnext-public-api.md`
 - `docs/specs/vnext-alpha-capabilities.md`
 - `docs/specs/vnext-external-position-contract.md`
+
+- `libs/collabtext/include/collabtext/ActorId.h`
+- `libs/collabtext/include/collabtext/CrdtEngine.h`
+- `libs/collabtext/include/collabtext/IdListEngine.h`
+- `libs/collabtext/src/CrdtEngine.cpp`
+- `libs/collabtext/src/IdListEngine.cpp`
+- `libs/collabtext/tests/reference/BoundaryApiContract.h`
+- `libs/collabtext/CMakeLists.txt`
 
 **Steps:**
 
