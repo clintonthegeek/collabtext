@@ -944,7 +944,9 @@
       "split_rationale": "Split out of P06 on 2026-10-04. P06 asked for opaque values and versioned sparse codecs in one step, but the actor identity is serialized by both the wire codec and the store, so the identity change cannot land before the codecs without either changing those formats outside this task's ownership or introducing a representation the codec task immediately rewrites. The identity work is therefore sequenced first *within* P06 rather than before it, which keeps it a discrete reviewable step without an impossible ordering.",
       "baseline_revision": "2fd5a76",
       "implementation_commits": [
-        "4ece11a"
+        "4ece11a",
+        "4983bc4",
+        "9e172c1"
       ],
       "gate_evidence": [
         "docs/specs/vnext-identity.md -- the contract: what an identity is, the order and the three places it is used, why locally assigned slots diverge, the seven laws, counter rules, why epoch is deliberately not here, and baseline/projected cost.",
