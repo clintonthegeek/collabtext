@@ -1761,3 +1761,69 @@ more tasks — the sort of well-meaning assertion that makes a suite lie.
 
 **Next:** A02a — self-contained public headers over the components that now
 exist. That is Wave's ask 2, and it is the gate on A06a/W01/W02/E07a.
+
+## A02a — a public surface that stands on its own, and a manifest that admits what it cannot do
+
+**Task:** A02a **Status:** complete **Baseline:** `ea751c7`
+**Implementation commits:** `a77f852`
+**Scope:** the engine's value types promoted to `collabtext/Engine.h`; `src/`
+removed from every component's public interface; a new `IdListEngine` facade;
+`StreamSync`'s header relocated out of the public tree; a versioned capability
+manifest; a plain-C++ alpha consumer; and header independence enforced by one
+translation unit per advertised header.
+
+**Regression:** `collabtext_alpha_consumer` and the 16 header TUs, neither of
+which could build before. The alpha consumer is the acceptance criterion as a
+program rather than a sentence: it edits text and list content, moves operations
+between two peers, and includes only `<collabtext/...>`.
+
+**Verification:** full Debug 68/68; Core-only with Qt/zstd/OpenSSL discovery
+disabled builds and both consumer programs exit 0; Release 14/14
+(`…/20261005T134354Z-3785495`); ASan/UBSan/LSan 4/4
+(`…/20261005T134918Z-3787056`), no suppressions;
+`tools/check-public-headers.sh` in sync.
+
+**Why the types had to move rather than the include path grow.** Six public
+headers included `crdt/Clock.h`, `crdt/Locator.h` or `crdt/Anchor.h`. That was
+not sloppiness — it is why A01 had to leave `src/` on the build interface. A
+consumer of `<collabtext/Operations.h>` was reaching into the implementation
+tree to get `Identity`, and there is no include-path arrangement that makes that
+self-sufficient. So the values moved to `collabtext/Engine.h` and the four
+`crdt/` headers became one-line shims, the same promotion `crdt/Operations.h`
+already went through. About sixty engine translation units kept compiling
+unchanged, which is the argument for doing it this way rather than renaming.
+
+**The defect worth remembering.** `CrdtEngine::applyRemoteOp` returned `true`
+unconditionally — it computed the `ApplyOutcome` and threw it away. A consumer
+writing the obvious `if (!engine.applyRemoteOp(op)) retry();` would never retry,
+and would believe a rejected operation succeeded. A bool that is always true is
+worse than no bool, because it invites exactly that code. It now returns true for
+applied-or-duplicate and false for deferred-or-rejected, and the header says
+plainly that a bool cannot distinguish those two. The typed answer is A02's
+`apply_remote(...) -> ApplyOutcome` rename, and the manifest records it as
+*partial* rather than letting the fix imply the whole thing is done.
+
+Two more of my own wrong assertions, both caught by the consumer and both fixed
+by reading the implementation rather than by relaxing the check: `ids()` is
+visible-only (my new facade doc claimed it included tombstones), and two peers
+inserting at offset 0 produce `hweolrllod ` rather than two contiguous runs —
+F8, which belongs to S01/S02/S03.
+
+**What I did not do.** `StreamSync`'s header could have been made self-sufficient
+with a pimpl. I did not, because that is a real answer to a question A06a owns
+— what the transport's exported form is — and A02a inventing an ownership shape
+nobody has reviewed is the same mistake as promising an API that does not exist.
+The header moved to `src/transport/` instead, and the manifest records the
+transport as implemented but not advertised.
+
+**The manifest is the point of this task.** `collabtext/ALPHA_CAPABILITIES.md`
+states as precisely what the alpha *cannot* do: affinity is stored and not read,
+an unresolvable anchor still falls back to end-of-document, there is no stable
+position-token encoding, undo does not survive a reopen, GC is inert, and there
+is no epoch on an operation. Wave's requirement R3 — a detectable failure rather
+than a silent relocation — is *not met yet*, and a consumer reading this file
+learns that before writing code rather than after losing a reply's position.
+
+**Next:** A06a — real `install(TARGETS)`/`install(EXPORT)`, a package config, and
+a producer/consumer check that relocates the install tree before building against
+it. That is the last packaging task, and it unblocks W01, W02 and E07a.

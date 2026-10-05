@@ -1086,9 +1086,31 @@
         "R13"
       ],
       "gate": null,
-      "status": "not_started",
+      "status": "complete",
       "consumer_requirements": [
         "W6"
+      ],
+      "baseline_revision": "ea751c7",
+      "implementation_commits": [
+        "a77f852"
+      ],
+      "verification_results": {
+        "core_only_public_only": "Core-only configure with Qt6/zstd/OpenSSL discovery disabled builds; collabtext_core_smoke and collabtext_alpha_consumer both exit 0 linking CollabText::Core alone.",
+        "header_independence": "collabtext_public_headers_core (13 TUs) and collabtext_public_headers_qt (3 TUs): every advertised public header compiled as the first and only library include, against the public include tree only. tools/check-public-headers.sh regenerates the set and reports drift plus each header's half of the surface.",
+        "src_removed_from_public": "src/ is PRIVATE on every component. In-tree tests, the dogfood apps and reduce-trace name it explicitly; nothing outside the library reaches it any more.",
+        "debug": "68/68 CTest executables pass (66 existing plus collabtext_core_smoke and collabtext_alpha_consumer).",
+        "release": "14/14 via tools/verify-roadmap.sh release (\u2026/20261005T134354Z-3785495)",
+        "asan": "4/4 via tools/verify-roadmap.sh asan (\u2026/20261005T134918Z-3787056), no suppressions",
+        "debug_selected": "14/14 (\u2026/20261005T134247Z-3784259)",
+        "artifacts": "build-roadmap-debug/verification/20261005T134247Z-3784259; build-roadmap-release/verification/20261005T134354Z-3785495; build-roadmap-asan/verification/20261005T134918Z-3787056"
+      },
+      "gate_evidence": [
+        "collabtext/Engine.h is the new public home of Identity, Global, Locator, Anchor, Bias and IdentityAllocator -- the values the public operation and outcome types are made of. crdt/Clock.h, crdt/Locator.h, crdt/Anchor.h and crdt/IdentityAllocator.h are one-line shims, the same promotion crdt/Operations.h already went through, so ~60 engine translation units kept compiling unchanged.",
+        "collabtext/IdListEngine.h -- a facade over Crdt::IdList, which was engine storage whose header named SumTree and UndoMap. Move-only, non-copyable. Every method maps one-to-one onto something IdList implements today; nothing was invented and no Result-returning undo was promised, because that rename is A02's.",
+        "collabtext/ALPHA_CAPABILITIES.md -- the versioned manifest. It records as unavailable: affinity not honoured by resolve_anchor, unresolvable anchors still falling back to end-of-document, no stable position-token encoding, F8 interleave, in-memory-only undo, no crash recovery, no epoch on the operation, and inert GC. Each line names the executable evidence, and a capability with no evidence is marked not implemented rather than 'probably works'.",
+        "DEFECT FOUND AND FIXED: CrdtEngine::applyRemoteOp returned true unconditionally, discarding the ApplyOutcome. A consumer writing `if (!applyRemoteOp(op)) retry();` would never retry and would believe a rejected operation succeeded. Now true for applied-or-duplicate, false for deferred or rejected, and the header states that a bool cannot distinguish those. The typed answer is A02's apply_remote(...) -> ApplyOutcome rename, recorded as partial in the manifest rather than claimed.",
+        "StreamSync's header moved from include/collabtext/ to src/transport/. It names SegmentWriter and SegmentReader, which reach zstd, so a Core-only consumer could not have included it. The alternative was a pimpl, which is a real answer but is A06a's call about the exported form, and doing it here would have invented an ownership shape nobody has reviewed. The manifest records the transport as implemented but not advertised.",
+        "tests/alpha-consumer/main.cpp -- the acceptance criterion as a program. Public headers only; it never reads an operation's fields, because operations travel as values through the codec and the outcome type and a consumer that had to read EditOperation::timestamp would prove the fields were the contract after all. It also asserted two things wrongly and both were fixed by checking the implementation: ids() is visible-only (the facade doc claimed otherwise), and concurrent inserts at one position interleave."
       ]
     },
     {
