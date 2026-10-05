@@ -27,6 +27,7 @@
 /// a silently lost counter.
 
 #include "collabtext/ActorId.h"
+#include "storage/DurableFile.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -35,7 +36,7 @@
 #include <charconv>
 #include <cstring>
 #include <fstream>
-#include <random>
+#include <utility>
 #include <sstream>
 
 namespace CollabText {
@@ -87,57 +88,45 @@ Result<std::array<uint8_t, ActorId::kBytes>> parse_hex_exact(std::string_view te
 /// The platform randomness adapter: the only place the project asks the
 /// operating system for entropy. Narrow on purpose.
 Result<std::array<uint8_t, ActorId::kBytes>> platform_random(std::string_view purpose) {
-    (void)purpose;
     std::array<uint8_t, ActorId::kBytes> bytes{};
-    std::random_device device;
-    for (size_t i = 0; i < bytes.size(); ++i) bytes[i] = static_cast<uint8_t>(device());
-    // std::random_device is allowed to be deterministic on some platforms. If it
-    // produced an all-zero id, refuse rather than mint an invalid actor.
-    bool all_zero = true;
-    for (const uint8_t byte : bytes) all_zero = all_zero && byte == 0;
-    if (all_zero)
-        return Error(ErrorCode::random_source_unavailable,
-                     "randomness source produced an all-zero actor id");
+    const int fd = ::open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return Error(ErrorCode::random_source_unavailable, "cannot open OS entropy source",
+                     std::string(purpose));
+    size_t accepted = 0;
+    while (accepted < bytes.size()) {
+        const auto count = ::read(fd, bytes.data() + accepted, bytes.size() - accepted);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) {
+            ::close(fd);
+            return Error(ErrorCode::random_source_unavailable, "OS entropy read failed",
+                         std::string(purpose));
+        }
+        accepted += static_cast<size_t>(count);
+    }
+    if (::close(fd) != 0)
+        return Error(ErrorCode::random_source_unavailable, "OS entropy descriptor close failed");
     return bytes;
 }
 
-bool fsync_path(const std::filesystem::path& path) {
-    const int fd = ::open(path.c_str(), O_RDONLY);
-    if (fd < 0) return false;
-    const int rc = ::fsync(fd);
-    ::close(fd);
-    return rc == 0;
+// The on-disk line format requires a token, not arbitrary text. The same rule
+// protects file names used for per-document writer leases.
+bool valid_stream_name(std::string_view name) {
+    if (name.empty() || name.size() > 128) return false;
+    for (const unsigned char c : name)
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == ':'))
+            return false;
+    return true;
 }
 
-bool fsync_directory(const std::filesystem::path& dir) {
-    const int fd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY);
-    if (fd < 0) return false;
-    const int rc = ::fsync(fd);
-    ::close(fd);
-    return rc == 0;
-}
-
-/// Write `contents` to `path` atomically: temp file, fsync, rename, fsync dir.
-Result<void> write_atomic(const std::filesystem::path& path, std::string_view contents) {
-    std::error_code ec;
-    const std::filesystem::path tmp = std::filesystem::path(path.string() + ".tmp");
-    {
-        std::ofstream file(tmp, std::ios::binary | std::ios::trunc);
-        if (!file)
-            return Error(ErrorCode::io_error, "cannot create temp file", tmp.string());
-        file.write(contents.data(), static_cast<std::streamsize>(contents.size()));
-        file.flush();
-        if (!file)
-            return Error(ErrorCode::io_error, "short write to temp file", tmp.string());
+std::string encode_path_component(std::string_view text) {
+    std::string encoded;
+    for (const unsigned char c : text) {
+        encoded += hex_digits[c >> 4];
+        encoded += hex_digits[c & 15];
     }
-    if (!fsync_path(tmp))
-        return Error(ErrorCode::io_error, "fsync of temp file failed", tmp.string());
-    fs::rename(tmp, path, ec);
-    if (ec)
-        return Error(ErrorCode::io_error, "rename failed: " + ec.message(), path.string());
-    if (!fsync_directory(path.parent_path()))
-        return Error(ErrorCode::io_error, "directory fsync failed", path.parent_path().string());
-    return {};
+    return encoded;
 }
 
 Result<uint64_t> parse_u64(std::string_view text, std::string_view what) {
@@ -177,6 +166,7 @@ std::string_view to_string(ErrorCode code) {
     case ErrorCode::unresolvable_anchor: return "unresolvable_anchor";
     case ErrorCode::corrupt_record: return "corrupt_record";
     case ErrorCode::io_error: return "io_error";
+    case ErrorCode::commit_uncertain: return "commit_uncertain";
     case ErrorCode::unsupported_operation: return "unsupported_operation";
     case ErrorCode::random_source_unavailable: return "random_source_unavailable";
     case ErrorCode::deferred_queue_full: return "deferred_queue_full";
@@ -236,6 +226,8 @@ int ActorId::compare(const ActorId& other) const noexcept {
 // ============================================================================
 
 Result<uint64_t> CheckedCounter::reserve(std::string_view context) {
+    if (m_next == 0)
+        return Error(ErrorCode::invalid_identity, "counter zero is reserved", std::string(context));
     if (m_next == kExhausted)
         return Error(ErrorCode::counter_exhausted,
                      "counter for this stream is exhausted; a new epoch is required",
@@ -281,6 +273,27 @@ std::string WriterLease::describe() const {
 // ReplicaState
 // ============================================================================
 
+ReplicaState::ReplicaState() = default;
+ReplicaState::~ReplicaState() { release_writer(); }
+ReplicaState::ReplicaState(ReplicaState&& other) noexcept
+    : m_state_dir(std::move(other.m_state_dir)), m_actor(other.m_actor),
+      m_streams(std::move(other.m_streams)), m_leases(std::exchange(other.m_leases, {})),
+      m_state_lease(std::move(other.m_state_lease)),
+      m_writer_locks(std::move(other.m_writer_locks)), m_failed(other.m_failed) {}
+ReplicaState& ReplicaState::operator=(ReplicaState&& other) noexcept {
+    if (this != &other) {
+        release_writer();
+        m_state_dir = std::move(other.m_state_dir);
+        m_actor = other.m_actor;
+        m_streams = std::move(other.m_streams);
+        m_leases = std::exchange(other.m_leases, {});
+        m_state_lease = std::move(other.m_state_lease);
+        m_writer_locks = std::move(other.m_writer_locks);
+        m_failed = other.m_failed;
+    }
+    return *this;
+}
+
 Result<ReplicaState> ReplicaState::open(std::filesystem::path state_dir) {
     return open(std::move(state_dir), &platform_random);
 }
@@ -298,9 +311,18 @@ Result<ReplicaState> ReplicaState::open(std::filesystem::path state_dir,
 
     ReplicaState state;
     state.m_state_dir = state_dir;
+    auto lease = Storage::ProcessLease::acquire(state_dir / "replica.lock");
+    if (!lease.ok()) return lease.error().with_context("opening private replica state");
+    state.m_state_lease = std::make_unique<Storage::ProcessLease>(std::move(lease).value());
 
     const auto path = state_file(state_dir);
-    if (fs::exists(path, ec)) {
+    // Inspect the name without following symlinks. A dangling/unreadable state
+    // entry is corruption, not first run; replacing it would mint a new actor.
+    const auto status = fs::symlink_status(path, ec);
+    if (ec && ec != std::errc::no_such_file_or_directory)
+        return Error(ErrorCode::io_error, "cannot inspect private state: " +
+                     ec.message(), path.string());
+    if (fs::exists(status)) {
         auto loaded = state.load();
         if (!loaded.ok()) return loaded.error().with_context("loading " + path.string());
         return state;
@@ -325,6 +347,7 @@ Result<void> ReplicaState::load() {
     std::string line;
     bool saw_magic = false;
     ActorId actor;
+    bool saw_actor = false;
     std::vector<std::pair<StreamId, StreamCounters>> streams;
     size_t line_number = 0;
 
@@ -362,6 +385,8 @@ Result<void> ReplicaState::load() {
         // ignored. An ignored field here would be a lost counter.
         std::string trailing;
         if (keyword == "actor") {
+            if (saw_actor) return Error(ErrorCode::corrupt_record, "duplicate actor directive", path.string());
+            saw_actor = true;
             std::string text;
             stream >> text;
             if (stream >> trailing)
@@ -383,7 +408,7 @@ Result<void> ReplicaState::load() {
                 return Error(ErrorCode::malformed,
                              "trailing data after the stream directive",
                              path.string() + ":" + std::to_string(line_number));
-            if (name.empty() || next_text.empty())
+            if (!valid_stream_name(name) || next_text.empty())
                 return Error(ErrorCode::malformed,
                              "stream directive needs a name and a counter",
                              path.string() + ":" + std::to_string(line_number));
@@ -391,9 +416,12 @@ Result<void> ReplicaState::load() {
             if (!next.ok())
                 return next.error().with_context(
                     path.string() + ":" + std::to_string(line_number));
+            for (const auto& [existing, ignored] : streams)
+                if (existing == name)
+                    return Error(ErrorCode::corrupt_record, "duplicate stream directive", path.string());
             StreamCounters counters;
             auto restored = counters.counter.restore(next.value(), name);
-            if (!restored.ok()) return restored.error();
+            if (!restored.ok()) return Error(ErrorCode::corrupt_record, "invalid persisted counter", path.string());
             streams.emplace_back(std::move(name), counters);
             continue;
         }
@@ -404,6 +432,7 @@ Result<void> ReplicaState::load() {
                      path.string() + ":" + std::to_string(line_number));
     }
 
+    if (file.bad()) return Error(ErrorCode::io_error, "state read failed", path.string());
     if (!saw_magic)
         return Error(ErrorCode::unknown_format, "empty or truncated state file",
                      path.string());
@@ -417,12 +446,14 @@ Result<void> ReplicaState::load() {
 }
 
 Result<void> ReplicaState::persist() const {
+    if (!m_state_lease || m_failed)
+        return Error(ErrorCode::writer_conflict, "replica owner is closed or requires reopen");
     std::ostringstream out;
     out << kStateMagic << ' ' << kStateVersion << '\n';
     out << "actor " << m_actor.to_string() << '\n';
     for (const auto& [name, counters] : m_streams)
         out << "stream " << name << ' ' << counters.counter.peek() << '\n';
-    return write_atomic(state_file(m_state_dir), out.str());
+    return Storage::replace_atomically(state_file(m_state_dir), out.str());
 }
 
 Result<ReplicaState::StreamCounters*> ReplicaState::stream(const StreamId& name) {
@@ -435,9 +466,11 @@ Result<ReplicaState::StreamCounters*> ReplicaState::stream(const StreamId& name)
 Result<OperationId> ReplicaState::next_operation(const StreamId& stream_name,
                                                   const DocumentId& document,
                                                   uint64_t epoch) {
-    if (stream_name.empty())
-        return Error(ErrorCode::unknown_stream, "stream name is empty");
-    if (document.empty())
+    if (!m_state_lease || m_failed)
+        return Error(ErrorCode::writer_conflict, "replica owner is closed or requires reopen");
+    if (!valid_stream_name(stream_name))
+        return Error(ErrorCode::unknown_stream, "stream name must be a bounded ASCII token");
+    if (document.empty() || document.find('\0') != std::string::npos || epoch == 0)
         return Error(ErrorCode::malformed, "document id is empty");
     if (!m_actor.valid())
         return Error(ErrorCode::invalid_identity,
@@ -484,54 +517,40 @@ uint64_t ReplicaState::high_water(const StreamId& stream_name) const {
 
 std::filesystem::path ReplicaState::lease_path(const DocumentId& document,
                                                const StreamId& stream_name) const {
-    std::string safe_doc = document;
-    for (char& c : safe_doc)
-        if (c == '/' || c == '\\') c = '_';
-    return m_state_dir /
-           ("writer-" + safe_doc + "." + stream_name + std::string(kLeaseSuffix));
+    return m_state_dir / ("writer-" + encode_path_component(document) + "." +
+                          encode_path_component(stream_name) + std::string(kLeaseSuffix));
 }
 
 Result<WriterLease> ReplicaState::acquire_writer(const DocumentId& document,
                                                   const StreamId& stream_name) {
+    if (!m_state_lease || m_failed)
+        return Error(ErrorCode::writer_conflict, "replica owner is closed or requires reopen");
+    if (document.empty() || document.size() > 80 || document.find('\0') != std::string::npos ||
+        !valid_stream_name(stream_name) || stream_name.size() > 32)
+        return Error(ErrorCode::malformed, "invalid document/stream lease key");
     const auto path = lease_path(document, stream_name);
-    std::error_code ec;
-    fs::create_directories(m_state_dir, ec);
-
-    // O_CREAT|O_EXCL is the whole mechanism: the create either wins or it does
-    // not, with no window in between.
-    const int fd = ::open(path.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0644);
-    if (fd < 0) {
-        std::string holder = "unknown";
-        std::ifstream existing(path, std::ios::binary);
-        std::string line;
-        if (existing && std::getline(existing, line))
-            holder = line;
-        return Error(ErrorCode::writer_conflict,
-                     "another local writer holds this stream (holder: " + holder + ")",
-                     path.string());
-    }
-
+    auto locked = Storage::ProcessLease::acquire(path);
+    if (!locked.ok()) return locked.error();
     WriterLease lease;
     lease.holder = m_actor;
-    lease.pid = static_cast<uint64_t>(::getpid());
+    lease.pid = locked.value().holder_pid;
     lease.path = path;
-    const std::string record = m_actor.to_string() + " " + std::to_string(lease.pid) + "\n";
-    const ssize_t written = ::write(fd, record.data(), record.size());
-    const bool synced = ::fsync(fd) == 0;
-    ::close(fd);
-    if (written != static_cast<ssize_t>(record.size()) || !synced) {
-        fs::remove(path, ec);
-        return Error(ErrorCode::io_error, "cannot record writer lease", path.string());
-    }
-    fsync_directory(m_state_dir);
+    m_writer_locks.push_back(std::make_unique<Storage::ProcessLease>(std::move(locked).value()));
     m_leases.push_back(lease);
     return lease;
 }
 
 void ReplicaState::release_writer() {
-    std::error_code ec;
-    for (const auto& lease : m_leases) fs::remove(lease.path, ec);
+    m_writer_locks.clear();
     m_leases.clear();
+}
+
+Result<void> ReplicaState::close() {
+    release_writer();
+    auto result = m_state_lease ? m_state_lease->release() : Result<void>::success();
+    m_state_lease.reset();
+    m_failed = true;
+    return result;
 }
 
 bool ReplicaState::holds_writer(const DocumentId& document,
@@ -543,6 +562,8 @@ bool ReplicaState::holds_writer(const DocumentId& document,
 }
 
 Result<ActorId> ReplicaState::fork_identity(std::string_view reason) {
+    if (!m_state_lease || m_failed || !m_leases.empty())
+        return Error(ErrorCode::writer_conflict, "close writers before forking identity");
     auto actor = ActorId::generate();
     if (!actor.ok()) return actor.error().with_context("forking identity");
     // A fork starts a new numbering space: the old actor's counters belong to
@@ -550,8 +571,11 @@ Result<ActorId> ReplicaState::fork_identity(std::string_view reason) {
     // keeping them would make the two histories indistinguishable in a log.
     m_actor = std::move(actor).value();
     m_streams.clear();
-    if (auto persisted = persist(); !persisted.ok())
-        return persisted.error().with_context("forking identity");
+    if (auto persisted = persist(); !persisted.ok()) {
+        m_failed = true;
+        return persisted.error().with_context("forking identity; reopen before further use");
+    }
+    (void)reason;
     return m_actor;
 }
 

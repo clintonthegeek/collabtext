@@ -26,15 +26,14 @@
 ///      complete new one.
 ///   3. The order write -> file sync -> replace -> directory sync is fixed, and
 ///      observable, so a test can assert it rather than trust it.
-///   4. A failed step returns a `StoreError` naming the step and path, and the
-///      caller's store state is unchanged by that failure.
+///   4. A failed step returns a typed error. Before publication the destination
+///      is unchanged; after a rename or append, an error may mean publication
+///      happened but its durability barrier was not confirmed. That outcome
+///      must be reconciled by the store, not treated as an automatic rollback.
 ///
-/// and is explicit about one thing it cannot do. It cannot promise survival of
-/// power loss, because nothing in user space can: `fsync` returns once the kernel
-/// has accepted the bytes, and a subsequent power cut can still lose them unless
-/// the platform is configured for a stronger barrier. What it does promise is
-/// that a *process* crash cannot lose or tear a committed write, which is a real
-/// and testable property. Claiming more would repeat F9 at a larger scale.
+/// Sync calls request stable storage from the filesystem and device stack. Their
+/// power-loss guarantees depend on that stack and platform; subprocess crash
+/// tests alone do not establish power-loss behavior.
 ///
 /// A platform that cannot supply a step returns `unsupported_operation`. It is
 /// never quietly skipped, because a skipped sync is the bug this file exists to
@@ -59,9 +58,9 @@ namespace fs = std::filesystem;
 enum class Step {
     Write,       ///< bytes handed to the OS
     FileSync,    ///< the file's own data forced out of the kernel
+    Close,       ///< close the synced temporary before publication
     Replace,     ///< rename the temporary over the destination
     DirSync,     ///< the *name* forced out of the kernel
-    Close,
 };
 
 [[nodiscard]] std::string_view to_string(Step step);
@@ -99,6 +98,7 @@ struct FileOps {
     std::function<Result<void>(const fs::path& from, const fs::path& to)> rename;
     std::function<Result<void>(const fs::path& path)> remove;
     std::function<Result<void>(const fs::path& dir)> sync_dir;
+    std::function<Result<void>(int fd, const fs::path& path)> close;
 
     /// The real operations.
     [[nodiscard]] static const FileOps& real();
@@ -118,37 +118,39 @@ struct FileOpCounts {
     uint64_t dir_syncs = 0;
 };
 
-/// A process lease over one path, so two writers cannot both believe they own
-/// it. Built on exclusive file creation rather than on advisory locking, because
-/// advisory locks are released silently when the holding process dies — which is
-/// the safe behaviour, but it means a lock file alone cannot tell a live holder
-/// from a dead one.
+/// Move-only ownership of an OS lock over a persistent local lock file.
+/// The kernel lock, not PID text or elapsed time, establishes ownership. Never
+/// unlink a lock file: replacement would let contenders lock different inodes.
+/// Death/release closes the descriptor; PID text is diagnostic only. This local
+/// process lease does not retire an offline replica or change membership.
 struct ProcessLease {
     fs::path path;
     uint64_t holder_pid = 0;
 
+    ProcessLease(const ProcessLease&) = delete;
+    ProcessLease& operator=(const ProcessLease&) = delete;
+    ProcessLease(ProcessLease&&) noexcept;
+    ProcessLease& operator=(ProcessLease&&) noexcept;
+    ~ProcessLease();
+
     [[nodiscard]] std::string describe() const;
-
-    /// True when `holder_pid` names a process that currently exists. Used to
-    /// distinguish "someone else is writing" from "a previous run died here";
-    /// the caller decides whether a stale lease may be broken, because only the
-    /// caller knows whether losing the race would lose work.
     [[nodiscard]] static bool process_alive(uint64_t pid);
-
-    /// True when a lease file exists and names a live process.
+    /// Probe the OS lock without trusting a stale or incomplete PID record.
     [[nodiscard]] static bool held_by_live_process(const fs::path& lease_path);
+    [[nodiscard]] static Result<ProcessLease> acquire(const fs::path& lease_path,
+                                                      const FileOps* ops = nullptr);
+    [[nodiscard]] Result<void> release();
 
-    /// Take the lease, failing with `writer_conflict` and naming the holder if a
-    /// live process already holds it.
-    [[nodiscard]] static Result<ProcessLease> acquire(const fs::path& lease_path);
+private:
+    ProcessLease() = default;
+    int m_fd = -1;
 };
 
 /// Write every byte or fail.
 ///
 /// Returns `io_error` with the byte counts in the context if the platform wrote
-/// fewer bytes than requested. Retries short writes caused by signals up to a
-/// bound, because a partial write is not by itself an error — a short write that
-/// is never retried is.
+/// fewer bytes than requested. Retries interrupted writes and continues while
+/// short writes make progress. Zero progress or an I/O error is a failure.
 [[nodiscard]] Result<void> write_all(int fd, std::string_view bytes,
                                      const StepHook* hook = nullptr,
                                      const fs::path& path = {},
@@ -172,8 +174,10 @@ struct ProcessLease {
 ///
 /// The sequence is: write a sibling temporary, fsync it, rename it over the
 /// target, fsync the parent directory. The target is never unlinked first, so a
-/// failure at any step leaves the previous complete contents in place. The
-/// temporary is removed on failure, and a failure to remove it is reported
+/// failure before rename leaves the previous complete contents in place. A
+/// directory-sync failure after rename reports commit_uncertain; the new file
+/// is already published. Each attempt owns a unique sibling temporary, which
+/// is removed on pre-publication failure; a cleanup failure is reported
 /// rather than ignored.
 [[nodiscard]] Result<void> replace_atomically(const fs::path& target,
                                               std::string_view contents,
@@ -201,7 +205,8 @@ public:
     DurableAppendFile& operator=(const DurableAppendFile&) = delete;
 
     /// Append bytes and fsync. Returns only after the data is out of the kernel,
-    /// so a caller that gets success has the guarantee it thinks it has.
+    /// including the directory barrier on the first sync for this handle.
+    /// An error may leave bytes in the file; callers need framed recovery.
     [[nodiscard]] Result<void> append(std::string_view bytes);
 
     /// Append without syncing. Returns how many bytes reached the OS. Exposed
@@ -242,6 +247,7 @@ private:
     const StepHook* m_hook = nullptr;
     const FileOps* m_ops = nullptr;
     FileOpCounts m_counts;
+    bool m_needs_directory_sync = true;
 };
 
 }  // namespace CollabText::Storage

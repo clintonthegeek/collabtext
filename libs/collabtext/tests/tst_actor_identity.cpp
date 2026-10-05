@@ -64,6 +64,81 @@ class TestActorIdentity : public QObject {
     Q_OBJECT
 
 private slots:
+    void unreadable_existing_state_link_is_never_replaced() {
+        for (const bool loop : {false, true}) {
+            QTemporaryDir temp;
+            const auto dir = fs::path(temp.path().toStdString());
+            const auto path = dir / "replica.state";
+            fs::create_symlink(loop ? path : dir / "missing-target", path);
+            int generated = 0;
+            ActorId::Source source = [&](std::string_view)
+                -> Result<std::array<uint8_t, ActorId::kBytes>> {
+                ++generated;
+                return source_bytes(0x77);
+            };
+            const auto opened = ReplicaState::open(dir, source);
+            QVERIFY(!opened.ok());
+            QCOMPARE(generated, 0);
+            QVERIFY(fs::is_symlink(fs::symlink_status(path)));
+        }
+    }
+
+    void fresh_reservations_never_issue_the_zero_identity_sentinel() {
+        QTemporaryDir dir;
+        auto replica = ReplicaState::open(fs::path(dir.path().toStdString()));
+        QVERIFY(replica.ok());
+        const auto operation = replica.value().next_operation("text", "doc", 1);
+        QVERIFY(operation.ok());
+        QCOMPARE(operation.value().counter, uint64_t(1));
+        CheckedCounter zero(0);
+        QVERIFY(!zero.reserve().ok());
+    }
+
+    void closed_and_moved_from_owners_cannot_reserve_operations() {
+        QTemporaryDir dir;
+        auto opened = ReplicaState::open(fs::path(dir.path().toStdString()));
+        QVERIFY(opened.ok());
+        auto moved = std::move(opened).value();
+        QVERIFY(!opened.value().next_operation("text", "doc", 1).ok());
+        QVERIFY(moved.next_operation("text", "doc", 1).ok());
+        QVERIFY(moved.close().ok());
+        QVERIFY(moved.close().ok());
+        QVERIFY(!moved.next_operation("text", "doc", 1).ok());
+    }
+
+    void mutable_private_state_has_one_owner_even_for_different_documents() {
+        QTemporaryDir dir;
+        const fs::path path(dir.path().toStdString());
+        auto first = ReplicaState::open(path);
+        QVERIFY(first.ok());
+        auto second = ReplicaState::open(path);
+        QVERIFY2(!second.ok(), "two owners can currently issue the same actor/stream/counter");
+        QCOMPARE(second.error().code(), ErrorCode::writer_conflict);
+    }
+
+    void duplicate_identity_directives_are_rejected() {
+        QTemporaryDir dir;
+        const fs::path path(dir.path().toStdString());
+        write_state(path, "collabtext-replica-state 1\nactor 11111111111111111111111111111111\n"
+                          "actor 22222222222222222222222222222222\n");
+        QVERIFY(!ReplicaState::open(path).ok());
+    }
+
+    void duplicate_stream_directives_are_rejected() {
+        QTemporaryDir dir;
+        const fs::path path(dir.path().toStdString());
+        write_state(path, "collabtext-replica-state 1\nactor 11111111111111111111111111111111\n"
+                          "stream text 1\nstream text 99\n");
+        QVERIFY(!ReplicaState::open(path).ok());
+    }
+
+    void stream_names_cannot_inject_private_state_directives() {
+        QTemporaryDir dir;
+        auto replica = ReplicaState::open(fs::path(dir.path().toStdString()));
+        QVERIFY(replica.ok());
+        QVERIFY(!replica.value().next_operation("text\nstream text 0", "doc", 1).ok());
+    }
+
 
     void initTestCase() {
         announce_seed("tst_actor_identity", "identity", "actor-identity");
@@ -167,8 +242,8 @@ private slots:
                 first_run.push_back(id.value().counter);
             }
         }
-        QCOMPARE(first_run.front(), 0ull);
-        QCOMPARE(first_run.back(), 4ull);
+        QCOMPARE(first_run.front(), 1ull);
+        QCOMPARE(first_run.back(), 5ull);
 
         // Restart from the same private state: same actor, no reused counter.
         auto reopened = ReplicaState::open(state, fixed_source(source_bytes(0x99)));
@@ -190,14 +265,14 @@ private slots:
 
         // Two streams advance independently: the same counter value in both is
         // not a collision, because coverage is per (actor, stream).
-        QCOMPARE(replica.value().next_operation("text", "doc", 1).value().counter, 0ull);
-        QCOMPARE(replica.value().next_operation("comments", "doc", 1).value().counter, 0ull);
         QCOMPARE(replica.value().next_operation("text", "doc", 1).value().counter, 1ull);
         QCOMPARE(replica.value().next_operation("comments", "doc", 1).value().counter, 1ull);
+        QCOMPARE(replica.value().next_operation("text", "doc", 1).value().counter, 2ull);
+        QCOMPARE(replica.value().next_operation("comments", "doc", 1).value().counter, 2ull);
 
         // And they persist as separate spaces.
-        QCOMPARE(replica.value().high_water("text"), 1ull);
-        QCOMPARE(replica.value().high_water("comments"), 1ull);
+        QCOMPARE(replica.value().high_water("text"), 2ull);
+        QCOMPARE(replica.value().high_water("comments"), 2ull);
         QVERIFY(!replica.value().peek_stream("chat").ok());
     }
 
@@ -211,8 +286,8 @@ private slots:
             QVERIFY(value.ok());
             issued = value.value();
         }
-        QCOMPARE(issued, 2ull);
-        QCOMPARE(counter.peek(), 3ull);
+        QCOMPARE(issued, 3ull);
+        QCOMPARE(counter.peek(), 4ull);
         QVERIFY(!counter.exhausted());
 
         CheckedCounter near_end(CheckedCounter::kExhausted - 1);
@@ -265,7 +340,7 @@ private slots:
         std::ifstream file(state / "replica.state", std::ios::binary);
         const std::string contents((std::istreambuf_iterator<char>(file)),
                                    std::istreambuf_iterator<char>());
-        QVERIFY(contents.find("stream text 1") != std::string::npos);
+        QVERIFY(contents.find("stream text 2") != std::string::npos);
     }
 
     // ---- corrupt and hostile state files ----
@@ -338,19 +413,20 @@ private slots:
             QVERIFY(id.ok());
             issued.push_back(id.value().counter);
         }
-        QCOMPARE(issued.front(), 0ull);
-        QCOMPARE(issued.back(), 39ull);
-        QCOMPARE(replica.value().high_water("text"), 39ull);
+        QCOMPARE(issued.front(), 1ull);
+        QCOMPARE(issued.back(), 40ull);
+        QCOMPARE(replica.value().high_water("text"), 40ull);
         QVERIFY(fs::exists(state / "replica.state"));
 
         // Reopen: the same actor, and the next id continues where it stopped.
+        QVERIFY(replica.value().close().ok());
         auto reopened = ReplicaState::open(state);
         QVERIFY(reopened.ok());
         QCOMPARE(reopened.value().actor(), replica.value().actor());
-        QCOMPARE(reopened.value().high_water("text"), 39ull);
+        QCOMPARE(reopened.value().high_water("text"), 40ull);
         const auto next = reopened.value().next_operation("text", "doc", 1);
         QVERIFY(next.ok());
-        QCOMPARE(next.value().counter, 40ull);
+        QCOMPARE(next.value().counter, 41ull);
         QVERIFY2(std::find(issued.begin(), issued.end(), next.value().counter) == issued.end(),
                  "restart reissued an operation id");
     }
@@ -374,15 +450,12 @@ private slots:
         // its own private state must contend for the *same* lease to be a real
         // test. Point both at one directory to model two processes on one machine.
         auto contender = ReplicaState::open(state / "device-a");
+        QVERIFY2(!contender.ok(), "two owners acquired the same private state");
+        QCOMPARE(contender.error().code(), ErrorCode::writer_conflict);
+        QVERIFY(contender.error().message().find("holder") != std::string::npos);
+        QVERIFY(first.value().close().ok());
+        contender = ReplicaState::open(state / "device-a");
         QVERIFY(contender.ok());
-        QVERIFY(contender.value().actor() == first.value().actor());
-        const auto conflict = contender.value().acquire_writer("doc", "text");
-        QVERIFY2(!conflict.ok(), "two writers acquired the same stream");
-        QCOMPARE(conflict.error().code(), ErrorCode::writer_conflict);
-        // The message names the holder, so a user can act on it.
-        QVERIFY(conflict.error().message().find("holder") != std::string::npos);
-
-        first.value().release_writer();
         const auto after_release = contender.value().acquire_writer("doc", "text");
         QVERIFY2(after_release.ok(), "the lease was not released");
         contender.value().release_writer();
@@ -491,10 +564,11 @@ private slots:
         QVERIFY(id.value().actor != original_actor);
 
         // And the fork is durable, so a restart keeps the new identity.
+        QVERIFY(clone.value().close().ok());
         auto reopened = ReplicaState::open(copy);
         QVERIFY(reopened.ok());
         QCOMPARE(reopened.value().actor(), forked.value());
-        QVERIFY(reopened.value().high_water("text") == 0ull);
+        QVERIFY(reopened.value().high_water("text") == 1ull);
     }
 
     void copying_a_shared_document_copies_no_writer_identity() {

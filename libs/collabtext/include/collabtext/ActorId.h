@@ -29,12 +29,15 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+#include <utility>
 
 namespace CollabText {
+namespace Storage { struct ProcessLease; }
 
 // ============================================================================
 // Errors
@@ -59,6 +62,7 @@ enum class ErrorCode {
     // store
     corrupt_record,
     io_error,
+    commit_uncertain,       // publication happened; its durability barrier failed
     /// The platform cannot provide the requested guarantee (e.g. asking for a
     /// directory sync where the OS has none). Reported, never approximated.
     unsupported_operation,
@@ -107,8 +111,8 @@ private:
 [[nodiscard]] std::string_view to_string(ErrorCode code);
 
 /// Result<T>: the project deliberately does not require C++23 std::expected.
-/// [[nodiscard]] with no throwing accessor, so ignoring an error is a compile
-/// error rather than a runtime surprise.
+/// [[nodiscard]] requests a compiler diagnostic when a result is discarded.
+/// value() has a checked-by-caller ok() precondition; it is not a throwing accessor.
 template <class T>
 class [[nodiscard]] Result {
 public:
@@ -263,8 +267,8 @@ public:
     [[nodiscard]] uint64_t peek() const noexcept { return m_next; }
 
     /// True once the counter can no longer reserve: its next value is
-    /// UINT64_MAX, which is a real counter value and must still be issued
-    /// before the stream is declared exhausted.
+    /// UINT64_MAX. That value is the exhaustion sentinel, not issued, since a
+    /// following reservation must remain representable.
     [[nodiscard]] bool exhausted() const noexcept { return m_next == kExhausted; }
 
     /// Reserve and return the next value. On exhaustion the counter is
@@ -287,7 +291,7 @@ public:
     static constexpr uint64_t kExhausted = UINT64_MAX;
 
 private:
-    uint64_t m_next = 0;
+    uint64_t m_next = 1;
 };
 
 // ============================================================================
@@ -296,12 +300,9 @@ private:
 
 /// A cross-process writer lease over one (document, stream).
 ///
-/// Acquired by creating the lease file exclusively, so two local writers cannot
-/// both believe they hold it. The holder's identity is recorded, so a conflict
-/// names who holds it. There is deliberately no automatic takeover: a lease that
-/// is reclaimed by timeout is a silent way to lose operations, and C2's rule —
-/// nothing changes membership or ownership without an explicit act — applies
-/// here too.
+/// Owned by ReplicaState through an OS lock. Process death/release frees the
+/// local writer lock; it never retires a device or changes membership. This
+/// returned value is diagnostic metadata, not transferable lock ownership.
 struct WriterLease {
     ActorId holder;
     uint64_t pid = 0;
@@ -312,7 +313,14 @@ struct WriterLease {
 
 class ReplicaState {
 public:
+    ReplicaState(const ReplicaState&) = delete;
+    ReplicaState& operator=(const ReplicaState&) = delete;
+    ReplicaState(ReplicaState&&) noexcept;
+    ReplicaState& operator=(ReplicaState&&) noexcept;
+    ~ReplicaState();
     /// Open (or create) the private state for this device.
+    /// One owner holds the OS lock for this entire directory until destruction.
+    /// Multiple documents share that owner; a second open returns writer_conflict.
     ///
     /// `state_dir` must be outside every shared document store. The actor
     /// identity is generated once and persisted atomically; a corrupt state file
@@ -345,6 +353,9 @@ public:
     [[nodiscard]] Result<WriterLease> acquire_writer(const DocumentId& document,
                                                      const StreamId& stream);
     void release_writer();
+    /// Release all writer locks and the private-state owner; safe twice.
+    /// Mutations on a closed owner return writer_conflict.
+    [[nodiscard]] Result<void> close();
     [[nodiscard]] bool holds_writer(const DocumentId& document,
                                     const StreamId& stream) const;
 
@@ -353,7 +364,9 @@ public:
     /// Copying a shared document never does this, because shared documents do
     /// not contain actor identity. Copying *private* state does, and the only
     /// correct answer is a new actor — minting one is the caller's explicit
-    /// statement that two independent writers now exist.
+    /// statement that two independent writers now exist. Active writer leases
+    /// must first be released. A failed fork makes this owner unusable until
+    /// reopen, since publication may have happened before a barrier failed.
     [[nodiscard]] Result<ActorId> fork_identity(std::string_view reason);
 
     /// Check an operation envelope that claims to be from this actor.
@@ -377,7 +390,7 @@ public:
     [[nodiscard]] Result<void> flush();
 
 private:
-    ReplicaState() = default;
+    ReplicaState();
 
     struct StreamCounters {
         CheckedCounter counter;
@@ -393,6 +406,9 @@ private:
     ActorId m_actor;
     std::vector<std::pair<StreamId, StreamCounters>> m_streams;
     std::vector<WriterLease> m_leases;
+    std::unique_ptr<Storage::ProcessLease> m_state_lease;
+    std::vector<std::unique_ptr<Storage::ProcessLease>> m_writer_locks;
+    bool m_failed = false;
 };
 
 }  // namespace CollabText

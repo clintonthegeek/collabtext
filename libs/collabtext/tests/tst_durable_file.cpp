@@ -29,6 +29,7 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -117,6 +118,149 @@ struct Recording {
 class TestDurableFile : public QObject {
     Q_OBJECT
 private slots:
+    void simultaneous_replacements_do_not_share_a_temporary() {
+        TempDir dir("separate-temporaries");
+        const auto target = dir.file("state");
+        bool inner_succeeded = false;
+        bool nested = false;
+        StepHook hook;
+        hook.observe = [&](Step step, const fs::path&) {
+            if (step == Step::Write && !nested) {
+                nested = true;
+                inner_succeeded = replace_atomically(target, "INNER").ok();
+            }
+        };
+        QVERIFY(replace_atomically(target, "OUTER", &hook).ok());
+        QVERIFY(inner_succeeded);
+        QCOMPARE(read_file(target), std::string("OUTER"));
+    }
+
+    void temporary_close_failure_does_not_publish() {
+        TempDir dir("failed-close");
+        const auto target = dir.file("state");
+        QVERIFY(replace_atomically(target, "OLD").ok());
+        FileOps ops = FileOps::real();
+        ops.close = [](int fd, const fs::path& path) -> Result<void> {
+            auto closed = FileOps::real().close(fd, path);
+            if (!closed.ok()) return closed;
+            return Error(ErrorCode::io_error, "close rejected", path.string());
+        };
+        const auto result = replace_atomically(target, "NEW", nullptr, &ops);
+        QVERIFY(!result.ok());
+        QCOMPARE(read_file(target), std::string("OLD"));
+    }
+
+    void failed_lease_record_write_releases_the_lock() {
+        TempDir dir("lease-record-failure");
+        const auto path = dir.file("lease");
+        FileOps ops = FileOps::real();
+        ops.write = [](int, std::string_view, size_t) -> Result<size_t> {
+            return Error(ErrorCode::io_error, "diagnostic write rejected");
+        };
+        QVERIFY(!ProcessLease::acquire(path, &ops).ok());
+        QVERIFY(!ProcessLease::held_by_live_process(path));
+        auto good = ProcessLease::acquire(path);
+        QVERIFY(good.ok());
+        auto moved = std::move(good).value();
+        QVERIFY(!ProcessLease::acquire(path).ok());
+        QVERIFY(moved.release().ok());
+        QVERIFY(ProcessLease::acquire(path).ok());
+    }
+
+    void process_death_releases_a_lease_without_replacing_the_lock_file() {
+        TempDir dir("lease-death");
+        const auto path = dir.file("lease");
+        const pid_t child = ::fork();
+        QVERIFY(child >= 0);
+        if (child == 0) {
+            auto lease = ProcessLease::acquire(path);
+            ::_exit(lease.ok() ? 0 : 1); // Deliberately no RAII destruction.
+        }
+        int status = 0;
+        QVERIFY(::waitpid(child, &status, 0) == child);
+        QVERIFY(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+        struct stat before{}, after{};
+        QVERIFY(::stat(path.c_str(), &before) == 0);
+        auto lease = ProcessLease::acquire(path);
+        QVERIFY(lease.ok());
+        QVERIFY(::stat(path.c_str(), &after) == 0);
+        QCOMPARE(before.st_ino, after.st_ino);
+    }
+
+    void missing_sync_directory_is_an_io_error() {
+        TempDir dir("missing-directory");
+        const auto result = sync_directory(dir.file("absent"));
+        QVERIFY(!result.ok());
+        QCOMPARE(result.error().code(), ErrorCode::io_error);
+    }
+
+    void write_all_refuses_a_short_success_from_an_injected_writer() {
+        FileOps ops = FileOps::real();
+        ops.write = [](int, std::string_view, size_t) -> Result<size_t> { return size_t(1); };
+        const auto result = write_all(1, "four", nullptr, {}, &ops);
+        QVERIFY(!result.ok());
+    }
+
+    void progressing_short_writes_are_not_limited_to_sixty_four_calls() {
+        TempDir dir("many-short-writes");
+        auto file = DurableAppendFile::open(dir.file("tail"));
+        QVERIFY(file.ok());
+        file.value().set_write_limit_for_testing(1);
+        const std::string bytes(80, 'x');
+        QVERIFY(file.value().append(bytes).ok());
+        QCOMPARE(read_file(dir.file("tail")), bytes);
+    }
+
+    void first_durable_append_syncs_the_created_name() {
+        TempDir dir("created-name");
+        FileOps ops = FileOps::real();
+        ops.sync_dir = [](const fs::path& path) -> Result<void> {
+            return Error(ErrorCode::io_error, "directory barrier failed", path.string());
+        };
+        auto file = DurableAppendFile::open(dir.file("tail"), nullptr, &ops);
+        QVERIFY(file.ok());
+        QVERIFY(!file.value().append("record").ok());
+    }
+
+    void rename_failure_preserves_cleanup_failure_context() {
+        TempDir dir("cleanup");
+        FileOps ops = FileOps::real();
+        ops.rename = [](const fs::path&, const fs::path&) -> Result<void> {
+            return Error(ErrorCode::io_error, "rename rejected");
+        };
+        ops.remove = [](const fs::path&) -> Result<void> {
+            return Error(ErrorCode::io_error, "cleanup rejected");
+        };
+        const auto result = replace_atomically(dir.file("state"), "record", nullptr, &ops);
+        QVERIFY(!result.ok());
+        QVERIFY(result.error().context().value_or("").find("cleanup rejected") != std::string::npos);
+    }
+
+    void publication_before_directory_sync_failure_is_reported() {
+        TempDir dir("published");
+        FileOps ops = FileOps::real();
+        ops.sync_dir = [](const fs::path&) -> Result<void> {
+            return Error(ErrorCode::io_error, "directory barrier failed");
+        };
+        const auto result = replace_atomically(dir.file("state"), "NEW", nullptr, &ops);
+        QVERIFY(!result.ok());
+        QCOMPARE(read_file(dir.file("state")), std::string("NEW"));
+        QVERIFY(result.error().context().value_or("").find("published") != std::string::npos);
+    }
+
+    void a_locked_lease_with_an_empty_record_cannot_be_stolen() {
+        TempDir dir("lease-window");
+        const auto path = dir.file("writer.lock");
+        const int fd = ::open(path.c_str(), O_CREAT | O_RDWR, 0600);
+        QVERIFY(fd >= 0);
+        const int locked = ::flock(fd, LOCK_EX | LOCK_NB);
+        if (locked != 0) { ::close(fd); QFAIL("could not arrange locked empty record"); }
+        const auto contender = ProcessLease::acquire(path);
+        ::close(fd);
+        QVERIFY(!contender.ok());
+        QCOMPARE(contender.error().code(), ErrorCode::writer_conflict);
+    }
+
 
     // =======================================================================
     // A. The step order is fixed and observable
@@ -133,11 +277,12 @@ private slots:
         // Exactly one of each step, in the documented order. This is the
         // acceptance criterion: the order is observable rather than asserted in
         // a comment and trusted.
-        QCOMPARE(rec.order.size(), std::size_t(4));
+        QCOMPARE(rec.order.size(), std::size_t(5));
         QCOMPARE(rec.order[0], std::string("write"));
         QCOMPARE(rec.order[1], std::string("file_sync"));
-        QCOMPARE(rec.order[2], std::string("replace"));
-        QCOMPARE(rec.order[3], std::string("dir_sync"));
+        QCOMPARE(rec.order[2], std::string("close"));
+        QCOMPARE(rec.order[3], std::string("replace"));
+        QCOMPARE(rec.order[4], std::string("dir_sync"));
         QVERIFY(rec.index_of(Step::Write) < rec.index_of(Step::FileSync));
         QVERIFY(rec.index_of(Step::FileSync) < rec.index_of(Step::Replace));
         QVERIFY(rec.index_of(Step::Replace) < rec.index_of(Step::DirSync));
@@ -155,9 +300,11 @@ private slots:
 
         // write then file_sync, with nothing in between: the caller is told
         // "durable" only after the sync actually happened.
-        QCOMPARE(rec.order.size(), std::size_t(2));
+        QCOMPARE(rec.order.size(), std::size_t(3));
         QCOMPARE(rec.order[0], std::string("write"));
         QCOMPARE(rec.order[1], std::string("file_sync"));
+        QCOMPARE(rec.order[2], std::string("dir_sync"));
+        QCOMPARE(file.value().counts().dir_syncs, uint64_t(1));
         QCOMPARE(file.value().sync_count(), 1u);
     }
 
@@ -332,7 +479,7 @@ private slots:
         // Every step, one at a time, asserting the same invariant: whatever
         // fails, the destination still holds the complete previous value and
         // never a prefix of the new one.
-        const Step steps[] = {Step::Write, Step::FileSync, Step::Replace, Step::DirSync};
+        const Step steps[] = {Step::Write, Step::FileSync, Step::Close, Step::Replace, Step::DirSync};
 
         for (const Step step : steps) {
             TempDir dir("atomicity");
@@ -348,7 +495,8 @@ private slots:
 
             const auto result = replace_atomically(target, "REPLACEMENT", &rec.hook);
             QVERIFY2(!result.ok(), to_string(step).data());
-            QCOMPARE(result.error().code(), ErrorCode::io_error);
+            QCOMPARE(result.error().code(), step == Step::DirSync ?
+                     ErrorCode::commit_uncertain : ErrorCode::io_error);
             // The error names the step that failed, so an operator can act.
             QVERIFY(!result.error().context().value_or("").empty());
 
