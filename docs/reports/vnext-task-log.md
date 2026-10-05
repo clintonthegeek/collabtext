@@ -1368,3 +1368,76 @@ progress; 63 active tasks after its earlier split. Updated executor orientation
 and API/protocol guides supersede stale kickoff status. Plan checks pass with
 F1–F10/R1–R14/W1–W6 coverage and zero unreviewed scope hits. Source stays isolated
 on roadmap/reliability-v2; master receives discovery docs only.
+
+## 2026-10-05 — P06a allocation-domain gate (step 2 of 6)
+
+```text
+Task: P06a (step 2 of 6 only; the task remains in_progress)
+Status: gate complete; engine migration pending
+Baseline: c150086
+Scope: docs/specs/vnext-identity.md sections 3.1-3.8; CheckedCounter::reserve_run;
+  libs/collabtext/tests/reference/IdentityAllocationModel.h;
+  libs/collabtext/tests/tst_identity_allocation_model.cpp; CMake registration
+Regression: none in production code -- this step adds a contract, a model, and a
+  checked counter primitive. The two failures found while writing the fixtures
+  were fixture bugs (undo parity asserted backwards; a frontier expectation that
+  did not account for the merged range), both fixed and re-run.
+Verification: Debug fast 63/63; Release 65/65 including tst_benchmark and
+  tst_realistic; ASan not run for this step
+Seed: fixed default 20261003; the randomised model comparison uses
+  std::mt19937_64(20261004)
+Artifacts: build-roadmap-debug/verification/20261005T014431Z-3098282;
+  build-roadmap-release/verification/20261005T014613Z-3101343
+Next ready tasks: P06a steps 3-6; S01 remains independently ready
+```
+
+The review was right that comparator evidence does not authorize replacing the
+character clock with one counter per operation, and the specification now says
+exactly what replaces it. A local operation reserves a **run interval**: `n`
+item identities followed by its own operation identity, from one checked
+`reserve_run(n + 1)`. Two consequences worth keeping in view.
+
+The layout is not cosmetic. Legacy sets `op.timestamp = m_clock.value - 1`
+(`Buffer.cpp:900`), so an insert operation and the last character of its own run
+carry the *same* identity today, and `deletion_ts` costs a second tick
+(`Buffer.cpp:586`) only because the operation's own timestamp cannot serve twice.
+Separating the domains removes both, and makes "which operation inserted this
+character" a range-containment question instead of a guess.
+
+The obvious alternative was rejected rather than skipped. Giving each operation
+one counter and each scalar a packed index stops consuming a counter per
+character, but it changes the order: `(counter, index)` puts all of one
+operation's items before the next operation, where the per-scalar clock
+interleaves them. Equal locators tie-break on exactly that order, so the change
+would be invisible in the type and visible in every concurrent-passage fixture.
+The interval scheme reproduces the legacy order value for value, which is why it
+was chosen and why S01's F8 fixtures stay meaningful after the migration.
+
+Three findings from writing the gate, in the order they mattered:
+
+- **The gap obligation is real and had nowhere to live.** Durability-first
+  allocation means a crash between the reservation and the log append burns the
+  whole interval, and a maximum observed counter is not proof that the values in
+  between ever existed. The contract now requires recovery to publish an explicit
+  gap record covering the abandoned interval, so a peer's contiguous frontier
+  crosses a *known* absence instead of stalling forever. Publication belongs to
+  P06b (carry the interval length and the gap kind), refusal to a mismatched
+  interval to P07, and framing plus the reopen path to L02. The gate fixed the
+  obligation; it did not implement any of it.
+- **A mutation survived the first version of the fixtures.** Deleting the
+  frontier's "nothing from the beginning is known" requirement still passed
+  16/16, because every fixture started at counter 1 and so never reached that
+  branch. A late-joining replica case was added; the mutation is now caught.
+  Recording this because the honest reading of "16/16 green" before that addition
+  was "the green run proves less than it appears to", which is the same category
+  of mistake the review caught in the engine.
+- **Comparing against production needs a production primitive to compare with.**
+  `CheckedCounter` could only reserve one value, so the interval rule would have
+  been unverifiable against anything real. `reserve_run` is additive to P02's
+  checked counter, deliberately not to the engine's identity types, and its
+  overflow-safe bound is the one thing the model and production are allowed to
+  share a test for.
+
+What this step does **not** prove: that a migrated engine converges, that
+`sizeof(FragmentSummary)` grows by the projected 1.4x, or anything about durable
+allocation across a power loss. Steps 3–6 own the migration and the measurement.

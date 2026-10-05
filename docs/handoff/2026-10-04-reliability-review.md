@@ -18,10 +18,23 @@ The [Wave reply](2026-10-04-reply-to-wave.md) is a saved draft, not a sent messa
 V01–V08, D01, P01–P05, and L01 are complete, with review amendments to private
 ownership, counter validity, parsing limits, UTF-8 source boundaries, operation
 deferral, bounded overflow retention, and durable filesystem primitives.
-P06a remains **in progress**: its model/order gate landed but engine identity
-migration did not. Complete its new allocation-domain gate (step 2), then the engine-adoption
-steps 3–6 and P06b. S01 is independently ready.
+P06a remains **in progress**: both design gates have landed (ordering, and
+allocation on 2026-10-05) but the engine identity migration did not. Its remaining
+scope is the engine-adoption steps 3–6, then P06b. S01 is independently ready.
 There are 63 tasks after splitting P06; the registry is authoritative.
+
+**Update, 2026-10-05.** Step 2 is complete: the allocation-domain contract is
+written (vnext-identity.md §3.1–§3.8), it has an independent model plus 16
+fixtures, and `CheckedCounter::reserve_run` gives the contract a production
+primitive to be checked against. Debug 63/63 and Release 65/65; ASan was not run
+for that step. Two things the next executor must not lose: a local operation
+reserves a **run interval** (its items, then its own identity), not one counter
+per character — a packed subidentity was considered and rejected because it
+changes equal-locator order; and a crash between reservation and log append
+burns an interval, which obliges P06b/P07/L02 to publish, refuse, and recover
+**explicit gap records** rather than treating a maximum counter as contiguity.
+Nothing in this branch yet allocates that way — the engine still ticks once per
+character.
 
 Important distinctions to preserve:
 

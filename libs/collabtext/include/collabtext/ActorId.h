@@ -275,6 +275,22 @@ public:
     /// unchanged and the error is counter_exhausted.
     [[nodiscard]] Result<uint64_t> reserve(std::string_view context = {});
 
+    /// Reserve a *run* of `count` consecutive values and return the first.
+    ///
+    /// This is the allocation one local operation actually needs: the operation's
+    /// own identity plus one identity per inserted scalar (docs/specs/
+    /// vnext-identity.md §3.2). Handing out a whole interval in one checked step
+    /// is what keeps a single crash from leaving an operation's identities
+    /// partly issued and partly reissuable, and it is why an engine borrows a
+    /// counter rather than ticking one value at a time.
+    ///
+    /// All-or-nothing. `count == 0` is refused: every operation consumes at least
+    /// its own identity, so a zero-length reservation is a caller error rather
+    /// than an empty range. The bound is tested by subtraction, because
+    /// `m_next + count` may itself overflow. `kExhausted` is never issued, so the
+    /// highest value `reserve_run` can hand out is `kExhausted - 1`.
+    [[nodiscard]] Result<uint64_t> reserve_run(uint64_t count, std::string_view context = {});
+
     /// Raise the counter to cover a value observed from a peer: the next
     /// reservation becomes `observed + 1`, so a locally minted operation can
     /// never collide with one the peer already has.

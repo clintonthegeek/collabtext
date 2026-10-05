@@ -237,6 +237,26 @@ Result<uint64_t> CheckedCounter::reserve(std::string_view context) {
     return issued;
 }
 
+Result<uint64_t> CheckedCounter::reserve_run(uint64_t count, std::string_view context) {
+    if (count == 0)
+        return Error(ErrorCode::invalid_identity,
+                     "a run reservation must cover at least one value",
+                     std::string(context));
+    if (m_next == 0)
+        return Error(ErrorCode::invalid_identity, "counter zero is reserved", std::string(context));
+    // Last value the run would occupy, computed by subtraction so the check
+    // cannot itself wrap: m_next + count - 1 <= kExhausted - 1.
+    if (m_next == kExhausted || count - 1 > (kExhausted - 1) - m_next)
+        return Error(ErrorCode::counter_exhausted,
+                     "a run of " + std::to_string(count) +
+                         " values does not fit below the counter's last value; "
+                         "a new epoch is required",
+                     std::string(context));
+    const uint64_t base = m_next;
+    m_next = base + count;
+    return base;
+}
+
 Result<void> CheckedCounter::observe(uint64_t observed, std::string_view context) {
     // Being behind an observed value is ordinary: the peer simply has not seen
     // everything we have produced. Only the end of the range is a failure.

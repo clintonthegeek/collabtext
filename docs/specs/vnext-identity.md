@@ -1,6 +1,10 @@
 # vNext operation identity
 
 **Created:** 2026-10-04, as the design-gate artifact for roadmap task P06a
+**Extended:** 2026-10-05 — §3.1–§3.8 close the allocation-domain gate the review
+required. §1–§3.0 and §4–§6 are unchanged in intent; nothing here is implemented
+in the engine yet, and §5's cost table stays projected until P06a step 4 measures
+a migrated engine.
 **Supersedes for identity purposes:** the `Lamport { uint32_t value; uint16_t
 replica_id; }` in `src/crdt/Clock.h`, which this document replaces rather than
 extends.
@@ -103,36 +107,194 @@ replicas would implement differently.
   `invalid_identity` rejection; it is restated here because the wider counter
   makes the sentinel even easier to hit by accident.
 
-### 3.1 Allocation domains still required before engine adoption
+### 3.1 The three domains
 
-The comparator model proves ordering laws for supplied identities; it does not
-yet specify how the engine allocates every identity. P06a must close these issues
-with a written mapping and independent fixtures before changing production types:
+The comparator model proves ordering laws for supplied identities. It does not
+say who hands out which number, and the legacy engine answers that question
+three different ways in three different places. Those are separated here.
 
-- Legacy Buffer allocates a deletion timestamp and advances its clock for each
-  inserted scalar; split fragments derive `origin + scalar_offset`. One P02
-  `next_operation()` reservation per edit does not reserve that whole range.
-  Specify separate operation/item domains or a checked, durably reserved interval,
-  with non-overlapping run/split/deletion/undo identities and overflow behavior.
-  Do not mechanically substitute single operation counters for character IDs.
-- Legacy Lamport ordering advances on remote observation; private P02 counters
-  advance on local reservation. Specify how operation identity, character identity,
-  and causal/tie-break clock relate, including multiple documents sharing one
-  private actor/stream owner. They must not alias or silently change ordering.
-  Specify the allocator/owner connection and explicit volatile test usage:
-  passing ActorId to a constructor alone is not authority to restart a private
-  counter at 1 or to claim durable allocation.
-- A crash can consume a private reservation before its operation enters a durable
-  log. The future contiguous coverage contract must represent an unused reservation
-  or explicitly account for gaps; a maximum observed counter is not proof that
-  every intervening operation was applied. Define the reservation/log interface
-  here and carry its publication/recovery semantics into P06b/P07/L02.
+| Domain | What it names | Allocated from | Counted for |
+|---|---|---|---|
+| **Operation** | the operation itself: its log record, its dedupe key, its undo id, a deletion event | the durable per-(actor, stream) counter, one value per operation | dedupe, undo map `undo_id`, version vector |
+| **Item** | one inserted scalar: a character's position identity, an `IdList` entry's origin | a **run interval** reserved by one operation (§3.2) | fragment ordering, anchors, undo map `edit_id` |
+| **Causal** | nothing durable — the local knowledge of what has been seen | the same counter, raised by applying a remote operation (§3.4) | making a later local identity sort after what it has observed |
 
-Required independent cases include multi-scalar insert → split → delete → undo/
-redo → restart, multiple documents/streams, remote clock advance, failed or
-abandoned reservations, and exhaustion at each interval boundary. State what the
-model validates and what later lifecycle tests must establish. The existing
-comparator gate remains useful evidence, but alone does not unlock this adoption.
+There is no separate persistent causal store. The durable counter *is* a Lamport
+clock whose actor half is persistent, so "causal" and "durable" are one counter
+with two ways to move, exactly as in the legacy engine. What is new is that the
+three uses are named, disjoint, and no longer alias.
+
+### 3.2 Run-interval reservation
+
+The legacy engine answers "which identity does this character get" by ticking its
+clock once per inserted scalar (`Buffer.cpp:864`, `IdList.cpp:73`). One P02
+`next_operation()` reservation per edit cannot supply that range, so vNext
+reserves a **run interval**: one checked reservation covering an operation and
+all of its items.
+
+For a local operation inserting `n` scalars in total, the reservation returns a
+base `b` and consumes `n + 1` consecutive values:
+
+```
+item identities   b + 0 .. b + n - 1     in document order: run by run, scalar by scalar
+operation identity        b + n         (for a deletion-only operation, n = 0: b + 0)
+next reservation      b + n + 1
+```
+
+Four properties, each of which the legacy engine does *not* have:
+
+1. **Non-aliasing.** The operation identity is strictly greater than every item
+   it created and strictly less than the next operation's base. The legacy
+   engine sets `op.timestamp` to `m_clock.value - 1` (`Buffer.cpp:900`) — the
+   *last* item identity of its own run — so an insert operation and one of its own
+   characters carry the same identity today. Splitting the domains removes that
+   overlap, and makes "which operation inserted this character" answerable by
+   range containment rather than by guesswork.
+2. **Disjointness falls out of monotonicity.** Intervals are half-open and handed
+   out in increasing order, so no two operations' items can collide without the
+   counter being reused, which §3's rules already forbid.
+3. **Derived, not re-reserved.** A fragment's item identities are positions in
+   its owning operation's interval. Splitting a fragment partitions those
+   positions; it never allocates (§3.3).
+4. **One durable write.** The whole `n + 1` range is persisted by a single
+   checked reservation *before* any of it is used, so a crash cannot leave part
+   of an operation's identities issued and part of them reissuable.
+
+`CheckedCounter::reserve_run(count)` is that reservation: it is `reserve()` with a
+checked bound, and it either hands out the whole range or changes nothing.
+
+Rejected alternative — a packed subidentity. Giving each operation one counter
+and each scalar an index packed beside it (`counter * 2^k + index`, or a
+`(counter, index)` pair) is the obvious way to stop consuming a counter per
+character. It is rejected because it silently changes the order: under
+`(counter, index)` the items of operation `c` all sort before operation `c + 1`,
+whereas the legacy counter-per-scalar scheme interleaves them. Equal locators
+tie-break on exactly that order, so the change is invisible in the type and
+visible in every concurrent-passage fixture. The interval scheme reproduces the
+legacy order value for value; that is why it was chosen.
+
+### 3.3 Derived identities: split, deletion, undo/redo
+
+| Event | Identity source | Allocation |
+|---|---|---|
+| Insert a run of `k` scalars | the operation's interval, positions `0..k-1` of that run | none beyond the operation's reservation |
+| Split a fragment at scalar offset `j` | second half's item identities are the owner's positions `j..` | none — derivation, `origin + j`, as today (`Buffer.cpp:413`) |
+| Delete | the deleting **operation's** identity, pushed onto each affected fragment's deletion list | none — the operation already consumed one value |
+| Undo / redo | undo ids are fresh operation identities; undo-map `edit_id`s are the affected **item** identities | one reservation per undo/redo operation |
+
+The invariant the engine must hold: a derived item identity always satisfies
+`base <= identity < base + n` for the operation that owns the run it came from,
+and a fragment's derived identities stay inside the interval recorded for that
+run. A split that could push an identity outside its interval is a defect, not a
+new numbering.
+
+Two consequences worth naming. Deletion no longer needs a separate counter tick:
+the legacy `deletion_ts` tick (`Buffer.cpp:586`) exists because the operation's
+own timestamp could not serve twice; with §3.2 it can. And the undo map's two
+key fields now come from different domains — `edit_id` is an item identity,
+`undo_id` is an operation identity — which is why no UndoMap entry can ever be
+confused with the operation that produced it.
+
+### 3.4 The causal clock and remote observation
+
+Applying a remote operation raises the local counter past everything that
+operation used, so an identity created afterwards sorts after identities the
+local replica has already seen. The legacy engine observes the operation's
+timestamp, its deletion id, and each run's last item
+(`Buffer.cpp:1297-1305`); under §3.2 the operation identity is the highest value
+in the interval, so observing it alone covers the run, and the per-run
+observations become redundant but harmless.
+
+The raise is **derived state, not durable allocation**. It need not be
+persisted: on reopen the engine replays its own log and observes again, and a
+lost raise cannot cause reuse because no identity was issued while it was held.
+A *reservation* is different in kind and is always durable first — that is the
+F4 fix, and §3.6 is about what is left over when the two steps come apart.
+
+### 3.5 Exhaustion at interval boundaries
+
+`UINT64_MAX` is the exhaustion sentinel and is never issued, so the highest
+issuable value is `UINT64_MAX - 1`. `reserve_run(count)` requires
+
+```
+next + count - 1  <=  UINT64_MAX - 1
+```
+
+and fails with `counter_exhausted`, changing nothing, when it does not. The
+arithmetic is checked, not wrapped: `next + count` itself may overflow `uint64`,
+so the bound is tested by subtraction. Boundary behaviour, all of it
+executable cases in the model:
+
+| next | count | result |
+|---|---|---|
+| `UINT64_MAX - 1` | 1 | issues `UINT64_MAX - 1`; counter becomes exhausted |
+| `UINT64_MAX - 1` | 2 | `counter_exhausted`, nothing issued |
+| `UINT64_MAX` | any | `counter_exhausted`, nothing issued |
+| 1 | 0 | rejected — a count of 0 is not an operation, since every operation consumes its own identity |
+
+### 3.6 Abandoned reservations, gaps, and contiguous coverage
+
+Durability-first allocation has a known cost: a crash between the durable
+reservation and the operation's arrival in the durable log burns the whole
+interval. The counter never goes backwards, so those values are gone, and
+nothing will ever fill them.
+
+That is a gap in the stream, and the protocol already has the rule for gaps
+(vnext-protocol.md §5): **coverage advances only over a validated, contiguous
+prefix.** So an abandoned interval is not a counter problem, it is a coverage
+problem, and it must be resolved explicitly:
+
+1. The reservation record is durable and states the interval *before* use, so
+   recovery can always enumerate reservations that were never published.
+2. On reopen, every reserved-but-unpublished interval is turned into an explicit
+   **gap record** appended to the stream — a record that occupies the interval,
+   applies as a no-op, and names the interval it accounts for. Peers therefore
+   advance their frontier across a *known* absence instead of stalling forever.
+3. A maximum observed counter is never treated as proof of contiguity. Receiving
+   `(actor, 40)` and `(actor, 43)` is missing 41 and 42 until a record says
+   otherwise, whether those records carry operations or gaps.
+4. A gap record is terminal. It cannot be filled later, so nothing may depend on
+   identities inside an abandoned interval.
+
+Publication and recovery of these records belong to P06b (the codec must carry
+the interval length and the gap kind), P07 (the envelope refuses a mismatched
+interval), and L02 (framing, partial-append reconciliation, and the reopen path
+that emits gap records). This section fixes their obligation; it does not
+implement it.
+
+### 3.7 One actor, many documents and streams
+
+Counters are per (actor, stream) and the envelope carries document and stream
+(vnext-protocol.md §1.3). Two consequences the engine must respect:
+
+- The **same** counter value in two streams is two independent facts. They are
+  different identities because their context differs, and no code may order them,
+  deduplicate across them, or treat one as covering the other.
+- An engine borrows its allocator. Constructing a `Buffer` with an `ActorId` does
+  not create a counter, does not restart one at 1, and is not authority to claim
+  durable allocation. The counter lives in `ReplicaState`, one durable owner per
+  private state directory (P02), and the engine holds a handle naming its
+  (document, stream). Tests that need a throwaway counter must say so explicitly
+  as a volatile test counter — never by reusing a production allocator path.
+
+### 3.8 What the independent model proves, and what it does not
+
+[`tst_identity_allocation_model.cpp`](../../libs/collabtext/tests/tst_identity_allocation_model.cpp)
+implements §3.2–§3.7 from the text above, without calling the production
+allocator it is validating, and the fixtures cover: multi-scalar insert → split →
+delete → undo → redo → restart, two documents and two streams under one actor, a
+remote clock advance followed by local allocation, a reserved-but-unpublished
+interval becoming an explicit gap, and exhaustion at each boundary in §3.5. It
+also compares its own run reservation against `CheckedCounter::reserve_run` —
+that single comparison is the only place the two implementations meet.
+
+It proves the contract is internally consistent and implementable: identities do
+not alias, intervals are disjoint, derivations stay in range, a restart never
+reissues, exhaustion is atomic, and gaps are explicit. It does **not** prove that
+a migrated engine converges; that is what P06a's steps 3–6 and the convergence
+suites are for. It also does not prove durable-allocation behaviour across a real
+power loss: the gap rules here are a specification, and the lifecycle evidence
+belongs to L02/L08.
 
 ## 4. Epoch, document, and stream are not in here
 

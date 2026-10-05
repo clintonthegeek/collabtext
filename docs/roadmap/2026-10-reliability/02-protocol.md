@@ -185,12 +185,15 @@ Run `./tools/verify-roadmap.sh debug 'tst_operation_validation|tst_opqueue|tst_c
 **Files / scope:**
 
 - `docs/specs/vnext-identity.md`
+- `libs/collabtext/include/collabtext/ActorId.h`
+- `libs/collabtext/src/identity/ReplicaState.cpp`
 - `libs/collabtext/src/crdt/Clock.h`
 - `libs/collabtext/src/crdt/Clock.cpp`
 - `libs/collabtext/src/crdt/UndoMap.h`
 - `libs/collabtext/include/collabtext/Operations.h`
 - `libs/collabtext/tests/tst_identity_ordering_model.cpp`
 - `libs/collabtext/tests/reference/IdentityAllocationModel.h`
+- `libs/collabtext/tests/tst_identity_allocation_model.cpp`
 
 **Steps:**
 

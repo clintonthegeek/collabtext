@@ -119,6 +119,7 @@ add_crdt_test(tst_summary_laws)
 add_crdt_test(tst_decode_validation)
 add_crdt_test(tst_operation_validation)
 add_crdt_test(tst_identity_ordering_model)
+add_crdt_test(tst_identity_allocation_model)
 add_crdt_test(tst_durable_file)
 target_compile_definitions(tst_behavior_fixtures PRIVATE
     COLLABTEXT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/behavior")

@@ -842,12 +842,15 @@
       ],
       "files": [
         "docs/specs/vnext-identity.md",
+        "libs/collabtext/include/collabtext/ActorId.h",
+        "libs/collabtext/src/identity/ReplicaState.cpp",
         "libs/collabtext/src/crdt/Clock.h",
         "libs/collabtext/src/crdt/Clock.cpp",
         "libs/collabtext/src/crdt/UndoMap.h",
         "libs/collabtext/include/collabtext/Operations.h",
         "libs/collabtext/tests/tst_identity_ordering_model.cpp",
-        "libs/collabtext/tests/reference/IdentityAllocationModel.h"
+        "libs/collabtext/tests/reference/IdentityAllocationModel.h",
+        "libs/collabtext/tests/tst_identity_allocation_model.cpp"
       ],
       "steps": [
         "Write the identity contract first: what a Lamport identity becomes (persistent ActorId plus a checked 64-bit counter, per R1), what total order the engine relies on, and which of those uses are convergence-critical rather than merely identifying. Prove the ordering laws against an independent model before touching the engine.",
@@ -876,22 +879,31 @@
         "4ece11a"
       ],
       "gate_evidence": [
-        "docs/specs/vnext-identity.md -- the contract: what an identity is, the order and the three places it is used, why locally assigned slots diverge, the seven laws, counter rules, why epoch is deliberately not here, and baseline/projected cost. Section 3.1 allocation-domain requirements were added by review and remain unfinished.",
+        "docs/specs/vnext-identity.md -- the contract: what an identity is, the order and the three places it is used, why locally assigned slots diverge, the seven laws, counter rules, why epoch is deliberately not here, and baseline/projected cost.",
         "libs/collabtext/tests/tst_identity_ordering_model.cpp -- 14 cases, independent implementation, registered in CMake and part of the fast selection.",
-        "Mutation-checked: actor-first, actor comparison truncated to 4 bytes, and a cyclic counter comparison each produce failures; the unmutated file passes 14/14."
+        "Mutation-checked: actor-first, actor comparison truncated to 4 bytes, and a cyclic counter comparison each produce failures; the unmutated file passes 14/14.",
+        "docs/specs/vnext-identity.md sections 3.1-3.8 (2026-10-05) -- the allocation-domain contract the review required: the operation/item/causal domains, run-interval reservation, split/deletion/undo derivation, the causal raise, exhaustion bounds, abandoned reservations becoming explicit gap records, and per-(actor, stream) independence. Section 3.8 states what the model does and does not prove.",
+        "libs/collabtext/tests/reference/IdentityAllocationModel.h -- the independent model: its own actor comparison, counter, overflow-safe bound, result vocabulary, run derivation, and contiguous-prefix frontier. It calls no production allocator.",
+        "libs/collabtext/tests/tst_identity_allocation_model.cpp -- 16 cases: exhaustion at every boundary in section 3.5, the model-versus-CheckedCounter comparison (fixed table plus 400 seeded randomised runs), non-aliasing across 120 operations, split derivation, deletion identity, undo/redo parity, the full insert/split/delete/undo/redo/restart lifecycle, two documents and two streams, an abandoned reservation becoming a gap, and maximum-counter-is-not-contiguity.",
+        "libs/collabtext/include/collabtext/ActorId.h + src/identity/ReplicaState.cpp -- CheckedCounter::reserve_run, the checked all-or-nothing interval reservation the contract needs, tested against the model.",
+        "Mutation-checked (allocation gate): removing the run-length bound in production reserve_run fails the two comparison tests; putting the operation identity back on its last item (the legacy aliasing) fails 3 cases; dropping the frontier's contiguity requirement initially passed 16/16, which was a real gap in the fixtures -- a late-joining replica case was added and the mutation is now caught."
       ],
       "verification_results": {
-        "model_cases": "14/14 QtTest cases",
-        "debug_fast": "61/61 CTest executables pass",
-        "mutation_checks": "3 of 3 deliberate comparator defects caught"
+        "model_cases": "tst_identity_ordering_model 14/14; tst_identity_allocation_model 16/16 QtTest cases",
+        "debug_fast": "63/63 CTest executables pass (the 62-test fast selection plus the new model executable)",
+        "release_all": "65/65 CTest executables pass, including the two expensive suites",
+        "mutation_checks": "3 of 3 ordering defects caught; 3 of 3 allocation defects caught after one fixture gap was closed",
+        "asan": "not run for this step; the review's ASan/UBSan/LSan 62/62 result stands for its own baseline, not for the new model",
+        "seed": "fixed default 20261003; the randomised comparison uses std::mt19937_64(20261004) directly",
+        "artifacts": "build-roadmap-debug/verification/20261005T014431Z-3098282, build-roadmap-release/verification/20261005T014613Z-3101343"
       },
       "remaining_scope": [
-        "Step 2: complete the allocation/causal-clock/run-identity mapping and independent fixtures in vnext-identity.md section 3.1; comparator tests alone do not establish this contract.",
-        "Step 3: replace the 16-bit replica_id and 32-bit counter in Clock.h/Clock.cpp and UndoMapKey. The gate's laws are proven but not yet enforced against the engine's types, because the engine's types have not changed.",
-        "Step 4: re-measure sizeof after the change and compare against the recorded before figures.",
-        "Step 5: Buffer(ActorId) and IdList(ActorId), rejecting a default-constructed ActorId as invalid_identity.",
+        "Step 3: replace the 16-bit replica_id and 32-bit counter in Clock.h/Clock.cpp and UndoMapKey, allocating per section 3.2's run intervals instead of ticking once per scalar. The gate's laws and the allocation mapping are now written and executable; nothing yet enforces them against the engine's types, because the engine's types have not changed.",
+        "Step 4: re-measure sizeof after the change and compare against the recorded before figures. The section 5 table stays projected until then.",
+        "Step 5: Buffer(ActorId) and IdList(ActorId), rejecting a default-constructed ActorId as invalid_identity. The engine must borrow the allocator; a constructor argument is not authority to restart a counter (section 3.7).",
         "Step 6: opaque operation values; move field layout out of the public header.",
-        "Roughly 140 Lamport construction sites in tests and 56 files referencing replica_id."
+        "Roughly 140 Lamport construction sites in tests and 56 files referencing replica_id.",
+        "Inherited obligations this gate fixed but did not implement: P06b must carry each operation's interval length and the gap record kind; P07 must refuse a mismatched interval and a gap that is not terminal; L02 owns gap-record publication, partial-append reconciliation, and the reopen path that emits gap records."
       ]
     },
     {

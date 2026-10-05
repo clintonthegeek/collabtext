@@ -4,7 +4,7 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status:** V01–V08, D01, P01–P05, and L01 complete. P06a is in progress: its independent ordering gate exists, engine migration remains. S01 is independently ready. Read the [2026-10-04 progress review](../../reports/2026-10-04-reliability-progress-review.md), [current handoff](../../handoff/2026-10-04-reliability-review.md), and [task registry](TASKS.json). W1–W6 external consumer requirements are accepted into existing tasks; they are not implemented merely by this amendment.
+**Status:** V01–V08, D01, P01–P05, and L01 complete. P06a is in progress: both design gates now exist and run (identity ordering, and identity allocation), so what remains is the engine migration itself — steps 3–6. S01 is independently ready. Read the [2026-10-04 progress review](../../reports/2026-10-04-reliability-progress-review.md), [current handoff](../../handoff/2026-10-04-reliability-review.md), and [task registry](TASKS.json). W1–W6 external consumer requirements are accepted into existing tasks; they are not implemented merely by this amendment.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **63 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
@@ -116,9 +116,9 @@ No recommendation is considered complete merely because it appears in a plan. E0
 
 ## Implementation handoff
 
-- **Next:** finish P06a without treating its model as an engine migration. Follow P06b only after its prerequisites. S01 fixtures can proceed independently; S02 and G01 still require complete specifications and independent models before dependent algorithms.
+- **Next:** P06a steps 3–6 — widen the engine's identity types to the 24-byte identity, allocate per the run-interval contract in vnext-identity.md §3.2 rather than one tick per scalar, then measure the real layout. Both design gates are landed; the migration itself is not. Follow P06b only after its prerequisites. S01 fixtures can proceed independently; S02 and G01 still require complete specifications and independent models before dependent algorithms.
 - **Independent review:** the [review report](../../reports/2026-10-04-reliability-progress-review.md) records reproduced defects and fixes in P02/P04/P05/L01, executable evidence, and limitations. The old kickoff handoff is historical.
-- **Identity:** ReplicaState now has one move-only kernel-lease owner per private directory, nonzero counter reservations, strict state directives, and checked atomic persistence. ActorId is still not consumed by the legacy engine; P06a must finish that adoption.
+- **Identity:** ReplicaState now has one move-only kernel-lease owner per private directory, nonzero counter reservations, strict state directives, and checked atomic persistence. The allocation contract is written and executable (vnext-identity.md §3.1–§3.8, with an independent model and a checked `reserve_run`), including the gap-record obligation a crash between reservation and log append creates. ActorId is still not consumed by the legacy engine; P06a steps 3–6 must finish that adoption.
 - **Validation:** the bounded reader rejects literal/escaped string overflow and duplicate keys; semantic validation also checks actor head-of-line queues. Deferred and diagnostic quarantine queues are separately bounded. The caller/store retains rejected input. Legacy operation serializers remain until P06b; P04/P05 did not complete all of F10.
 - **Coverage:** Global::coverage_intersection is a durable-watermark intersection; Global::meet is a nonzero-min summary fold. The latter cannot authorize GC. F3's marker was removed for the intended API; an old probe calling meet is not the new coverage contract.
 - **Durability:** L01 provides checked file primitives, first-append directory barriers, unique temporary files, kernel leases, and explicit uncertain publication outcomes. SegmentWriter/StreamSync/session/save wiring remains L02–L08; F9 is not yet solved end to end. Process-kill evidence is not power-loss/platform certification.
@@ -143,7 +143,14 @@ Two failures that predate their discovery hid in the excluded suites: `tst_reali
 On 2026-10-04 P06 was split into P06a (engine identity adoption) and P06b (opaque
 codecs); the active count is 63. P05 and L01 subsequently landed. Independent
 review corrected ownership, validation limits, overflow retention, and durable
-filesystem behavior. Wave's requests were integrated as W1–W6 into 13 existing
+filesystem behavior. On 2026-10-05 P06a's second design gate landed: the
+allocation-domain contract (vnext-identity.md §3.1–§3.8), an independent model, 16
+fixtures, and the checked `CheckedCounter::reserve_run` they compare against. The
+decision it records is that one local operation reserves a *run interval* — its
+items and then its own identity — instead of one counter per character, which
+reproduces the legacy ordering value for value; a packed subidentity was
+considered and rejected because it changes equal-locator order. P06a steps 3–6,
+the engine migration, remain. Wave's requests were integrated as W1–W6 into 13 existing
 tasks, with no dependency bypass or completed-status promotion. The supported
 published vNext token contract is a future persisted-data obligation; the user's
 permission to discard pre-vNext experimental stores remains unchanged.
