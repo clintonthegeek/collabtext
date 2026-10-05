@@ -1827,3 +1827,94 @@ learns that before writing code rather than after losing a reply's position.
 **Next:** A06a — real `install(TARGETS)`/`install(EXPORT)`, a package config, and
 a producer/consumer check that relocates the install tree before building against
 it. That is the last packaging task, and it unblocks W01, W02 and E07a.
+
+## A06a — Install and export a relocatable alpha package (2026-10-05)
+
+Commits `666297b`, `b1cfa6c`, `f3360c0`.
+
+**Why this was not packaging busywork.** A02a made the alpha surface usable, but
+only from inside this repository. A consumer cannot consume a repository. More
+importantly, a library whose only user is its own test suite has never been asked
+the questions a consumer asks, and three of those questions failed the moment an
+outside project tried to answer them.
+
+**What the install now does.** Each component exports in its own export set
+rather than sharing one. That is stricter than a single combined export file
+requires — an unused imported target naming `Qt6::Widgets` is usually harmless —
+and the strictness is the point: a consumer that asked for Core should not have
+Qt visible anywhere in its configure output, not even as a string it never reads.
+Static dependency records ride along per component, so `find_dependency(zstd)`
+only happens when someone asked for the file transport.
+
+The consumer fixture is a separate CMake project on purpose. It finds the package
+by prefix path, includes headers as `<collabtext/X>`, links an imported target,
+and compiles one translation unit per installed header. That last part is a real
+check rather than a gesture: a header that needs an include path the consumer
+does not have is not self-sufficient, and only compiling it alone proves
+otherwise. `StreamSync` fails exactly this test — its header names zstd-reaching
+segment types — so it stayed in `src/transport/` and the manifest says the
+transport is implemented but not advertised. Splitting those types out of the
+public header is what would let it ship, and that is a decision for whoever owns
+the transport, not something to paper over with a pimpl.
+
+**The relocation is the check.** `verify-consumer-package.sh` installs to prefix
+A, moves it to prefix B, and only then configures the consumer against B. Not
+because moving is clever, but because a consumer inside the source tree compiles
+happily against whatever it can reach — an inherited include path, a source-tree
+`-I`, a link against the build directory. Every one of those produces a green
+build that proves nothing about the install tree.
+
+**Three defects, one shape.** Every interesting failure in this task was a check
+that reported success after failing, and I want them recorded rather than
+quietly fixed:
+
+- `finish()` read `$?` instead of its argument. Every explicit `finish 3` path
+  therefore exited with the status of the preceding `echo` — zero. A failed check
+  printed its own diagnostic and then reported `PASS`. It survived review because
+  the first version of the gate had no failing path to take; I added the leakage
+  check, watched it fail, and saw `PASS` printed underneath its own error message.
+- The consumer emitted no `compile_commands.json`, so the leakage check had
+  nothing to inspect and silently could not run. A check that cannot execute is
+  indistinguishable from a check that passes.
+- `results.json` recorded `step_status` rather than the status the caller saw.
+  They disagree on paths that fail before any `run_step`, so the evidence file
+  could disagree with the exit code.
+
+The general lesson, now in `AGENTS.md`: a verification script that cannot exit
+nonzero is worse than no script, and a new verification path must be tested by
+making it fail. `--no-tests=error` is not optional; CTest exits 0 on a
+zero-test selection, which reads exactly like success.
+
+**Verification.** `verify-consumer-package.sh`, `--gate package`, components
+`core,file-transport,qt`, in Debug, Release and ASan, each from a from-scratch
+producer, each installing to A and moving to B, each configuring the consumer
+with Qt/zstd/OpenSSL discovery disabled and asserting that the consumer's only
+include path is `prefix-b/include` and that it links only from prefix B. Also
+asserted: requesting a component the producer did not build fails with a message
+naming the option that would enable it; requesting an unknown component fails;
+an unbuilt tree passed via `--producer-build` exits 3.
+
+Full Debug sweep: 69/70. The one failure is `tst_benchmark::memory_growth`
+tripping the QtTest watchdog at 307s under a parallel sweep — a Debug-build
+timing limit on an uninstrumented measurement, no engine source changed here.
+The user asked for it to be skipped rather than tuned.
+
+**The test ritual, rewritten.** Separately: the full sweep had come to default to
+two workers and was taking over an hour, which is most of why it had stopped being
+run routinely. `tools/verify-changed.sh` now routes on the diff — each changed
+path maps to the tests that can observe it, and it builds only those in the warm
+tree. The packaging change above verifies in about 30 seconds. Two properties
+matter more than the speed: a path matching no route is reported rather than
+dropped, and a zero-test selection is an error. A routing table that quietly
+stops matching a file is exactly the regression a fast subset would hide.
+
+**Not done, and not faked.** P06a step 6 (opaque operation values) remains open
+and blocked on the recorded A02 boundary decision; S04a does not need it.
+`ReplicaAllocator` is still source-tree only — making it public would commit to
+its persistence format, which is a separate decision. The manifest now says so
+rather than naming A06a as the owner of a thing A06a did not do.
+
+**Next:** S04a, the design gate for scoped boundary identities. It is on Wave's
+critical path — affinity, typed unresolvable anchors, and a persistable position
+token are the three items the manifest lists as not implemented, and they are
+the ones a consumer cannot design around.
