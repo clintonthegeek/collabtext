@@ -1,0 +1,106 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "concurrent-replacements",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "concurrent-replacements",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [
+    {
+      "id": "S/1",
+      "value": "a"
+    },
+    {
+      "id": "S/2",
+      "value": "b"
+    }
+  ],
+  "operations": [
+    {
+      "id": "A/4",
+      "kind": "delete",
+      "after": [],
+      "targets": [
+        "S/1"
+      ]
+    },
+    {
+      "id": "A/6",
+      "kind": "insert",
+      "after": [
+        "A/4"
+      ],
+      "between": [
+        "START",
+        "S/2"
+      ],
+      "items": [
+        {
+          "id": "A/5",
+          "value": "x"
+        }
+      ]
+    },
+    {
+      "id": "B/4",
+      "kind": "delete",
+      "after": [],
+      "targets": [
+        "S/1"
+      ]
+    },
+    {
+      "id": "B/6",
+      "kind": "insert",
+      "after": [
+        "B/4"
+      ],
+      "between": [
+        "START",
+        "S/2"
+      ],
+      "items": [
+        {
+          "id": "B/5",
+          "value": "Y"
+        }
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/4",
+      "A/6",
+      "B/4",
+      "B/6"
+    ],
+    [
+      "B/6",
+      "B/4",
+      "A/6",
+      "A/4"
+    ]
+  ],
+  "tokens": [],
+  "expected": {
+    "order": [
+      "A/5",
+      "B/5",
+      "S/2"
+    ],
+    "hidden": [
+      "S/1"
+    ],
+    "positions": {},
+    "text": "xYb",
+    "comparisons": []
+  }
+}

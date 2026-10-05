@@ -32,14 +32,9 @@ case "$mode" in
 esac
 # Default to the machine's cores. The old default of 2 turned a few-minute sweep
 # into an hour, which is most of why the sweep stopped being run routinely.
-jobs=${COLLABTEXT_VERIFY_JOBS:-$(nproc)}
-if [[ ! "$jobs" =~ ^[1-9][0-9]*$ ]]; then
-    echo "COLLABTEXT_VERIFY_JOBS must be a positive integer" >&2
-    exit 2
-fi
-
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 build_dir="$repo_root/build-roadmap-$mode"
+source "$repo_root/tools/verification-env.sh"
 if [[ $fresh -eq 1 ]]; then
     printf 'Discarding %s for a from-scratch acceptance run.\n' "$build_dir" >&2
     rm -rf "$build_dir"
@@ -54,7 +49,9 @@ printf 'Root: %s\nMode: %s\nRegex: %s\nWorkers: %s\nFresh: %s\n' \
 cmake -S "$repo_root" -B "$build_dir" \
     -DCMAKE_BUILD_TYPE="$build_type" \
     -DCOLLABTEXT_ENABLE_SANITIZERS="$sanitizers" \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DCOLLABTEXT_BUILD_BENCHMARKS=OFF \
+    -DCOLLABTEXT_VERIFY_TARGETS= \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON "${compiler_launcher_args[@]}"
 
 # Ask CTest to apply its own regex dialect; do not approximate it with Python.
 ctest --test-dir "$build_dir" -R "$test_regex" --show-only=json-v1 > "$run_dir/selected-tests.json"
@@ -92,12 +89,18 @@ metadata = dict(root=root, revision=revision.stdout.strip() if revision.returnco
                 representative_compile_command=example, compile_commands=str(compile_commands),
                 configuration={k: v for k, v in cache.items()
                                if k.startswith('CMAKE_CXX_FLAGS') or k in
-                               {'CMAKE_BUILD_TYPE', 'COLLABTEXT_ENABLE_SANITIZERS'}},
+                               {'CMAKE_BUILD_TYPE', 'COLLABTEXT_ENABLE_SANITIZERS',
+                                'COLLABTEXT_BUILD_BENCHMARKS', 'CMAKE_CXX_COMPILER_LAUNCHER'}},
                 commands=[['cmake', '-S', root, '-B', build,
                            f'-DCMAKE_BUILD_TYPE={cache["CMAKE_BUILD_TYPE"]}',
                            f'-DCOLLABTEXT_ENABLE_SANITIZERS={cache.get("COLLABTEXT_ENABLE_SANITIZERS", "OFF")}',
-                           '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'],
-                          ['cmake', '--build', build, '--parallel', jobs, '--target', *names],
+                           '-DCOLLABTEXT_BUILD_BENCHMARKS=OFF', '-DCOLLABTEXT_VERIFY_TARGETS=',
+                           '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
+                           *([f'-DCMAKE_CXX_COMPILER_LAUNCHER={cache["CMAKE_CXX_COMPILER_LAUNCHER"]}']
+                             if cache.get('CMAKE_CXX_COMPILER_LAUNCHER') else [])],
+                          ['cmake', '-S', root, '-B', build,
+                           '-DCOLLABTEXT_VERIFY_TARGETS=' + ';'.join(names)],
+                          ['cmake', '--build', build, '--parallel', jobs, '--target', 'collabtext_verify_selected'],
                           ['ctest', '--test-dir', build, '-R', regex, '--parallel', jobs,
                            '--output-on-failure', '--no-tests=error']],
                 test_environment={'QT_QPA_PLATFORM': 'offscreen'})
@@ -107,6 +110,8 @@ PY
 
 # Repository convention: each CTest test and its build target share a name.
 mapfile -t targets < "$run_dir/targets.txt"
-cmake --build "$build_dir" --parallel "$jobs" --target "${targets[@]}"
+target_list=$(IFS=';'; echo "${targets[*]}")
+cmake -S "$repo_root" -B "$build_dir" "-DCOLLABTEXT_VERIFY_TARGETS=$target_list"
+cmake --build "$build_dir" --parallel "$jobs" --target collabtext_verify_selected
 QT_QPA_PLATFORM=offscreen ctest --test-dir "$build_dir" -R "$test_regex" \
     --parallel "$jobs" --output-on-failure --no-tests=error

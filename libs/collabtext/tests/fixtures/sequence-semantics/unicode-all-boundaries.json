@@ -1,0 +1,254 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "unicode-all-boundaries",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "unicode-all-boundaries",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [
+    {
+      "id": "S/1",
+      "value": "α"
+    },
+    {
+      "id": "S/2",
+      "value": "😀"
+    },
+    {
+      "id": "S/3",
+      "value": "b"
+    }
+  ],
+  "operations": [
+    {
+      "id": "A/6",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "S/2",
+        "S/3"
+      ],
+      "items": [
+        {
+          "id": "A/5",
+          "value": "X"
+        }
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/6"
+    ]
+  ],
+  "tokens": [
+    {
+      "id": "0-left",
+      "between": [
+        "START",
+        "S/1"
+      ],
+      "affinity": "left",
+      "after": [],
+      "context": {
+        "document": "unicode-all-boundaries",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "0-right",
+      "between": [
+        "START",
+        "S/1"
+      ],
+      "affinity": "right",
+      "after": [],
+      "context": {
+        "document": "unicode-all-boundaries",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "2-left",
+      "between": [
+        "S/1",
+        "S/2"
+      ],
+      "affinity": "left",
+      "after": [],
+      "context": {
+        "document": "unicode-all-boundaries",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "2-right",
+      "between": [
+        "S/1",
+        "S/2"
+      ],
+      "affinity": "right",
+      "after": [],
+      "context": {
+        "document": "unicode-all-boundaries",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "6-left",
+      "between": [
+        "S/2",
+        "S/3"
+      ],
+      "affinity": "left",
+      "after": [],
+      "context": {
+        "document": "unicode-all-boundaries",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "6-right",
+      "between": [
+        "S/2",
+        "S/3"
+      ],
+      "affinity": "right",
+      "after": [],
+      "context": {
+        "document": "unicode-all-boundaries",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "7-left",
+      "between": [
+        "S/3",
+        "END"
+      ],
+      "affinity": "left",
+      "after": [],
+      "context": {
+        "document": "unicode-all-boundaries",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "7-right",
+      "between": [
+        "S/3",
+        "END"
+      ],
+      "affinity": "right",
+      "after": [],
+      "context": {
+        "document": "unicode-all-boundaries",
+        "stream": "text",
+        "epoch": 1
+      }
+    }
+  ],
+  "expected": {
+    "order": [
+      "S/1",
+      "S/2",
+      "A/5",
+      "S/3"
+    ],
+    "hidden": [],
+    "positions": {
+      "0-left": {
+        "offset": 0,
+        "state": "resolved"
+      },
+      "0-right": {
+        "offset": 0,
+        "state": "resolved"
+      },
+      "2-left": {
+        "offset": 2,
+        "state": "resolved"
+      },
+      "2-right": {
+        "offset": 2,
+        "state": "resolved"
+      },
+      "6-left": {
+        "offset": 6,
+        "state": "resolved"
+      },
+      "6-right": {
+        "offset": 7,
+        "state": "resolved"
+      },
+      "7-left": {
+        "offset": 8,
+        "state": "resolved"
+      },
+      "7-right": {
+        "offset": 8,
+        "state": "resolved"
+      }
+    },
+    "text": "α😀Xb",
+    "comparisons": [
+      {
+        "left": "0-left",
+        "right": "0-right",
+        "order": "equal"
+      },
+      {
+        "left": "0-right",
+        "right": "2-left",
+        "order": "less"
+      },
+      {
+        "left": "2-left",
+        "right": "2-right",
+        "order": "equal"
+      },
+      {
+        "left": "2-right",
+        "right": "6-left",
+        "order": "less"
+      },
+      {
+        "left": "6-left",
+        "right": "6-right",
+        "order": "less"
+      },
+      {
+        "left": "6-right",
+        "right": "7-left",
+        "order": "less"
+      },
+      {
+        "left": "7-left",
+        "right": "7-right",
+        "order": "equal"
+      }
+    ]
+  },
+  "invalid_mint_offsets": [
+    1,
+    3,
+    4,
+    5,
+    8
+  ]
+}

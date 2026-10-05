@@ -207,6 +207,9 @@ if(COLLABTEXT_BUILD_TESTS)
         target_link_libraries(collabtext_public_headers_qt PRIVATE collabtext_widgets)
     endif()
 
+endif()
+
+if(COLLABTEXT_BUILD_TESTS OR COLLABTEXT_BUILD_BENCHMARKS)
     add_library(collabtext_testsupport STATIC
         src/crdt/NetworkSim.cpp
     )
@@ -231,6 +234,13 @@ if(COLLABTEXT_BUILD_TESTS)
                                                ${CMAKE_CURRENT_SOURCE_DIR}/tests)
         add_test(NAME ${name} COMMAND ${name})
     endfunction()
+endif()
+
+if(COLLABTEXT_BUILD_BENCHMARKS)
+    add_executable(tst_benchmark EXCLUDE_FROM_ALL tests/tst_benchmark.cpp)
+    target_link_libraries(tst_benchmark PRIVATE CollabText::TestSupport Qt6::Test)
+    target_include_directories(tst_benchmark PRIVATE ${COLLABTEXT_INTERNAL_INCLUDES})
+    # Run explicitly; neither the normal build nor any CTest selection runs it.
 endif()
 
 # ===========================================================================
@@ -321,7 +331,6 @@ target_include_directories(store_crash_worker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR
 add_dependencies(tst_store_fault_harness store_crash_worker)
 add_crdt_test(tst_rope_integration)
 add_crdt_test(tst_undomap)
-add_crdt_test(tst_benchmark)
 add_crdt_test(tst_gc)
 add_crdt_test(tst_evaluation_regressions)
 add_crdt_test(tst_serialization)

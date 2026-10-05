@@ -53,6 +53,13 @@ mode=""; gate=""; components="core"; output_dir=""; producer_build_in=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --mode|--gate|--components|--output-dir|--producer-build)
+            if [[ $# -lt 2 || "$2" == --* ]]; then
+                echo "Missing value for $1" >&2
+                exit 2
+            fi ;;
+    esac
+    case "$1" in
         --mode)       mode="${2:-}"; shift 2 ;;
         --gate)       gate="${2:-}"; shift 2 ;;
         --components) components="${2:-}"; shift 2 ;;
@@ -100,6 +107,8 @@ for comp in "${wanted_components[@]}"; do
 done
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+build_dir=${producer_build_in:-}
+source "$repo_root/tools/verification-env.sh"
 producer_revision=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || echo unknown)
 
 if [[ -z "$output_dir" ]]; then
@@ -144,7 +153,7 @@ finish() {
     # exited zero with PASS. A verification script that can report success after
     # a failure it just described is worse than no script.
     local rc="${1:-$?}"
-    [[ $rc -eq 0 && $step_status -eq 0 ]] || rc=${rc:-1}
+    if [[ $rc -eq 0 && $step_status -ne 0 ]]; then rc=$step_status; fi
     if [[ $rc -eq 0 && $step_status -eq 0 ]]; then
         printf '\nverify-consumer-package: PASS (%s/%s)\n' "$mode" "$gate"
     else
@@ -235,7 +244,9 @@ producer_flags=(
     "-DCOLLABTEXT_BUILD_QT=$want_qt"
     "-DCOLLABTEXT_BUILD_FILE_TRANSPORT=$want_transport"
     "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+    "-DCOLLABTEXT_BUILD_BENCHMARKS=OFF"
 )
+producer_flags+=("${compiler_launcher_args[@]}")
 # A sanitizer run has to instrument *both* sides of the check. The producer's
 # flags are set with add_compile_options/add_link_options inside its own tree and
 # do not reach a separate consumer project, so the consumer is configured with
@@ -256,12 +267,19 @@ if [[ -n "$producer_build_in" ]]; then
     # Build it anyway: it may be stale, and a stale install is the one failure
     # mode this script must not have.
     producer_build="$producer_build_in"
-    run_step producer-build cmake --build "$producer_build" --parallel "$(nproc)" \
+    # Install exports all enabled library components. Build those libraries,
+    # never the unrelated apps, unit suites or opt-in benchmarks in this tree.
+    producer_targets=(collabtext_core)
+    grep -q '^COLLABTEXT_BUILD_FILE_TRANSPORT:BOOL=ON' "$producer_build/CMakeCache.txt" \
+        && producer_targets+=(collabtext_filetransport)
+    grep -q '^COLLABTEXT_BUILD_QT:BOOL=ON' "$producer_build/CMakeCache.txt" \
+        && producer_targets+=(collabtext_qtadapter collabtext_widgets)
+    run_step producer-build cmake --build "$producer_build" --parallel "$jobs" --target "${producer_targets[@]}" \
         || { trap - EXIT; finish 3; }
 else
     run_step producer-configure cmake -S "$repo_root" -B "$producer_build" "${producer_flags[@]}" \
         || { trap - EXIT; finish 3; }
-    run_step producer-build cmake --build "$producer_build" --parallel "$(nproc)" \
+    run_step producer-build cmake --build "$producer_build" --parallel "$jobs" \
         || { trap - EXIT; finish 3; }
 fi
 
@@ -306,6 +324,7 @@ consumer_flags=(
     # Needed so the leakage check below has something to inspect.
     "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 )
+consumer_flags+=("${compiler_launcher_args[@]}")
 if [[ "$mode" == "asan" ]]; then
     consumer_flags+=("-DCMAKE_CXX_FLAGS=$sanitizer_flags"
                      "-DCMAKE_EXE_LINKER_FLAGS=$sanitizer_flags")
@@ -332,7 +351,7 @@ fi
 
 run_step consumer-configure cmake -S "$repo_root/tests/consumer-smoke" -B "$consumer_build" "${consumer_flags[@]}" \
     || { trap - EXIT; finish 3; }
-run_step consumer-build cmake --build "$consumer_build" --parallel "$(nproc)" \
+run_step consumer-build cmake --build "$consumer_build" --parallel "$jobs" \
     || { trap - EXIT; finish 3; }
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,122 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "deleted-both-neighbors",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "deleted-both-neighbors",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [
+    {
+      "id": "S/1",
+      "value": "a"
+    },
+    {
+      "id": "S/2",
+      "value": "b"
+    }
+  ],
+  "operations": [
+    {
+      "id": "A/5",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "S/1",
+        "S/2"
+      ],
+      "items": [
+        {
+          "id": "A/4",
+          "value": "X"
+        }
+      ]
+    },
+    {
+      "id": "B/4",
+      "kind": "delete",
+      "after": [],
+      "targets": [
+        "S/1",
+        "S/2"
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/5",
+      "B/4"
+    ],
+    [
+      "B/4",
+      "A/5"
+    ]
+  ],
+  "tokens": [
+    {
+      "id": "left",
+      "between": [
+        "S/1",
+        "S/2"
+      ],
+      "affinity": "left",
+      "after": [],
+      "context": {
+        "document": "deleted-both-neighbors",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "right",
+      "between": [
+        "S/1",
+        "S/2"
+      ],
+      "affinity": "right",
+      "after": [],
+      "context": {
+        "document": "deleted-both-neighbors",
+        "stream": "text",
+        "epoch": 1
+      }
+    }
+  ],
+  "expected": {
+    "order": [
+      "A/4"
+    ],
+    "hidden": [
+      "S/1",
+      "S/2"
+    ],
+    "positions": {
+      "left": {
+        "offset": 0,
+        "state": "collapsed"
+      },
+      "right": {
+        "offset": 1,
+        "state": "collapsed"
+      }
+    },
+    "text": "X",
+    "comparisons": [
+      {
+        "left": "left",
+        "right": "right",
+        "order": "less"
+      }
+    ]
+  },
+  "contract_cases": [
+    "deleted_neighbors_explicit_collapse"
+  ]
+}

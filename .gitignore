@@ -9,6 +9,7 @@ cmake_install.cmake
 Makefile
 compile_commands.json
 .cache/
+__pycache__/
 .worktrees/
 
 # A06a: per-run producer/install/consumer trees from verify-consumer-package.sh

@@ -1,0 +1,138 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "shared-token-concurrent-inserts",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "shared-token-concurrent-inserts",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [
+    {
+      "id": "S/1",
+      "value": "a"
+    },
+    {
+      "id": "S/2",
+      "value": "b"
+    }
+  ],
+  "operations": [
+    {
+      "id": "A/6",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "S/1",
+        "S/2"
+      ],
+      "items": [
+        {
+          "id": "A/4",
+          "value": "x"
+        },
+        {
+          "id": "A/5",
+          "value": "y"
+        }
+      ]
+    },
+    {
+      "id": "B/6",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "S/1",
+        "S/2"
+      ],
+      "items": [
+        {
+          "id": "B/4",
+          "value": "X"
+        },
+        {
+          "id": "B/5",
+          "value": "Y"
+        }
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/6",
+      "B/6"
+    ],
+    [
+      "B/6",
+      "A/6"
+    ]
+  ],
+  "tokens": [
+    {
+      "id": "left",
+      "between": [
+        "S/1",
+        "S/2"
+      ],
+      "affinity": "left",
+      "after": [],
+      "context": {
+        "document": "shared-token-concurrent-inserts",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "right",
+      "between": [
+        "S/1",
+        "S/2"
+      ],
+      "affinity": "right",
+      "after": [],
+      "context": {
+        "document": "shared-token-concurrent-inserts",
+        "stream": "text",
+        "epoch": 1
+      }
+    }
+  ],
+  "expected": {
+    "order": [
+      "S/1",
+      "A/4",
+      "A/5",
+      "B/4",
+      "B/5",
+      "S/2"
+    ],
+    "hidden": [],
+    "positions": {
+      "left": {
+        "offset": 1,
+        "state": "resolved"
+      },
+      "right": {
+        "offset": 5,
+        "state": "resolved"
+      }
+    },
+    "text": "axyXYb",
+    "comparisons": [
+      {
+        "left": "left",
+        "right": "right",
+        "order": "less"
+      }
+    ]
+  },
+  "contract_cases": [
+    "shared_token_concurrent_boundary_inserts"
+  ]
+}

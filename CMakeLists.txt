@@ -15,6 +15,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # find_package(Qt6) cannot be used by a consumer who has no Qt.
 # ---------------------------------------------------------------------------
 option(COLLABTEXT_BUILD_TESTS          "Build the QtTest suites and test support" ON)
+option(COLLABTEXT_BUILD_BENCHMARKS     "Build standalone benchmarks (never registered with CTest)" OFF)
 option(COLLABTEXT_BUILD_QT             "Build the Qt adapter and widget components" ON)
 option(COLLABTEXT_BUILD_APPS           "Build the dogfood applications"        ON)
 option(COLLABTEXT_BUILD_FILE_TRANSPORT "Build the file-backed transport component" ON)
@@ -23,7 +24,7 @@ option(COLLABTEXT_BUILD_FILE_TRANSPORT "Build the file-backed transport componen
 # component and the apps. Deriving the requirement here rather than in the
 # subdirectory is what keeps a tests-off, Qt-off configure from looking for Qt.
 set(COLLABTEXT_NEEDS_QT OFF)
-if(COLLABTEXT_BUILD_QT OR COLLABTEXT_BUILD_APPS OR COLLABTEXT_BUILD_TESTS)
+if(COLLABTEXT_BUILD_QT OR COLLABTEXT_BUILD_APPS OR COLLABTEXT_BUILD_TESTS OR COLLABTEXT_BUILD_BENCHMARKS)
     set(COLLABTEXT_NEEDS_QT ON)
 endif()
 
@@ -53,7 +54,7 @@ if(COLLABTEXT_NEEDS_QT)
     if(COLLABTEXT_BUILD_QT)
         find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets)
     endif()
-    if(COLLABTEXT_BUILD_TESTS)
+    if(COLLABTEXT_BUILD_TESTS OR COLLABTEXT_BUILD_BENCHMARKS)
         find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
     endif()
 else()
@@ -74,6 +75,13 @@ endif()
 
 if(COLLABTEXT_BUILD_TESTS)
     enable_testing()
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_custom_target(tst_verification_tools)
+    add_test(NAME tst_verification_tools
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_verify_changed.py)
+    add_custom_target(tst_sequence_fixtures)
+    add_test(NAME tst_sequence_fixtures
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_sequence_fixtures.py)
 
     # Trace reduction tool (roadmap V04). Reads a versioned trace artifact
     # produced by a COLLABTEXT_TRACE_OUTPUT campaign and emits a smaller trace
@@ -83,4 +91,17 @@ if(COLLABTEXT_BUILD_TESTS)
     target_link_libraries(reduce-trace PRIVATE CollabText::TestSupport)
     target_include_directories(reduce-trace PRIVATE ${CMAKE_SOURCE_DIR}/libs/collabtext/src
                                                ${CMAKE_SOURCE_DIR}/libs/collabtext/tests)
+endif()
+
+# Build a selected set in one dependency traversal. Passing many independent
+# targets to Make repeats the shared library/automoc traversal for every target.
+# Verification scripts set this list; it does not change compiler flags or APIs.
+set(COLLABTEXT_VERIFY_TARGETS "" CACHE STRING "Targets for the verification aggregate")
+if(COLLABTEXT_VERIFY_TARGETS)
+    foreach(_verify_target IN LISTS COLLABTEXT_VERIFY_TARGETS)
+        if(NOT TARGET ${_verify_target})
+            message(FATAL_ERROR "Unknown verification target: ${_verify_target}")
+        endif()
+    endforeach()
+    add_custom_target(collabtext_verify_selected DEPENDS ${COLLABTEXT_VERIFY_TARGETS})
 endif()
