@@ -82,8 +82,8 @@ public:
     void set_on_change(ChangeCallback cb) { m_on_change = std::move(cb); }
 
     /// Bound on the deferral queue. Reaching the bound is reported to the
-    /// caller as ErrorCode::deferred_queue_full and the operation is retained
-    /// in quarantined() rather than discarded.
+    /// caller as ErrorCode::deferred_queue_full. A bounded diagnostic copy may
+    /// be retained in quarantined(); the caller still owns the rejected input.
     void set_deferred_budget(const DeferredBudget &budget) { m_deferred_budget = budget; }
     [[nodiscard]] const DeferredBudget &deferred_budget() const { return m_deferred_budget; }
 
@@ -91,8 +91,23 @@ public:
     [[nodiscard]] size_t deferred_count() const { return m_deferred_count; }
 
     /// Operations evicted from the deferral queue by the budget, each with the
-    /// reason it was evicted. Retained so that lost work is recoverable
-    /// instead of merely absent.
+    /// reason it was refused. This diagnostic retention has its own budget;
+    /// absence here never authorizes a caller to discard an offered record.
+    /// Bound the diagnostic overflow copies separately from the causal queue.
+    /// Rejected input stays caller-owned even if this retention budget is full.
+    Result<void> set_quarantine_budget(const DeferredBudget& budget) {
+        if (m_quarantined.size() > budget.max_operations || m_quarantined_bytes > budget.max_bytes)
+            return Error(ErrorCode::malformed, "drain quarantine before lowering its budget");
+        m_quarantine_budget = budget;
+        return Result<void>::success();
+    }
+    std::vector<QuarantinedBufferOp> take_quarantined() {
+        m_quarantined_bytes = 0;
+        auto retained = std::move(m_quarantined);
+        m_quarantined.clear();
+        return retained;
+    }
+
     [[nodiscard]] const std::vector<QuarantinedBufferOp> &quarantined() const {
         return m_quarantined;
     }
@@ -286,6 +301,8 @@ private:
     size_t m_deferred_bytes = 0;
     DeferredBudget m_deferred_budget;
     std::vector<QuarantinedBufferOp> m_quarantined;
+    DeferredBudget m_quarantine_budget;
+    size_t m_quarantined_bytes = 0;
 
     /// Fired only for operations that actually changed the document.
     ChangeCallback m_on_change;

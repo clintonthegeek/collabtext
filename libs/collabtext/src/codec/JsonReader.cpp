@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <set>
 
 #include "codec/Utf.h"
 
@@ -333,7 +334,8 @@ bool JsonReader::parse_value(JsonValue& out, size_t depth, size_t& element_budge
         case '[': return parse_array(out, depth, element_budget, error);
         case '"': {
             out.type_ = JsonValue::Type::string;
-            return parse_string(input_, out.text_, pos_, error);
+            return parse_string(input_, out.text_, pos_, error, limits_.max_text_bytes,
+                                JsonErrorKind::text_too_large);
         }
         case 't':
             if (input_.compare(pos_, 4, "true") == 0) {
@@ -381,6 +383,7 @@ bool JsonReader::parse_object(JsonValue& out, size_t depth, size_t& element_budg
         return true;
     }
 
+    std::set<std::string, std::less<>> keys;
     for (;;) {
         skip_whitespace();
         if (out.members_.size() >= limits_.max_container_elements)
@@ -397,7 +400,8 @@ bool JsonReader::parse_object(JsonValue& out, size_t depth, size_t& element_budg
 
         std::string key;
         const size_t key_offset = pos_;
-        if (!parse_string(input_, key, key_offset, error)) return false;
+        if (!parse_string(input_, key, key_offset, error, limits_.max_key_bytes,
+                          JsonErrorKind::key_too_large)) return false;
         if (key.size() > limits_.max_key_bytes)
             return fail(JsonErrorKind::key_too_large, key_offset,
                         "key is " + std::to_string(key.size()) + " bytes");
@@ -408,14 +412,10 @@ bool JsonReader::parse_object(JsonValue& out, size_t depth, size_t& element_budg
         JsonValue value;
         if (!parse_value(value, depth + 1, element_budget, error)) return false;
 
-        // Duplicate keys are an error, not last-wins. Two writers that disagree
-        // about a field must not be resolved by whichever one happened to be
-        // serialized second.
-        for (const auto& [name, existing] : out.members_) {
-            if (name != key) continue;
+        // A logarithmic lookup bounds duplicate detection even for wide objects.
+        if (!keys.insert(key).second)
             return fail(JsonErrorKind::duplicate_key, key_offset,
                         "duplicate key \"" + key + "\"");
-        }
         out.members_.emplace_back(std::move(key), std::move(value));
 
         skip_whitespace();
@@ -485,7 +485,8 @@ bool JsonReader::parse_array(JsonValue& out, size_t depth, size_t& element_budge
 }
 
 bool JsonReader::parse_string(std::string_view raw, std::string& out, size_t start,
-                              JsonError& error) {
+                              JsonError& error, size_t byte_limit,
+                              JsonErrorKind limit_kind) {
     size_t pos = start;
     if (pos >= raw.size() || raw[pos] != '"') {
         error_ = error;
@@ -495,6 +496,12 @@ bool JsonReader::parse_string(std::string_view raw, std::string& out, size_t sta
 
     out.clear();
     size_t literal_start = pos;
+    auto room_for = [&](size_t count) {
+        if (count > byte_limit - out.size())
+            return fail(limit_kind, start, "decoded string exceeds " +
+                        std::to_string(byte_limit) + " bytes");
+        return true;
+    };
     auto flush_literal = [&](size_t end) {
         // Literal runs are copied in one go, but validated first: a truncated
         // multi-byte sequence must be reported here rather than after the fact.
@@ -515,6 +522,7 @@ bool JsonReader::parse_string(std::string_view raw, std::string& out, size_t sta
                              context_at(rebased.offset);
             return false;
         }
+        if (!room_for(run.size())) return false;
         out.append(run);
         literal_start = end;
         return true;
@@ -554,6 +562,7 @@ bool JsonReader::parse_string(std::string_view raw, std::string& out, size_t sta
         const char kind = raw[pos + 1];
         pos += 2;
 
+        if (kind != 'u' && !room_for(1)) return false;
         switch (kind) {
             case '"': out.push_back('"'); break;
             case '\\': out.push_back('\\'); break;
@@ -607,6 +616,9 @@ bool JsonReader::parse_string(std::string_view raw, std::string& out, size_t sta
                     }
                     break;
                 }
+                const size_t scalar_bytes = unit < 0x80 ? 1 : unit < 0x800 ? 2
+                                                 : unit < 0x10000 ? 3 : 4;
+                if (!room_for(scalar_bytes)) return false;
                 if (!append_scalar(out, unit)) {
                     error_ = error;
                     return fail(JsonErrorKind::invalid_unicode_escape, escape_offset,
@@ -624,13 +636,7 @@ bool JsonReader::parse_string(std::string_view raw, std::string& out, size_t sta
         // "a\tb\nc" and "\u0041tail" work.
         literal_start = pos;
 
-        if (out.size() > limits_.max_text_bytes) {
-            error_ = error;
-            return fail(JsonErrorKind::text_too_large, start,
-                        "string is " + std::to_string(out.size()) +
-                            " bytes, limit is " +
-                            std::to_string(limits_.max_text_bytes));
-        }
+
     }
 
     error_ = error;

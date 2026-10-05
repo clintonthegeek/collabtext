@@ -551,6 +551,24 @@ Result<Operation> Buffer::try_apply_local_edit(
         !valid.ok()) {
         return valid.error();
     }
+    // Byte offsets must be Unicode scalar boundaries. Seek the containing run
+    // rather than copying the entire document for every edit.
+    const auto boundary = [&](uint32_t offset) {
+        if (offset == 0 || offset == visible_length()) return true;
+        auto cursor = m_fragment_tree.cursor<VisibleOffset>();
+        // SumTree's Left seek selects the first item whose end is strictly
+        // beyond offset, skipping prior runs and zero-width tombstones.
+        if (!cursor.seek({offset}, Bias::Left) || !cursor.item()) return false;
+        const auto& fragment = *cursor.item();
+        const auto start = cursor.position().value;
+        if (offset < start || offset - start >= fragment.text.size()) return false;
+        return (static_cast<unsigned char>(fragment.text[offset - start]) & 0xc0) != 0x80;
+    };
+    for (const auto& [start, end] : ranges) {
+        if (!boundary(start) || !boundary(end))
+            return Error(ErrorCode::invalid_unicode,
+                         "local edit range splits a UTF-8 scalar");
+    }
     return apply_validated_local_edit(ranges, new_text);
 }
 
@@ -1339,9 +1357,8 @@ ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Lamport awaiting) 
 
     if (deferred_budget_exhausted(m_deferred_budget, m_deferred_count,
                                    m_deferred_bytes, bytes)) {
-        // Backpressure, not amnesia. The operation is retained with a reason so
-        // the loss is recoverable and visible; dropping it would make "the
-        // queue was full" indistinguishable from "it never arrived".
+        // Backpressure is explicit. Diagnostic copies are separately bounded;
+        // the caller retains ownership of every refused operation.
         const Error reason(
             ErrorCode::deferred_queue_full,
             "deferral budget exhausted: " + std::to_string(m_deferred_count) +
@@ -1350,7 +1367,14 @@ ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Lamport awaiting) 
                 std::to_string(m_deferred_budget.max_bytes) + " bytes held",
             "waiting on actor " + std::to_string(awaiting.replica_id) +
                 " counter " + std::to_string(awaiting.value));
-        m_quarantined.push_back(QuarantinedBufferOp{op, reason});
+        if (!deferred_budget_exhausted(m_quarantine_budget, m_quarantined.size(),
+                                       m_quarantined_bytes, bytes)) {
+            m_quarantined.push_back(QuarantinedBufferOp{op, reason});
+            m_quarantined_bytes += bytes;
+        }
+        // The offered operation is a const reference: ownership never transfers
+        // on refusal. The store/transport must retain it until accepted.
+
         return ApplyOutcome::rejected(reason);
     }
 
@@ -1377,18 +1401,6 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
     // transport re-delivering one we already applied.
     if (m_version.observed(ts)) return ApplyOutcome::duplicate();
 
-    // Head-of-line blocking within a replica. Operations from one replica are
-    // causally ordered, so if an earlier one is waiting, this one is too.
-    if (m_deferred_replicas.count(ts.replica_id)) {
-        // The identity this one is ultimately waiting for is the earliest thing
-        // its replica is still missing; the blocked replica's own pending
-        // operation is the honest answer when it is not otherwise derivable.
-        const Lamport awaiting = ts.value > 0 ? Lamport(ts.replica_id, ts.value - 1)
-                                              : ts;
-        m_deferred_replicas.insert(ts.replica_id);
-        return defer_or_quarantine(op, awaiting);
-    }
-
     // Validity before causality: a record that can never be applied is refused
     // now rather than parked in the queue behind a dependency that will not
     // make it valid.
@@ -1401,6 +1413,18 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
         return defer_or_quarantine(op, *verdict.awaiting);
     case ValidationVerdict::valid:
         break;
+    }
+
+    // Head-of-line blocking within a replica. Operations from one replica are
+    // causally ordered, so if an earlier one is waiting, this one is too.
+    if (m_deferred_replicas.count(ts.replica_id)) {
+        // The identity this one is ultimately waiting for is the earliest thing
+        // its replica is still missing; the blocked replica's own pending
+        // operation is the honest answer when it is not otherwise derivable.
+        const Lamport awaiting = ts.value > 0 ? Lamport(ts.replica_id, ts.value - 1)
+                                              : ts;
+        m_deferred_replicas.insert(ts.replica_id);
+        return defer_or_quarantine(op, awaiting);
     }
 
     if (!try_apply(op)) {

@@ -559,7 +559,6 @@ size_t locator_bytes(const Locator& locator) {
 
 size_t estimate_operation_bytes(const Operation& op) {
     size_t bytes = sizeof(Lamport) * 2;  // timestamp + deletion_id
-    bytes += op_lamport(op).counter();   // a cheap proxy for identity width
     return std::visit(
         [&](const auto& concrete) {
             size_t total = bytes;

@@ -180,7 +180,7 @@ private:
     bool parse_array(JsonValue& out, size_t depth, size_t& element_budget,
                      JsonError& error);
     bool parse_string(std::string_view raw, std::string& out, size_t start,
-                      JsonError& error);
+                      JsonError& error, size_t byte_limit, JsonErrorKind limit_kind);
     bool parse_number(std::string_view raw, JsonValue& out, size_t start,
                       JsonError& error);
     bool expect(char c, JsonError& error);

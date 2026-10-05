@@ -102,6 +102,31 @@ class TestDecodeValidation : public QObject {
     Q_OBJECT
 
 private slots:
+    void literal_and_mixed_strings_obey_decoded_byte_limit() {
+        JsonLimits limits;
+        limits.max_text_bytes = 3;
+        for (const std::string input : {std::string("\"abcd\""),
+                                        std::string("\"a\\nbc\""),
+                                        std::string("\"\\u00e9ab\"")}) {
+            JsonReader reader(limits);
+            JsonValue value;
+            JsonError error;
+            QVERIFY2(!reader.parse(input, value, error), input.c_str());
+            QCOMPARE(error.kind, JsonErrorKind::text_too_large);
+        }
+    }
+
+    void object_keys_have_their_own_decoded_byte_limit() {
+        JsonLimits limits;
+        limits.max_text_bytes = 16;
+        limits.max_key_bytes = 3;
+        JsonReader reader(limits);
+        JsonValue value;
+        JsonError error;
+        QVERIFY(!reader.parse("{\"a\\nbc\":0}", value, error));
+        QCOMPARE(error.kind, JsonErrorKind::key_too_large);
+    }
+
 
     // ---- the corpus ----
 

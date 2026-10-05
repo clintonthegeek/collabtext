@@ -306,6 +306,10 @@ Anchor IdList::anchor_at_index(uint32_t index, Bias bias) const {
 }
 
 Anchor IdList::anchor_of(uint64_t id, Bias bias) const {
+    return try_anchor_of(id, bias).value_or(Anchor::max());
+}
+
+Result<Anchor> IdList::try_anchor_of(uint64_t id, Bias bias) const {
     Anchor result = Anchor::max();
     bool found = false;
     m_entry_tree.for_each([&](const IdListEntry& e) {
@@ -316,6 +320,9 @@ Anchor IdList::anchor_of(uint64_t id, Bias bias) const {
             found = true;
         }
     });
+    if (!found)
+        return Error(ErrorCode::unresolvable_anchor, "visible list id was not found",
+                     std::to_string(id));
     return result;
 }
 
@@ -397,6 +404,7 @@ void IdList::local_clear() noexcept {
     m_deferred_count = 0;
     m_deferred_bytes = 0;
     m_quarantined.clear();
+    m_quarantined_bytes = 0;
     // Intentionally preserved: m_replica_id, m_clock, m_version,
     // m_max_undo_depth, m_on_change, m_on_local_op.
     // Intentionally not fired: m_on_change, m_on_local_op.
@@ -426,7 +434,14 @@ ApplyOutcome IdList::defer_or_quarantine(const IdListOperation& op,
                 std::to_string(m_deferred_budget.max_bytes) + " bytes held",
             "waiting on actor " + std::to_string(awaiting.replica_id) +
                 " counter " + std::to_string(awaiting.value));
-        m_quarantined.push_back(QuarantinedIdListOp{op, reason});
+        if (!deferred_budget_exhausted(m_quarantine_budget, m_quarantined.size(),
+                                       m_quarantined_bytes, bytes)) {
+            m_quarantined.push_back(QuarantinedIdListOp{op, reason});
+            m_quarantined_bytes += bytes;
+        }
+        // The offered operation is a const reference: ownership never transfers
+        // on refusal. The store/transport must retain it until accepted.
+
         return ApplyOutcome::rejected(reason);
     }
 

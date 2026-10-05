@@ -88,6 +88,116 @@ EditOperation valid_edit_payload(uint16_t replica = 7, uint32_t counter = 3) {
 class TestOperationValidation : public QObject {
     Q_OBJECT
 private slots:
+    void overflow_retention_is_bounded_and_drainable_for_both_primitives() {
+        Buffer source(1), target(2);
+        auto blocked = as_edit(source.apply_local_edit({{0, 0}}, {"payload"}));
+        blocked.version.observe(Lamport(9, 9));
+        target.set_deferred_budget({0, 0});
+        QVERIFY(target.set_quarantine_budget({2, 1u << 20}).ok());
+        for (int i = 0; i < 20; ++i)
+            QCOMPARE(target.apply_ops({Operation{blocked}})[0].kind(), ApplyOutcomeKind::rejected);
+        QCOMPARE(target.quarantined().size(), size_t(2));
+        QVERIFY(!target.set_quarantine_budget({0, 0}).ok());
+        QCOMPARE(target.take_quarantined().size(), size_t(2));
+        QVERIFY(target.quarantined().empty());
+        QVERIFY(target.set_quarantine_budget({2, 0}).ok());
+        QCOMPARE(target.apply_ops({Operation{blocked}})[0].kind(), ApplyOutcomeKind::rejected);
+        QVERIFY(target.quarantined().empty());
+
+        IdList list_source(1), list_target(2);
+        auto operation = list_source.insert_after(Anchor::min(), 42);
+        std::get<IdListInsertOp>(operation).version.observe(Lamport(9, 9));
+        list_target.set_deferred_budget({0, 0});
+        QVERIFY(list_target.set_quarantine_budget({2, 1u << 20}).ok());
+        for (int i = 0; i < 20; ++i)
+            QCOMPARE(list_target.apply_ops({operation})[0].kind(), ApplyOutcomeKind::rejected);
+        QCOMPARE(list_target.quarantined().size(), size_t(2));
+        QCOMPARE(list_target.take_quarantined().size(), size_t(2));
+        QVERIFY(list_target.quarantined().empty());
+        QVERIFY(list_target.set_quarantine_budget({2, 0}).ok());
+        QCOMPARE(list_target.apply_ops({operation})[0].kind(), ApplyOutcomeKind::rejected);
+        QVERIFY(list_target.quarantined().empty());
+    }
+
+    void quarantine_does_not_bypass_the_default_pending_operation_bound() {
+        Buffer source(1), target(2);
+        auto blocked = as_edit(source.apply_local_edit({{0, 0}}, {"a"}));
+        blocked.version.observe(Lamport(9, 9));
+        target.set_deferred_budget({0, 0});
+        for (size_t i = 0; i <= DeferredBudget{}.max_operations; ++i) {
+            const auto verdict = target.apply_ops({Operation{blocked}})[0];
+            QCOMPARE(verdict.kind(), ApplyOutcomeKind::rejected);
+        }
+        QVERIFY(target.quarantined().size() <= DeferredBudget{}.max_operations);
+    }
+
+    void missing_idlist_lookup_has_a_checked_not_found_result() {
+        IdList list(1);
+        QVERIFY(!list.try_anchor_of(100).ok());
+        list.insert_after(Anchor::min(), 100);
+        QVERIFY(list.try_anchor_of(100).ok());
+        const auto missing = list.try_anchor_of(200);
+        QVERIFY(!missing.ok());
+        QCOMPARE(missing.error().code(), ErrorCode::unresolvable_anchor);
+        QCOMPARE(list.ids(), std::vector<uint64_t>{100});
+    }
+
+    void local_utf8_interior_boundaries_are_refused_without_mutation() {
+        for (const auto range : {std::pair<uint32_t, uint32_t>{1, 1},
+                                 {0, 1}, {1, 2}}) {
+            Buffer buffer(1);
+            buffer.apply_local_edit({{0, 0}}, {"\xc3\xa9"});
+            const auto version = buffer.version();
+            const auto depth = buffer.undo_depth();
+            const auto result = buffer.try_apply_local_edit({range}, {"X"});
+            QVERIFY(!result.ok());
+            QCOMPARE(result.error().code(), ErrorCode::invalid_unicode);
+            QCOMPARE(buffer.text(), std::string("\xc3\xa9"));
+            QVERIFY(buffer.version() == version);
+            QCOMPARE(buffer.undo_depth(), depth);
+        }
+    }
+
+    void valid_scalar_boundaries_in_fragmented_text_remain_editable() {
+        const std::string original = "\xc3\xa9\xf0\x9f\x99\x82Z";
+        for (const uint32_t offset : {0u, 2u, 6u, 7u}) {
+            Buffer buffer(1);
+            QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {original}).ok());
+            QVERIFY(buffer.try_apply_local_edit({{2, 2}}, {"q"}).ok());
+            QVERIFY(buffer.try_apply_local_edit({{2, 3}}, {""}).ok());
+            QCOMPARE(buffer.text(), original);
+            auto expected = original;
+            expected.insert(offset, "X");
+            const auto edit = buffer.try_apply_local_edit({{offset, offset}}, {"X"});
+            QVERIFY2(edit.ok(), "a scalar/run boundary is a valid insertion point");
+            QCOMPARE(buffer.text(), expected);
+        }
+    }
+
+    void blocked_replica_does_not_bypass_semantic_validation() {
+        Buffer source(1), target(2);
+        auto first = source.apply_local_edit({{0, 0}}, {"a"});
+        auto blocked = source.apply_local_edit({{1, 1}}, {"b"});
+        QCOMPARE(target.apply_ops({blocked})[0].kind(), ApplyOutcomeKind::deferred);
+        auto malformed = as_edit(source.apply_local_edit({{2, 2}}, {"c"}));
+        malformed.inserted_fragments[0].length = 999;
+        QCOMPARE(target.apply_ops({Operation{malformed}})[0].kind(), ApplyOutcomeKind::rejected);
+        QCOMPARE(target.deferred_count(), size_t(1));
+        target.apply_ops({first});
+        QCOMPARE(target.text(), std::string("ab"));
+    }
+
+    void pending_byte_estimate_does_not_depend_on_counter_value() {
+        Buffer source(1);
+        auto early = as_edit(source.apply_local_edit({{0, 0}}, {"payload"}));
+        auto later = early;
+        later.timestamp.value += 1000000;
+        QCOMPARE(estimate_operation_bytes(Operation{early}),
+                 estimate_operation_bytes(Operation{later}));
+    }
+
+
+
 
     // =======================================================================
     // A. Operation identity and counter intervals

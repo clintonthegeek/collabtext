@@ -119,6 +119,21 @@ public:
     void set_deferred_budget(const DeferredBudget& budget) { m_deferred_budget = budget; }
     [[nodiscard]] const DeferredBudget& deferred_budget() const { return m_deferred_budget; }
     [[nodiscard]] size_t deferred_count() const { return m_deferred_count; }
+    /// Bound the diagnostic overflow copies separately from the causal queue.
+    /// Rejected input stays caller-owned even if this retention budget is full.
+    Result<void> set_quarantine_budget(const DeferredBudget& budget) {
+        if (m_quarantined.size() > budget.max_operations || m_quarantined_bytes > budget.max_bytes)
+            return Error(ErrorCode::malformed, "drain quarantine before lowering its budget");
+        m_quarantine_budget = budget;
+        return Result<void>::success();
+    }
+    std::vector<QuarantinedIdListOp> take_quarantined() {
+        m_quarantined_bytes = 0;
+        auto retained = std::move(m_quarantined);
+        m_quarantined.clear();
+        return retained;
+    }
+
     [[nodiscard]] const std::vector<QuarantinedIdListOp>& quarantined() const {
         return m_quarantined;
     }
@@ -133,6 +148,8 @@ public:
     std::vector<uint64_t> ids() const;
     uint32_t size() const;
 
+    /// Checked visible-element lookup. A missing id is an explicit error.
+    Result<Anchor> try_anchor_of(uint64_t id, Bias bias = Bias::Left) const;
     Anchor anchor_of(uint64_t id, Bias bias = Bias::Left) const;
     Anchor anchor_at_index(uint32_t index, Bias bias = Bias::Left) const;
     uint32_t resolve_anchor(const Anchor& a) const;
@@ -245,6 +262,8 @@ private:
     size_t m_deferred_bytes = 0;
     DeferredBudget m_deferred_budget;
     std::vector<QuarantinedIdListOp> m_quarantined;
+    DeferredBudget m_quarantine_budget;
+    size_t m_quarantined_bytes = 0;
 };
 
 } // namespace CollabText::Crdt
