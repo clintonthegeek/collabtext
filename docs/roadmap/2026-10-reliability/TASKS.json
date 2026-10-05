@@ -1469,11 +1469,43 @@
     "R13"
    ],
    "gate": "A complete boundary specification, implementation map, and independent executable model must pass before S04b. An API value declaration or comparator test alone does not satisfy this gate.",
-   "status": "in_progress",
+   "status": "complete",
    "consumer_requirements": [
     "W1",
     "W2",
     "W6"
+   ],
+   "baseline_revision": "d52dceb",
+   "implementation_commits": [
+    "45fd3061270431f2492cb41c20853b7afed9db4f"
+   ],
+   "gate_evidence": [
+    "docs/specs/vnext-boundary-semantics.md: full identity/scope/retained-order invariants; mint/resolve/compare pseudocode; strict selected-referent loss and same-token undo restoration; local_clear invalidates position history even for scoped empty-edge tokens; checked bounds and canonical codec candidate; exact native transformation map for S04b and relative-order preservation obligation for S02.",
+    "BoundaryModel.h is stdlib-only and calls no production identity/anchor/order/codec helpers. The QtTest harness links QtTest/Core only, no CollabText production target. BoundaryApiContract.h compile-checks target declarations separately; no installed API claim.",
+    "Independent mint snapshot reconstruction rejected the original WP2 a/c range masquerading as a caret gap; WP2 now uses a/b with strict following-b. WP8 formerly selected surviving a while claiming deleted b; it now selects b. Exact caret collapse at byte 1 and same-token undo restoration are roadmap-inference expectations, preserving provenance.",
+    "Three reduced model mutations are detected: ignored affinity, erased document scope, missing retained identity mapped to end. The fixture validator additionally rejects the original range and surviving-referent errors, missing exact collapse and incorrect restoration.",
+    "S04b scope corrected to include required facades, typed-error header, compile contract and CMake registration; dependencies are unchanged. F7/F8 production markers remain."
+   ],
+   "verification_results": {
+    "fixtures": "21 token-bearing S01/W01 histories; 50 minted gaps, 48 exact placements, 24 comparisons; every supplied final arrival permutation and duplicate observations use the original handles.",
+    "bounded": "472 supplied text/list orders across two/three actors with one/two scalars per actor; 75,328 visibility states; 602,624 result assertions plus 944 missing-causal-state assertions. Exhaustive only within supplied-order/visibility bounds, not production integration.",
+    "seed": "20261003 repeated twice. Trace SHA256 1cbd4c70d0e27a700551ac0da36d07c3771344b54b6b1dab36f6f0d350ca6a5c matches; result-row digest d0129e2188d6336f02a0af0a690dc7210118c3b848659f55cd6579366ab07ff9.",
+    "debug": "Boundary model and sequence fixture suites 2/2 pass (20261005T231207Z-2); final model 1/1 / 8 Qt cases pass (20261005T232511Z-changed-2gjfpg9i), 5.24 s tests / 16.718 s whole warm check.",
+    "release": "Model and sequence suites 2/2 pass (20261005T231207Z-2); final model 1/1 passes (20261005T232528Z-changed-mr2rjoy4), 0.66 s tests / 14.001 s whole check.",
+    "asan": "ASan/UBSan/LSan model+sequence 2/2 pass (20261005T231219Z-86751). After final oracle assertions, already-built boundary model 1/1 passes with leak checks enabled outside process-inspection restriction, 26.66 s. Approval for broader rerun timed out; narrower ctest retry approved. No suppressions.",
+    "validator": "37 corruption kinds, 362 applications, all rejected; clean 14 fixtures / 32 operations / 28 tokens / 57 typed expectations.",
+    "routing": "13 verification-tool tests pass; model header changes select only boundary model, external fixtures select model/anchor suites rather than a data-only empty route.",
+    "limits": "No production position/codec/order fix, file recovery, persistent undo, pin/GC or benchmark claim. S02 must generate supplied orders and certify retained relative-order invariance."
+   },
+   "artifacts": [
+    "docs/reports/2026-10-05-takeover-review.md",
+    "build-roadmap-debug/verification/20261005T231207Z-2",
+    "build-roadmap-debug/verification/20261005T232511Z-changed-2gjfpg9i",
+    "build-roadmap-release/verification/20261005T232528Z-changed-mr2rjoy4",
+    "build-roadmap-asan/verification/20261005T231219Z-86751",
+    "/tmp/collabtext-boundary-asan-final-ctest.log",
+    "/tmp/collabtext-boundary-run1/boundary-states.trace",
+    "/tmp/collabtext-boundary-run2/boundary-states.trace"
    ]
   },
   {

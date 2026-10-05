@@ -2131,3 +2131,40 @@ also conflates a visible range with a caret gap; S04a will define those precisel
 P06a is complete; **S04a is now structurally ready**, alongside W02/P06b. Proceed
 with scoped boundary semantics and independent model before S04b production code.
 Publication/master/consumer edits remain outside this local implementation.
+
+
+## 2026-10-05 — S04a: scoped boundary gate accepted
+
+Baseline d52dceb; implementation 45fd306. A complete native boundary contract,
+implementation map, candidate canonical codec and compile-checked target signatures
+now precede S04b. Positions use scoped stable item fences, mint causal coverage
+and retained logical order, with separate caret collapse and strict selected
+referent loss. A valid undo restores the original token when its item becomes
+visible; physical history loss remains unavailable. Local clear invalidates
+position history even for old empty-edge tokens. S02 must preserve the relative
+order of integrated retained items and generate the supplied orders itself.
+
+The independent model first failed on WP2's original range mislabeled as a gap.
+WP8 also selected a surviving character while asserting detachment of another.
+Both fixtures are corrected with explicit selected referents and provenance.
+WP2's pending rules are replaced by exact byte-1 collapse and same-token undo
+restoration. The corpus validator now rejects these mistakes: 37 corruption
+kinds applied 362 times, all rejected. WP6 prose follows S01's exact native tie
+abcXYZ, without attributing that choice to the consumer.
+
+Verification: `tools/verify-roadmap.sh {debug,release,asan}
+'^tst_(boundary_model|sequence_fixtures)$'` passed 2/2 in each mode. Final oracle
+checks passed `verify-changed.sh --target tst_boundary_model` in Debug/Release;
+a narrow unrestricted final ASan/UBSan/LSan ctest passed 1/1 after the broader
+approval review timed out. Leak checking stayed enabled. Model harness links only
+QtTest/QtCore, not production CollabText. Tests: 21 fixture histories, 50 minted
+gaps, 48 placements, 24 comparisons; 472 supplied text/list orders, 75,328 states,
+602,624 result assertions and 944 missing-state assertions. Three reduced model
+mutation violations are detected. Seed 20261003 repeats with identical traces,
+SHA256 1cbd4c70d0e27a700551ac0da36d07c3771344b54b6b1dab36f6f0d350ca6a5c.
+Exact logs/paths belong to TASKS.json. Verification routing checks pass 13/13;
+model-header edits now select their own executable, and external fixture edits
+run model/anchor checks. No benchmarks or engine optimization.
+
+S04a is complete. P06b is next before S04b; W02/S02 are separately ready.
+No production F7/F8 marker or installed position capability was promoted.
