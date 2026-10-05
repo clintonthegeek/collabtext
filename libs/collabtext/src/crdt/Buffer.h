@@ -272,6 +272,21 @@ private:
         const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
         const std::vector<std::string> &new_text);
 
+    /// Refuse to mint identity for an invalid actor.
+    ///
+    /// An all-zero ActorId is not actor 0 (P02); it is the absence of an actor.
+    /// Minting from one would produce operations no peer could attribute and no
+    /// peer could order against any real identity without inventing a tie-break,
+    /// so this is a refusal in Release exactly as it is in Debug — the assert in
+    /// the constructor is a developer tripwire, not the check.
+    [[nodiscard]] Result<void> check_allocator() const {
+        if (!m_allocator->actor().valid())
+            return Error(ErrorCode::invalid_identity,
+                         "cannot mint operation identity: the allocator has no "
+                         "valid actor identity");
+        return Result<void>::success();
+    }
+
     /// Raise the allocator above an identity observed from a peer.
     ///
     /// Derived state, deliberately not durable (identity spec §3.4): it need not

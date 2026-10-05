@@ -301,6 +301,32 @@ private slots:
         QCOMPARE(f.buf().actor_id(), actor(7));
     }
 
+    void an_invalid_actor_is_refused_rather_than_treated_as_actor_zero() {
+        // There is no actor 0 (P02). An allocator holding the all-zero id is an
+        // engine with no author, and the refusal has to hold in a Release build
+        // — an assert would simply disappear there and start minting
+        // unattributable operations.
+        auto counter = std::make_shared<VolatileCounter>(CollabText::ActorId());
+        Buffer buf(counter);
+
+        const auto edit = buf.try_apply_local_edit({{0, 0}}, {"abc"});
+        QVERIFY(!edit.ok());
+        QCOMPARE(edit.error().code(), ErrorCode::invalid_identity);
+
+        QVERIFY(!buf.undo().has_value());
+        QVERIFY(!buf.redo().has_value());
+        QVERIFY(buf.text().empty());
+        QCOMPARE(counter->reservation_count(), size_t(0));
+
+        // The same for a list, whose mutation entry points cannot report failure
+        // and therefore return an empty operation instead.
+        IdList list(counter);
+        QVERIFY(!list.try_insert_after(Anchor::min(), 1).ok());
+        QCOMPARE(list.size(), 0u);
+        QVERIFY(!list.undo().has_value());
+        QCOMPARE(counter->reservation_count(), size_t(0));
+    }
+
     void two_engines_on_one_counter_never_reissue() {
         // Not a supported configuration (one counter is one stream), but the
         // property that makes it safe to hand the same allocator to two engines

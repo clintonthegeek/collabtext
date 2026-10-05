@@ -247,13 +247,28 @@ private:
     /// Queue `op` if the budget allows, otherwise quarantine it with a reason.
     ApplyOutcome defer_or_quarantine(const IdListOperation& op, Identity awaiting);
 
-    /// The existing bodies, which assume their anchor was resolved.
-    IdListOperation insert_after_resolved(const Anchor& after, uint64_t id);
-    IdListOperation remove_at_resolved(const Anchor& target);
+    /// The existing bodies, which assume their anchor was resolved — but not
+    /// that identity allocation will succeed, so they report rather than
+    /// returning an empty operation. A default-constructed IdListOperation is
+    /// indistinguishable from a real one whose fields happen to be zeroed, and
+    /// the caller cannot tell a refusal from a mutation.
+    Result<IdListOperation> insert_after_resolved(const Anchor& after, uint64_t id);
+    Result<IdListOperation> remove_at_resolved(const Anchor& target);
 
     /// Index of the entry whose origin matches `target`, or npos.
     [[nodiscard]] size_t find_origin(const std::vector<IdListEntry>& entries,
                                      const Anchor& target) const;
+
+    /// Refuse to mint identity for an invalid actor. See
+    /// Buffer::check_allocator(): an all-zero ActorId is not actor 0, and the
+    /// refusal has to hold in Release, not only behind an assert.
+    [[nodiscard]] Result<void> check_allocator() const {
+        if (!m_allocator->actor().valid())
+            return Error(ErrorCode::invalid_identity,
+                         "cannot mint operation identity: the allocator has no "
+                         "valid actor identity");
+        return Result<void>::success();
+    }
 
     /// Raise the allocator above an identity observed from a peer. Derived
     /// state, not durable allocation (identity spec §3.4).

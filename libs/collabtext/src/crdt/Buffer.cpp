@@ -9,9 +9,13 @@ namespace CollabText::Crdt {
 Buffer::Buffer(SharedAllocator allocator)
     : m_allocator(std::move(allocator))
 {
+    // A null allocator is a programming error: nothing can be minted and there
+    // is no state to recover to, so it fails loudly here.
     assert(m_allocator && "an engine without an allocator cannot mint identity");
-    assert(m_allocator->actor().valid() &&
-           "an engine cannot mint identity for an invalid actor");
+    // An *invalid actor* is not asserted on, because it is a state rather than a
+    // bug: an engine may exist before its private state has an identity. Minting
+    // is refused at the reservation site instead (check_allocator), where the
+    // refusal can be reported to a caller instead of vanishing in Release.
 }
 
 // ---------------------------------------------------------------------------
@@ -580,6 +584,8 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     const std::vector<std::string> &new_text)
 {
     assert(ranges.size() == new_text.size());
+
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
 
     // One reservation for the whole operation, before anything is mutated
     // (identity spec §3.2): `n` item identities followed by the operation's own.
@@ -1582,6 +1588,8 @@ std::optional<Operation> Buffer::undo() {
     // identities from a different domain, which is why no undo-map entry can be
     // confused with the operation that produced it (§3.3).
     //
+    if (auto usable = check_allocator(); !usable.ok()) return std::nullopt;
+
     // Reserved *before* the cursor moves: a refused undo that had already
     // decremented m_undo_cursor would silently drop an entry from the undo
     // history.

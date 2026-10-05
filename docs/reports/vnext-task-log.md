@@ -1635,3 +1635,62 @@ P06b/P07/L02's obligation, recorded in TASKS.json.
 
 **Next ready tasks:** A01, W01, S01. Within P06a: rejecting an invalid `ActorId`
 at the public boundary (step 5), then opaque operation values (step 6).
+
+## P06a step 5 — an invalid actor is refused, in Release too
+
+**Task:** P06a (still in progress; this closes step 5)
+**Status:** in progress — steps 3, 3b, 4 and 5 done; step 6 remains
+**Baseline:** `4d5ca29`
+**Implementation commits:** this entry's commit
+**Scope:** `Buffer`, `IdList`, `CrdtEngine` and `CollabDocument` take a borrowed
+allocator, expose `actor_id()`, and have no legacy integer constructor. Every mint
+site now refuses an all-zero `ActorId` with `ErrorCode::invalid_identity`.
+`IdList::insert_after_resolved` / `remove_at_resolved` became `Result`-returning
+because a refusal inside them was being reported as success. The public API guide
+gains §2.1 for the allocator contract.
+
+**Regression:** one more case in `tst_identity_allocation_engine` — an engine over
+an allocator holding the all-zero actor refuses edits, undo and redo with
+`invalid_identity`, reserves nothing, and leaves the text empty.
+
+**Verification:** Debug 65/65; Release 16/16
+(`…/20261005T072729Z-3439371`); ASan/UBSan/LSan 12/12
+(`…/20261005T074436Z-3464803`), no suppressions.
+
+**The finding.** I had written the constructor as
+`assert(m_allocator->actor().valid())`. That is a developer tripwire, not a
+check: it disappears in Release, where the engine would then mint operations for
+an engine with no author — unattributable, unorderable against any real identity,
+and accepted by nothing. The test caught the real problem by *not being able to
+run*: the assert fired before the case could assert that the refusal is reported.
+
+The distinction the fix turns on: a **null** allocator is a programming error and
+is asserted on; an **invalid actor** is a state — an engine may legitimately exist
+before its private state has an identity — so it is refused at the reservation
+site, where the refusal can be returned to a caller. Those two look identical in
+the constructor and want opposite treatment.
+
+The same reasoning caught `IdList`: `try_insert_after` delegates to
+`insert_after_resolved`, which returned a *default-constructed* `IdListOperation`
+on failure. `try_insert_after` therefore reported success with an empty
+operation — indistinguishable from a real one whose fields happen to be zero.
+Making the resolved bodies `Result`-returning is the fix, and it is the second
+time in this task that a "cannot report failure" convenience turned out to be
+hiding a refusal.
+
+**Environment note.** `/tmp` filled up mid-run (7.7G tmpfs, 100%), and an ASan
+build failed with `No space left on device` writing a compiler temporary. Nothing
+in this worktree caused it — `/tmp/opencode` holds ~5G of build directories from
+other sessions. The ASan re-run used `TMPDIR` pointed inside the worktree, which
+is where EXECUTION.md wants build temporaries anyway.
+
+**Step 6 needs a decision, not an implementation.** "Move operation field layout
+out of the public header" cannot be done for a `std::variant` of by-value structs
+without either handle types — which is the A02 rename, and would collide with it
+— or leaving the layout visible and routing engine access through internal
+accessors, which is weaker than the step asks for. That tension is recorded in
+TASKS.json rather than resolved unilaterally; it belongs with whoever owns the
+public boundary.
+
+**Next ready tasks:** A01, W01, S01. Within P06a: step 6, once the above is
+settled with A02.

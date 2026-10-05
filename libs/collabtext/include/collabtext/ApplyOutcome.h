@@ -17,10 +17,16 @@
 /// the document. The distinction is therefore part of the return type, not a
 /// diagnostic.
 ///
-/// `awaiting()` is `std::optional<Crdt::Identity>` today because the engine's
-/// operation identity is still the Identity pair. When P06 makes operations
-/// opaque and keyed by `ActorId`, this becomes `std::optional<OperationId>`
-/// with no other change to callers, who only ever compare or display it.
+/// `awaiting()` is `std::optional<Crdt::Identity>` — the engine's identity is
+/// already an `ActorId` plus a checked counter, so this is no longer the old
+/// replica/value pair. It is not spelled `OperationId` because the two are the
+/// same shape with different roles: an `Identity` is a position in the total
+/// order that breaks equal-locator ties, while an `OperationId` is what an
+/// envelope claims and what a receiver checks a claim against. Unifying them is
+/// P07's call, when the envelope stops being a separate layer.
+///
+/// Callers only ever compare or display it, so either spelling is a source-level
+/// change for them and nothing more.
 
 #pragma once
 

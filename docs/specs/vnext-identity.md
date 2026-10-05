@@ -19,6 +19,12 @@ P07/L04 rather than code here. §5 is measured.
 
 ## 1. What an identity is
 
+`OperationId` in vnext-public-api.md §2 is this same pair with a different role:
+an `Identity` is a position in the total order that breaks equal-locator ties,
+while an `OperationId` is what a transport envelope claims and what a receiver
+checks a claim against. They have the same fields and the same comparison today.
+Unifying them belongs to P07, which owns the envelope.
+
 An operation's identity is the pair
 
 ```

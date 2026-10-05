@@ -78,6 +78,50 @@ struct OperationContext {
 };
 ```
 
+### 2.1 An engine is constructed from an allocator, not from an actor id
+
+P06a adopted this and it is worth stating precisely, because the ActorId-only
+signature this guide originally sketched cannot express the property that
+matters.
+
+```cpp
+class IdentityAllocator {
+public:
+    // Reserve `count` consecutive counters, returning the first. All-or-nothing.
+    [[nodiscard]] virtual Result<uint64_t> reserve_run(uint64_t count) = 0;
+    // Raise past an identity observed from a peer. Derived, not durable.
+    virtual void observe(uint64_t counter) = 0;
+    [[nodiscard]] virtual uint64_t peek() const noexcept = 0;
+    [[nodiscard]] virtual const ActorId& actor() const noexcept = 0;
+};
+
+using SharedIdentityAllocator = std::shared_ptr<IdentityAllocator>;
+```
+
+The engine never owns identity allocation. `ReplicaState` (P02) owns the durable
+per-(actor, stream) counter; an engine borrows a handle naming its (document,
+stream). Three consequences a consumer can rely on:
+
+- **There is no `Buffer(ActorId)`.** Holding an actor id is not authority to
+  claim durable allocation. A constructor that quietly started a counter at 1
+  would hand out identities a relaunch hands out again, and nothing in the type
+  would say so. An engine that cannot be given an allocator cannot mint an
+  identity at all, which is a better failure than a plausible one.
+- **An invalid actor is a refusal, not actor 0.** An engine may exist before its
+  private state has an identity, so this is a state rather than a bug: it is not
+  asserted on, and every mint site returns `ErrorCode::invalid_identity` instead
+  of minting an unattributable operation. In Release as well as Debug.
+- **One local operation costs one reservation.** An operation that inserts `n`
+  scalars reserves `n + 1` counters: its item identities, then its own. The
+  operation's identity is therefore strictly greater than every item identity it
+  created and strictly below the next reservation's base
+  (vnext-identity.md §3.2). Exhaustion is reported as `counter_exhausted` with
+  nothing consumed; it is never wrapped.
+
+A test that wants a throwaway counter asks for a volatile one by name. That is a
+requirement on tests, not on consumers: the durability guarantees are only
+meaningful where a `ReplicaState` is behind them.
+
 There is deliberately no `ActorId()` default that means "actor 1". A
 constructed-from-nothing `ActorId` is invalid and any operation carrying it is
 rejected — which is what makes "silent fallback to actor 1" impossible to write.
@@ -224,7 +268,9 @@ resolution. Scoped start/end/empty anchors are values, not universal sentinels.
 ```cpp
 class Buffer {
 public:
-    explicit Buffer(ActorId actor);
+    // Takes the allocator identities are minted from, and learns its actor from
+    // it. See §2.1: there is deliberately no ActorId-only constructor.
+    explicit Buffer(SharedIdentityAllocator allocator);
 
     // Local mutation. Fails without mutating anything.
     [[nodiscard]] Result<BufferOperation> apply_local_edit(
@@ -246,7 +292,7 @@ public:
 
 class IdList {
 public:
-    explicit IdList(ActorId actor);
+    explicit IdList(SharedIdentityAllocator allocator);
 
     [[nodiscard]] Result<IdListOperation> insert_after(const Anchor&, uint64_t id);
     [[nodiscard]] Result<IdListOperation> remove_at(const Anchor&);
@@ -353,11 +399,12 @@ needed and did not have.
 
 | Today | Becomes | Why |
 |---|---|---|
-| `Buffer(uint16_t replica_id)` | `Buffer(ActorId)` | 16-bit ids cannot survive offline enrollment (R1) |
+| `Buffer(uint16_t replica_id)` | `Buffer(SharedIdentityAllocator)` | 16-bit ids cannot survive offline enrollment (R1), and an engine must not own its counter |
 | `apply_ops(...)` returning `void` | `apply_remote(...) -> ApplyOutcome` | duplicate/deferred/rejected must be distinguishable (R1) |
 | `undo()/redo()` returning `optional<Operation>` | `Result<BufferOperation>` | persistence can fail (C3) |
 | `uint32_t resolve_anchor(...)` | `Result<ResolvedTextPosition>` / `Result<ResolvedListPosition>` | success carries a position; failure never fabricates end (R6) |
 | `Operation` with public fields | opaque `BufferOperation` | field layout is not a contract |
+| `Anchor::max()` as a largest-identity sentinel | explicit past-the-end | a 128-bit actor space has no largest identity |
 | `OpStream::lowest_peer_acked_lamport()` | `receipts()` per stream | a scalar cannot mean cross-stream coverage |
 | `collect_garbage()` / `compact(Global)` | replaced by G06's certificate | receipt is not authority (C14) |
 | `src/` on the public include path | internal, `PRIVATE` | internals are not a contract (A01) |
@@ -391,18 +438,32 @@ Landed:
   budgets; `take_quarantined()` drains diagnostic retention. The caller retains
   ownership of rejected input and the transport/store must preserve its bytes.
 
-Not landed, and still owed:
+### 9.2 What P06a landed from this table
 
-- `Buffer(ActorId)` instead of `Buffer(uint16_t)`. P02 built the persistent
-  identity and the checked counter; nothing has moved the engine's internal
-  identity over to it yet. Until that happens, `Buffer` still numbers replicas
-  with 16 bits and epoch/document/stream context cannot be checked at all — the
-  operation value carries no epoch to compare. P05's validator therefore checks
-  the identity fields that exist and records the epoch check as a gap rather
-  than inventing one; it belongs with P06 (opaque operations), P07 (envelope and
-  transport outcomes), and L04 (persisted envelope identity).
-- `undo()`/`redo()` returning `Result`, typed position resolution,
-  and opaque operations — those are P06, S04, and A02.
+- Engines are constructed from a borrowed allocator rather than an ActorId, and
+  expose `actor_id()`. There is no legacy integer constructor to keep, because
+  an integer could not be made safe: any value a caller supplied would be
+  indistinguishable from an identity the engine had authority to claim.
+- Operation identity is a persistent 128-bit actor plus a checked 64-bit counter,
+  and the engine allocates it as a run interval per operation (§2.1). A deletion
+  marks its tombstones with the deleting operation's own identity.
+- An all-zero `ActorId` is refused at every mint site with
+  `ErrorCode::invalid_identity`, in Release as well as Debug.
+- `idlist_op_lamport()`/`op_lamport()` became `idlist_op_identity()`/
+  `op_identity()`, and `Anchor`'s largest-identity sentinel became an explicit
+  past-the-end flag, because a 128-bit actor space has no largest identity.
+
+Still owed, and still not invented here:
+
+- Epoch, document and stream context on the operation value. The operation still
+  carries no epoch to compare, so P05's validator records that check as a gap
+  rather than fabricating one. It belongs with P07 (envelope and transport
+  outcomes) and L04 (persisted envelope identity).
+- `undo()`/`redo()` returning `Result` — they still return
+  `std::optional<Operation>` and now return `nullopt` on a refused reservation
+  (exhaustion, or an allocator with no valid actor). A `Result` is owed because
+  persistence can fail (C3), and that is A02's rename.
+- Typed position resolution and opaque operations — S04 and A02.
 
 ## 10. Examples
 

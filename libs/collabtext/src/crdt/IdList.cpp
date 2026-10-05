@@ -6,9 +6,9 @@ namespace CollabText::Crdt {
 IdList::IdList(SharedAllocator allocator)
     : m_allocator(std::move(allocator))
 {
+    // See Buffer's constructor: a null allocator is a programming error, an
+    // invalid actor is a state, and only the first is asserted on.
     assert(m_allocator && "a list without an allocator cannot mint identity");
-    assert(m_allocator->actor().valid() &&
-           "a list cannot mint identity for an invalid actor");
 }
 
 size_t IdList::find_origin(const std::vector<IdListEntry>& entries,
@@ -44,7 +44,7 @@ Result<IdListOperation> IdList::try_insert_after(const Anchor& after, uint64_t i
     return insert_after_resolved(after, id);
 }
 
-IdListOperation IdList::insert_after_resolved(const Anchor& after, uint64_t id) {
+Result<IdListOperation> IdList::insert_after_resolved(const Anchor& after, uint64_t id) {
     // a. Get entries vector
     auto entries = get_entries();
 
@@ -76,8 +76,9 @@ IdListOperation IdList::insert_after_resolved(const Anchor& after, uint64_t id) 
     // identity (§3.2). They stay different domains by construction rather than
     // by accident: an IdList entry's origin is its item identity, and the
     // operation that created it is that same value.
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
     auto reserved = m_allocator->reserve_run(1);
-    if (!reserved.ok()) return IdListOperation{};
+    if (!reserved.ok()) return reserved.error().with_context("allocating identities for an IdList insert");
     const Identity origin(m_allocator->actor(), reserved.value());
 
     // e. Capture version before observing this op
@@ -108,7 +109,7 @@ IdListOperation IdList::insert_after_resolved(const Anchor& after, uint64_t id) 
     IdListOperation op = IdListInsertOp{ origin, version_before, id, new_loc };
     emit_local_op(op);
 
-    return op;
+    return Result<IdListOperation>(std::move(op));
 }
 
 IdListOperation IdList::remove_at(const Anchor& target) {
@@ -134,7 +135,7 @@ Result<IdListOperation> IdList::try_remove_at(const Anchor& target) {
     return remove_at_resolved(target);
 }
 
-IdListOperation IdList::remove_at_resolved(const Anchor& target) {
+Result<IdListOperation> IdList::remove_at_resolved(const Anchor& target) {
     // a. Get entries
     auto entries = get_entries();
 
@@ -149,8 +150,9 @@ IdListOperation IdList::remove_at_resolved(const Anchor& target) {
     // d. Reserve this operation's identity. A removal creates no items, so the
     // interval is one value and the deletion identity *is* the operation
     // identity (§3.3).
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
     auto reserved = m_allocator->reserve_run(1);
-    if (!reserved.ok()) return IdListOperation{};
+    if (!reserved.ok()) return reserved.error().with_context("allocating identities for an IdList insert");
     const Identity del_id(m_allocator->actor(), reserved.value());
 
     // f. Capture version before observing this op
@@ -178,7 +180,7 @@ IdListOperation IdList::remove_at_resolved(const Anchor& target) {
     IdListOperation op = IdListRemoveOp{ del_id, version_before, target_origin };
     emit_local_op(op);
 
-    return op;
+    return Result<IdListOperation>(std::move(op));
 }
 
 std::vector<ApplyOutcome> IdList::apply_ops(const std::vector<IdListOperation>& ops) {
@@ -193,6 +195,8 @@ std::vector<ApplyOutcome> IdList::apply_ops(const std::vector<IdListOperation>& 
 
 std::optional<IdListOperation> IdList::undo() {
     if (m_undo_cursor == 0) return std::nullopt;
+
+    if (auto usable = check_allocator(); !usable.ok()) return std::nullopt;
 
     // Reserved before the cursor moves: a refused undo that had already
     // decremented m_undo_cursor would silently drop an entry from the history.
@@ -229,6 +233,8 @@ std::optional<IdListOperation> IdList::undo() {
 
 std::optional<IdListOperation> IdList::redo() {
     if (m_undo_cursor >= m_undo_stack.size()) return std::nullopt;
+
+    if (auto usable = check_allocator(); !usable.ok()) return std::nullopt;
 
     // Reserved before the cursor moves; see undo().
     auto reserved = m_allocator->reserve_run(1);
