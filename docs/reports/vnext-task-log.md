@@ -1962,3 +1962,136 @@ S04a's registry depends on **all** of P06a. P01 already requires opaque operatio
 values; no new policy answer is required. Finish W01 and P06a, then follow the
 actual S04a/S04b/probe/ordering dependencies. Benchmarks and speculative engine
 optimization must not occupy the current consumer delivery lane.
+
+## 2026-10-05 — W01: the eight consumer probes, with their provenance kept honest
+
+```text
+Task: W01
+Status: complete
+Baseline: fcb7e71 (docs: record S01 evidence and correct consumer implementation handoff)
+Scope: docs/specs/vnext-consumer-probes.md (new),
+       libs/collabtext/tests/fixtures/external-position/*.json (14 new),
+       tests/consumer-smoke/wave-contract/probes/{probe_contract.h,README.md} (new),
+       tools/validate-consumer-fixtures.py (new),
+       docs/reports/vnext-consumer-probe-provenance.md (new),
+       docs/specs/vnext-external-position-contract.md, tools/verify_changed.py
+Verification: corpus 14 fixtures / 32 operations / 28 tokens / 58 typed expectations,
+       WP1-WP8 covered; --self-test 31 corruption kinds applied 351 times, all rejected;
+       determinism re-run identical; probe_contract.h standalone on gcc 16 + clang 22.1.8;
+       tools/verify-changed.sh PASS (debug/package); Debug suite 71/71
+Known limits: specifies cases only; collapse placement and undo-restore of a referent
+       are design_pending (S04a); offset units are our decision; no third-party figure
+       was reproduced because the cited harnesses do not exist locally
+Next ready tasks: W02 (installed baseline probes); P06a step 6 remains resumable
+```
+
+### The finding that shaped the task
+
+The consumer's table has a column headed **"What it found"**, and every entry in
+it describes Automerge, yrs or Loro — not collabtext. Reading that column as a
+table of expected results would have inverted the entire task: eight fixtures
+asserting that collabtext silently relocates 400/400 times, which is the defect
+being reported about somebody else's engine.
+
+So every expectation carries a machine-readable provenance tag, and the validator
+enforces it rather than trusting it. `consumer_asserted` and
+`wave_protocol_normative` must cite an external document; `roadmap_inference` must
+cite the internal requirement it derives from. A derived expectation citing a Wave
+document is rejected as a fabricated citation.
+
+**That rule immediately caught me.** Seventeen of my own expectations were tagged
+`consumer_asserted` while citing only our own W1–W6 contract — I had credited the
+consumer with requirements I had written. They are now `roadmap_inference`. The
+honest ratio is roughly 40% consumer-asserted; the number I started with was much
+higher, and the difference was entirely self-congratulation.
+
+### What the consumer did not say, and what we did about it
+
+Nine things the four external documents simply do not state, recorded rather than
+filled in: offset units, WP1's sweep corpus, **WP5's expected results** (ask2:204
+offers "the exact expected results we need" and never writes them), WP6's target
+result, WP8's answers, WP2's collapse placement, WP3's ownership split, the error
+type names, and the Yjs version.
+
+WP2 is the case worth naming. The consumer requires that deletion never be silent;
+it does **not** say what a deleted referent should resolve to. Inventing a
+fallback integer would have produced a fixture that looks authoritative and
+settles S04a's design gate by accident. Instead the mandatory observable outcome
+is recorded — a strict attachment surfaces detachment, a caret may resolve with an
+explicit collapse marker — and the offset rule is tagged `design_pending` with
+owner S04a. Same for whether undo restores a referent.
+
+### The provenance report says the harnesses do not exist
+
+The alternatives report states its harnesses are "under `/tmp/opencode/`" and
+cites `loro-internal/src/state.rs:2122-2152` and
+`crates/loro/tests/contracts/cursor_recovery.rs:164-171`. **Neither file is
+present.** Nor is any identifiable yrs/Loro/Automerge probe harness; the
+`probe*.cpp` files in that directory are unrelated SQLite/GTFS timing code. Only
+an Automerge `LICENSE`/`Cargo.toml` and some extracted Loro snippets survive.
+
+So 400/400, 1000/1000, 256/256, the 84-case sweep and exit 134 are carried as the
+consumer's reported observations with `attribution:
+reported_by_wave_not_reproduced_here`, and the validator **rejects any
+third-party observation without that attribution**. Reproducing a number we cannot
+re-run would be exactly the failure this roadmap has been auditing for.
+
+Also recorded: the consumer twice cites
+`docs/reports/2026-10-03-evaluation-artifacts/probes.cpp` as containing its
+probes. That path is relative to collabtext, not Wave; the file exists and holds
+*our* 13 evaluation probes, exactly one of which is probe 1 of the eight. Anyone
+following that citation finds one block and stops.
+
+### Three defects the validator found in my own work
+
+- **Token observation excluded the parent operation.** A token minted by the
+  latest operation referenced an item that operation had created, and was refused.
+- **The neighbour-derived offset oracle was unsound.** My first version computed a
+  boundary token's offset from its neighbours, which is right only when nothing was
+  inserted at that boundary. Where content *was* inserted, the offset is
+  affinity-dependent and the rule belongs to S04a/S04b. Tightening it to "the
+  offset must lie between the end of the left neighbour and the start of the
+  right one" constrains what can be claimed without inventing the rule that is
+  still an open design gate.
+- **The list-origin interval rule was wrong for lists.** A list element's identity
+  *is* its insertion operation, so the two counters are equal by construction; the
+  "item counter is below the operation counter" rule applies to text runs only.
+
+Two more came from compiling the header: `offset = 0` is the start of a document,
+not "unset" — my check was wrong, not the contract — and `PositionState::Unavailable`
+with no error was passing `well_formed()`. A default-constructed resolution now
+fails, because a value that reads as "a position was produced" before anything ran
+is precisely the shape that reports success after failing.
+
+### The self-test was wrong about itself, twice
+
+The first version applied each corruption to one fixture and treated a mutation
+returning `None` as "not applicable". Most of my mutations edited the case in
+place and returned nothing, so **sixteen of thirty-one were silently skipped** and
+the self-test reported success while covering almost nothing. It now detects
+applicability by comparing against a snapshot of the original, and fails if any
+mutation never applied anywhere.
+
+Two mutations were also not corruptions at all. Replacing a neighbour with
+`START` produces a *legal alternative history*, and reversing the arrival order of
+two concurrent operations violates nothing. A self-test full of mutations that
+cannot fail is decoration; both were rewritten to break a rule the validator
+actually enforces.
+
+To confirm the self-test can go red at all, the arrival-causality rule was
+disabled: it then reported nine corruptions it had been accepting. Restoring the
+rule returned it to green.
+
+### Scope, stated plainly
+
+W01 specifies cases. Nothing here is evidence that collabtext passes a probe, and
+the fixture validator's own output says so on every run. The harness in
+`tests/consumer-smoke/wave-contract/probes/` is a contract header with no `main`,
+no engine call and no assertion, because a green run here before an adapter exists
+would be the exact thing this workstream keeps catching. W02 builds the installed
+adapter and the result matrix; S04a/S04b supply the live API behind it.
+
+`PositionResolution::well_formed()` is the one piece of real enforcement shipped
+here, and it encodes the rule the probes keep asking for: a resolution carries an
+offset **or** a typed error, a failure state must say why, and `Collapsed` is not
+`Resolved`.

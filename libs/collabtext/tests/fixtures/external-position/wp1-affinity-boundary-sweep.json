@@ -1,0 +1,276 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp1-affinity-boundary-sweep",
+ "probe": "WP1",
+ "title": "Every scalar boundary of a non-BMP text, both affinities, start and end included",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp1-affinity-boundary-sweep",
+  "stream": "text",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/2",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "a"
+    }
+   ]
+  },
+  {
+   "id": "A/4",
+   "kind": "insert",
+   "after": [
+    "A/2"
+   ],
+   "between": [
+    "A/1",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/3",
+     "value": "𝄞"
+    }
+   ]
+  },
+  {
+   "id": "A/6",
+   "kind": "insert",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/3",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/5",
+     "value": "b"
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/2",
+   "A/4",
+   "A/6"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "b0-left",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "START",
+    "A/1"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "b0-right",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "START",
+    "A/1"
+   ],
+   "affinity": "right"
+  },
+  {
+   "id": "b1-left",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "b1-right",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "right"
+  },
+  {
+   "id": "b5-left",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/3",
+    "A/5"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "b5-right",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/3",
+    "A/5"
+   ],
+   "affinity": "right"
+  },
+  {
+   "id": "b6-left",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/5",
+    "END"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "b6-right",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/5",
+    "END"
+   ],
+   "affinity": "right"
+  }
+ ],
+ "invalid_requests": [],
+ "expectations": [
+  {
+   "id": "every_scalar_boundary_is_mintable",
+   "kind": "resolved",
+   "token": "b0-left",
+   "offset": 0,
+   "collapsed": false,
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:58-59; wave ask2:26-28"
+  },
+  {
+   "id": "end_boundary_is_a_real_scoped_token",
+   "kind": "resolved",
+   "token": "b6-left",
+   "offset": 6,
+   "collapsed": false,
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:58-59"
+  },
+  {
+   "id": "end_token_compares_with_later_token",
+   "kind": "comparison",
+   "left": "b6-left",
+   "right": "b5-left",
+   "order": "greater",
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:58-59"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04a",
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S02",
+   "S04"
+  ]
+ },
+ "third_party_observations": [
+  {
+   "library": "yrs",
+   "version": "0.28",
+   "claim": "Assoc::After returns no token at all at index == len, for every length.",
+   "citation": "wave ask2:142",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  }
+ ],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "A/3",
+   "A/5"
+  ],
+  "hidden": [],
+  "text": "a𝄞b",
+  "positions": {
+   "b0-left": {
+    "offset": 0,
+    "state": "resolved"
+   },
+   "b0-right": {
+    "offset": 0,
+    "state": "resolved"
+   },
+   "b1-left": {
+    "offset": 1,
+    "state": "resolved"
+   },
+   "b1-right": {
+    "offset": 1,
+    "state": "resolved"
+   },
+   "b5-left": {
+    "offset": 5,
+    "state": "resolved"
+   },
+   "b5-right": {
+    "offset": 5,
+    "state": "resolved"
+   },
+   "b6-left": {
+    "offset": 6,
+    "state": "resolved"
+   },
+   "b6-right": {
+    "offset": 6,
+    "state": "resolved"
+   }
+  },
+  "comparisons": [
+   {
+    "left": "b0-left",
+    "right": "b1-left",
+    "order": "less"
+   },
+   {
+    "left": "b1-left",
+    "right": "b5-left",
+    "order": "less"
+   },
+   {
+    "left": "b5-left",
+    "right": "b6-left",
+    "order": "less"
+   }
+  ]
+ }
+}

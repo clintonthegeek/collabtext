@@ -22,6 +22,9 @@ ROUTES = [
     ('tools/verification-env.sh', 'tst_verification_tools'),
     ('tools/test_verify_changed.py', 'tst_verification_tools'),
     ('tools/*sequence_fixtures.py', 'tst_sequence_fixtures'),
+    # W01 specifies consumer-probe cases; its fixtures and validator are data and
+    # Python, checked by the validator's own --self-test rather than by CTest.
+    ('tools/validate-consumer-fixtures.py', ''),
     ('libs/collabtext/CMakeLists.txt', PACKAGING), ('CMakeLists.txt', PACKAGING),
     ('cmake/*', PACKAGING), ('tests/consumer-smoke/*', PACKAGING),
     ('libs/collabtext/include/*', PACKAGING),
@@ -39,6 +42,7 @@ ROUTES = [
     ('libs/collabtext/src/*.cpp', BROAD),
     ('libs/collabtext/tests/tst_*.cpp', 'OWN_TEST'),
     ('libs/collabtext/tests/fixtures/sequence-semantics/*', r'tst_(sequence_.*|boundary_.*)'),
+    ('libs/collabtext/tests/fixtures/external-position/*', ''),
     ('libs/collabtext/tests/*', BROAD),
 ]
 PACKAGE_PATHS = ('CMakeLists.txt', 'libs/collabtext/CMakeLists.txt', 'cmake/*',

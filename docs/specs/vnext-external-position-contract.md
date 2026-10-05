@@ -228,3 +228,13 @@ explicit; G01's independent model proves GC obligations before G06 enables physi
 reclamation. A06a/W03 prove the early installed seam; A06 extends it and E05 reruns it with the completed
 reclamation implementation. Writing this requirement document alone completes none
 of those tasks and supplies no delivery date.
+
+W01 turns W1–W6 into checked-in cases: the eight consumer probes have permanent
+ids, typed expectations, per-expectation provenance, and a validator in
+[vnext-consumer-probes.md](vnext-consumer-probes.md), with fixtures under
+`libs/collabtext/tests/fixtures/external-position/` and an honest record of what
+could not be verified in
+[the provenance report](../reports/vnext-consumer-probe-provenance.md). W01
+specifies cases; it supplies no evidence that the engine passes them, and its
+expectations derived from this document rather than from the consumer are tagged
+as such.

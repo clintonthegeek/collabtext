@@ -1,0 +1,136 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp6-split-paste",
+ "probe": "WP6",
+ "title": "Two peers paste whole paragraphs; each passage must stay contiguous",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001",
+  "B": "00000000000000000000000000000002"
+ },
+ "context": {
+  "document": "wp6-split-paste",
+  "stream": "text",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/4",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "a"
+    },
+    {
+     "id": "A/2",
+     "value": "b"
+    },
+    {
+     "id": "A/3",
+     "value": "c"
+    }
+   ]
+  },
+  {
+   "id": "B/4",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "B/1",
+     "value": "X"
+    },
+    {
+     "id": "B/2",
+     "value": "Y"
+    },
+    {
+     "id": "B/3",
+     "value": "Z"
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/4",
+   "B/4"
+  ],
+  [
+   "B/4",
+   "A/4"
+  ]
+ ],
+ "tokens": [],
+ "attachment_kinds": {},
+ "invalid_requests": [],
+ "expectations": [
+  {
+   "id": "each_pasted_passage_stays_contiguous",
+   "kind": "passage_contiguous",
+   "passage": "abc",
+   "source": "roadmap_inference",
+   "citation": "W2; S01 histories; 00-consumer-integration.md"
+  },
+  {
+   "id": "each_pasted_passage_stays_contiguous.other",
+   "kind": "passage_contiguous",
+   "passage": "XYZ",
+   "source": "roadmap_inference",
+   "citation": "W2; S01 histories; 00-consumer-integration.md"
+  },
+  {
+   "id": "first_passage_selection_is_unspecified",
+   "kind": "unspecified_ordering",
+   "source": "roadmap_inference",
+   "citation": "S01 histories",
+   "note": "Which passage lands first is deliberately not asserted; asserting one canonical merged string would over-specify."
+  },
+  {
+   "id": "text_equality_alone_is_insufficient",
+   "kind": "evidence_rule",
+   "note": "Convergence of final text does not demonstrate repaired passage order. Ownership is S01/S02/S03 with S06 enumeration.",
+   "source": "roadmap_inference",
+   "citation": "00-consumer-integration.md"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S01",
+   "S02",
+   "S03",
+   "S06"
+  ],
+  "strict": [
+   "S06"
+  ]
+ },
+ "third_party_observations": [],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "A/2",
+   "A/3",
+   "B/1",
+   "B/2",
+   "B/3"
+  ],
+  "hidden": [],
+  "text": "abcXYZ",
+  "positions": {},
+  "comparisons": []
+ }
+}

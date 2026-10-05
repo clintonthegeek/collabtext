@@ -1,0 +1,211 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp5-token-codec",
+ "probe": "WP5",
+ "title": "Canonical token bytes: round-trip, trailing suffixes, truncation, rejection",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp5-token-codec",
+  "stream": "text",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/2",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "a"
+    }
+   ]
+  },
+  {
+   "id": "A/4",
+   "kind": "insert",
+   "after": [
+    "A/2"
+   ],
+   "between": [
+    "A/1",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/3",
+     "value": "b"
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/2",
+   "A/4"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "codec-1",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/3",
+    "END"
+   ],
+   "affinity": "left"
+  }
+ ],
+ "attachment_kinds": {},
+ "invalid_requests": [
+  {
+   "kind": "token_bytes",
+   "mutation": "trailing_suffix",
+   "count": 256,
+   "error": "trailing_data"
+  },
+  {
+   "kind": "token_bytes",
+   "mutation": "truncate_every_prefix",
+   "error": "truncated"
+  },
+  {
+   "kind": "token_bytes",
+   "mutation": "unknown_version",
+   "error": "unsupported_version"
+  },
+  {
+   "kind": "token_bytes",
+   "mutation": "invalid_enum",
+   "error": "malformed"
+  },
+  {
+   "kind": "token_bytes",
+   "mutation": "foreign_context",
+   "error": "wrong_context"
+  },
+  {
+   "kind": "token_bytes",
+   "mutation": "unsupported_affinity",
+   "error": "malformed"
+  }
+ ],
+ "expectations": [
+  {
+   "id": "external_token_roundtrip_reopen",
+   "kind": "codec_roundtrip",
+   "token": "codec-1",
+   "source": "consumer_asserted",
+   "citation": "wave ask2:143; W1"
+  },
+  {
+   "id": "every_one_byte_trailing_suffix_is_rejected",
+   "kind": "reject_trailing_suffixes",
+   "count": 256,
+   "source": "roadmap_inference",
+   "citation": "W1; count mirrors wave ask2:143"
+  },
+  {
+   "id": "every_truncation_is_rejected",
+   "kind": "reject_truncation",
+   "source": "roadmap_inference",
+   "citation": "W1"
+  },
+  {
+   "id": "unknown_version_is_typed",
+   "kind": "typed_error",
+   "error": "unsupported_version",
+   "source": "roadmap_inference",
+   "citation": "W1"
+  },
+  {
+   "id": "invalid_enum_is_typed",
+   "kind": "typed_error",
+   "error": "malformed",
+   "source": "roadmap_inference",
+   "citation": "W1"
+  },
+  {
+   "id": "foreign_context_is_typed",
+   "kind": "typed_error",
+   "error": "wrong_context",
+   "source": "roadmap_inference",
+   "citation": "W1; W2"
+  },
+  {
+   "id": "decode_never_creates_a_pin_or_mutates",
+   "kind": "state_unchanged_on_reject",
+   "source": "roadmap_inference",
+   "citation": "W1"
+  },
+  {
+   "id": "fresh_process_replay_uses_the_same_bytes",
+   "kind": "fresh_process_replay",
+   "token": "codec-1",
+   "source": "consumer_asserted",
+   "citation": "wave ask2:143; W1"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S04",
+   "S05",
+   "G06",
+   "G08"
+  ]
+ },
+ "third_party_observations": [
+  {
+   "library": "Loro",
+   "version": "1.16.2",
+   "claim": "decode(bytes + any one trailing byte) accepted 256/256; no version byte. Upstream admitted \"There is no version marker in the data\".",
+   "citation": "wave ask2:143; alternatives:67-69",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  },
+  {
+   "library": "Yjs",
+   "version": "NOT_STATED_EXTERNALLY",
+   "claim": "Relative-position API is not stable yet; two encodings, no version byte; decode_v1 of v2 bytes succeeds and returns garbage.",
+   "citation": "alternatives:70-72",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  },
+  {
+   "library": "loro.js",
+   "version": "0.3.0",
+   "claim": "Shipped an unversioned position change five days before the measurement, applying old documents edits to the wrong text.",
+   "citation": "wave ask2:143; alternatives:67-69",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  }
+ ],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "A/3"
+  ],
+  "hidden": [],
+  "text": "ab",
+  "positions": {
+   "codec-1": {
+    "offset": 2,
+    "state": "resolved"
+   }
+  },
+  "comparisons": []
+ }
+}

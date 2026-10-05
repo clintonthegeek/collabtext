@@ -1,0 +1,176 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp1-affinity-ab-insert-x",
+ "probe": "WP1",
+ "title": "Named contract case: left/right boundary at 1 survives insert of X at 1",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001",
+  "B": "00000000000000000000000000000002"
+ },
+ "context": {
+  "document": "wp1-affinity-ab-insert-x",
+  "stream": "text",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/2",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "a"
+    }
+   ]
+  },
+  {
+   "id": "A/4",
+   "kind": "insert",
+   "after": [
+    "A/2"
+   ],
+   "between": [
+    "A/1",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/3",
+     "value": "b"
+    }
+   ]
+  },
+  {
+   "id": "A/6",
+   "kind": "insert",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "items": [
+    {
+     "id": "A/5",
+     "value": "X"
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/2",
+   "A/4",
+   "A/6"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "t1-left",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "t1-right",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "right"
+  }
+ ],
+ "invalid_requests": [],
+ "expectations": [
+  {
+   "id": "boundary_affinity_ab_insert_X.left",
+   "kind": "resolved",
+   "token": "t1-left",
+   "offset": 1,
+   "collapsed": false,
+   "source": "consumer_asserted",
+   "citation": "wave ask2:139; wave devs-our-asks:52-53"
+  },
+  {
+   "id": "boundary_affinity_ab_insert_X.right",
+   "kind": "resolved",
+   "token": "t1-right",
+   "offset": 2,
+   "collapsed": false,
+   "source": "consumer_asserted",
+   "citation": "wave ask2:139; wave devs-our-asks:52-53"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04a",
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S01",
+   "S02",
+   "S04"
+  ]
+ },
+ "third_party_observations": [
+  {
+   "library": "Loro",
+   "version": "1.16.2",
+   "claim": "Side is never read on the resolve path; all three values give identical results (84-case sweep, 3 differing empty-container cases).",
+   "citation": "wave ask2:139; alternatives:45-51",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  },
+  {
+   "library": "Automerge",
+   "version": "3.5",
+   "claim": "MoveCursor is a deletion tiebreak, not an affinity.",
+   "citation": "alternatives:55-56",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  }
+ ],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "A/5",
+   "A/3"
+  ],
+  "hidden": [],
+  "text": "aXb",
+  "positions": {
+   "t1-left": {
+    "offset": 1,
+    "state": "resolved"
+   },
+   "t1-right": {
+    "offset": 2,
+    "state": "resolved"
+   }
+  },
+  "comparisons": [
+   {
+    "left": "t1-left",
+    "right": "t1-right",
+    "order": "less"
+   }
+  ]
+ }
+}

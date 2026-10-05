@@ -1,0 +1,202 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp7-wrong-context",
+ "probe": "WP7",
+ "title": "Every scope axis rejects with a typed error and no mutation",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp7-wrong-context",
+  "stream": "block-1",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/6",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "h"
+    },
+    {
+     "id": "A/2",
+     "value": "e"
+    },
+    {
+     "id": "A/3",
+     "value": "l"
+    },
+    {
+     "id": "A/4",
+     "value": "l"
+    },
+    {
+     "id": "A/5",
+     "value": "o"
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/6"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "scoped-1",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/5",
+    "END"
+   ],
+   "affinity": "left"
+  }
+ ],
+ "attachment_kinds": {
+  "scoped-1": "strict"
+ },
+ "invalid_requests": [
+  {
+   "kind": "wrong_scope",
+   "axis": "document",
+   "value": "some-other-document",
+   "error": "wrong_context"
+  },
+  {
+   "kind": "wrong_scope",
+   "axis": "stream",
+   "value": "block-2",
+   "error": "wrong_context"
+  },
+  {
+   "kind": "wrong_scope",
+   "axis": "block",
+   "value": "block-2",
+   "error": "wrong_context"
+  },
+  {
+   "kind": "wrong_scope",
+   "axis": "primitive",
+   "value": "list",
+   "error": "wrong_primitive"
+  },
+  {
+   "kind": "wrong_scope",
+   "axis": "epoch",
+   "value": 2,
+   "error": "wrong_epoch"
+  }
+ ],
+ "expectations": [
+  {
+   "id": "wrong_document_is_typed",
+   "kind": "typed_error",
+   "error": "wrong_context",
+   "axis": "document",
+   "source": "consumer_asserted",
+   "citation": "wave ask2:148-150"
+  },
+  {
+   "id": "wrong_stream_is_typed",
+   "kind": "typed_error",
+   "error": "wrong_context",
+   "axis": "stream",
+   "source": "consumer_asserted",
+   "citation": "wave ask2:148-150"
+  },
+  {
+   "id": "wrong_block_is_typed",
+   "kind": "typed_error",
+   "error": "wrong_context",
+   "axis": "block",
+   "source": "consumer_asserted",
+   "citation": "wave ask2:145; wave ask2:148-150"
+  },
+  {
+   "id": "wrong_primitive_is_typed",
+   "kind": "typed_error",
+   "error": "wrong_primitive",
+   "axis": "primitive",
+   "source": "roadmap_inference",
+   "citation": "W2"
+  },
+  {
+   "id": "wrong_epoch_is_typed",
+   "kind": "typed_error",
+   "error": "wrong_epoch",
+   "axis": "epoch",
+   "source": "roadmap_inference",
+   "citation": "W3"
+  },
+  {
+   "id": "wrong_object_never_fabricates_a_number",
+   "kind": "no_fabricated_offset",
+   "source": "consumer_asserted",
+   "citation": "wave ask2:148-150"
+  },
+  {
+   "id": "wrong_object_never_mutates_or_aborts",
+   "kind": "no_mutation_no_abort",
+   "source": "consumer_asserted",
+   "citation": "wave ask2:148-150; W2"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04a",
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S04"
+  ]
+ },
+ "third_party_observations": [
+  {
+   "library": "Automerge",
+   "version": "3.5",
+   "claim": "assert!(obj_range.contains(&pos)) trips because get_op_id_pos is not scoped to the object, and the C build uses -C panic=abort.",
+   "citation": "alternatives:79-80",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  },
+  {
+   "library": "Loro",
+   "version": "1.16.2",
+   "claim": "unreachable!() then a poisoned LoroMutex then abort(), exit 134; catch_unwind cannot save it.",
+   "citation": "alternatives:80-82",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  }
+ ],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "A/2",
+   "A/3",
+   "A/4",
+   "A/5"
+  ],
+  "hidden": [],
+  "text": "hello",
+  "positions": {
+   "scoped-1": {
+    "offset": 5,
+    "state": "resolved"
+   }
+  },
+  "comparisons": []
+ }
+}
