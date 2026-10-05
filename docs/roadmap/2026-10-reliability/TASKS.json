@@ -946,7 +946,8 @@
       "implementation_commits": [
         "4ece11a",
         "4983bc4",
-        "9e172c1"
+        "9e172c1",
+        "c1931b9"
       ],
       "gate_evidence": [
         "docs/specs/vnext-identity.md -- the contract: what an identity is, the order and the three places it is used, why locally assigned slots diverge, the seven laws, counter rules, why epoch is deliberately not here, and baseline/projected cost.",
