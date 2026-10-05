@@ -41,6 +41,39 @@ Continue independent ready work when possible. Route a technical design gap to i
 
 User-facing questions belong in ordinary conversation/final text for this user, who cannot use inline question controls. Ask only for missing policy, scope changes, or permission that is actually necessary. Routine implementation choices with documented authorization do not need another question.
 
+## Verification tiers
+
+The full sweep is the thing we trust and the thing we could not afford to run
+often, so it is not the inner loop. Verification is layered, cheapest first, and
+the layer a change actually needs is the one to run.
+
+| Tier | Command | Cost | Use |
+| --- | --- | --- | --- |
+| 1 | `tools/verify-changed.sh` | seconds to ~1 min | every edit |
+| 2 | `tools/verify-changed.sh --thorough` | minutes | before committing an engine change |
+| 3 | `tools/verify-changed.sh --all` | minutes | when the route looks wrong |
+| 4 | `tools/verify-roadmap.sh --fresh <mode> '.'` | the full sweep | once per arc, as the acceptance gate |
+
+`tools/verify-changed.sh` reads the uncommitted diff (or `--since REV`), maps each
+changed path to the test areas that can observe it through an explicit routing
+table, builds only those targets in the warm `build-roadmap-{mode}` tree, and runs
+them. It prints the table it used and warns about files nothing matched, because a
+routing table that has quietly stopped matching a path is the failure mode that
+would otherwise hide. Zero selected tests is an error, never a pass. Docs-only
+changes route to nothing and exit successfully.
+
+Routing is coarse on purpose. `src/crdt/Buffer*` pulls in the Buffer, undo, GC and
+serialization tests; `src/identity/*` the identity suite; `src/transport/*` the
+OpStream and file-floor suites; `src/ui/*` the widget tests; any change under
+`include/`, `CMakeLists.txt`, `cmake/`, `tests/consumer-smoke/`, or
+`tools/verify-consumer-package.sh` routes to the header-independence targets plus
+the package gate, since those changes alter what a consumer sees without altering
+engine behaviour. `--explain` prints the table and exits.
+
+Slow property, fuzz and simulation tests are excluded from tier 1 and included by
+`--thorough`; they dominate wall-clock and a fast subset already catches most
+regressions. Acceptance is where they all run.
+
 ## Verification command contract
 
 `tools/verify-roadmap.sh` supplies V01's verification entry point. The script interface is:
@@ -49,11 +82,14 @@ User-facing questions belong in ordinary conversation/final text for this user, 
 ./tools/verify-roadmap.sh debug 'anchored-or-specific-ctest-regex'
 ./tools/verify-roadmap.sh release 'anchored-or-specific-ctest-regex'
 ./tools/verify-roadmap.sh asan 'anchored-or-specific-ctest-regex'
+./tools/verify-roadmap.sh --fresh debug '.'   # from-scratch acceptance sweep
 ```
 
 The script resolves its own repository/worktree root, configures `build-roadmap-{mode}`, builds the selected test targets, and runs CTest with `--output-on-failure`. Test names must match build target names, as they do in add_crdt_test. Zero matches and build/test failures return nonzero. Debug and Release use the appropriate CMake build type. ASan uses Debug with opt-in `COLLABTEXT_ENABLE_SANITIZERS=ON`, address/undefined-behavior sanitizer compile/link flags, and frame pointers on supported GCC/Clang non-Windows configurations; unsupported configurations fail explicitly. The script also checks that the core compile command contains instrumentation.
 
-Set `COLLABTEXT_VERIFY_JOBS` to a positive integer to change the default two workers. The runner sets `QT_QPA_PLATFORM=offscreen` only for CTest. Every invocation retains `run.log`, `metadata.json`, CTest selection JSON, target names, and exit status under `build-roadmap-{mode}/verification/`; metadata includes revision, compiler, flags, representative core compilation, selected test count, and commands. These generated artifacts are ignored by Git. Task reports retain portable evidence summaries and paths.
+`--fresh` discards `build-roadmap-{mode}` first and is the acceptance-tier form. Run it once per arc rather than per task: a stale object file surviving a flag change is a real failure mode, and it is worth paying for at the arc boundary.
+
+Set `COLLABTEXT_VERIFY_JOBS` to a positive integer to change the worker count, which defaults to the machine's core count. The runner sets `QT_QPA_PLATFORM=offscreen` only for CTest. Every invocation retains `run.log`, `metadata.json`, CTest selection JSON, target names, and exit status under `build-roadmap-{mode}/verification/`; metadata includes revision, compiler, flags, representative core compilation, selected test count, and commands. These generated artifacts are ignored by Git. Task reports retain portable evidence summaries and paths.
 
 Leak checking stays enabled by default; the runner does not hide failures with global suppressions. A restricted sandbox may block LeakSanitizer's process inspection even when all test assertions pass. Rerun outside that restriction when authorized, and distinguish this environment failure from a leak report. Do not disable leak detection or suppress Qt allocations without recording the limitation and actual evidence. V01's successful unrestricted smoke run covers Buffer/IdList with Qt and requires no Qt leak suppression.
 

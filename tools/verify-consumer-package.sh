@@ -138,7 +138,13 @@ run_step() {   # run_step <name> <command...>
 }
 
 finish() {
-    local rc=$?
+    # Take the status as an argument. Reading $? here looked equivalent and was
+    # not: on every explicit `finish 3` failure path $? was the status of the
+    # preceding echo, so a failed check printed its own diagnostic and then
+    # exited zero with PASS. A verification script that can report success after
+    # a failure it just described is worse than no script.
+    local rc="${1:-$?}"
+    [[ $rc -eq 0 && $step_status -eq 0 ]] || rc=${rc:-1}
     if [[ $rc -eq 0 && $step_status -eq 0 ]]; then
         printf '\nverify-consumer-package: PASS (%s/%s)\n' "$mode" "$gate"
     else
@@ -160,7 +166,9 @@ json.dump({
     "output_dir": "$output_dir",
     "capability_manifest_version": "${manifest_version:-}",
     "steps": steps,
-    "exit_status": $step_status,
+    # rc, not step_status: they disagree on the paths that fail before any
+    # run_step, and the recorded value has to be the one the caller saw.
+    "exit_status": $rc,
 }, open(sys.argv[1], "w"), indent=2)
 PY
     printf 'evidence: %s\n' "$output_dir"
@@ -295,6 +303,8 @@ printf 'capability manifest: version %s at %s\n' "${manifest_version:-unknown}" 
 consumer_flags=(
     "-DCMAKE_PREFIX_PATH=$prefix_b"
     "-DCMAKE_BUILD_TYPE=$build_type"
+    # Needed so the leakage check below has something to inspect.
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 )
 if [[ "$mode" == "asan" ]]; then
     consumer_flags+=("-DCMAKE_CXX_FLAGS=$sanitizer_flags"
@@ -324,6 +334,55 @@ run_step consumer-configure cmake -S "$repo_root/tests/consumer-smoke" -B "$cons
     || { trap - EXIT; finish 3; }
 run_step consumer-build cmake --build "$consumer_build" --parallel "$(nproc)" \
     || { trap - EXIT; finish 3; }
+
+# ---------------------------------------------------------------------------
+# The consumer must be using the installation and only the installation
+#
+# This is the check that would otherwise be missing. A consumer inside the
+# source tree compiles happily against whatever it can reach: an inherited
+# include path from a producer target, a source-tree -I, a link to the build
+# directory. Every one of those produces a green build that proves nothing
+# about the install tree, so the acceptance criterion is checked directly
+# rather than inferred from the tests passing.
+# ---------------------------------------------------------------------------
+printf '\n=== no source-tree or build-tree leakage into the consumer\n'
+consumer_cc="$consumer_build/compile_commands.json"
+if [[ ! -f "$consumer_cc" ]]; then
+    echo "!!! the consumer produced no compile_commands.json; nothing to inspect" >&2
+    trap - EXIT; finish 3
+fi
+leaks=$(grep -oE '(-I|-isystem)[^ ]*' "$consumer_cc" | tr ' ' '\n' \
+        | sed 's/^-I//; s/^-isystem//' | sort -u \
+        | grep -E "^$repo_root/(libs/collabtext/(src|include)|cmake)|^$prefix_a" || true)
+if [[ -n "$leaks" ]]; then
+    echo "!!! the consumer compiles against paths it should not have:" >&2
+    printf '  %s\n' "$leaks" >&2
+    trap - EXIT; finish 3
+fi
+link_line=$(cat "$consumer_build"/CMakeFiles/*/link.txt 2>/dev/null || true)
+leak_links=$(printf '%s' "$link_line" | grep -oE "$repo_root/(libs/collabtext|build-roadmap[^ /]*)[^ ]*" | sort -u || true)
+if [[ -n "$leak_links" ]]; then
+    echo "!!! the consumer links against source or build tree artifacts:" >&2
+    printf '  %s\n' "$leak_links" >&2
+    trap - EXIT; finish 3
+fi
+note_step "consumer-uses-install-tree-only: ok"
+echo "include paths used by the consumer:"
+python3 -c "
+import json,collections
+paths=collections.Counter()
+for e in json.load(open('$consumer_cc')):
+    parts=e.get('arguments') or e['command'].split()
+    for i,a in enumerate(parts):
+        if a in ('-I','-isystem'):
+            paths[parts[i+1]]+=1
+for p,n in sorted(paths.items()): print(f'  {n:3d} x {p}')
+"
+if ! printf '%s' "$link_line" | grep -q "$prefix_b"; then
+    echo "!!! the consumer links nothing from prefix B; it did not use the install" >&2
+    trap - EXIT; finish 3
+fi
+note_step "consumer-links-prefix-b: ok"
 
 run_step consumer-test ctest --test-dir "$consumer_build" --output-on-failure --no-tests=error \
     || { trap - EXIT; finish 3; }

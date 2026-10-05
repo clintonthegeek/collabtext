@@ -29,7 +29,8 @@ documentation. A capability with no evidence is marked `not implemented`, not
 | Two peers converge over the wire codec | **available, with a known limit** | `tst_convergence`, `tst_opstream_convergence_*` — see "Ordering repair" below |
 | Core builds and links with no Qt, no zstd, no hash provider | **available** | `collabtext_core_smoke` under `CMAKE_DISABLE_FIND_PACKAGE_Qt6/zstd/OpenSSL=ON` |
 | Every advertised public header compiles as the first and only library include | **available** | `collabtext_public_headers_core`, `collabtext_public_headers_qt` |
-| The file-backed transport (`StreamSync`) | implemented, **not advertised** | `tst_stream_sync`, `tst_opstream_streamsync` — its header names zstd-reaching segment types, so it is not self-sufficient yet. A06a owns the exported form. |
+| The file-backed transport (`StreamSync`) | implemented, **not advertised** | `tst_stream_sync`, `tst_opstream_streamsync` — its header names zstd-reaching segment types, so it is not self-sufficient yet. A06a installed the implemented public surface and left this out rather than export a header that cannot compile alone; splitting those types out of the public header is what would let it ship. |
+| **The installed package.** Component targets, headers, capability manifest and config files, installable and consumable after relocation | **available** | `tools/verify-consumer-package.sh` — installs to prefix A, moves to prefix B, builds a separate consumer against B with Qt/zstd/OpenSSL discovery disabled |
 
 ## What is not available, and why
 
@@ -45,7 +46,7 @@ These are stated so a consumer designs around them rather than discovering them.
 | **Typed outcome on the text facade.** `CrdtEngine::applyRemoteOp` returns a bool, so deferred and rejected are indistinguishable. | **partial** | A02 renames it to `apply_remote(...) -> ApplyOutcome`. A02a fixed the worse bug — it used to return true unconditionally, which would have told a retrying caller that a rejected operation succeeded. |
 | **Persistent undo/redo.** Undo is in-memory and does not survive a reopen. | **not implemented** | L06. Consumer requirement R5. |
 | **Crash recovery.** No replay-from-log session exists. A reopened `ReplicaState` knows the counter but not the document. | **not implemented** | L02–L08. |
-| **Durable identity for consumers.** A `ReplicaAllocator` exists in the source tree but is not exported or installed. | **partial** | A06a installs it. Until then a consumer supplies its own `IdentityAllocator` and is responsible for durability. |
+| **Durable identity for consumers.** A `ReplicaAllocator` exists in the source tree but is not exported or installed. | **partial** | Not part of the installed public surface. A consumer supplies its own `IdentityAllocator` and is responsible for durability. Making `ReplicaAllocator` public is a separate decision, because it means committing to its persistence format. |
 | **Epoch / document / stream on the operation.** An operation carries no epoch, so a receiver cannot check one. | **not implemented** | P07 owns the envelope; L04 owns its persistence. |
 | **GC, pins, checkpoints, reclamation.** | **not implemented, and inert** | G01–G08. `collect_garbage()` and `compact()` return zero and retain everything. **Do not call them expecting reclamation.** |
 | **Formatting / annotation layer.** | **not planned** | Deliberately out of scope. A consumer's document layer owns it over character CRDTs. |
@@ -83,21 +84,31 @@ These are stated so a consumer designs around them rather than discovering them.
 
 ## How to check this manifest rather than trust it
 
+Every claim above names an executable test. Run the cheap ones while working, and
+the full sweep once per arc — see the verification tiers in
+`docs/roadmap/2026-10-reliability/EXECUTION.md`.
+
 ```sh
-# The alpha surface, on public headers only, with no Qt/zstd/hash discovery.
+# Just what this manifest claims, from the warm tree. Routed, not the full sweep.
+./tools/verify-changed.sh --target 'collabtext_alpha_consumer|collabtext_core_smoke'
+
+# The installed package: producer, install to A, move to B, separate consumer
+# against B with Qt/zstd/OpenSSL discovery disabled.
+./tools/verify-consumer-package.sh --mode release --gate package --components core
+
+# The alpha surface on public headers only, no Qt/zstd/hash discovery.
 cmake -S . -B build-alpha \
   -DCMAKE_BUILD_TYPE=Release \
   -DCOLLABTEXT_BUILD_QT=OFF -DCOLLABTEXT_BUILD_APPS=OFF \
   -DCOLLABTEXT_BUILD_TESTS=OFF -DCOLLABTEXT_BUILD_FILE_TRANSPORT=OFF \
   -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=ON -DCMAKE_DISABLE_FIND_PACKAGE_ZSTD=ON \
   -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
-cmake --build build-alpha -j 2
+cmake --build build-alpha -j "$(nproc)"
 ./build-alpha/libs/collabtext/collabtext_core_smoke
-
-# The consumer program, plus every suite, from the full configuration.
-./tools/verify-roadmap.sh debug 'collabtext_alpha_consumer|collabtext_core_smoke'
-./tools/verify-roadmap.sh release 'collabtext_alpha_consumer|tst_identity_allocation_engine'
 
 # That the advertised header set has not drifted from the tree.
 ./tools/check-public-headers.sh
+
+# Acceptance tier: the whole thing, from scratch.
+./tools/verify-roadmap.sh --fresh debug '.'
 ```
