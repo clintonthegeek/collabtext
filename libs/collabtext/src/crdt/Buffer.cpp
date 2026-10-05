@@ -1398,7 +1398,7 @@ bool Buffer::apply_remote_undo(const UndoOperation &op) {
 // ---------------------------------------------------------------------------
 
 bool Buffer::try_apply(const Operation& op) {
-    return std::visit([this](const auto &o) -> bool {
+    return visit_operation([this](const auto &o) -> bool {
         using T = std::decay_t<decltype(o)>;
         if constexpr (std::is_same_v<T, EditOperation>) {
             return apply_remote_edit(o);

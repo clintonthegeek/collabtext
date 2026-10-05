@@ -1,13 +1,6 @@
-/// src/crdt/IdListOperations.h — internal shim after Task 1.1 promotion
-///
-/// Public op types (IdListInsertOp, IdListRemoveOp, IdListUndoOpVariant,
-/// IdListOperation, idlist_op_lamport, get_idlist_op_timestamp,
-/// get_idlist_op_version) now live in <collabtext/IdListOperations.h>.
-/// This file re-exports them and adds the SumTree-backed deferred queue
-/// types that are internal to IdList.
 #pragma once
 
-#include <collabtext/IdListOperations.h>
+#include "crdt/OperationPayload.h"
 
 #include "crdt/SumTree.h"
 

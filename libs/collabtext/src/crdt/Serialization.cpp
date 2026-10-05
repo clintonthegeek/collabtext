@@ -1,3 +1,4 @@
+#include "crdt/OperationPayload.h"
 #include "crdt/Serialization.h"
 
 #include <collabtext/ActorId.h>
@@ -162,15 +163,15 @@ static std::string encode_undo(const UndoOperation& op) {
 }
 
 std::string encode_operation(const Operation& op) {
-    if (auto* e = std::get_if<EditOperation>(&op))
+    if (auto* e = operation_get_if<EditOperation>(&op))
         return encode_edit(*e);
-    if (auto* u = std::get_if<UndoOperation>(&op))
+    if (auto* u = operation_get_if<UndoOperation>(&op))
         return encode_undo(*u);
     return "{}";
 }
 
 std::string encode_idlist_operation(const IdListOperation& op) {
-    return std::visit([](const auto& o) -> std::string {
+    return visit_operation([](const auto& o) -> std::string {
         using T = std::decay_t<decltype(o)>;
         if constexpr (std::is_same_v<T, IdListInsertOp>) {
             std::string out = "{\"t\":\"il-i\"";

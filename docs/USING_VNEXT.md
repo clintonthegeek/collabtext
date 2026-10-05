@@ -164,3 +164,17 @@ The manifest has a "verified by" column naming an executable test for each
 claim. If reality disagrees with the manifest, that is a bug in one of the two —
 say which. A capability with no test behind it should say `not implemented`, not
 `probably works`.
+
+## Opaque operations (P06a step 6)
+
+`Crdt::Operation` and `Crdt::IdListOperation` are immutable, independently
+retainable values. Copying them shares read-only ownership, so a callback may
+keep a copy for delivery after the engine returns or is destroyed. Obtain them
+from the engine or public decoder, use the identity accessors, and transmit
+through the public encode functions. Concrete edit/list/undo payload structs and
+`std::get`/`std::visit` access are no longer public. No consumer can mutate an
+emitted operation. An empty or moved-from value is rejected before application.
+
+This changes the C++ surface, not wire schema 4, operation allocation or merge
+order. Document/stream/epoch envelopes and typed version-decode errors remain
+P07/P06b work. Keep unknown or rejected input for diagnostics/recovery.

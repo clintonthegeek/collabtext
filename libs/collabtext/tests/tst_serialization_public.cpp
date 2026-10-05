@@ -1,175 +1,141 @@
-/// tst_serialization_public.cpp — public surface round-trip tests
-///
-/// Proves the public API is self-sufficient: only angle-bracket includes from
-/// <collabtext/> are used. No "crdt/…" relative paths. No Qt internals.
-/// If this file compiles and all tests pass, Task 1.1 is done.
-
+// Installed-header-only behavior checks. No concrete operation payload access.
 #include <collabtext/Serialization.h>
 #include <collabtext/Operations.h>
 #include <collabtext/IdListOperations.h>
-
+#include <collabtext/CrdtEngine.h>
+#include <collabtext/IdListEngine.h>
 #include <QTest>
 #include "TestActor.h"
+#include <type_traits>
+#include <variant>
 
 using CollabText::Test::actor;
-
 using namespace CollabText::Crdt;
+
+template<class T> concept HasTimestamp = requires(T value) { value.timestamp; };
+template<class T> concept HasPayload = requires(T value) { value.ranges; };
+static_assert(!HasTimestamp<Operation> && !HasPayload<Operation>);
+static_assert(!HasTimestamp<IdListOperation>);
+static_assert(!std::is_aggregate_v<Operation>);
+static_assert(!std::is_aggregate_v<IdListOperation>);
+static_assert(!std::is_convertible_v<Operation, IdListOperation>);
 
 class TestSerializationPublic : public QObject {
     Q_OBJECT
-
+private:
+    static Operation text_op(uint16_t actor_number, const std::string& text, bool undo = false) {
+        CollabText::CrdtEngine engine(CollabText::Test::test_counter(actor_number));
+        Operation captured;
+        engine.setOnLocalOp([&](const Operation& op) { captured = op; });
+        engine.insert(0, text);
+        if (undo) engine.undo();
+        return captured;  // survives callback and engine destruction
+    }
 private slots:
-    // ── Identity: actor + counter fields ───────────────────────────────────────
-    //
-    // The contract used to expose `Lamport::counter()` and a public
-    // `Lamport::replica_id`. Both are gone (P06a): a 16-bit replica id is not a
-    // persistent identity. What replaces them is pinned here so a future
-    // narrowing has to break this test rather than slip through.
-
     void identity_carries_an_actor_and_a_counter() {
-        Identity id(actor(3), /*counter=*/42);
+        Identity id(actor(3), 42);
         QCOMPARE(id.counter, uint64_t(42));
         QCOMPARE(id.actor, actor(3));
     }
-
-    // ── op_identity() free function ────────────────────────────────────────────
-
     void op_lamport_for_edit_operation() {
-        EditOperation e;
-        e.timestamp = Identity(actor(1), 10);
-        Operation op{e};
-        Identity ts = op_identity(op);
-        QCOMPARE(ts.counter, uint64_t(10));
-        QCOMPARE(ts.actor, actor(1));
+        const auto op = text_op(1, "hello");
+        QCOMPARE(op_identity(op), Identity(actor(1), 6));
     }
-
     void op_lamport_for_undo_operation() {
-        UndoOperation u;
-        u.timestamp = Identity(actor(2), 20);
-        Operation op{u};
-        Identity ts = op_identity(op);
-        QCOMPARE(ts.counter, uint64_t(20));
-        QCOMPARE(ts.actor, actor(2));
+        const auto op = text_op(2, "hello", true);
+        QCOMPARE(op_identity(op), Identity(actor(2), 7));
     }
-
     void idlist_op_lamport_for_insert() {
-        IdListInsertOp i;
-        i.timestamp = Identity(actor(5), 99);
-        IdListOperation op{i};
-        Identity ts = idlist_op_identity(op);
-        QCOMPARE(ts.counter, uint64_t(99));
-        QCOMPARE(ts.actor, actor(5));
+        CollabText::IdListEngine engine(CollabText::Test::test_counter(5));
+        auto op = engine.try_insert_after(Anchor::min(), 99);
+        QVERIFY(op.ok());
+        QCOMPARE(idlist_op_identity(op.value()), Identity(actor(5), 1));
     }
-
-    // ── encode_operation / decode_operation round-trips ──────────────────────
-
     void edit_operation_roundtrip() {
-        EditOperation e;
-        e.timestamp = Identity(actor(1), 42);
-        e.deletion_id = Identity(actor(1), 41);
-        e.version.observe(Identity(actor(1), 41));
-        e.ranges = {{0, 0}};
-        e.new_text = {"hello"};
-
-        EditOperation::InsertedFragment frag;
-        frag.origin = Identity(actor(1), 42);
-        frag.locator = Locator({1152921504606846976ULL});
-        frag.content = "hello";
-        frag.length = 5;
-        e.inserted_fragments.push_back(frag);
-
-        Operation op{e};
-        std::string json = encode_operation(op);
-        QVERIFY(!json.empty());
-
-        auto decoded = decode_operation(json);
+        const auto op = text_op(1, "hello");
+        const auto wire = encode_operation(op);
+        auto decoded = decode_operation(wire);
         QVERIFY(decoded.has_value());
-
-        // Re-encode must match
-        std::string json2 = encode_operation(*decoded);
-        QCOMPARE(json2, json);
-
-        // Identity preserved
-        QCOMPARE(op_identity(*decoded).counter, uint64_t(42));
+        QCOMPARE(encode_operation(*decoded), wire);
+        QCOMPARE(op_identity(*decoded), op_identity(op));
+        CollabText::CrdtEngine receiver(CollabText::Test::test_counter(9));
+        QVERIFY(receiver.applyRemoteOp(*decoded));
+        QCOMPARE(receiver.text(), std::string("hello"));
     }
-
     void undo_operation_roundtrip() {
-        UndoOperation u;
-        u.timestamp = Identity(actor(1), 43);
-        u.version.observe(Identity(actor(1), 42));
-        u.counts = {{Identity(actor(1), 42), 1}};
-
-        Operation op{u};
-        std::string json = encode_operation(op);
-        auto decoded = decode_operation(json);
+        CollabText::CrdtEngine sender(CollabText::Test::test_counter(1));
+        CollabText::CrdtEngine receiver(CollabText::Test::test_counter(9));
+        Operation captured;
+        sender.setOnLocalOp([&](const Operation& op) { captured = op; });
+        sender.insert(0, "hello");
+        QVERIFY(receiver.applyRemoteOp(captured));
+        QVERIFY(sender.undo());
+        const auto wire = encode_operation(captured);
+        auto decoded = decode_operation(wire);
         QVERIFY(decoded.has_value());
-        QCOMPARE(encode_operation(*decoded), json);
-        QCOMPARE(op_identity(*decoded).counter, uint64_t(43));
+        QCOMPARE(encode_operation(*decoded), wire);
+        QCOMPARE(op_identity(*decoded), op_identity(captured));
+        QVERIFY(receiver.applyRemoteOp(*decoded));
+        QVERIFY(receiver.text().empty());
     }
-
-    // ── encode_idlist_operation / decode_idlist_operation round-trips ─────────
-
     void idlist_insert_roundtrip() {
-        IdListInsertOp ins;
-        ins.timestamp = Identity(actor(1), 1);
-        ins.version.observe(Identity(actor(1), 0));
-        ins.id = 0xDEADBEEFCAFE0001ULL;
-        ins.locator = Locator({500ULL, 1000ULL});
-
-        IdListOperation op{ins};
-        std::string json = encode_idlist_operation(op);
-        auto decoded = decode_idlist_operation(json);
+        CollabText::IdListEngine sender(CollabText::Test::test_counter(1));
+        CollabText::IdListEngine receiver(CollabText::Test::test_counter(9));
+        const uint64_t value = 0xDEADBEEFCAFE0001ULL;
+        auto op = sender.try_insert_after(Anchor::min(), value);
+        QVERIFY(op.ok());
+        const auto wire = encode_idlist_operation(op.value());
+        auto decoded = decode_idlist_operation(wire);
         QVERIFY(decoded.has_value());
-        QVERIFY(std::holds_alternative<IdListInsertOp>(*decoded));
-        QCOMPARE(std::get<IdListInsertOp>(*decoded).id, ins.id);
-        QCOMPARE(encode_idlist_operation(*decoded), json);
-        QCOMPARE(idlist_op_identity(*decoded).counter, uint64_t(1));
+        QCOMPARE(encode_idlist_operation(*decoded), wire);
+        QCOMPARE(idlist_op_identity(*decoded), idlist_op_identity(op.value()));
+        QCOMPARE(receiver.apply_ops({*decoded})[0].kind(), CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(receiver.ids(), std::vector<uint64_t>{value});
     }
-
     void idlist_remove_roundtrip() {
-        IdListRemoveOp rem;
-        rem.timestamp = Identity(actor(2), 5);
-        rem.version.observe(Identity(actor(1), 1));
-        rem.target_origin = Identity(actor(1), 1);
-
-        IdListOperation op{rem};
-        std::string json = encode_idlist_operation(op);
-        auto decoded = decode_idlist_operation(json);
+        CollabText::IdListEngine sender(CollabText::Test::test_counter(1));
+        CollabText::IdListEngine receiver(CollabText::Test::test_counter(9));
+        auto inserted = sender.try_insert_after(Anchor::min(), 42);
+        QVERIFY(inserted.ok());
+        QCOMPARE(receiver.apply_ops({inserted.value()})[0].kind(), CollabText::ApplyOutcomeKind::applied);
+        auto anchor = sender.try_anchor_of(42);
+        QVERIFY(anchor.ok());
+        auto removed = sender.try_remove_at(anchor.value());
+        QVERIFY(removed.ok());
+        const auto wire = encode_idlist_operation(removed.value());
+        auto decoded = decode_idlist_operation(wire);
         QVERIFY(decoded.has_value());
-        QVERIFY(std::holds_alternative<IdListRemoveOp>(*decoded));
-        QCOMPARE(encode_idlist_operation(*decoded), json);
+        QCOMPARE(encode_idlist_operation(*decoded), wire);
+        QCOMPARE(receiver.apply_ops({*decoded})[0].kind(), CollabText::ApplyOutcomeKind::applied);
+        QVERIFY(receiver.ids().empty());
     }
-
     void idlist_undo_roundtrip() {
-        IdListUndoOpVariant undo;
-        undo.timestamp = Identity(actor(1), 10);
-        undo.version.observe(Identity(actor(1), 9));
-        undo.counts = {{Identity(actor(1), 1), 1}};
-
-        IdListOperation op{undo};
-        std::string json = encode_idlist_operation(op);
-        auto decoded = decode_idlist_operation(json);
+        CollabText::IdListEngine sender(CollabText::Test::test_counter(1));
+        CollabText::IdListEngine receiver(CollabText::Test::test_counter(9));
+        auto inserted = sender.try_insert_after(Anchor::min(), 42);
+        QVERIFY(inserted.ok());
+        QCOMPARE(receiver.apply_ops({inserted.value()})[0].kind(), CollabText::ApplyOutcomeKind::applied);
+        auto undone = sender.undo();
+        QVERIFY(undone.has_value());
+        const auto wire = encode_idlist_operation(*undone);
+        auto decoded = decode_idlist_operation(wire);
         QVERIFY(decoded.has_value());
-        QVERIFY(std::holds_alternative<IdListUndoOpVariant>(*decoded));
-        QCOMPARE(encode_idlist_operation(*decoded), json);
+        QCOMPARE(encode_idlist_operation(*decoded), wire);
+        QCOMPARE(receiver.apply_ops({*decoded})[0].kind(), CollabText::ApplyOutcomeKind::applied);
+        QVERIFY(receiver.ids().empty());
     }
-
-    // ── decode returns nullopt on bad input ───────────────────────────────────
-
     void decode_operation_nullopt_on_invalid() {
-        QVERIFY(!decode_operation("").has_value());
-        QVERIFY(!decode_operation("not json").has_value());
-        QVERIFY(!decode_operation("{}").has_value());
-        QVERIFY(!decode_operation("{\"t\":\"x\"}").has_value());
+        for (auto bytes : {"", "not json", "{}", "{\"t\":\"x\"}"})
+            QVERIFY(!decode_operation(bytes).has_value());
     }
-
     void decode_idlist_operation_nullopt_on_invalid() {
-        QVERIFY(!decode_idlist_operation("").has_value());
-        QVERIFY(!decode_idlist_operation("not json").has_value());
-        QVERIFY(!decode_idlist_operation("{}").has_value());
-        QVERIFY(!decode_idlist_operation(R"({"t":"unknown"})").has_value());
+        for (auto bytes : {"", "not json", "{}", "{\"t\":\"unknown\"}"})
+            QVERIFY(!decode_idlist_operation(bytes).has_value());
     }
 };
-
 QTEST_GUILESS_MAIN(TestSerializationPublic)
 #include "tst_serialization_public.moc"
+
+template<class T> concept VariantPayload = requires { std::variant_size<T>::value; };
+static_assert(!VariantPayload<CollabText::Crdt::Operation>);
+static_assert(!VariantPayload<CollabText::Crdt::IdListOperation>);

@@ -918,7 +918,17 @@
     "libs/collabtext/include/collabtext/Operations.h",
     "libs/collabtext/tests/tst_identity_ordering_model.cpp",
     "libs/collabtext/tests/reference/IdentityAllocationModel.h",
-    "libs/collabtext/tests/tst_identity_allocation_model.cpp"
+    "libs/collabtext/tests/tst_identity_allocation_model.cpp",
+    "libs/collabtext/include/collabtext/IdListOperations.h",
+    "libs/collabtext/src/crdt/OperationPayload.h",
+    "libs/collabtext/src/crdt/OperationValues.cpp",
+    "libs/collabtext/src/crdt/Buffer.cpp",
+    "libs/collabtext/src/crdt/IdList.cpp",
+    "libs/collabtext/src/crdt/Serialization.cpp",
+    "libs/collabtext/src/crdt/OperationValidation.cpp",
+    "libs/collabtext/tests/tst_operation_values.cpp",
+    "libs/collabtext/tests/tst_serialization_public.cpp",
+    "libs/collabtext/CMakeLists.txt"
    ],
    "steps": [
     "Write the identity contract first: what a Lamport identity becomes (persistent ActorId plus a checked 64-bit counter, per R1), what total order the engine relies on, and which of those uses are convergence-critical rather than merely identifying. Prove the ordering laws against an independent model before touching the engine.",
@@ -988,7 +998,8 @@
     "Inherited obligations this step created for other tasks: P06b must carry each operation's interval length and the gap-record kind, and the versioned sparse codec replaces the interim JSON identity/version-vector encodings. P07 must refuse a mismatched interval and a gap that is not terminal, and owns unifying Crdt::Identity with OperationId. L02 owns gap-record publication, partial-append reconciliation and the reopen path that emits gap records for abandoned intervals -- a durable reservation that is never published now burns a whole interval, not one value. L04 owns the stream envelope: StreamEntry::replica_id, ChatMessage::replica_id and Comment::replica_id are still 16-bit producer ids and are NOT this device's actor, and the ack-frontier file key is still a decimal replica id. The decided *structure* of acks.json is unchanged; only the key's spelling follows the identity.",
     "Left deliberately alone: SegmentFormat's first_lamport/last_lamport u64 header fields keep their names. They are counters, and segment framing belongs to L02.",
     "Not claimed: durable-allocation behaviour across a real power loss (L02/L08), and convergence of the new allocation against the independent model under partition (S06)."
-   ]
+   ],
+   "opacity_baseline_revision": "2157cfb"
   },
   {
    "id": "A01",

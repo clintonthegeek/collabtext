@@ -70,7 +70,7 @@ Operation valid_edit_op(Buffer& src, const std::string& text = "hello") {
 /// The EditOperation inside a Buffer operation, failing the test if it is not
 /// an edit.
 EditOperation as_edit(const Operation& op) {
-    auto* edit = std::get_if<EditOperation>(&op);
+    auto* edit = operation_get_if<EditOperation>(&op);
     Q_ASSERT(edit);
     return *edit;
 }
@@ -109,7 +109,9 @@ private slots:
 
         IdList list_source(CollabText::Test::test_counter(1)), list_target(CollabText::Test::test_counter(2));
         auto operation = list_source.insert_after(Anchor::min(), 42);
-        std::get<IdListInsertOp>(operation).version.observe(Identity(actor(9), 9));
+        auto blocked_list = operation_get<IdListInsertOp>(operation);
+        blocked_list.version.observe(Identity(actor(9), 9));
+        operation = IdListOperation{std::move(blocked_list)};
         list_target.set_deferred_budget({0, 0});
         QVERIFY(list_target.set_quarantine_budget({2, 1u << 20}).ok());
         for (int i = 0; i < 20; ++i)
@@ -842,7 +844,9 @@ private slots:
         bob.set_on_change([&] { ++changes; });
 
         IdListOperation op = alice.insert_after(Anchor::min(), 77);
-        std::get<IdListInsertOp>(op).timestamp = Identity(actor(1), 0);  // never a legal identity
+        auto malformed = operation_get<IdListInsertOp>(op);
+        malformed.timestamp = Identity(actor(1), 0);  // never a legal identity
+        op = IdListOperation{std::move(malformed)};
 
         const auto outcomes = bob.apply_ops({op});
         QCOMPARE(outcomes.size(), std::size_t(1));

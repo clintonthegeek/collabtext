@@ -8,7 +8,7 @@ namespace CollabText::Crdt {
 
 /// Extract the Identity timestamp from any Operation variant.
 inline Identity get_op_timestamp(const Operation& op) {
-    return std::visit([](const auto& o) -> Identity { return o.timestamp; }, op);
+    return visit_operation([](const auto& o) -> Identity { return o.timestamp; }, op);
 }
 
 // ============================================================================

@@ -43,6 +43,7 @@ add_library(collabtext_core STATIC
     src/crdt/IdList.cpp
     src/crdt/Serialization.cpp
     src/crdt/ApplyOutcome.cpp
+    src/crdt/OperationValues.cpp
     src/crdt/OperationValidation.cpp
     src/crdt/StreamSerialization.cpp
     src/crdt/ChatMessage.cpp
@@ -312,6 +313,7 @@ add_crdt_test(tst_actor_identity)
 add_crdt_test(tst_summary_laws)
 add_crdt_test(tst_decode_validation)
 add_crdt_test(tst_operation_validation)
+add_crdt_test(tst_operation_values)
 add_crdt_test(tst_identity_ordering_model)
 add_crdt_test(tst_identity_allocation_model)
 add_crdt_test(tst_identity_types)

@@ -42,7 +42,7 @@ private slots:
         // agreeing (same content, same actor) while making a seed and a real
         // edit distinct facts.
         auto op = op_for_seed("anything");
-        const auto* edit = std::get_if<EditOperation>(&op);
+        const auto* edit = operation_get_if<EditOperation>(&op);
         QVERIFY(edit != nullptr);
         QVERIFY(edit->timestamp.actor.valid());
         QCOMPARE(edit->timestamp.actor, seed_actor("anything"));

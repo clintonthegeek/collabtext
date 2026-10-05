@@ -1,6 +1,6 @@
 # collabtext alpha capability manifest
 
-**Version:** 1
+**Version:** 2
 **Introduced by:** roadmap task A02a
 **Branch:** `roadmap/reliability-v2`
 **Status:** alpha. Not a supported release, and not published. E07a prepares a
@@ -24,6 +24,7 @@ documentation. A capability with no evidence is marked `not implemented`, not
 | An all-zero actor is refused as `invalid_identity`, in Release as well as Debug | **available** | `tst_identity_allocation_engine::an_invalid_actor_is_refused_rather_than_treated_as_actor_zero` |
 | Text: local insert/remove, read, undo/redo. Offsets are UTF-16 code units | **available** | `collabtext_alpha_consumer`, `tst_crdtengine_op_api` |
 | Structural list: insert after anchor, remove at anchor, read ids/size, undo/redo | **available** | `collabtext_alpha_consumer` |
+| Opaque immutable text/list operation values; read-only copies survive engine/callback lifetime | **available** | `tst_operation_values`, installed `consumer_main`, `tst_serialization_public` compile-time variant exclusion |
 | Operation wire codec: encode/decode round trip, schema_version 4 | **available** | `tst_serialization_public`, `tst_serialization` |
 | Per-operation outcome vocabulary (applied / duplicate / deferred / rejected) on the **list** facade | **available** | `collabtext_alpha_consumer`, `tst_operation_validation` |
 | Two peers converge over the wire codec | **available, with a known limit** | `tst_convergence`, `tst_opstream_convergence_*` — see "Ordering repair" below |
@@ -63,8 +64,7 @@ These are stated so a consumer designs around them rather than discovering them.
   fragment's `length` is Unicode scalars and `byte_length` is UTF-8 bytes. Not
   part of the public surface.
 - **Stability:** the narrow contract in `<collabtext/Operations.h>` and
-  `<collabtext/IdListOperations.h>`. Field layout of every operation struct is
-  evolution-reserved; `Identity::actor`/`counter` and the `op_identity` /
+  `<collabtext/IdListOperations.h>`. Operation payload structs and variant alternatives are private and absent from installed headers; `Identity::actor`/`counter` and the `op_identity` /
   `idlist_op_identity` accessors are the stable part.
 - **Uniqueness context:** an identity is unique within one (document, stream).
   The same counter value in two streams is two independent facts. A consumer

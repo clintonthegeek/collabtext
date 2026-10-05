@@ -1,3 +1,4 @@
+#include "crdt/OperationPayload.h"
 #include <QTest>
 #include "crdt/IdList.h"
 #include "crdt/Serialization.h"
@@ -17,8 +18,8 @@ private slots:
         std::string encoded = encode_idlist_operation(op);
         auto decoded = decode_idlist_operation(encoded);
         QVERIFY(decoded.has_value());
-        QVERIFY(std::holds_alternative<IdListInsertOp>(*decoded));
-        const auto& d = std::get<IdListInsertOp>(*decoded);
+        QVERIFY(operation_holds<IdListInsertOp>(*decoded));
+        const auto& d = operation_get<IdListInsertOp>(*decoded);
         QCOMPARE(d.id, quint64(0xDEADBEEF));
     }
 
@@ -37,7 +38,7 @@ private slots:
         auto encoded = encode_idlist_operation(op);
         auto decoded = decode_idlist_operation(encoded);
         QVERIFY(decoded.has_value());
-        QVERIFY(std::holds_alternative<IdListRemoveOp>(*decoded));
+        QVERIFY(operation_holds<IdListRemoveOp>(*decoded));
     }
 
     void undo_op_round_trip() {
@@ -48,7 +49,7 @@ private slots:
         auto encoded = encode_idlist_operation(*undo);
         auto decoded = decode_idlist_operation(encoded);
         QVERIFY(decoded.has_value());
-        QVERIFY(std::holds_alternative<IdListUndoOpVariant>(*decoded));
+        QVERIFY(operation_holds<IdListUndoOpVariant>(*decoded));
     }
 
     // β8.5 — Buffer ops still parse after schema bump

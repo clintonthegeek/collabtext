@@ -507,7 +507,7 @@ ApplyOutcome IdList::apply_one(const IdListOperation& op) {
 bool IdList::try_apply(const IdListOperation& op) {
     // Check causal dependencies satisfied
     if (!m_version.observed_all(get_idlist_op_version(op))) return false;
-    return std::visit([&](const auto& concrete) -> bool {
+    return visit_operation([&](const auto& concrete) -> bool {
         return apply_concrete(concrete);
     }, op);
 }

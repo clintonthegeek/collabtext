@@ -168,7 +168,7 @@ const ValidationLimits& default_validation_limits() {
 // ---------------------------------------------------------------------------
 
 ValidationResult validate_operation_identity(const Operation& op) {
-    return std::visit(
+    return visit_operation(
         [](const auto& concrete) {
             using T = std::decay_t<decltype(concrete)>;
             if constexpr (std::is_same_v<T, EditOperation>) {
@@ -186,7 +186,7 @@ ValidationResult validate_operation_identity(const Operation& op) {
 }
 
 ValidationResult validate_idlist_operation_identity(const IdListOperation& op) {
-    return std::visit(
+    return visit_operation(
         [](const auto& concrete) {
             using T = std::decay_t<decltype(concrete)>;
             if constexpr (std::is_same_v<T, IdListInsertOp>) {
@@ -416,7 +416,7 @@ ValidationResult validate_undo_operation(const UndoOperation& op,
 }
 
 ValidationResult validate_operation(const Operation& op, const Global& current) {
-    return std::visit(
+    return visit_operation(
         [&](const auto& concrete) {
             using T = std::decay_t<decltype(concrete)>;
             if constexpr (std::is_same_v<T, EditOperation>) {
@@ -436,7 +436,7 @@ ValidationResult validate_idlist_operation(const IdListOperation& op,
                                             const Global& current) {
     const Limits& limits = default_validation_limits();
 
-    return std::visit(
+    return visit_operation(
         [&](const auto& concrete) -> ValidationResult {
             using T = std::decay_t<decltype(concrete)>;
 
@@ -578,7 +578,7 @@ size_t locator_bytes(const Locator& locator) {
 
 size_t estimate_operation_bytes(const Operation& op) {
     size_t bytes = sizeof(Identity) * 2;  // timestamp + deletion_id
-    return std::visit(
+    return visit_operation(
         [&](const auto& concrete) {
             size_t total = bytes;
             using T = std::decay_t<decltype(concrete)>;
@@ -609,7 +609,7 @@ size_t estimate_operation_bytes(const Operation& op) {
 size_t estimate_operation_bytes(const IdListOperation& op) {
     size_t total = sizeof(Identity);
     total += get_idlist_op_version(op).pair_count() * sizeof(uint64_t);
-    return std::visit(
+    return visit_operation(
         [&](const auto& concrete) {
             size_t inner = total;
             using T = std::decay_t<decltype(concrete)>;

@@ -128,43 +128,36 @@ rejected — which is what makes "silent fallback to actor 1" impossible to writ
 
 ## 3. Operation value types
 
-`BufferOperation` and `IdListOperation` are distinct, opaque, and never
-interchangeable. Both are non-copyable handles over an immutable encoded
-operation plus its decoded header, so passing one around cannot mutate it.
+`Crdt::Operation` (text) and `Crdt::IdListOperation` are distinct opaque
+immutable values. Their payload structs and variant layouts live only in
+`src/crdt/OperationPayload.h`; no installed header defines them. Production
+helpers read payloads through private const accessors. Builders freeze by value
+before publication; a retained builder cannot modify an emitted operation.
+
+P06a step 6 revises the earlier move-only draft to **copyable immutable handles**.
+Deferred queues, retry/quarantine records, callbacks and transport consumers may
+retain the same operation independently. Copying shares `const` storage instead
+of granting write access or requiring a new clone protocol throughout the working
+engine. This is an implementation choice within the authorized fresh API, not a
+relaxation of operation immutability. No encoded-byte cache is added here; the
+existing codec remains the encoder/decoder, pending P06b's version/error work.
 
 ```cpp
-class BufferOperation {
-public:
-    BufferOperation(const BufferOperation&) = delete;
-    BufferOperation& operator=(const BufferOperation&) = delete;
-    BufferOperation(BufferOperation&&) noexcept;
-    BufferOperation& operator=(BufferOperation&&) noexcept;
-    ~BufferOperation();
-
-    [[nodiscard]] OperationContext context() const;
-    [[nodiscard]] uint64_t lamport() const;      // the ordering key, narrow contract
-
-    // Round-trip is the stable surface; the payload layout is not.
-    [[nodiscard]] std::string encode() const;
-    static Result<BufferOperation> decode(std::string_view bytes);
-};
-
-class IdListOperation { /* same shape, own payload and own codec */ };
+Crdt::Operation retained = received; // read-only shared ownership
+Crdt::Identity id = Crdt::op_identity(retained);
+std::string bytes = Crdt::encode_operation(retained);
+auto decoded = Crdt::decode_operation(bytes);
 ```
 
-**The narrow contract.** Callers may depend on `context()`, `lamport()`, and
-`encode()`/`decode()` round-tripping. They may not depend on any field layout,
-serialization bytes, or the existence of a field they once read. This replaces
-today's habit of reading `Operation`'s fields directly (D01 §3, B8).
-
-```cpp
-// What a caller may write:
-auto op = engine.local_edit(...);
-send(op.encode());
-
-// What a caller must not write: depends on layout, and will be removed.
-send(JSON{op.timestamp, op.ranges, op.new_text});
-```
+The list uses `idlist_op_identity`, `encode_idlist_operation` and
+`decode_idlist_operation`. Default and moved-from handles have an invalid
+identity and are rejected before mutation. Public callers cannot construct a
+payload or access a variant alternative; construction comes from engine output
+or decoding. Identity/counter remain the narrow existing accessor contract.
+P07 adds the document/stream/epoch envelope; opacity alone does not create that
+context. P06b still owes distinguishable version errors and canonical codecs;
+retain rejected bytes rather than interpreting a decode failure as permission
+to discard an event-log record.
 
 ## 4. Decode and store errors
 

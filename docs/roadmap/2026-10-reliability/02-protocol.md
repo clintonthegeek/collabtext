@@ -194,6 +194,16 @@ Run `./tools/verify-roadmap.sh debug 'tst_operation_validation|tst_opqueue|tst_c
 - `libs/collabtext/tests/tst_identity_ordering_model.cpp`
 - `libs/collabtext/tests/reference/IdentityAllocationModel.h`
 - `libs/collabtext/tests/tst_identity_allocation_model.cpp`
+- `libs/collabtext/include/collabtext/IdListOperations.h`
+- `libs/collabtext/src/crdt/OperationPayload.h`
+- `libs/collabtext/src/crdt/OperationValues.cpp`
+- `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/src/crdt/IdList.cpp`
+- `libs/collabtext/src/crdt/Serialization.cpp`
+- `libs/collabtext/src/crdt/OperationValidation.cpp`
+- `libs/collabtext/tests/tst_operation_values.cpp`
+- `libs/collabtext/tests/tst_serialization_public.cpp`
+- `libs/collabtext/CMakeLists.txt`
 
 **Steps:**
 

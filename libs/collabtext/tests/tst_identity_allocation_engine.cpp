@@ -79,7 +79,7 @@ struct Fixture {
 };
 
 EditOperation as_edit(const CollabText::Crdt::Operation &op) {
-    return std::get<EditOperation>(op);
+    return operation_get<EditOperation>(op);
 }
 
 /// IdList operations carry their identity in the same place; this keeps the
@@ -164,7 +164,7 @@ private slots:
         Fixture f;
         const auto edit = as_edit(f.buf().apply_local_edit({{0, 0}}, {"abc"}));
 
-        const auto undone = std::get<UndoOperation>(f.buf().undo().value());
+        const auto undone = operation_get<UndoOperation>(f.buf().undo().value());
         QVERIFY(undone.timestamp.counter > edit.timestamp.counter);
         // The undo's targets are *item* identities, from a different domain than
         // its own identity, so no undo-map entry can be confused with the
@@ -175,7 +175,7 @@ private slots:
             QVERIFY(edit_id.counter < edit.timestamp.counter);
             QVERIFY(undone.timestamp.counter > edit_id.counter);
         }
-        const auto redone = std::get<UndoOperation>(f.buf().redo().value());
+        const auto redone = operation_get<UndoOperation>(f.buf().redo().value());
         QVERIFY(redone.timestamp.counter > undone.timestamp.counter);
     }
 

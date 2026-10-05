@@ -1,3 +1,4 @@
+#include "crdt/OperationPayload.h"
 #include "crdt/FileSync.h"
 #include "crdt/Serialization.h"
 
@@ -40,8 +41,8 @@ void FileSync::start() {
 void FileSync::push_local_op(const Operation& op) {
     if (!m_writer) return;
     Identity ts;
-    if (auto* e = std::get_if<EditOperation>(&op))      ts = e->timestamp;
-    else if (auto* u = std::get_if<UndoOperation>(&op)) ts = u->timestamp;
+    if (auto* e = operation_get_if<EditOperation>(&op))      ts = e->timestamp;
+    else if (auto* u = operation_get_if<UndoOperation>(&op)) ts = u->timestamp;
     m_writer->append(encode_operation(op), ts.counter);
 }
 
