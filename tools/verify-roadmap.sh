@@ -1,11 +1,27 @@
 #!/usr/bin/env bash
 # Configure, build selected CTest targets, and retain a reproducible local log.
+#
+# This is the acceptance-tier runner: the full sweep, in Debug, Release and ASan.
+# It reuses build-roadmap-<mode> by default, which is right for most calls. Pass
+# --fresh to discard that tree first, once per arc, where a stale object file
+# surviving a flag change would be a plausible story that the sweep cannot refute.
+# The inner loop is verify-changed.sh, which routes on what actually changed.
 set -euo pipefail
 
-if [[ $# -ne 2 ]]; then
-    echo "Usage: $0 {debug|release|asan} 'CTest regex'" >&2
+fresh=0
+args=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --fresh) fresh=1; shift ;;
+        *) args+=("$1"); shift ;;
+    esac
+done
+
+if [[ ${#args[@]} -ne 2 ]]; then
+    echo "Usage: $0 [--fresh] {debug|release|asan} 'CTest regex'" >&2
     exit 2
 fi
+set -- "${args[@]}"
 mode=$1
 test_regex=$2
 case "$mode" in
@@ -14,7 +30,9 @@ case "$mode" in
     asan) build_type=Debug; sanitizers=ON ;;
     *) echo "Unknown verification mode: $mode" >&2; exit 2 ;;
 esac
-jobs=${COLLABTEXT_VERIFY_JOBS:-2}
+# Default to the machine's cores. The old default of 2 turned a few-minute sweep
+# into an hour, which is most of why the sweep stopped being run routinely.
+jobs=${COLLABTEXT_VERIFY_JOBS:-$(nproc)}
 if [[ ! "$jobs" =~ ^[1-9][0-9]*$ ]]; then
     echo "COLLABTEXT_VERIFY_JOBS must be a positive integer" >&2
     exit 2
@@ -22,12 +40,17 @@ fi
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 build_dir="$repo_root/build-roadmap-$mode"
+if [[ $fresh -eq 1 ]]; then
+    printf 'Discarding %s for a from-scratch acceptance run.\n' "$build_dir" >&2
+    rm -rf "$build_dir"
+fi
 run_dir="$build_dir/verification/$(date -u +%Y%m%dT%H%M%SZ)-$$"
 mkdir -p "$run_dir"
 exec > >(tee "$run_dir/run.log") 2>&1
 trap 'result=$?; printf "%s\n" "$result" > "$run_dir/exit-code.txt"; echo "Verification exit: $result; evidence: $run_dir"' EXIT
 
-printf 'Root: %s\nMode: %s\nRegex: %s\nWorkers: %s\n' "$repo_root" "$mode" "$test_regex" "$jobs"
+printf 'Root: %s\nMode: %s\nRegex: %s\nWorkers: %s\nFresh: %s\n' \
+    "$repo_root" "$mode" "$test_regex" "$jobs" "$fresh"
 cmake -S "$repo_root" -B "$build_dir" \
     -DCMAKE_BUILD_TYPE="$build_type" \
     -DCOLLABTEXT_ENABLE_SANITIZERS="$sanitizers" \
