@@ -4,7 +4,7 @@ A conflict-free plain text engine for offline-first collaborative editing.
 
 collabtext is a CRDT text engine designed for a world where collaborators aren't always online at the same time. Instead of requiring a server or real-time connection, it produces compact operations that can travel over any file transport — Syncthing, Dropbox, a shared drive, a USB stick. Edits merge automatically. Documents converge. No conflicts, no "conflicted copy" files, no manual resolution.
 
-On `roadmap/reliability-v2`, V01–V08, D01, P01–P05, and L01 have landed; P06a is in progress. See the [independent progress review](docs/reports/2026-10-04-reliability-progress-review.md) and [current handoff](docs/handoff/2026-10-04-reliability-review.md). Stable external position tokens, session durability, and installed headless consumption remain dependency-gated work. Both primitives currently retain all state on GC/compaction requests until certified reclamation is implemented; memory can grow in the meantime.
+On `roadmap/reliability-v2`, V01–V08, D01, P01–P05, L01, S01 and headless package exports A01/A02a/A06a have landed; P06a is in progress. See the [current handoff](docs/handoff/2026-10-05-state-at-handoff.md) and [development throughput review](docs/reports/2026-10-05-development-throughput-review.md). Stable external position tokens, repaired concurrent passage ordering and session durability remain dependency-gated work. Both primitives retain all state on GC/compaction requests until certified reclamation is implemented. The examples below describe the historical API; use [USING_VNEXT.md](docs/USING_VNEXT.md) for the installed branch API.
 
 ## The problem
 
@@ -70,6 +70,12 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
+
+Benchmarks are disabled by default and are never registered with CTest. Enabling
+`COLLABTEXT_BUILD_BENCHMARKS=ON` exposes an explicit `tst_benchmark` build target,
+still excluded from the default build. Run that binary separately when measurement
+is requested. Development verification commands are in the roadmap's
+[execution guide](docs/roadmap/2026-10-reliability/EXECUTION.md).
 
 ## Quick start
 

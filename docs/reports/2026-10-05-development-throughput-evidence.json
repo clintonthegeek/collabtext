@@ -1,0 +1,77 @@
+{
+  "schema": "collabtext-development-throughput-review/1",
+  "baseline_revision": "8496194",
+  "implementation_revision": "0db31aa83f51bbc3e4504fbe17cdfa8d909e17b2",
+  "warm_comparison": {
+    "tests": [
+      "tst_buffer",
+      "tst_anchor",
+      "tst_idlist_anchor"
+    ],
+    "mode": "debug",
+    "workers": 8,
+    "before_wall_seconds": 12.833,
+    "after_wall_seconds": 4.421,
+    "scope": "already built objects and same selected targets; orchestration only"
+  },
+  "bounded_debug": {
+    "passed": 70,
+    "ctest_seconds": 25.62,
+    "combined_wall_seconds": 153.178,
+    "evidence": "build-roadmap-debug/verification/20261005T215421Z-changed-ylk7ei8r/results.json",
+    "excluded": [
+      "tst_realistic"
+    ],
+    "benchmarks_registered": false
+  },
+  "installed_consumer": {
+    "passed": 1,
+    "negative_component_checks": "pass",
+    "relocation": "prefix A moved to B",
+    "evidence": "build-consumer-verify/debug-package-20261005T215611Z-1970/"
+  },
+  "final_targeted": {
+    "ctest_passed": 2,
+    "verifier_unit_tests": 12,
+    "fixture_unit_tests": 11,
+    "wall_seconds": 1.599,
+    "evidence": "build-roadmap-debug/verification/20261005T220334Z-changed-qlik6rpo/results.json"
+  },
+  "fixtures": {
+    "count": 17,
+    "operations": 46,
+    "arrival_permutations": 29,
+    "corpus_sha256": "8722cb24e7fea9465615b1e355ae10f3d9f7a6ebdcc7f17339347183e8b0130b",
+    "digest_rule": "SHA-256 of sorted fixture basenames, each followed by NUL then exact file bytes",
+    "sha256_by_file": {
+      "libs/collabtext/tests/fixtures/sequence-semantics/boundary-affinity.json": "ebec3a654c7f7bffd2890f37a1f88116aea119b2b2cd599670784dca2e50b00d",
+      "libs/collabtext/tests/fixtures/sequence-semantics/concurrent-replacements.json": "8901cd5288d3f365866091f9549d29cce788eef8538e522ec52e3104c9a40b49",
+      "libs/collabtext/tests/fixtures/sequence-semantics/deleted-both-neighbors.json": "b0561fa58112d2c4a76dd29bce580d297f78fb5d1c1f953c357a62ccac6cbf88",
+      "libs/collabtext/tests/fixtures/sequence-semantics/deleted-left-neighbor.json": "27d793636c344355529d4e4afcc66ebf897602288c1351cee7b590ebb156c15b",
+      "libs/collabtext/tests/fixtures/sequence-semantics/empty-start-end.json": "9429e6b54d3f7f3e20f81f9e69aa9722905dfbb14d2902845f6ad749dc9eb894",
+      "libs/collabtext/tests/fixtures/sequence-semantics/end-affinity.json": "db4219368476b04b44123c658296b76cc6ddb7cdde183fce5b7cabc12e771a64",
+      "libs/collabtext/tests/fixtures/sequence-semantics/forward-typing.json": "d13a52544bca5187e437c0c70bdfde84c3e40d5461ac1824f1e32964bb242462",
+      "libs/collabtext/tests/fixtures/sequence-semantics/list-local-undo-and-redo.json": "2a24ab8f687322fa5bb9a5c401a978e61882fff97aa9f3525e4a7d9206cbad4b",
+      "libs/collabtext/tests/fixtures/sequence-semantics/list-same-position-tie.json": "fff80e3884d17c5838a04c6c5fb8a718b9422cca22d33fac4acd19b2020ecb7d",
+      "libs/collabtext/tests/fixtures/sequence-semantics/local-undo-preserves-peer.json": "c54f333221d8765b395704c77b3626426d90f91b25e8c0267190c1c91aa965d7",
+      "libs/collabtext/tests/fixtures/sequence-semantics/nested-post-merge-edit.json": "801b9d7b59c513fb2dcd623d2222f52c7b8ac0ba52ee3d8c1edc036b151c9203",
+      "libs/collabtext/tests/fixtures/sequence-semantics/reverse-typing.json": "633f7bf3f0fb3bc30303ed5ca64863a421d549cdc49513464ff7b8b65e1497c0",
+      "libs/collabtext/tests/fixtures/sequence-semantics/shared-token-concurrent-inserts.json": "08a1f3dc5a180097202a9b7b6f2de17bbf5d498ae4132dc6776e0555418c1487",
+      "libs/collabtext/tests/fixtures/sequence-semantics/start-affinity.json": "c42ecec43baefaec7b759a7d5d098e3d91b0812e877e51b77a7616e71f2a7492",
+      "libs/collabtext/tests/fixtures/sequence-semantics/undo-redo-and-reinsert.json": "5082d4a86603ff515c64b2240336aa060613f91e0dabb8460de79fd591dc21ee",
+      "libs/collabtext/tests/fixtures/sequence-semantics/unicode-all-boundaries.json": "c2b2174d030bc3384c2ed785190cb94949037e173268921f6ab3ea39403b34b0",
+      "libs/collabtext/tests/fixtures/sequence-semantics/whole-concurrent-pastes.json": "034d02f2bfb5a6817d029b39a707cdcb30c0e19544700100a7fe1ea6acc51331"
+    }
+  },
+  "configuration_checks": {
+    "benchmarks_on": "71 CTest correctness tests; no benchmark registered; configure only",
+    "headless_core": "tests/Qt/apps/transport/benchmarks OFF; configure succeeds without Qt/Python discovery"
+  },
+  "limitations": [
+    "No benchmark built or run.",
+    "No engine ordering/position implementation changed; F7/F8 expected failures remain.",
+    "No new fresh full build or Release/ASan/realistic sweep for infrastructure/specification change.",
+    "Final parser/comparison additions received targeted checks after the broad bounded gate.",
+    "Compiler cache exercised by 14 actual consumer compilation misses; no cold-build speedup claimed."
+  ]
+}

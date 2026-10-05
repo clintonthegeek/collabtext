@@ -161,7 +161,7 @@ Validate local links and API examples; compare each advertised guarantee to a na
 
 **Verification:**
 
-Run the complete Debug/Release correctness suite, bounded model/fuzz campaigns, ASan/UBSan, installed-consumer checks, and selected performance suite; retain acceptance logs. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
+Run the complete Debug/Release correctness suite, bounded model/fuzz campaigns, ASan/UBSan, installed-consumer checks; retain correctness acceptance logs. Run any selected performance suite separately when performance work resumes; benchmarks are never part of a correctness test run. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
 
 ## E06 — Prepare the fresh release dossier without merging master
 

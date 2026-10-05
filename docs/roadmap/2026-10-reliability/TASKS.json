@@ -1316,8 +1316,9 @@
         "docs/specs/vnext-sequence-semantics.md",
         "libs/collabtext/tests/fixtures/sequence-semantics/",
         "docs/specs/vnext-external-position-contract.md",
-        "libs/collabtext/tests/tst_sequence_fixtures.cpp",
-        "libs/collabtext/CMakeLists.txt"
+        "tools/validate_sequence_fixtures.py",
+        "tools/test_sequence_fixtures.py",
+        "CMakeLists.txt"
       ],
       "steps": [
         "State exact properties: convergence, duplicate safety, causal integration, contiguous concurrent passages, intended left/right insertion affinity, selective local undo, and explicit behavior for concurrent replacements.",
@@ -1337,9 +1338,36 @@
         "R4"
       ],
       "gate": null,
-      "status": "not_started",
+      "status": "complete",
       "consumer_requirements": [
         "W2"
+      ],
+      "baseline_revision": "8496194",
+      "implementation_commits": [
+        "0db31aa83f51bbc3e4504fbe17cdfa8d909e17b2"
+      ],
+      "verification_commands": [
+        "python3 tools/validate_sequence_fixtures.py",
+        "python3 tools/test_sequence_fixtures.py",
+        "tools/verify-roadmap.sh debug '^tst_(sequence_fixtures|verification_tools)$'",
+        "tools/verify-changed.sh --target '^tst_(sequence_fixtures|verification_tools)$'"
+      ],
+      "verification_results": {
+        "fixtures": "17 histories, 46 operations, 29 complete arrival permutations",
+        "fixture_parser": "11/11 unittest cases; final CTest fixture/verifier checks 2/2 pass, 1.599 seconds total",
+        "scope": "Desired sequence order and exact offsets/comparisons; fixture consistency validation, not execution of the production engine or S02/S04a models",
+        "review": "Paste abcXYZ excludes aXbYcZ; forward/reverse causal passages, nested edits, replacements, selective undo/redo, list tie/miss, same-token left/right affinities, neighbor-collapse offsets and UTF-8 scalar boundaries reviewed against F7/F8 and W2. General ordering proof remains S02; sufficient boundary representation remains S04a.",
+        "corpus_sha256": "8722cb24e7fea9465615b1e355ae10f3d9f7a6ebdcc7f17339347183e8b0130b"
+      },
+      "artifacts": [
+        "docs/specs/vnext-sequence-semantics.md",
+        "libs/collabtext/tests/fixtures/sequence-semantics/",
+        "docs/reports/2026-10-05-development-throughput-evidence.json",
+        "build-roadmap-debug/verification/20261005T220334Z-changed-qlik6rpo/"
+      ],
+      "limitations": [
+        "No production algorithm or public token implementation changed; F7/F8 remain known failures.",
+        "Static validator does not establish convergence for the proposed repaired integration; S02 must execute these histories independently."
       ]
     },
     {
@@ -3049,7 +3077,7 @@
         "No evaluation defect is claimed fixed solely through disabling its test or narrowing an advertised guarantee without documenting the limitation.",
         "The final acceptance dossier contains exact installed token/pin/reopen/compensation/GC/epoch tests for W1-W3/W5-W6 and an explicit W4 formatting scope statement; no Wave readiness claim is based solely on task checkboxes."
       ],
-      "verification": "Run the complete Debug/Release correctness suite, bounded model/fuzz campaigns, ASan/UBSan, installed-consumer checks, and selected performance suite; retain acceptance logs. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
+      "verification": "Run the complete Debug/Release correctness suite, bounded model/fuzz campaigns, ASan/UBSan, installed-consumer checks; retain correctness acceptance logs. Run any selected performance suite separately when performance work resumes; benchmarks are never part of a correctness test run. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
         "F1",
         "F2",

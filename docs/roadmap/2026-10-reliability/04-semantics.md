@@ -17,8 +17,9 @@ The selected route is incremental repair of existing Buffer/IdList integration, 
 - `docs/specs/vnext-sequence-semantics.md`
 - `libs/collabtext/tests/fixtures/sequence-semantics/`
 - `docs/specs/vnext-external-position-contract.md`
-- `libs/collabtext/tests/tst_sequence_fixtures.cpp`
-- `libs/collabtext/CMakeLists.txt`
+- `tools/validate_sequence_fixtures.py`
+- `tools/test_sequence_fixtures.py`
+- `CMakeLists.txt`
 
 **Steps:**
 

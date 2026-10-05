@@ -13,24 +13,21 @@ W1–W6 consumer cases.
 
 ## Where the work is, as of 2026-10-05
 
-**Done:** V01–V08, D01, P01–P05, L01, W01, S01, and the whole packaging arc —
-A01, A02a, A06a. The registry has 72 tasks.
+**Done:** V01–V08, D01, P01–P05, L01, S01, and packaging A01, A02a,
+A06a. The registry has 72 tasks. S01 supplies desired histories, not an engine
+ordering repair. W01 is **not done**; its consumer probe fixtures are absent.
 
-**Do next: S04a**, the design gate for scoped boundary identities
-(`TASKS.json` id `S04a`, doc `docs/roadmap/2026-10-reliability/`). Its
-dependencies (S01, P06a steps 1–5, W01) are met. S04a is on Wave's critical
-path: it specifies affinity, typed unresolvable anchors and the position-token
-codec, which are the three things the manifest records as *not implemented* and
-which Wave's R3 calls a data-corruption risk. S04b implements it.
+**Do next:** W01's eight-probe specification/corpus and P06a step 6 (opaque
+operation values). P06a steps 1–5 adopted persistent ActorId/counter allocation.
+Its remaining opacity work is implementation, not a pending user-policy choice:
+P01's API specification already requires opaque operation values. S04a depends
+on all of P06a, S01 and W01 in TASKS.json; do not treat partial completion as a
+finished prerequisite. See the corrected state-at-handoff and throughput review.
 
-**Then:** S04b → W02 (installed baseline probes) → W03 (strict live-position
-probes) → S02/S03 → E07a/E07b. Follow
-`docs/roadmap/2026-10-reliability/00-consumer-integration.md` for the early
-package/probe/position ordering.
-
-**P06a remains open** at step 6 (opaque operation values). It is blocked on a
-recorded A02 boundary decision, not on anything S04a needs. Do not let it
-reorder the critical path.
+**Then:** S04a → S04b, installed W02/W03 probes, S02/S03 and E07a/E07b,
+following the actual registry dependencies and the early consumer lane. S04a is
+the independent live-boundary model gate; F7/F8 remain outstanding. Complete
+required design/model gates before production changes.
 
 ## Read this before trusting a green run
 
@@ -44,18 +41,18 @@ failing — so verify the verifier:
   `--no-tests=error`, and `tools/verify-changed.sh` refuses an empty selection
   and reports any changed file that matched no route. A routing table that stops
   matching a path is the regression a fast subset would otherwise hide.
-- `tst_benchmark::memory_growth` trips the QtTest watchdog at ~307s under a
-  parallel Debug sweep. That is a Debug timing limit on an uninstrumented
-  measurement, not an assertion failure; it does not block acceptance. The user
-  has asked for it to be skipped rather than tuned.
+- Benchmarks are opt-in standalone binaries, absent from CTest even with the
+  build option enabled. Never run them with tests. The user deferred engine
+  optimization and performance comparisons; focus on consumer correctness.
 
 ## Verification tiers
 
-The full sweep is trusted and is not the inner loop. Use
-`tools/verify-changed.sh` (routes on the diff, ~30s), `--thorough` (adds fuzz
-and property tests), or `--all`. `tools/verify-roadmap.sh --fresh <mode> '.'` is
-the acceptance tier — once per arc, not once per task. Details in `EXECUTION.md`
-under "Verification tiers".
+Use `tools/verify-changed.sh` for affected warm correctness checks. Bounded fuzz
+and regression tests stay included. `--thorough` includes the long realistic
+simulation where routed; `--all` includes every correctness test. A fresh
+acceptance sweep is once per arc, not per edit. Compilation uses local bounded
+ccache when available and one aggregate build traversal. Unknown routes and
+empty selections fail. Details and separate benchmark commands are in EXECUTION.md.
 
 For implementation turns:
 

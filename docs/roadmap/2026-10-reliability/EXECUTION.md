@@ -18,7 +18,18 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 4. Prefer registry order for a serial run. Work on one task at a time. If a task is too broad, split it into new well-defined subtask IDs with dependencies and acceptance criteria before coding; do not silently expand scope.
 5. Mark the task `in_progress`, record the baseline revision and relevant failures, and read every existing file the task will touch. Paths named as new files are not missing prerequisites.
 
-`validate-plan.py --ready` lists structurally ready tasks. It cannot establish technical review or user approval; the executor must still check the decision/design artifacts. V01–V08, D01, P01–P05, and L01 are complete. Continue unfinished P06a: both design gates (ordering and allocation) have landed and run, and the engine migration in steps 3–6 is pending; A01/W01/S01 are separately ready. After finishing P06a, use the preferred serial route in [00-consumer-integration.md](00-consumer-integration.md): package and baseline probes first, live-position specification/model and implementation next, then full ordering/recovery and final certification. Read the [current handoff](../../handoff/2026-10-04-reliability-review.md) and [external consumer requirements](../../specs/vnext-external-position-contract.md) before continuing. Acceptance must include the W-series cases assigned to each task; a test name in a spec is not implementation evidence.
+`validate-plan.py --ready` lists structurally ready tasks. It cannot establish
+technical acceptance: check the referenced artifacts as well. Packaging A01,
+A02a and A06a and identity adoption P06a steps 1–5 have landed. S01 supplies
+checked-in desired sequence histories. W01's consumer probe corpus is still
+missing, and P06a step 6 (opaque operation values) remains implementation work.
+Complete W01 and finish P06a before S04a; the registry depends on the whole
+P06a task, not an unrecorded partial milestone. The existing P01 public API
+specification already requires opaque values; this is not a new user-policy
+question. S04a/S04b then unlock live-position probes on the early consumer lane.
+Read [current handoff](../../handoff/2026-10-05-state-at-handoff.md) and
+[external requirements](../../specs/vnext-external-position-contract.md).
+A named test in a specification is not implementation evidence.
 
 ## Implementing the selected task
 
@@ -43,36 +54,63 @@ User-facing questions belong in ordinary conversation/final text for this user, 
 
 ## Verification tiers
 
-The full sweep is the thing we trust and the thing we could not afford to run
-often, so it is not the inner loop. Verification is layered, cheapest first, and
-the layer a change actually needs is the one to run.
+Use a warm, affected subset while implementing. Run the required broader gates
+at a completed implementation arc, and record what they actually exercised.
+Benchmarks never run with tests, including `--all` or a fresh acceptance sweep.
+Engine optimization and performance comparisons are deferred per the user's
+2026-10-05 instruction; correctness and consumer capability work take priority.
 
-| Tier | Command | Cost | Use |
-| --- | --- | --- | --- |
-| 1 | `tools/verify-changed.sh` | seconds to ~1 min | every edit |
-| 2 | `tools/verify-changed.sh --thorough` | minutes | before committing an engine change |
-| 3 | `tools/verify-changed.sh --all` | minutes | when the route looks wrong |
-| 4 | `tools/verify-roadmap.sh --fresh <mode> '.'` | the full sweep | once per arc, as the acceptance gate |
+| Command | Use |
+| --- | --- |
+| `tools/verify-changed.sh` | Route the current diff; bounded correctness checks and package checks where affected |
+| `tools/verify-changed.sh --thorough` | Include the long realistic simulation when its suite is routed |
+| `tools/verify-changed.sh --target '^tst_buffer$'` | Explicit, narrow inner-loop check |
+| `tools/verify-changed.sh --all` | All correctness tests, including the long simulation |
+| `tools/verify-roadmap.sh --fresh <mode> '.'` | Fresh acceptance once per arc, when required |
 
-`tools/verify-changed.sh` reads the uncommitted diff (or `--since REV`), maps each
-changed path to the test areas that can observe it through an explicit routing
-table, builds only those targets in the warm `build-roadmap-{mode}` tree, and runs
-them. It prints the table it used and warns about files nothing matched, because a
-routing table that has quietly stopped matching a path is the failure mode that
-would otherwise hide. Zero selected tests is an error, never a pass. Docs-only
-changes route to nothing and exit successfully.
+Changed-path routing is explicit and fails for **any** unknown file, even mixed
+with documentation. Add a route or use an explicit broader gate; unknown source
+must never turn into a docs-only pass. Invalid Git revisions, zero runnable
+CTest matches, stale routes and build/test failures are errors. Markdown and
+roadmap JSON alone need no engine build. `--explain` prints the routing choice.
 
-Routing is coarse on purpose. `src/crdt/Buffer*` pulls in the Buffer, undo, GC and
-serialization tests; `src/identity/*` the identity suite; `src/transport/*` the
-OpStream and file-floor suites; `src/ui/*` the widget tests; any change under
-`include/`, `CMakeLists.txt`, `cmake/`, `tests/consumer-smoke/`, or
-`tools/verify-consumer-package.sh` routes to the header-independence targets plus
-the package gate, since those changes alter what a consumer sees without altering
-engine behaviour. `--explain` prints the table and exits.
+Buffer changes include anchor/undo/GC/fuzz/convergence/regression checks; IdList
+changes include its whole test family. Shared CRDT internals and public/build
+changes select broad correctness checks. Public headers, packaging and CMake
+changes also check header independence and the relocated installed consumer.
+Cheap bounded fuzz/property tests stay in the normal subset. Only the long
+`tst_realistic` simulation is excluded by default; use `--thorough`, `--all` or
+an explicit target when required. No assertions or expected-failure markers are
+removed to obtain a faster run.
 
-Slow property, fuzz and simulation tests are excluded from tier 1 and included by
-`--thorough`; they dominate wall-clock and a fast subset already catches most
-regressions. Acceptance is where they all run.
+Scripts reuse `build-roadmap-{mode}`, build one aggregate dependency target,
+and avoid unconditional warm reconfiguration when possible. The package gate
+builds enabled library components rather than rebuilding unrelated apps/tests.
+Installed header, relocation, dependency isolation and negative-component checks
+remain mandatory there. `verify-roadmap.sh` retains the reproducible acceptance
+log; `verify-changed.sh` retains machine-readable routes, selected targets, status
+and wall time in `results.json`.
+
+When available, ccache is configured automatically for compilation only; test
+execution and sanitizer checks always run. Cache defaults to the worktree's
+`.cache/ccache`, bounded to 512 MB, outside disposable build trees. Set
+`COLLABTEXT_USE_CCACHE=0` to stop adding a launcher to new configurations; clear
+`CMAKE_CXX_COMPILER_LAUNCHER` explicitly in an already configured tree if needed.
+An explicitly configured different launcher is preserved. `TMPDIR` defaults to
+`build-compiler-temp` in the worktree; an explicit environment value is honored.
+`COLLABTEXT_VERIFY_JOBS` defaults to the available CPU count.
+
+For a later, separately requested measurement, benchmarks are opt-in and are
+also excluded from the default build when enabled:
+
+```sh
+cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DCOLLABTEXT_BUILD_BENCHMARKS=ON
+cmake --build build-bench --parallel 8 --target tst_benchmark
+build-bench/libs/collabtext/tst_benchmark
+```
+
+There is no benchmark CTest registration. Do not add benchmarks back to test
+regexes or correctness acceptance requirements.
 
 ## Verification command contract
 
@@ -93,7 +131,7 @@ Set `COLLABTEXT_VERIFY_JOBS` to a positive integer to change the worker count, w
 
 Leak checking stays enabled by default; the runner does not hide failures with global suppressions. A restricted sandbox may block LeakSanitizer's process inspection even when all test assertions pass. Rerun outside that restriction when authorized, and distinguish this environment failure from a leak report. Do not disable leak detection or suppress Qt allocations without recording the limitation and actual evidence. V01's successful unrestricted smoke run covers Buffer/IdList with Qt and requires no Qt leak suppression.
 
-Before A01, the full project still needs Qt6 and zstd. A01 is now independently ready and is not gated by recovery or codec work. After A01, support these independent configurations:
+A01/A06a have landed. Preserve the independent headless configuration and installed-consumer checks:
 
 ```sh
 cmake -S . -B build-roadmap-core \
@@ -112,7 +150,7 @@ cmake --build build-roadmap-consumer -j 2
 ctest --test-dir build-roadmap-consumer --output-on-failure
 ```
 
-The exact options/paths become authoritative when A01/A06a implement them; A06 extends final certification rather than first creating installation. tools/verify-consumer-package.sh becomes the installed producer/consumer entry point in A06a and gains baseline/strict probe modes in W02/W03. Read its implemented --help for exact mode/option syntax; the roadmap does not pretend those scripts exist yet. The task registry names intended new tests; each creating task must register its executable so verification does not pass with “No tests were found.” The script must fail if a selected regex matches zero tests.
+A06 extends final certification rather than first creating installation. `tools/verify-consumer-package.sh` is the installed producer/consumer entry point; W02/W03 will add executable baseline/strict probes. Read its implemented --help for exact syntax. The task registry names intended new tests; each creating task must register its executable so verification does not pass with “No tests were found.” The script must fail if a selected regex matches zero tests.
 
 ## Randomized test contract (V04)
 

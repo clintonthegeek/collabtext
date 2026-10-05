@@ -1918,3 +1918,47 @@ rather than naming A06a as the owner of a thing A06a did not do.
 critical path — affinity, typed unresolvable anchors, and a persistable position
 token are the three items the manifest lists as not implemented, and they are
 the ones a consumer cannot design around.
+
+
+## 2026-10-05 — Faster correctness iteration and completed S01 corpus
+
+Baseline `8496194`; implementation `0db31aa`. Kept all changes in the
+isolated reliability worktree. No engine performance optimization or benchmark
+run; the user explicitly deferred that work.
+
+Benchmarks now default OFF, are standalone explicit targets and are absent from
+CTest even when enabled. They cannot run with normal/all/fresh correctness
+selection. Verification reuses warm configuration, builds a single aggregate,
+uses available bounded local ccache, and builds only enabled libraries for the
+installed package gate. Corrected unknown-path/docs mixing, incomplete test
+family routes, invalid-baseline handling, missing-option loops, empty/stale
+selection checks and failure-status propagation. Twelve verifier regressions pass.
+
+Completed **S01** with a documented fixture schema and seventeen histories:
+forty-six operations, twenty-nine arrival permutations. Exact content and item
+order, causal dependencies, compensation identities, scoped mint directives,
+left/right and collapse offsets, scalar boundaries and later comparisons are
+recorded. A Python validator and eleven parser regressions run via CTest without
+compiling a static-data parser. This implementation choice is reflected in the
+phase scope and task registry. Corpus SHA-256: `8722cb24e7fea9465615b1e355ae10f3d9f7a6ebdcc7f17339347183e8b0130b`.
+Parser validation is not a repaired CRDT interpreter; S02/S04a must execute the
+semantic histories. F7/F8 expected-fail markers and production behavior remain.
+
+Evidence: bounded Debug **70/70** CTest tests passed (25.62 s CTest), relocated
+Core consumer **1/1** plus dependency isolation and negative component checks
+passed; combined gate 153.178 s. Same warm three-test selection measured
+12.833 s before versus 4.421 s after; that measures orchestration only. Final
+fixture/verifier selection **2/2**, **1.599 s**, including all 23 parser/verifier
+unit cases. Configure-only checks confirm benchmarks ON never registers a
+benchmark and Core-only tests/Qt/apps/transport/benchmarks OFF needs no Qt/Python
+lookup. No fresh full build, Release/ASan/realistic sweep or clean-build cache
+speedup claim. Details, portable results and fixture hashes are in the
+[throughput review](2026-10-05-development-throughput-review.md) and its JSON.
+
+**Handoff correction:** the previous entry/orientation prematurely claimed W01
+and S01 were finished and S04a ready. S01 is completed by this commit. W01 is
+still not started; its WP1–WP8 corpus is missing. P06a step 6 is unfinished, and
+S04a's registry depends on **all** of P06a. P01 already requires opaque operation
+values; no new policy answer is required. Finish W01 and P06a, then follow the
+actual S04a/S04b/probe/ordering dependencies. Benchmarks and speculative engine
+optimization must not occupy the current consumer delivery lane.
