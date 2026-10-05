@@ -30,6 +30,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <ostream>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -217,8 +218,37 @@ public:
         return a.compare(b) < 0;
     }
 
+    /// Stream insertion as the canonical hex form.
+    ///
+    /// Added with the identity widening: diagnostics used to print a 16-bit
+    /// replica id as a bare integer, and a bare integer for an identity is
+    /// ambiguous between actors that happen to share one — which is exactly the
+    /// collision this type exists to prevent. An error message that cannot say
+    /// *which* actor is not much of an error message.
+    friend std::ostream& operator<<(std::ostream& out, const ActorId& id) {
+        return out << id.to_string();
+    }
+
 private:
     std::array<uint8_t, kBytes> m_bytes{};
+};
+
+/// Hash for opaque actor bytes, so an ActorId can key an unordered container.
+///
+/// FNV-1a over the 16 bytes. The choice is performance-only and never
+/// load-bearing: nothing may depend on iteration order of a map keyed by
+/// ActorId, because that order is not the identity order (see
+/// docs/specs/vnext-identity.md §2 — the *comparison* is what must be a global
+/// function of the actor, and an unordered container has no such requirement).
+struct ActorIdHash {
+    [[nodiscard]] size_t operator()(const ActorId& id) const noexcept {
+        size_t hash = 1469598103934665603ULL;
+        for (uint8_t byte : id.bytes()) {
+            hash ^= byte;
+            hash *= 1099511628211ULL;
+        }
+        return hash;
+    }
 };
 
 /// A unique operation identity: an actor and its counter *within one stream*.

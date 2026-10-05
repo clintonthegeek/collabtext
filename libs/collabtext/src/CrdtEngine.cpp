@@ -9,7 +9,7 @@ struct CrdtEngine::Impl {
     ChangeCallback on_change;
     LocalOpCallback on_local_op;
 
-    explicit Impl(uint16_t rid) : buffer(rid) {}
+    explicit Impl(const ActorId &actor) : buffer(actor) {}
 
     void notify() {
         if (on_change) on_change();
@@ -20,8 +20,8 @@ struct CrdtEngine::Impl {
     }
 };
 
-CrdtEngine::CrdtEngine(uint16_t replica_id)
-    : m_impl(std::make_unique<Impl>(replica_id))
+CrdtEngine::CrdtEngine(const ActorId &actor)
+    : m_impl(std::make_unique<Impl>(actor))
 {
 }
 

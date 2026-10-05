@@ -26,6 +26,7 @@
 #pragma once
 
 #include "TestSeed.h"
+#include "TestActor.h"
 #include "TraceHarness.h"
 
 #include "crdt/Buffer.h"
@@ -236,8 +237,8 @@ inline void print(const Measurement& measurement) {
 /// A single-replica edit workload that can be rebuilt identically.
 class Workload {
 public:
-    Workload(uint16_t replica_id, std::string label)
-        : m_buffer(replica_id), m_label(std::move(label)) {}
+    Workload(const ActorId &actor, std::string label)
+        : m_buffer(actor), m_label(std::move(label)) {}
 
     Buffer& buffer() { return m_buffer; }
     const Buffer& buffer() const { return m_buffer; }
@@ -270,7 +271,7 @@ public:
     /// engine. The result is state-identical to the original, with a different
     /// allocation history.
     void rebuild() {
-        Buffer fresh(m_buffer.replica_id());
+        Buffer fresh(m_buffer.actor_id());
         std::vector<Operation> produced;
         for (const Event& decision : m_decisions) {
             switch (decision.kind) {

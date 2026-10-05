@@ -14,6 +14,9 @@
 
 #include "crdt/Buffer.h"
 #include "ui/CollabPlainTextEdit.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 using namespace CollabText::Ui;
@@ -24,7 +27,7 @@ class TestScrollStability : public QObject {
 private slots:
     void remote_insert_above_viewport_preserves_top_anchor() {
         // Set up Alice's buffer and widget, populated with a 100-line doc.
-        Buffer aliceBuf(1);
+        Buffer aliceBuf(actor(1));
         {
             std::string text;
             for (int i = 0; i < 100; ++i) {
@@ -105,7 +108,7 @@ private slots:
     }
 
     void remote_insert_below_viewport_leaves_top_unchanged() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         {
             std::string text;
             for (int i = 0; i < 100; ++i) {

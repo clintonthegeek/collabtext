@@ -1,5 +1,7 @@
 #include "crdt/Serialization.h"
 
+#include <collabtext/ActorId.h>
+
 #include <charconv>
 #include <sstream>
 
@@ -34,8 +36,17 @@ static std::string escape_json_string(std::string_view s) {
     return out;
 }
 
-static std::string encode_lamport(const Lamport& l) {
-    return "[" + std::to_string(l.replica_id) + "," + std::to_string(l.value) + "]";
+/// An identity as `["<actor hex>", counter]`.
+///
+/// Schema 3 wrote `[replica_id, counter]` with a 16-bit replica id. That field
+/// was not an identity at all: it was a number the writing process happened to
+/// be configured with, so two devices could be handed the same one and neither
+/// could tell. The actor's canonical 32-character hex is what makes the record
+/// self-describing about *who* wrote it. P06b replaces this with the versioned
+/// sparse codec; this is the interim honest encoding, and schema_version 4 is
+/// the documented cut (there is no production data to migrate).
+static std::string encode_identity(const Identity& id) {
+    return "[\"" + id.actor.to_string() + "\"," + std::to_string(id.counter) + "]";
 }
 
 static std::string encode_locator(const Locator& loc) {
@@ -48,22 +59,31 @@ static std::string encode_locator(const Locator& loc) {
     return out;
 }
 
+/// A version vector as a sparse object keyed by actor hex.
+///
+/// Schema 3 wrote a dense array indexed by replica id, which only had a
+/// meaning while ids were consecutive small integers: `[10, 0, 5]` meant "actor
+/// 0 has 10, actor 1 has none, actor 2 has 5". With 128-bit actor keys there is
+/// no index to be dense over, so the sparse form is the only honest encoding —
+/// and it is also smaller, since a peer that has observed three actors no
+/// longer pays for every actor id below the largest one it has seen.
 std::string encode_global(const Global& g) {
-    std::string out = "[";
-    for (size_t i = 0; i < g.size(); ++i) {
+    std::string out = "{";
+    for (size_t i = 0; i < g.pair_count(); ++i) {
+        const auto& [who, counter] = g.pair(i);
         if (i > 0) out += ',';
-        out += std::to_string(g[i]);
+        out += "\"" + who.to_string() + "\":" + std::to_string(counter);
     }
-    out += ']';
+    out += '}';
     return out;
 }
 
 static std::string encode_edit(const EditOperation& op) {
     std::string out = "{\"t\":\"e\"";
 
-    out += ",\"ts\":" + encode_lamport(op.timestamp);
+    out += ",\"ts\":" + encode_identity(op.timestamp);
     out += ",\"v\":" + encode_global(op.version);
-    out += ",\"did\":" + encode_lamport(op.deletion_id);
+    out += ",\"did\":" + encode_identity(op.deletion_id);
 
     // Ranges
     out += ",\"r\":[";
@@ -88,7 +108,7 @@ static std::string encode_edit(const EditOperation& op) {
         for (size_t i = 0; i < op.inserted_fragments.size(); ++i) {
             auto& f = op.inserted_fragments[i];
             if (i > 0) out += ',';
-            out += "{\"o\":" + encode_lamport(f.origin)
+            out += "{\"o\":" + encode_identity(f.origin)
                  + ",\"l\":" + encode_locator(f.locator)
                  + ",\"c\":" + escape_json_string(f.content)
                  + ",\"n\":" + std::to_string(f.length) + "}";
@@ -102,8 +122,7 @@ static std::string encode_edit(const EditOperation& op) {
         for (size_t i = 0; i < op.deletion_runs.size(); ++i) {
             auto& d = op.deletion_runs[i];
             if (i > 0) out += ',';
-            out += "[" + std::to_string(d.replica_id) + ","
-                 + std::to_string(d.start_value) + ","
+            out += "[" + encode_identity(d.first) + ","
                  + std::to_string(d.count) + "]";
         }
         out += ']';
@@ -115,7 +134,7 @@ static std::string encode_edit(const EditOperation& op) {
         for (size_t i = 0; i < op.split_relocations.size(); ++i) {
             auto& s = op.split_relocations[i];
             if (i > 0) out += ',';
-            out += "{\"o\":" + encode_lamport(s.fragment_origin)
+            out += "{\"o\":" + encode_identity(s.fragment_origin)
                  + ",\"s\":" + std::to_string(s.split_offset)
                  + ",\"n\":" + std::to_string(s.fragment_length)
                  + ",\"l\":" + encode_locator(s.new_locator) + "}";
@@ -129,13 +148,13 @@ static std::string encode_edit(const EditOperation& op) {
 
 static std::string encode_undo(const UndoOperation& op) {
     std::string out = "{\"t\":\"u\"";
-    out += ",\"ts\":" + encode_lamport(op.timestamp);
+    out += ",\"ts\":" + encode_identity(op.timestamp);
     out += ",\"v\":" + encode_global(op.version);
 
     out += ",\"c\":[";
     for (size_t i = 0; i < op.counts.size(); ++i) {
         if (i > 0) out += ',';
-        out += "[" + encode_lamport(op.counts[i].first) + ","
+        out += "[" + encode_identity(op.counts[i].first) + ","
              + std::to_string(op.counts[i].second) + "]";
     }
     out += "]}";
@@ -155,7 +174,7 @@ std::string encode_idlist_operation(const IdListOperation& op) {
         using T = std::decay_t<decltype(o)>;
         if constexpr (std::is_same_v<T, IdListInsertOp>) {
             std::string out = "{\"t\":\"il-i\"";
-            out += ",\"ts\":" + encode_lamport(o.timestamp);
+            out += ",\"ts\":" + encode_identity(o.timestamp);
             out += ",\"v\":" + encode_global(o.version);
             out += ",\"id\":" + std::to_string(o.id);
             out += ",\"loc\":" + encode_locator(o.locator);
@@ -163,21 +182,21 @@ std::string encode_idlist_operation(const IdListOperation& op) {
             return out;
         } else if constexpr (std::is_same_v<T, IdListRemoveOp>) {
             std::string out = "{\"t\":\"il-r\"";
-            out += ",\"ts\":" + encode_lamport(o.timestamp);
+            out += ",\"ts\":" + encode_identity(o.timestamp);
             out += ",\"v\":" + encode_global(o.version);
-            out += ",\"to\":" + encode_lamport(o.target_origin);
+            out += ",\"to\":" + encode_identity(o.target_origin);
             out += '}';
             return out;
         } else {
             // IdListUndoOpVariant
             std::string out = "{\"t\":\"il-u\"";
-            out += ",\"ts\":" + encode_lamport(o.timestamp);
+            out += ",\"ts\":" + encode_identity(o.timestamp);
             out += ",\"v\":" + encode_global(o.version);
             out += ",\"c\":[";
             for (size_t i = 0; i < o.counts.size(); ++i) {
                 if (i > 0) out += ',';
                 out += '[';
-                out += encode_lamport(o.counts[i].first);
+                out += encode_identity(o.counts[i].first);
                 out += ',';
                 out += std::to_string(o.counts[i].second);
                 out += ']';
@@ -297,14 +316,16 @@ struct Parser {
         return std::nullopt; // Unterminated string
     }
 
-    std::optional<Lamport> parse_lamport() {
+    std::optional<Identity> parse_identity() {
         skip_ws();
         if (!expect('[')) return std::nullopt;
-        auto rid = parse_uint16();
-        if (!rid || !expect(',')) return std::nullopt;
-        auto val = parse_uint32();
-        if (!val || !expect(']')) return std::nullopt;
-        return Lamport(*rid, *val);
+        auto actor_text = parse_string();
+        if (!actor_text || !expect(',')) return std::nullopt;
+        auto counter = parse_uint64();
+        if (!counter || !expect(']')) return std::nullopt;
+        auto actor = ActorId::parse(*actor_text);
+        if (!actor) return std::nullopt;
+        return Identity(std::move(actor).value(), *counter);
     }
 
     std::optional<Locator> parse_locator() {
@@ -326,25 +347,28 @@ struct Parser {
         return Locator(std::move(digits));
     }
 
+    /// Sparse `{"<actor hex>": counter, ...}`. An actor whose hex does not
+    /// parse is a malformed record, not a skipped one: silently dropping a
+    /// component would understate coverage, and coverage is what a watermark
+    /// and a GC certificate are computed from.
     std::optional<Global> parse_global() {
         skip_ws();
-        if (!expect('[')) return std::nullopt;
+        if (!expect('{')) return std::nullopt;
         Global g;
         skip_ws();
-        if (peek() != ']') {
-            uint16_t idx = 0;
-            auto v = parse_uint32();
-            if (!v) return std::nullopt;
-            if (*v > 0) g.observe(Lamport(idx, *v));
-            ++idx;
-            while (expect(',')) {
-                v = parse_uint32();
-                if (!v) return std::nullopt;
-                if (*v > 0) g.observe(Lamport(idx, *v));
-                ++idx;
+        if (peek() != '}') {
+            while (true) {
+                auto actor_text = parse_string();
+                if (!actor_text || !expect(':')) return std::nullopt;
+                auto counter = parse_uint64();
+                if (!counter) return std::nullopt;
+                auto actor = ActorId::parse(*actor_text);
+                if (!actor) return std::nullopt;
+                g.observe(Identity(std::move(actor).value(), *counter));
+                if (!expect(',')) break;
             }
         }
-        if (!expect(']')) return std::nullopt;
+        if (!expect('}')) return std::nullopt;
         return g;
     }
 
@@ -410,7 +434,7 @@ struct Parser {
         EditOperation op;
         while (auto key = next_key()) {
             if (*key == "ts") {
-                auto v = parse_lamport();
+                auto v = parse_identity();
                 if (!v) return std::nullopt;
                 op.timestamp = *v;
             } else if (*key == "v") {
@@ -418,7 +442,7 @@ struct Parser {
                 if (!v) return std::nullopt;
                 op.version = *v;
             } else if (*key == "did") {
-                auto v = parse_lamport();
+                auto v = parse_identity();
                 if (!v) return std::nullopt;
                 op.deletion_id = *v;
             } else if (*key == "r") {
@@ -456,7 +480,7 @@ struct Parser {
                     EditOperation::InsertedFragment frag;
                     while (auto fkey = next_key()) {
                         if (*fkey == "o") {
-                            auto v = parse_lamport();
+                            auto v = parse_identity();
                             if (!v) return std::nullopt;
                             frag.origin = *v;
                         } else if (*fkey == "l") {
@@ -486,13 +510,11 @@ struct Parser {
                 if (peek() != ']') {
                     do {
                         if (!expect('[')) return std::nullopt;
-                        auto rid = parse_uint16();
-                        if (!rid || !expect(',')) return std::nullopt;
-                        auto sv = parse_uint32();
-                        if (!sv || !expect(',')) return std::nullopt;
+                        auto first = parse_identity();
+                        if (!first || !expect(',')) return std::nullopt;
                         auto cnt = parse_uint32();
                         if (!cnt || !expect(']')) return std::nullopt;
-                        op.deletion_runs.push_back({*rid, *sv, *cnt});
+                        op.deletion_runs.push_back({*first, *cnt});
                     } while (expect(','));
                 }
                 if (!expect(']')) return std::nullopt;
@@ -506,7 +528,7 @@ struct Parser {
                     EditOperation::SplitRelocation sr;
                     while (auto skey = next_key()) {
                         if (*skey == "o") {
-                            auto v = parse_lamport();
+                            auto v = parse_identity();
                             if (!v) return std::nullopt;
                             sr.fragment_origin = *v;
                         } else if (*skey == "s") {
@@ -541,7 +563,7 @@ struct Parser {
         UndoOperation op;
         while (auto key = next_key()) {
             if (*key == "ts") {
-                auto v = parse_lamport();
+                auto v = parse_identity();
                 if (!v) return std::nullopt;
                 op.timestamp = *v;
             } else if (*key == "v") {
@@ -554,7 +576,7 @@ struct Parser {
                 if (peek() != ']') {
                     do {
                         if (!expect('[')) return std::nullopt;
-                        auto l = parse_lamport();
+                        auto l = parse_identity();
                         if (!l || !expect(',')) return std::nullopt;
                         auto cnt = parse_uint32();
                         if (!cnt || !expect(']')) return std::nullopt;
@@ -597,7 +619,7 @@ struct Parser {
         IdListInsertOp op;
         while (auto key = next_key()) {
             if (*key == "ts") {
-                auto v = parse_lamport(); if (!v) return std::nullopt; op.timestamp = *v;
+                auto v = parse_identity(); if (!v) return std::nullopt; op.timestamp = *v;
             } else if (*key == "v") {
                 auto v = parse_global(); if (!v) return std::nullopt; op.version = *v;
             } else if (*key == "id") {
@@ -615,11 +637,11 @@ struct Parser {
         IdListRemoveOp op;
         while (auto key = next_key()) {
             if (*key == "ts") {
-                auto v = parse_lamport(); if (!v) return std::nullopt; op.timestamp = *v;
+                auto v = parse_identity(); if (!v) return std::nullopt; op.timestamp = *v;
             } else if (*key == "v") {
                 auto v = parse_global(); if (!v) return std::nullopt; op.version = *v;
             } else if (*key == "to") {
-                auto v = parse_lamport(); if (!v) return std::nullopt; op.target_origin = *v;
+                auto v = parse_identity(); if (!v) return std::nullopt; op.target_origin = *v;
             } else {
                 if (!skip_value()) return std::nullopt;
             }
@@ -631,7 +653,7 @@ struct Parser {
         IdListUndoOpVariant op;
         while (auto key = next_key()) {
             if (*key == "ts") {
-                auto v = parse_lamport(); if (!v) return std::nullopt; op.timestamp = *v;
+                auto v = parse_identity(); if (!v) return std::nullopt; op.timestamp = *v;
             } else if (*key == "v") {
                 auto v = parse_global(); if (!v) return std::nullopt; op.version = *v;
             } else if (*key == "c") {
@@ -640,7 +662,7 @@ struct Parser {
                 if (peek() != ']') {
                     do {
                         if (!expect('[')) return std::nullopt;
-                        auto l = parse_lamport(); if (!l || !expect(',')) return std::nullopt;
+                        auto l = parse_identity(); if (!l || !expect(',')) return std::nullopt;
                         auto cnt = parse_uint32(); if (!cnt || !expect(']')) return std::nullopt;
                         op.counts.push_back({*l, *cnt});
                     } while (expect(','));

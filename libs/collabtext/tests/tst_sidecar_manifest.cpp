@@ -13,7 +13,7 @@ class TestSidecarManifest : public QObject {
 private slots:
     void round_trip() {
         SidecarManifest m;
-        m.schema_version    = 3;
+        m.schema_version    = 4;
         m.doc_id            = "01HXXX0000000000000000000A";
         m.enrolled_at       = "2026-04-30T14:22:01Z";
         m.original_filename = "notes.md";
@@ -55,7 +55,7 @@ private slots:
         fs::path dir = tmp.path().toStdString();
 
         SidecarManifest m;
-        m.schema_version = 3;
+        m.schema_version = 4;
         m.doc_id         = "01HABC";
         m.enrolled_at    = "2026-04-30T14:22:01Z";
         m.original_filename = "notes.md";
@@ -68,7 +68,21 @@ private slots:
         auto loaded = read_manifest(path);
         QVERIFY(loaded.has_value());
         QCOMPARE(loaded->doc_id, m.doc_id);
-        QCOMPARE(loaded->schema_version, 3);
+        QCOMPARE(loaded->schema_version, 4);
+    }
+
+    // Schema 4 changed how an identity and a version vector are written; a
+    // schema 3 record does not load. That is a deliberate cut, not an
+    // oversight — see SidecarManifest.h.
+    void rejects_schema_version_3() {
+        QTemporaryDir tmp;
+        fs::path p = fs::path(tmp.path().toStdString()) / "manifest.json";
+        std::ofstream(p) << "{\"schema_version\":3,\"doc_id\":\"x\","
+                            "\"enrolled_at\":\"2026-04-30T00:00:00Z\","
+                            "\"original_filename\":\"f.txt\","
+                            "\"seed_sha256\":\"00\"}";
+        auto loaded = read_manifest(p);
+        QVERIFY(!loaded.has_value());
     }
 
     void rejects_schema_version_1() {

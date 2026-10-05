@@ -23,6 +23,8 @@
 #include <QDir>
 #include <QTest>
 
+#include "TestActor.h"
+
 #include "TestSeed.h"
 #include "TraceHarness.h"
 
@@ -427,7 +429,8 @@ private:
         // Rebuild the document by replaying the trace's edits onto a real
         // Buffer, so the anchor is resolved by the engine rather than by
         // arithmetic on the expected text.
-        Buffer buffer(static_cast<uint16_t>(expectation.replica + 1));
+        Buffer buffer(CollabText::Test::actor(
+            static_cast<uint8_t>(expectation.replica + 1)));
         std::vector<Operation> produced;
         for (const Event& event : fixture.trace.events) {
             switch (event.kind) {
@@ -456,8 +459,10 @@ private:
         }
         // The comment names the range boundaries; the range start is what a
         // reader resolves to position the comment.
-        const Anchor start(expectation.anchor_replica,
-                                 expectation.anchor_char, expectation.bias);
+        const Anchor start(
+            Identity(CollabText::Test::actor(expectation.anchor_replica),
+                     expectation.anchor_char),
+            expectation.bias);
         return buffer.resolve_anchor(start);
     }
 };

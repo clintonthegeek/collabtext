@@ -39,10 +39,10 @@ void FileSync::start() {
 
 void FileSync::push_local_op(const Operation& op) {
     if (!m_writer) return;
-    Lamport ts;
+    Identity ts;
     if (auto* e = std::get_if<EditOperation>(&op))      ts = e->timestamp;
     else if (auto* u = std::get_if<UndoOperation>(&op)) ts = u->timestamp;
-    m_writer->append(encode_operation(op), ts.value);
+    m_writer->append(encode_operation(op), ts.counter);
 }
 
 void FileSync::flush() {

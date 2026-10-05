@@ -11,7 +11,11 @@ class CollabDocument : public QObject {
     Q_OBJECT
 
 public:
-    explicit CollabDocument(uint16_t replicaId = 0, QObject *parent = nullptr);
+    /// The actor this document mints identities for. No default: a document
+    /// constructed with an implicit actor 0 would emit operations indistinguishable
+    /// from any other process's, which is the identity collision P02 exists to
+    /// prevent.
+    explicit CollabDocument(const ActorId &actor, QObject *parent = nullptr);
     ~CollabDocument() override;
 
     QTextDocument *qtDocument() const { return m_qtDoc; }

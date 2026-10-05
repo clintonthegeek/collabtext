@@ -189,8 +189,12 @@ std::optional<SidecarManifest> manifest_from_json(const std::string& json) {
         }
     }
 
-    // schema_version 3: IdList operations (il-i, il-r, il-u) may appear in op streams
-    if (m.schema_version != 3) return std::nullopt;
+    // schema_version 3 added IdList operations (il-i, il-r, il-u) to op streams.
+    // schema_version 4 changed the identity and version-vector encodings; a
+    // schema 3 record's `[replica_id, counter]` pair would parse as an actor
+    // hex and fail, but refusing on the version first is what makes that a
+    // clean cut rather than an incidental parse failure.
+    if (m.schema_version != 4) return std::nullopt;
     return m;
 }
 

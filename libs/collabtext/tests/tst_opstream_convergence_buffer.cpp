@@ -8,6 +8,7 @@
 ///   - Multi-op sequential: several ops from engine1 all arrive at engine2 correctly.
 
 #include <QTest>
+
 #include <QTemporaryDir>
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/Operations.h>
@@ -17,6 +18,9 @@
 
 #include <filesystem>
 #include <string>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText;
 using namespace CollabText::Crdt;
@@ -49,8 +53,8 @@ private slots:
         OpStream* op1 = &sync1;
         OpStream* op2 = &sync2;
 
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(actor(1));
+        CrdtEngine engine2(actor(2));
 
         // Wire engine1 → op1 (outbound)
         engine1.setOnLocalOp([&](const Operation& op) {
@@ -126,8 +130,8 @@ private slots:
         OpStream* op1 = &sync1;
         OpStream* op2 = &sync2;
 
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(actor(1));
+        CrdtEngine engine2(actor(2));
 
         engine1.setOnLocalOp([&](const Operation& op) {
             op1->push("buf:doc", encode_operation(op));
@@ -191,8 +195,8 @@ private slots:
 
         OpStream* op1 = &sync1;
 
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(actor(1));
+        CrdtEngine engine2(actor(2));
 
         // One-directional wiring: engine1 → op1 → engine2 only
         engine1.setOnLocalOp([&](const Operation& op) {

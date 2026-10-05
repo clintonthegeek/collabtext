@@ -52,68 +52,37 @@ std::string now_iso8601() {
     return buf;
 }
 
-uint16_t loadOrAssignReplicaId(const std::filesystem::path &sidecar,
-                               const std::string &doc_id) {
+/// Open this device's private state for `doc_id` and return its persistent
+/// actor.
+///
+/// Replaces the previous `loadOrAssignReplicaId`, which drew a random 16-bit
+/// number, scanned every peer's presence.json for numbers already in use, and
+/// wrote the winner to a text file. That was not an identity: 250 candidates
+/// over a handful of peers, and a relaunch that lost the file would mint a
+/// different one while old operations still claimed the old one. `ReplicaState`
+/// (P02) mints 128 bits of OS randomness once, persists it atomically before
+/// any operation exists, and refuses to open twice rather than duplicating it.
+///
+/// The state directory stays outside the shared store, which is the whole point:
+/// copying the document folder must not copy an identity.
+ReplicaState openPrivateState(const std::string &doc_id) {
     namespace fs = std::filesystem;
 
-    QString configRoot = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    const QString configRoot =
+        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     QDir().mkpath(configRoot + "/replica-state");
-    auto rid_path = fs::path(configRoot.toStdString())
-                  / "replica-state"
-                  / (doc_id + ".replica_id");
+    const fs::path state_dir = fs::path(configRoot.toStdString()) /
+                               "replica-state" / doc_id;
 
-    if (fs::exists(rid_path)) {
-        std::ifstream f(rid_path);
-        unsigned int x = 0;
-        f >> x;
-        if (x >= 1 && x <= 65535) return static_cast<uint16_t>(x);
+    auto state = ReplicaState::open(state_dir);
+    if (!state.ok()) {
+        // A private state that cannot be opened is not recoverable by inventing
+        // an identity: that would mint a second actor for one device while old
+        // operations still claim the first.
+        qFatal("collabtext: cannot open private state for document %s: %s",
+               doc_id.c_str(), std::string(state.error().message()).c_str());
     }
-
-    std::set<uint16_t> taken;
-    auto replicas_dir = sidecar / "replicas";
-    if (fs::exists(replicas_dir)) {
-        for (const auto &entry : fs::directory_iterator(replicas_dir)) {
-            if (!entry.is_directory()) continue;
-            auto pres = entry.path() / "presence.json";
-            if (!fs::exists(pres)) continue;
-            std::ifstream pf(pres);
-            std::string content((std::istreambuf_iterator<char>(pf)),
-                                std::istreambuf_iterator<char>());
-            // version_summary is sparse: {"0":8,"197":60}
-            auto vpos = content.find("\"version_summary\":{");
-            if (vpos == std::string::npos) continue;
-            auto end = content.find('}', vpos);
-            if (end == std::string::npos) continue;
-            std::string body = content.substr(vpos + 19, end - vpos - 19);
-            // body looks like: "0":8,"197":60
-            size_t p = 0;
-            while (p < body.size()) {
-                size_t qstart = body.find('"', p);
-                if (qstart == std::string::npos) break;
-                size_t qend = body.find('"', qstart + 1);
-                if (qend == std::string::npos) break;
-                try {
-                    unsigned long idx = std::stoul(body.substr(qstart + 1, qend - qstart - 1));
-                    if (idx >= 1 && idx <= 65535) taken.insert(static_cast<uint16_t>(idx));
-                } catch (...) {}
-                p = body.find(',', qend);
-                if (p == std::string::npos) break;
-                ++p;
-            }
-        }
-    }
-
-    uint16_t chosen = 0;
-    auto *rng = QRandomGenerator::global();
-    for (int attempt = 0; attempt < 500; ++attempt) {
-        uint16_t candidate = static_cast<uint16_t>(rng->bounded(250) + 1);
-        if (taken.count(candidate) == 0) { chosen = candidate; break; }
-    }
-    if (chosen == 0) chosen = 1;
-
-    std::ofstream out(rid_path);
-    out << chosen;
-    return chosen;
+    return std::move(state).value();
 }
 
 } // namespace
@@ -127,7 +96,8 @@ CollabPane::CollabPane(CollabText::Identity::Identity identity,
     : QWidget(parent)
     , m_identity(std::move(identity))
     , m_replicaName(std::move(replica_name))
-    , m_buffer(loadOrAssignReplicaId(sidecar_dir, doc_id))
+    , m_replicaState(openPrivateState(doc_id))
+    , m_buffer(m_replicaState.actor())
     , m_sync(m_buffer, sidecar_dir, m_replicaName)
     , m_presence(sidecar_dir, m_replicaName, m_identity.identity_id)
     , m_projector(sidecar_dir)
@@ -549,7 +519,7 @@ void CollabPane::applyRemoteCursorsAndFollow() {
                 rc.color = QColor(Qt::gray);
                 rc.label = QString::fromStdString(replicaId);
             }
-            rc.cursorVersion = (quint64(cp.head.replica_id) << 32) | cp.head.char_value;
+            rc.cursorVersion = cp.head.position.counter;
             cursors.append(rc);
         }
 
@@ -648,9 +618,9 @@ void CollabPane::onChatMessageSent(const QString &body) {
 
     ++m_chatSeq;
     ChatMessage msg;
-    msg.replica_id = m_buffer.replica_id();
+    msg.replica_id = 0;   // TODO(A08): chat entries still carry a 16-bit producer id
     msg.seq = m_chatSeq;
-    msg.id = std::to_string(msg.replica_id) + "-" + std::to_string(m_chatSeq);
+    msg.id = m_buffer.actor_id().to_string() + "-" + std::to_string(m_chatSeq);
     msg.timestamp = now_iso8601();
     msg.author = m_identity.identity_id;
     msg.author_name = m_identity.display_name;
@@ -671,9 +641,12 @@ void CollabPane::onAddComment(const QString &body) {
 
     ++m_commentSeq;
     Comment c;
-    c.id = "c-" + std::to_string(m_buffer.replica_id())
-         + "-" + std::to_string(m_commentSeq);
-    c.replica_id = m_buffer.replica_id();
+    c.id = "c-" + m_buffer.actor_id().to_string() + "-" +
+           std::to_string(m_commentSeq);
+    // Comment records still carry a 16-bit producer id, which is not this
+    // device's identity. Widening it is L04's stream-envelope work; until then
+    // it stays 0 rather than being given a number that means nothing.
+    c.replica_id = 0;
     c.seq = m_commentSeq;
     c.timestamp = now_iso8601();
     c.author = m_identity.identity_id;

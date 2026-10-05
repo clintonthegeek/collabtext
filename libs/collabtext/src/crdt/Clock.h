@@ -1,62 +1,113 @@
 #pragma once
 
-#include <cstdint>
+#include <collabtext/ActorId.h>
+
 #include <cstddef>
+#include <cstdint>
 #include <compare>
 #include <utility>
 
 namespace CollabText::Crdt {
 
-struct Lamport {
-    uint32_t value = 0;
-    uint16_t replica_id = 0;
+/// An operation's identity: a persistent 128-bit actor plus a checked 64-bit
+/// counter (docs/specs/vnext-identity.md §1).
+///
+/// The order is `(counter, actor)`, counter first, and it is not negotiable.
+/// Two fragments can share a locator — `Buffer::normalize_fragments` exists to
+/// handle runs from different actors at one shared locator, and split
+/// relocation deliberately leaves locators equal — so when locators tie,
+/// origin decides, and a replica that disagrees about that order produces a
+/// different document, permanently and invisibly.
+///
+/// The actor half is compared byte-wise through `ActorId::compare`, which is a
+/// deterministic total order every replica computes identically. It must not
+/// become a locally assigned dense slot: two replicas meeting the same actors
+/// in opposite orders would then tie-break equal locators in opposite
+/// directions. §2.1 of the specification rules that out.
+struct Identity {
+    ActorId actor;
+    uint64_t counter = 0;
 
-    Lamport() = default;
-    Lamport(uint16_t replica, uint32_t val) : value(val), replica_id(replica) {}
+    Identity() = default;
+    Identity(ActorId a, uint64_t c) : actor(std::move(a)), counter(c) {}
 
-    static Lamport min() { return {0, 0}; }
-    static Lamport max() { return {UINT16_MAX, UINT32_MAX}; }
+    /// The least identity: counter 0 and an invalid actor. True minimum, because
+    /// counter 0 beats every higher counter and an all-zero actor beats every
+    /// valid one. Fragment summaries seed with it, so a fold that starts here
+    /// must not be able to lose a real identity.
+    static Identity min() { return {ActorId(), 0}; }
 
-    Lamport tick() {
-        Lamport result = *this;
-        ++value;
-        return result;
+    /// Take the next counter value for the same actor, returning the value this
+    /// clock *had* before the call.
+    ///
+    /// The return-before-increment shape is deliberate and preserved from the
+    /// legacy `Lamport::tick()`, whose body incremented `this` and returned a
+    /// pre-increment copy. Call sites depend on both halves: `frag_origin =
+    /// m_clock.tick()` wants the first item identity, and the operation's own
+    /// identity is then `m_clock.counter - 1`, the last of its items. Callers
+    /// that discard the result are using it as "advance by one".
+    ///
+    /// This is the legacy per-scalar allocation and it is what §3.2's run
+    /// intervals replace; the awkward return is part of why. Do not "fix" it
+    /// into a post-increment return without auditing every call site.
+    Identity tick() {
+        const Identity previous = *this;
+        ++counter;
+        return previous;
     }
 
-    void observe(Lamport other) {
-        if (other.value >= value)
-            value = other.value + 1;
+    /// Raise past an observed identity. The actor half is deliberately ignored:
+    /// this is the causal clock, and a local identity must sort after
+    /// everything this replica has seen regardless of who authored it.
+    void observe(Identity other) {
+        if (other.counter >= counter)
+            counter = other.counter + 1;
     }
 
-    /// Stable public accessor: returns the logical clock value as uint64_t.
-    /// Part of the OpStream narrow contract; safe to depend on.
-    /// `replica_id` (the field below) is the companion stable surface —
-    /// see Operations.h contract block for the explicit carve-out.
-    uint64_t counter() const { return value; }
+    /// Stable public accessor: the logical clock value. Part of the OpStream
+    /// narrow contract; safe to depend on.
+    uint64_t counter_value() const noexcept { return counter; }
 
-    auto operator<=>(const Lamport &other) const {
-        if (auto cmp = value <=> other.value; cmp != 0)
+    auto operator<=>(const Identity &other) const {
+        if (auto cmp = counter <=> other.counter; cmp != 0)
             return cmp;
-        return replica_id <=> other.replica_id;
+        // ActorId::compare returns an int; fold it into an ordering so this is
+        // a real three-way comparison rather than a mixed return type.
+        const int by_actor = actor.compare(other.actor);
+        if (by_actor < 0) return std::strong_ordering::less;
+        if (by_actor > 0) return std::strong_ordering::greater;
+        return std::strong_ordering::equal;
     }
-    bool operator==(const Lamport &other) const = default;
+    bool operator==(const Identity &other) const = default;
 };
 
-/// Version vector keyed by replica id. Stored as a sorted, packed sequence of
-/// `(replica_id, value)` pairs (one uint64_t per pair, replica_id in the high
-/// 32 bits). Sparse: only replicas that have been observed take space. Up to
-/// SBO_CAP entries live inline; larger spill to the heap.
+/// Version vector keyed by actor id. A sorted sequence of
+/// `(ActorId, counter)` pairs, sparse: only actors that have been observed take
+/// space. Up to SBO_CAP entries live inline; larger spill to the heap.
 ///
-/// Sparseness matters because the SumTree aggregates a FragmentSummary per
-/// edit, each carrying three Globals; a dense-array layout indexed by
-/// replica_id would copy and zero ~replica_id*sizeof(uint32_t) bytes per
-/// summary, making per-edit cost linear in the magnitude of replica_id.
+/// Sparseness is load-bearing. A dense array indexed by actor id was the
+/// original O(actor) per-edit bug (docs/handoff/2026-05-09-collabtext-bug-report.md):
+/// per-edit cost grew linearly with the magnitude of the key, because every
+/// aggregated summary copied and zeroed the whole array. With 128-bit keys a
+/// dense index is not even representable, so the sparse pair list is the only
+/// option — but the per-edit cost argument is unchanged and is what the inline
+/// capacity is sized against.
 ///
-/// `size()` and `operator[]` preserve the legacy dense-view semantics
-/// (`size() == max_observed_replica_id + 1`, `operator[](rid) == get(rid)`)
-/// so the existing wire format and tests stay unchanged.
+/// There is no dense view any more, and there cannot be one: `size()` and
+/// `operator[]` used to mean "max observed replica_id + 1" and "the value at
+/// replica_id == i", which had no meaning once keys stopped being consecutive
+/// integers. Callers that need to walk the vector use `pair_count()`/`pair()`.
+///
+/// The inline capacity is 2 rather than the legacy 4 because a pair is 24 bytes
+/// instead of 8. Three inline pairs would cost 72 bytes for a vector that is
+/// usually empty or single-actor, and version vectors are stored per participant
+/// rather than per summary — but this is a size/perf tradeoff to revisit with
+/// measurement in the optimization phase, not a settled optimum.
 class Global {
 public:
+    /// One observed component: the highest counter seen from one actor.
+    using Pair = std::pair<ActorId, uint64_t>;
+
     Global() noexcept = default;
     Global(const Global &other);
     Global(Global &&other) noexcept;
@@ -64,23 +115,28 @@ public:
     Global &operator=(Global &&other) noexcept;
     ~Global();
 
-    uint32_t get(uint16_t replica_id) const;
-    void observe(Lamport ts);
-    bool observed(Lamport ts) const;
+    /// Highest counter observed for `actor`, or 0 when never observed.
+    uint64_t get(const ActorId &actor) const;
+    /// Record `id` as seen. Counter 0 is the "unseen" sentinel rather than an
+    /// identity (§3 of the identity specification), so it is discarded.
+    void observe(Identity id);
+    bool observed(Identity id) const;
+    /// True when every component of `other` is covered here.
     bool observed_all(const Global &other) const;
+    /// Per-actor maximum.
     void join(const Global &other);
 
     /// Nonzero-minimum aggregation. NOT a coverage intersection.
     ///
     /// For each component present in `*this`, take the smaller of the two
-    /// values **when the other vector has a nonzero value for that replica**;
+    /// values **when the other vector has a nonzero value for that actor**;
     /// when it does not, leave this vector's value alone. So
     /// `{1:10}.meet({}) == {1:10}`.
     ///
     /// That is the right answer for one narrow question — "what is the largest
     /// counter that some vector in this set has *not* gone below?" — and the
     /// wrong answer for "what has every peer seen?", because a peer that has
-    /// never observed replica 1 constrains replica 1's common coverage to zero,
+    /// never observed actor 1 constrains actor 1's common coverage to zero,
     /// not to whatever it happens to hold locally. Finding F3 is exactly this
     /// conflation, and NetworkSim::compact_all() still builds its GC watermark
     /// this way; it is inert only because V03 made reclamation a no-op.
@@ -88,16 +144,16 @@ public:
     /// New code that means "common coverage" must call coverage_intersection().
     void meet(const Global &other);
 
-    /// Coverage intersection: the per-replica minimum over the **union** of
-    /// both vectors, with an absent component counting as zero, and zero
-    /// components canonicalized away.
+    /// Coverage intersection: the per-actor minimum over the **union** of both
+    /// vectors, with an absent component counting as zero, and zero components
+    /// canonicalized away.
     ///
     /// This is the operation a watermark needs, and it is deliberately not the
     /// same operation as meet():
     ///
-    ///   {1:10} ∩ {}      == {}      a peer that never observed replica 1 has
+    ///   {1:10} ∩ {}      == {}      a peer that never observed actor 1 has
     ///   {1:10} ∩ {2:5}   == {}      seen none of it, so common coverage of
-    ///   {1:10} ∩ {1:5}   == {1:5}   replica 1 is zero
+    ///   {1:10} ∩ {1:5}   == {1:5}   actor 1 is zero
     ///   {1:10} ∩ {1:10}  == {1:10}
     ///
     /// Laws: commutative, associative, idempotent. There is no identity element
@@ -114,53 +170,42 @@ public:
 
     bool operator==(const Global &other) const;
 
-    /// Dense view: max observed replica_id + 1, or 0 if empty.
-    /// Preserved for compatibility with dense-iteration callers
-    /// (encode_global, parse_global, identity version-summary encoder).
-    size_t size() const noexcept;
-    /// Dense view: value at `replica_id == i`, or 0 if absent.
-    uint32_t operator[](size_t i) const noexcept;
-
-    /// Sparse iteration: number of present (replica_id, value) pairs.
+    /// Sparse iteration: number of present (actor, counter) pairs.
     size_t pair_count() const noexcept { return m_size; }
-    /// Sparse iteration: i-th present pair, sorted by replica_id ascending.
-    Lamport pair(size_t i) const noexcept {
-        uint64_t p = data()[i];
-        return Lamport(static_cast<uint16_t>(p >> 32),
-                       static_cast<uint32_t>(p));
-    }
+    /// Sparse iteration: i-th present pair, sorted by actor ascending.
+    Pair pair(size_t i) const noexcept { return data()[i]; }
 
 private:
-    static constexpr uint16_t SBO_CAP = 4;
-
-    static uint64_t pack(uint16_t replica_id, uint32_t value) noexcept {
-        return (static_cast<uint64_t>(replica_id) << 32) | value;
-    }
-    static uint16_t unpack_rid(uint64_t p) noexcept {
-        return static_cast<uint16_t>(p >> 32);
-    }
-    static uint32_t unpack_val(uint64_t p) noexcept {
-        return static_cast<uint32_t>(p);
-    }
+    static constexpr uint32_t SBO_CAP = 2;
 
     bool on_heap() const noexcept { return m_capacity > SBO_CAP; }
-    uint64_t *data_mut() noexcept { return on_heap() ? m_heap_data : m_inline; }
-    const uint64_t *data() const noexcept { return on_heap() ? m_heap_data : m_inline; }
+
+    /// Inline storage is raw bytes rather than a `Pair[]` member because
+    /// `std::pair<ActorId, uint64_t>` has a non-trivial default constructor —
+    /// ActorId value-initializes — and so cannot be a union member. The
+    /// reinterpret_cast is well-defined: the buffer is suitably aligned and
+    /// every object in it is created by copy before it is read.
+    Pair *data_mut() noexcept {
+        return on_heap() ? m_heap_data
+                         : reinterpret_cast<Pair *>(m_inline_storage);
+    }
+    const Pair *data() const noexcept {
+        return on_heap() ? m_heap_data
+                         : reinterpret_cast<const Pair *>(m_inline_storage);
+    }
 
     /// Ensure room for at least `need` pairs. May reallocate; do NOT hold
     /// pointers across this call.
     void ensure_capacity(uint32_t need);
 
-    /// Find the index of `replica_id`, or the insertion point if absent.
+    /// Find the index of `actor`, or the insertion point if absent.
     /// Returns (idx, found).
-    std::pair<uint32_t, bool> find_index(uint16_t replica_id) const noexcept;
+    std::pair<uint32_t, bool> find_index(const ActorId &actor) const noexcept;
 
     uint32_t m_size = 0;       ///< number of present pairs
     uint32_t m_capacity = SBO_CAP;
-    union {
-        uint64_t m_inline[SBO_CAP];
-        uint64_t *m_heap_data;
-    };
+    alignas(Pair) std::byte m_inline_storage[sizeof(Pair) * SBO_CAP];
+    Pair *m_heap_data = nullptr;
 };
 
 } // namespace CollabText::Crdt

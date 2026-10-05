@@ -6,17 +6,17 @@
 
 namespace CollabText::Crdt {
 
-/// Extract the Lamport timestamp from any Operation variant.
-inline Lamport get_op_timestamp(const Operation& op) {
-    return std::visit([](const auto& o) -> Lamport { return o.timestamp; }, op);
+/// Extract the Identity timestamp from any Operation variant.
+inline Identity get_op_timestamp(const Operation& op) {
+    return std::visit([](const auto& o) -> Identity { return o.timestamp; }, op);
 }
 
 // ============================================================================
-// SumTree-backed operation queue, ordered by Lamport timestamp
+// SumTree-backed operation queue, ordered by Identity timestamp
 // ============================================================================
 
 struct OperationSummary {
-    Lamport max_timestamp = Lamport::min();
+    Identity max_timestamp = Identity::min();
 
     static OperationSummary zero() { return {}; }
     void add_summary(const OperationSummary& other) {
@@ -26,9 +26,9 @@ struct OperationSummary {
 };
 
 struct TimestampDim {
-    Lamport value = Lamport::min();
+    Identity value = Identity::min();
 
-    static TimestampDim zero() { return {Lamport::min()}; }
+    static TimestampDim zero() { return {Identity::min()}; }
     void add_summary(const OperationSummary& s) { value = s.max_timestamp; }
 
     auto operator<=>(const TimestampDim&) const = default;
@@ -38,7 +38,7 @@ struct TimestampDim {
 struct OperationEntry {
     using Summary = OperationSummary;
 
-    Lamport timestamp;
+    Identity timestamp;
     Operation op;
 
     OperationSummary summary() const { return {timestamp}; }

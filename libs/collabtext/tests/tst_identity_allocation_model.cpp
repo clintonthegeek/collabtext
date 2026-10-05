@@ -6,7 +6,7 @@
 ///
 /// `tst_identity_ordering_model` proves the order's laws for identities it is
 /// handed. It says nothing about who hands them out, and that is where the legacy
-/// engine is genuinely at risk: `Buffer` ticks one Lamport value per inserted
+/// engine is genuinely at risk: `Buffer` ticks one Identity value per inserted
 /// character (`Buffer.cpp:864`) and derives split origins as `origin + j`
 /// (`Buffer.cpp:413`), while P02's `next_operation()` reserves exactly one counter
 /// per operation. Substituting one-operation-one-counter for the character clock

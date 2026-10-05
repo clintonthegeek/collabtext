@@ -25,7 +25,7 @@ struct IdListSummary {
     uint32_t visible_count = 0;
     uint32_t deleted_count = 0;
     Locator max_locator;
-    Lamport max_origin = Lamport::min();
+    Identity max_origin = Identity::min();
 
     static IdListSummary zero() { return {}; }
 
@@ -51,15 +51,15 @@ struct VisibleIndex {
 struct IdListEntry {
     using Summary = IdListSummary;
 
-    Lamport origin;
+    Identity origin;
     Locator locator;
     uint64_t id = 0;
-    std::vector<Lamport> deletions;
+    std::vector<Identity> deletions;
     bool visible = true;
 
     IdListEntry() = default;
-    IdListEntry(Lamport orig, Locator loc, uint64_t i)
-        : origin(orig), locator(std::move(loc)), id(i) {}
+    IdListEntry(Identity orig, Locator loc, uint64_t i)
+        : origin(std::move(orig)), locator(std::move(loc)), id(i) {}
 
     bool was_visible() const { return deletions.empty(); }
 
@@ -95,7 +95,7 @@ using IdListTree = SumTree<IdListEntry, IDLIST_TREE_B>;
 
 class IdList {
 public:
-    explicit IdList(uint16_t replica_id);
+    explicit IdList(const ActorId &actor);
 
     IdListOperation insert_after(const Anchor& after, uint64_t id);
     IdListOperation remove_at(const Anchor& target);
@@ -156,7 +156,7 @@ public:
     int compare_anchors(const Anchor& a, const Anchor& b) const;
 
     const Global& version() const { return m_version; }
-    uint16_t replica_id() const { return m_replica_id; }
+    const ActorId &actor_id() const { return m_actor; }
 
     /// Temporarily retains all entries, including restoration/anchor context.
     /// Returns zero until certified reclamation is implemented.
@@ -191,7 +191,7 @@ public:
 
     /// Single-replica reset primitive. Drops all entries (visible +
     /// tombstones), the undo stack, and the deferred-op queue.
-    /// Preserves replica_id, clock, version, max_undo_depth, and
+    /// Preserves actor, clock, version, max_undo_depth, and
     /// registered callbacks. Does NOT fire set_on_change or
     /// set_on_local_op. For use when the canonical content is
     /// replaced from outside the CRDT (file reload, revert-to-saved,
@@ -208,15 +208,15 @@ public:
     void local_clear() noexcept;
 
 private:
-    uint16_t m_replica_id;
-    Lamport m_clock;
+    ActorId m_actor;
+    Identity m_clock;
     Global m_version;
     UndoMap m_undo_map;
     IdListTree m_entry_tree;
 
     struct UndoEntry {
         std::vector<UndoMapKey> inserted_keys;
-        std::vector<Lamport> deletion_ids;
+        std::vector<Identity> deletion_ids;
     };
     std::vector<UndoEntry> m_undo_stack;
     size_t m_undo_cursor = 0;
@@ -239,7 +239,7 @@ private:
     ApplyOutcome apply_one(const IdListOperation& op);
 
     /// Queue `op` if the budget allows, otherwise quarantine it with a reason.
-    ApplyOutcome defer_or_quarantine(const IdListOperation& op, Lamport awaiting);
+    ApplyOutcome defer_or_quarantine(const IdListOperation& op, Identity awaiting);
 
     /// The existing bodies, which assume their anchor was resolved.
     IdListOperation insert_after_resolved(const Anchor& after, uint64_t id);

@@ -1,5 +1,8 @@
 #include <QTest>
 #include "crdt/IdList.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -7,7 +10,7 @@ class TestIdListUndo : public QObject {
     Q_OBJECT
 private slots:
     void undo_local_insert() {
-        IdList list(1);
+        IdList list(actor(1));
         list.insert_after(Anchor::min(), 0xAA);
         QCOMPARE(list.size(), 1u);
         auto undo_op = list.undo();
@@ -16,9 +19,9 @@ private slots:
     }
 
     void undo_local_remove_restores_element() {
-        IdList list(1);
+        IdList list(actor(1));
         list.insert_after(Anchor::min(), 0xAA);
-        list.remove_at(Anchor(1, 1, Bias::Left));
+        list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
         QCOMPARE(list.size(), 0u);
         list.undo();
         QCOMPARE(list.size(), 1u);
@@ -26,7 +29,7 @@ private slots:
     }
 
     void redo_after_undo_restores_state() {
-        IdList list(1);
+        IdList list(actor(1));
         list.insert_after(Anchor::min(), 0xAA);
         list.undo();
         list.redo();
@@ -34,7 +37,7 @@ private slots:
     }
 
     void undo_only_unwinds_local_edits() {
-        IdList alice(1), bob(2);
+        IdList alice(actor(1)), bob(actor(2));
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op_a});
         auto op_b = bob.insert_after(Anchor::min(), 0xBB);
@@ -49,7 +52,7 @@ private slots:
     }
 
     void coalesce_last_undo_groups_two_inserts() {
-        IdList list(1);
+        IdList list(actor(1));
         list.insert_after(Anchor::min(), 1);
         list.insert_after(Anchor::min(), 2);
         QVERIFY(list.coalesce_last_undo());
@@ -58,7 +61,7 @@ private slots:
     }
 
     void max_undo_depth_trims_oldest() {
-        IdList list(1);
+        IdList list(actor(1));
         list.set_max_undo_depth(3);
         for (int i = 0; i < 5; ++i) list.insert_after(Anchor::min(), static_cast<uint64_t>(i));
         QCOMPARE(list.undo_depth(), size_t{3});

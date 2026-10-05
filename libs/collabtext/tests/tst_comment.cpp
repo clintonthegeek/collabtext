@@ -1,6 +1,9 @@
 #include <QTest>
 #include "crdt/Comment.h"
 #include "crdt/Anchor.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -16,8 +19,8 @@ private slots:
         comment.author      = "alice@example.com";
         comment.author_name = "Alice";
         comment.body        = "This is a comment on the selected text.";
-        comment.range_start = Anchor(2, 100, Bias::Left);
-        comment.range_end   = Anchor(3, 200, Bias::Right);
+        comment.range_start = Anchor(Identity(actor(2), 100), Bias::Left);
+        comment.range_end   = Anchor(Identity(actor(3), 200), Bias::Right);
 
         StreamEntry entry = comment_to_entry(comment);
         auto result       = comment_from_entry(entry);
@@ -30,11 +33,11 @@ private slots:
         QCOMPARE(result->author,                comment.author);
         QCOMPARE(result->author_name,           comment.author_name);
         QCOMPARE(result->body,                  comment.body);
-        QCOMPARE(result->range_start.replica_id, uint16_t(2));
-        QCOMPARE(result->range_start.char_value, uint32_t(100));
+        QCOMPARE(result->range_start.position.actor, actor(2));
+        QCOMPARE(result->range_start.position.counter, quint64(100));
         QCOMPARE(result->range_start.bias,       Bias::Left);
-        QCOMPARE(result->range_end.replica_id,   uint16_t(3));
-        QCOMPARE(result->range_end.char_value,   uint32_t(200));
+        QCOMPARE(result->range_end.position.actor, actor(3));
+        QCOMPARE(result->range_end.position.counter, quint64(200));
         QCOMPARE(result->range_end.bias,         Bias::Right);
     }
 
@@ -47,8 +50,8 @@ private slots:
         comment.author      = "bob@example.com";
         comment.author_name = "Bob";
         comment.body        = "Some note";
-        comment.range_start = Anchor(1, 50, Bias::Left);
-        comment.range_end   = Anchor(1, 80, Bias::Right);
+        comment.range_start = Anchor(Identity(actor(1), 50), Bias::Left);
+        comment.range_end   = Anchor(Identity(actor(1), 80), Bias::Right);
 
         StreamEntry entry = comment_to_entry(comment);
 
@@ -79,8 +82,8 @@ private slots:
         comment.author      = "dave@example.com";
         comment.author_name = "Dave";
         comment.body        = "Looks good now";
-        comment.range_start = Anchor(1, 10, Bias::Left);
-        comment.range_end   = Anchor(1, 20, Bias::Right);
+        comment.range_start = Anchor(Identity(actor(1), 10), Bias::Left);
+        comment.range_end   = Anchor(Identity(actor(1), 20), Bias::Right);
         comment.resolved    = true;
 
         StreamEntry entry = comment_to_entry(comment);

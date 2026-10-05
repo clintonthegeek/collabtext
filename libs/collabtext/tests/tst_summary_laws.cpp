@@ -21,6 +21,9 @@
 #include <algorithm>
 #include <numeric>
 #include <random>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 using CollabText::Test::announce_seed;
@@ -32,7 +35,7 @@ namespace {
 Global vector_of(std::initializer_list<std::pair<uint16_t, uint32_t>> pairs) {
     Global g;
     for (const auto& [replica, value] : pairs)
-        g.observe(Lamport(replica, value));
+        g.observe(Identity(actor(replica), value));
     return g;
 }
 
@@ -43,7 +46,7 @@ Global random_vector(std::mt19937& rng, int replicas, int nonzero_count) {
     for (int i = 0; i < nonzero_count; ++i) {
         const uint16_t replica = static_cast<uint16_t>(1 + rng() % replicas);
         const uint32_t value = 1 + rng() % 1000;
-        g.observe(Lamport(replica, value));
+        g.observe(Identity(actor(replica), value));
     }
     return g;
 }
@@ -65,12 +68,12 @@ private slots:
         // A peer that has never observed replica 1 constrains replica 1's common
         // coverage to zero — not to whatever the local vector happens to hold.
         const Global observed = vector_of({{1, 10}});
-        QCOMPARE(observed.get(1), 10u);
+        QCOMPARE(observed.get(actor(1)), quint64(10));
 
         const Global intersected = observed.coverage_intersection(Global{});
         QVERIFY2(intersected.empty(),
                  "intersection with an empty peer must constrain coverage to zero");
-        QCOMPARE(intersected.get(1), 0u);
+        QCOMPARE(intersected.get(actor(1)), quint64(0));
         // Canonicalized: a zero component is not a fact worth carrying.
         QCOMPARE(intersected.pair_count(), size_t(0));
     }
@@ -86,29 +89,30 @@ private slots:
         const Global a = vector_of({{1, 10}, {2, 20}});
         const Global b = vector_of({{1, 4}, {3, 30}});
         const Global c = a.coverage_intersection(b);
-        QCOMPARE(c.get(1), 4u);     // present in both: the minimum
-        QCOMPARE(c.get(2), 0u);     // only in a: constrained to zero
-        QCOMPARE(c.get(3), 0u);     // only in b: constrained to zero
+        QCOMPARE(c.get(actor(1)), quint64(4));     // present in both: the minimum
+        QCOMPARE(c.get(actor(2)), quint64(0));     // only in a: constrained to zero
+        QCOMPARE(c.get(actor(3)), quint64(0));     // only in b: constrained to zero
         QCOMPARE(c.pair_count(), size_t(1));
     }
 
     void meet_and_coverage_intersection_are_different_operations() {
         // Pin both, because the whole point of P03 is that they differ.
         const Global observed = vector_of({{1, 10}});
-        const Global empty;
+        const Global empty = Global{};
 
         Global m = observed;
         m.meet(empty);
-        QCOMPARE(m.get(1), 10u);              // meet: nonzero-minimum aggregation
+        QCOMPARE(m.get(actor(1)), quint64(10));      // meet: nonzero-minimum aggregation
 
-        QCOMPARE(observed.coverage_intersection(empty).get(1), 0u);  // coverage: zero
+        // coverage: zero
+        QCOMPARE(observed.coverage_intersection(empty).get(actor(1)), quint64(0));
 
         // They agree only when both vectors name the same replica with a value.
         const Global lower = vector_of({{1, 3}});
         Global m2 = observed;
         m2.meet(lower);
-        QCOMPARE(m2.get(1), 3u);
-        QCOMPARE(observed.coverage_intersection(lower).get(1), 3u);
+        QCOMPARE(m2.get(actor(1)), quint64(3));
+        QCOMPARE(observed.coverage_intersection(lower).get(actor(1)), quint64(3));
     }
 
     // ---- laws of the two vector operations ----
@@ -171,7 +175,7 @@ private slots:
         Global fold = a;
         fold = fold.coverage_intersection(peer_one);
         fold = fold.coverage_intersection(peer_two);
-        QCOMPARE(fold.get(1), 5u);
+        QCOMPARE(fold.get(actor(1)), quint64(5));
         QCOMPARE(fold.pair_count(), size_t(1));
     }
 
@@ -184,8 +188,8 @@ private slots:
             const Global b = random_vector(rng, 8, 5);
             const Global c = a.coverage_intersection(b);
             for (uint16_t replica = 1; replica <= 8; ++replica) {
-                QVERIFY(c.get(replica) <= a.get(replica));
-                QVERIFY(c.get(replica) <= b.get(replica));
+                QVERIFY(c.get(actor(replica)) <= a.get(actor(replica)));
+                QVERIFY(c.get(actor(replica)) <= b.get(actor(replica)));
             }
         }
     }
@@ -202,7 +206,7 @@ private slots:
             s.visible_bytes = visible;
             s.deleted_bytes = deleted;
             s.max_locator = Locator{std::vector<uint64_t>{locator}};
-            s.max_origin = Lamport(1, origin);
+            s.max_origin = Identity(actor(1), origin);
             return s;
         };
 
@@ -244,9 +248,9 @@ private slots:
         QCOMPARE(with_empty.visible_count, 0u);
         QCOMPARE(with_empty.deleted_count, 0u);
 
-        IdListEntry first(Lamport(1, 5), Locator{std::vector<uint64_t>{1}}, 11);
-        IdListEntry second(Lamport(2, 3), Locator{std::vector<uint64_t>{2}}, 22);
-        IdListEntry third(Lamport(3, 9), Locator{std::vector<uint64_t>{3}}, 33);
+        IdListEntry first(Identity(actor(1), 5), Locator{std::vector<uint64_t>{1}}, 11);
+        IdListEntry second(Identity(actor(2), 3), Locator{std::vector<uint64_t>{2}}, 22);
+        IdListEntry third(Identity(actor(3), 9), Locator{std::vector<uint64_t>{3}}, 33);
 
         IdListSummary sum;
         sum.add_summary(first.summary());
@@ -255,7 +259,7 @@ private slots:
         QCOMPARE(sum.visible_count, 3u);
         QCOMPARE(sum.deleted_count, 0u);
         QCOMPARE(sum.max_locator, Locator{std::vector<uint64_t>{3}});
-        QCOMPARE(sum.max_origin, Lamport(3, 9));
+        QCOMPARE(sum.max_origin, Identity(actor(3), 9));
     }
 
     // ---- the property that actually matters to a user ----
@@ -267,7 +271,7 @@ private slots:
         // hardest, because they change fragment boundaries without changing text.
         std::mt19937 rng(static_cast<uint32_t>(effective_seed("splice-property")));
         for (int round = 0; round < 25; ++round) {
-            Buffer buffer(1);
+            Buffer buffer(actor(1));
             std::string expected;
             for (int i = 0; i < 40; ++i) {
                 const uint32_t at = expected.empty()

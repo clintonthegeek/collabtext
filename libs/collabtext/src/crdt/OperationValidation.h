@@ -51,10 +51,10 @@ enum class ValidationVerdict {
 struct ValidationResult {
     ValidationVerdict verdict = ValidationVerdict::valid;
     Error error;                       ///< meaningful when rejected
-    std::optional<Lamport> awaiting;   ///< meaningful when deferred
+    std::optional<Identity> awaiting;   ///< meaningful when deferred
 
     [[nodiscard]] static ValidationResult valid();
-    [[nodiscard]] static ValidationResult defer(Lamport missing);
+    [[nodiscard]] static ValidationResult defer(Identity missing);
     [[nodiscard]] static ValidationResult reject(Error error);
 
     [[nodiscard]] bool ok() const noexcept {

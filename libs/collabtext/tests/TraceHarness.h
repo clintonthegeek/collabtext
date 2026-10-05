@@ -8,7 +8,7 @@
 // A trace records *decisions*, never entropy and never derived operation
 // identity. Each event names what a scenario chose to do (which replica, which
 // byte range, which delivered operation, whether a peer was offline), so a
-// replay re-executes the same choices. Operation Lamport identifiers are
+// replay re-executes the same choices. Operation Identity identifiers are
 // re-derived by the engine exactly as they were during the recorded run: the
 // trace never carries an identity it does not have to.
 //
@@ -94,6 +94,7 @@
 
 #pragma once
 
+#include "TestActor.h"
 #include "TestSeed.h"
 
 #include "crdt/Buffer.h"
@@ -613,7 +614,7 @@ struct BufferWorld {
     explicit BufferWorld(int count) : replicas(), offline(count, false) {
         replicas.reserve(static_cast<size_t>(count));
         for (int r = 0; r < count; ++r)
-            replicas.emplace_back(static_cast<uint16_t>(r + 1));
+            replicas.emplace_back(CollabText::Test::actor(static_cast<uint8_t>(r + 1)));
     }
 };
 
@@ -625,7 +626,7 @@ struct IdListWorld {
     explicit IdListWorld(int count) : replicas(), offline(count, false) {
         replicas.reserve(static_cast<size_t>(count));
         for (int r = 0; r < count; ++r)
-            replicas.emplace_back(static_cast<uint16_t>(r + 1));
+            replicas.emplace_back(CollabText::Test::actor(static_cast<uint8_t>(r + 1)));
     }
 };
 
@@ -729,7 +730,7 @@ inline ReplayResult replay_buffer(const Trace& trace) {
         case EventKind::Restart: {
             // Replay-based recovery: rebuild the replica from the journal of
             // decisions that concerned it, in order.
-            Crdt::Buffer rebuilt(static_cast<uint16_t>(e.replica + 1));
+            Crdt::Buffer rebuilt(CollabText::Test::actor(static_cast<uint8_t>(e.replica + 1)));
             for (size_t j = 0; j < i; ++j) {
                 const Event& p = trace.events[j];
                 if (!p.involves(e.replica)) continue;
@@ -878,7 +879,7 @@ inline ReplayResult replay_idlist(const Trace& trace) {
             ++result.applied;
             break;
         case EventKind::Restart: {
-            Crdt::IdList rebuilt(static_cast<uint16_t>(e.replica + 1));
+            Crdt::IdList rebuilt(CollabText::Test::actor(static_cast<uint8_t>(e.replica + 1)));
             for (size_t j = 0; j < i; ++j) {
                 const Event& p = trace.events[j];
                 if (!p.involves(e.replica)) continue;
@@ -1301,7 +1302,7 @@ public:
         e.kind = EventKind::Restart;
         e.replica = r;
         m_trace.events.push_back(e);
-        Crdt::Buffer rebuilt(static_cast<uint16_t>(r + 1));
+        Crdt::Buffer rebuilt(CollabText::Test::actor(static_cast<uint8_t>(r + 1)));
         for (size_t j = 0; j + 1 < m_trace.events.size(); ++j) {
             const Event& p = m_trace.events[j];
             if (!p.involves(r)) continue;
@@ -1486,7 +1487,7 @@ public:
         e.kind = EventKind::Restart;
         e.replica = r;
         m_trace.events.push_back(e);
-        Crdt::IdList rebuilt(static_cast<uint16_t>(r + 1));
+        Crdt::IdList rebuilt(CollabText::Test::actor(static_cast<uint8_t>(r + 1)));
         for (size_t j = 0; j + 1 < m_trace.events.size(); ++j) {
             const Event& p = m_trace.events[j];
             if (!p.involves(r)) continue;

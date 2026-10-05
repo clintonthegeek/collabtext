@@ -4,6 +4,9 @@
 #include "TestSeed.h"
 #include "TraceHarness.h"
 #include "crdt/IdList.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 using namespace CollabText::Test;
@@ -93,13 +96,13 @@ class TestIdListFuzz : public QObject {
 private slots:
 
     void invariant_checker_passes_on_valid_list() {
-        IdList list(1);
+        IdList list(actor(1));
         check_invariants(list, "empty");
         list.insert_after(Anchor::min(), 1);
         check_invariants(list, "one-element");
         list.insert_after(Anchor::min(), 2);
         check_invariants(list, "two-elements");
-        list.remove_at(Anchor(1, 1, Bias::Left));
+        list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
         check_invariants(list, "one-tombstone");
     }
 

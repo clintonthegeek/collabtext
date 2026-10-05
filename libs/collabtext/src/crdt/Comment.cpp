@@ -1,5 +1,7 @@
 #include "crdt/Comment.h"
 
+#include <collabtext/ActorId.h>
+
 #include <cstdio>
 
 namespace CollabText::Crdt {
@@ -161,18 +163,28 @@ struct CommentPayloadParser {
         return key;
     }
 
+    /// `{"a":"<actor hex>","c":<counter>,"b":"left"|"right"}`.
+    ///
+    /// The previous `{"r":<uint16 replica>,"s":<uint32 seq>}` named no author,
+    /// so a comment's range could not be resolved against a document somebody
+    /// else authored. A missing or malformed actor is a parse failure rather
+    /// than a default: an unresolved comment range is a visible outcome the
+    /// caller has to hear about.
     std::optional<Anchor> parse_anchor_object() {
         if (!expect('{')) return std::nullopt;
-        uint16_t a_rid = 0;
-        uint32_t a_cv  = 0;
+        Identity position;
         Bias     a_bias = Bias::Left;
         while (auto akey = next_key()) {
-            if (*akey == "r") {
+            if (*akey == "a") {
+                auto v = parse_string();
+                if (!v) return std::nullopt;
+                auto actor = ActorId::parse(*v);
+                if (!actor) return std::nullopt;
+                position.actor = std::move(actor).value();
+            } else if (*akey == "c") {
                 auto v = parse_uint();
-                if (v) a_rid = static_cast<uint16_t>(*v);
-            } else if (*akey == "s") {
-                auto v = parse_uint();
-                if (v) a_cv = static_cast<uint32_t>(*v);
+                if (!v) return std::nullopt;
+                position.counter = *v;
             } else if (*akey == "b") {
                 auto v = parse_string();
                 if (v && *v == "right") a_bias = Bias::Right;
@@ -181,7 +193,7 @@ struct CommentPayloadParser {
             }
         }
         if (!expect('}')) return std::nullopt;
-        return Anchor(a_rid, a_cv, a_bias);
+        return Anchor(position, a_bias);
     }
 };
 
@@ -203,16 +215,16 @@ StreamEntry comment_to_entry(const Comment& comment) {
     payload += ",\"resolved\":";
     payload += (comment.resolved ? "true" : "false");
     payload += ",\"range\":{";
-    payload += "\"start\":{\"r\":";
-    payload += std::to_string(comment.range_start.replica_id);
-    payload += ",\"s\":";
-    payload += std::to_string(comment.range_start.char_value);
+    payload += "\"start\":{\"a\":\"";
+    payload += comment.range_start.position.actor.to_string();
+    payload += "\",\"c\":";
+    payload += std::to_string(comment.range_start.position.counter);
     payload += ",\"b\":";
     payload += (comment.range_start.bias == Bias::Left) ? "\"left\"" : "\"right\"";
-    payload += "},\"end\":{\"r\":";
-    payload += std::to_string(comment.range_end.replica_id);
-    payload += ",\"s\":";
-    payload += std::to_string(comment.range_end.char_value);
+    payload += "},\"end\":{\"a\":\"";
+    payload += comment.range_end.position.actor.to_string();
+    payload += "\",\"c\":";
+    payload += std::to_string(comment.range_end.position.counter);
     payload += ",\"b\":";
     payload += (comment.range_end.bias == Bias::Left) ? "\"left\"" : "\"right\"";
     payload += "}}";

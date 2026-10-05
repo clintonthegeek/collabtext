@@ -3,6 +3,9 @@
 #include "crdt/Buffer.h"
 
 #include <string>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 using namespace CollabText::Codec;
@@ -24,7 +27,7 @@ private:
 private slots:
 
     void insert_2byte_chars() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         std::string text = repeat(ACUTE_E, 5);
         buf.apply_local_edit({{0, 0}}, {text});
         QCOMPARE(buf.text(), text);
@@ -32,7 +35,7 @@ private slots:
     }
 
     void insert_3byte_chars() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         std::string text = repeat(CJK_MID, 4);
         buf.apply_local_edit({{0, 0}}, {text});
         QCOMPARE(buf.text(), text);
@@ -40,7 +43,7 @@ private slots:
     }
 
     void insert_4byte_chars() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         std::string text = repeat(ROCKET, 3);
         buf.apply_local_edit({{0, 0}}, {text});
         QCOMPARE(buf.text(), text);
@@ -48,7 +51,7 @@ private slots:
     }
 
     void delete_mid_multibyte() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         std::string text = std::string("a") + CJK_MID + "b";
         buf.apply_local_edit({{0, 0}}, {text});
         QCOMPARE(buf.visible_length(), 5u);
@@ -58,7 +61,7 @@ private slots:
     }
 
     void replace_with_multibyte() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{1, 4}}, {std::string(ROCKET)});
         std::string expected = std::string("h") + ROCKET + "o";
@@ -67,7 +70,7 @@ private slots:
     }
 
     void split_between_multibyte_chars() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         std::string text = repeat(CJK_MID, 3);
         buf.apply_local_edit({{0, 0}}, {text});
         buf.apply_local_edit({{3, 3}}, {"X"});
@@ -76,7 +79,7 @@ private slots:
     }
 
     void delete_partial_multibyte_sequence() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         std::string text = repeat(ROCKET, 3);
         buf.apply_local_edit({{0, 0}}, {text});
         buf.apply_local_edit({{0, 4}}, {""});
@@ -86,7 +89,7 @@ private slots:
     }
 
     void mixed_ascii_and_multibyte() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         std::string text = std::string("hello") + CJK_MID + "world" + ROCKET + "!";
         buf.apply_local_edit({{0, 0}}, {text});
         QCOMPARE(buf.visible_length(), 18u);
@@ -97,7 +100,7 @@ private slots:
     }
 
     void concurrent_multibyte_inserts_converge() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto opA = bufA.apply_local_edit({{0, 0}}, {repeat(ROCKET, 2)});
         auto opB = bufB.apply_local_edit({{0, 0}}, {repeat(CJK_MID, 3)});
         bufA.apply_ops({opB});
@@ -107,7 +110,7 @@ private slots:
     }
 
     void undo_multibyte_insert() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"abc"});
         buf.apply_local_edit({{3, 3}}, {repeat(ROCKET, 2)});
         QCOMPARE(buf.visible_length(), 11u);
@@ -120,7 +123,7 @@ private slots:
     }
 
     void anchor_on_multibyte_char() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         std::string text = std::string("a") + CJK_MID + "b";
         buf.apply_local_edit({{0, 0}}, {text});
         auto anchor = buf.anchor_at(1, Bias::Left);
@@ -130,7 +133,7 @@ private slots:
     }
 
     void anchor_survives_multibyte_delete() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         std::string text = repeat(CJK_MID, 3);
         buf.apply_local_edit({{0, 0}}, {text});
         auto anchor = buf.anchor_at(6, Bias::Left);

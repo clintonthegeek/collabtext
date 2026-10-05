@@ -12,7 +12,7 @@ namespace CollabText::Crdt {
 // ============================================================================
 
 struct InsertionSummary {
-    Lamport max_timestamp = Lamport::min();
+    Identity max_timestamp = Identity::min();
     uint32_t max_split_offset = 0;
 
     static InsertionSummary zero() { return {}; }
@@ -29,7 +29,7 @@ struct InsertionSummary {
 /// Timestamps increase monotonically, so we can seek to a specific
 /// insertion operation's fragments.
 struct InsertionKey {
-    Lamport timestamp = Lamport::min();
+    Identity timestamp = Identity::min();
     uint32_t split_offset = 0;
 
     static InsertionKey zero() { return {}; }
@@ -51,13 +51,13 @@ struct InsertionKey {
 struct InsertionFragment {
     using Summary = InsertionSummary;
 
-    Lamport timestamp;         ///< Insertion operation timestamp
+    Identity timestamp;         ///< Insertion operation timestamp
     uint32_t split_offset = 0; ///< Byte offset within the insertion where this fragment starts
     Locator fragment_id;       ///< The fragment's Locator in the fragment tree
     uint32_t length = 0;       ///< Length of this fragment (bytes)
 
     InsertionFragment() = default;
-    InsertionFragment(Lamport ts, uint32_t offset, Locator fid, uint32_t len)
+    InsertionFragment(Identity ts, uint32_t offset, Locator fid, uint32_t len)
         : timestamp(ts), split_offset(offset), fragment_id(std::move(fid)), length(len) {}
 
     InsertionSummary summary() const {

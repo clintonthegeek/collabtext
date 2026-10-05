@@ -1,5 +1,7 @@
 #include "crdt/ChatMessage.h"
 
+#include <collabtext/ActorId.h>
+
 #include <cstdio>
 
 namespace CollabText::Crdt {
@@ -178,10 +180,10 @@ StreamEntry chat_message_to_entry(const ChatMessage& msg) {
     payload += ",\"author_name\":" + escape_json(msg.author_name);
     payload += ",\"body\":"        + escape_json(msg.body);
     if (msg.anchor) {
-        payload += ",\"anchor\":{\"r\":";
-        payload += std::to_string(msg.anchor->replica_id);
-        payload += ",\"s\":";
-        payload += std::to_string(msg.anchor->char_value);
+        payload += ",\"anchor\":{\"a\":\"";
+        payload += msg.anchor->position.actor.to_string();
+        payload += "\",\"c\":";
+        payload += std::to_string(msg.anchor->position.counter);
         payload += ",\"b\":";
         payload += (msg.anchor->bias == Bias::Left) ? "\"left\"" : "\"right\"";
         payload += "}";
@@ -222,16 +224,19 @@ std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
             has_body = true;
         } else if (*key == "anchor") {
             if (!p.expect('{')) { p.skip_value(); continue; }
-            uint16_t a_rid = 0;
-            uint32_t a_cv = 0;
+            Identity position;
             Bias a_bias = Bias::Left;
             while (auto akey = p.next_key()) {
-                if (*akey == "r") {
+                if (*akey == "a") {
+                    auto v = p.parse_string();
+                    if (!v) return std::nullopt;
+                    auto actor = ActorId::parse(*v);
+                    if (!actor) return std::nullopt;
+                    position.actor = std::move(actor).value();
+                } else if (*akey == "c") {
                     auto v = p.parse_uint();
-                    if (v) a_rid = static_cast<uint16_t>(*v);
-                } else if (*akey == "s") {
-                    auto v = p.parse_uint();
-                    if (v) a_cv = static_cast<uint32_t>(*v);
+                    if (!v) return std::nullopt;
+                    position.counter = *v;
                 } else if (*akey == "b") {
                     auto v = p.parse_string();
                     if (v && *v == "right") a_bias = Bias::Right;
@@ -240,7 +245,7 @@ std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
                 }
             }
             p.expect('}');
-            anchor_val = Anchor(a_rid, a_cv, a_bias);
+            anchor_val = Anchor(position, a_bias);
             has_anchor = true;
         } else {
             if (!p.skip_value()) return std::nullopt;

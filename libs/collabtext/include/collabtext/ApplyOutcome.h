@@ -17,8 +17,8 @@
 /// the document. The distinction is therefore part of the return type, not a
 /// diagnostic.
 ///
-/// `awaiting()` is `std::optional<Crdt::Lamport>` today because the engine's
-/// operation identity is still the Lamport pair. When P06 makes operations
+/// `awaiting()` is `std::optional<Crdt::Identity>` today because the engine's
+/// operation identity is still the Identity pair. When P06 makes operations
 /// opaque and keyed by `ActorId`, this becomes `std::optional<OperationId>`
 /// with no other change to callers, who only ever compare or display it.
 
@@ -26,7 +26,7 @@
 
 #include <collabtext/ActorId.h>   // Error, ErrorCode
 
-#include <crdt/Clock.h>           // Lamport
+#include <crdt/Clock.h>           // Identity
 
 #include <optional>
 #include <string_view>
@@ -47,14 +47,14 @@ public:
 
     [[nodiscard]] static ApplyOutcome applied();
     [[nodiscard]] static ApplyOutcome duplicate();
-    [[nodiscard]] static ApplyOutcome deferred(Crdt::Lamport awaiting);
+    [[nodiscard]] static ApplyOutcome deferred(Crdt::Identity awaiting);
     [[nodiscard]] static ApplyOutcome rejected(Error error);
 
     [[nodiscard]] ApplyOutcomeKind kind() const noexcept { return m_kind; }
 
     /// Deferred only: the identity this operation is waiting for. Present
     /// exactly when `kind() == deferred`.
-    [[nodiscard]] std::optional<Crdt::Lamport> awaiting() const noexcept {
+    [[nodiscard]] std::optional<Crdt::Identity> awaiting() const noexcept {
         return m_awaiting;
     }
 
@@ -77,7 +77,7 @@ public:
 
 private:
     ApplyOutcomeKind m_kind = ApplyOutcomeKind::applied;
-    std::optional<Crdt::Lamport> m_awaiting;
+    std::optional<Crdt::Identity> m_awaiting;
     std::optional<Error> m_error;
 };
 

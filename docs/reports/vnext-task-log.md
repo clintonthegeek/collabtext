@@ -1475,3 +1475,90 @@ A01, removing P06a from S04a, removing L08 from final S04, and removing WP7
 ownership. Local-link review found 96 valid links across 20 orientation/roadmap/
 spec/handoff documents before this log entry; `git diff --check` passes.
 No new engine tests/results are claimed by this documentation/validator change.
+
+## P06a step 3 — the engine's identity types adopt the persistent actor
+
+**Task:** P06a (still in progress; this is the engine-migration step, not the
+whole task)
+**Status:** in progress — steps 3 and 4 done, 3b/5/6 remaining
+**Baseline:** `25c4eee`
+**Implementation commits:** this entry's commit
+**Scope:** `Lamport {uint32 value; uint16 replica_id}` is gone. `Clock.h` now
+defines `Crdt::Identity {ActorId actor; uint64_t counter}`, compared
+counter-first then actor byte-wise. `Global` is keyed by `ActorId` and lost its
+dense view entirely; `Fragment`, `FragmentSummary`, `FragmentOrderDim`,
+`UndoMapKey`, `UndoTreeKey`, `Anchor`, `IdListEntry` and the public operation
+structs carry identities; `Buffer`/`IdList`/`CrdtEngine`/`CollabDocument` take an
+`ActorId`; the JSON codecs, the version-summary codec, the cursor/comment/chat
+anchor codecs and `collabedit`'s replica-id file all follow. `Interval::fits`
+overflow checks moved to the 64-bit width. `schema_version` 3 -> 4.
+
+**Regression:** `tst_identity_types.cpp`, written before the migration. It did
+not compile — `Crdt::Identity` did not exist and `Anchor` was still
+`{uint16_t, uint32_t}` — which is the honest form of "red" for a type migration:
+there was nothing to fail at runtime yet.
+
+**Verification:**
+- Debug: 64/64 CTest executables pass.
+- Release: 23/23 via `./tools/verify-roadmap.sh release` (identity + models,
+  Buffer, IdList, convergence, serialization, validation, undo, anchors, seed,
+  public API).
+- ASan/UBSan/LSan: 17/17 via `./tools/verify-roadmap.sh asan`, no suppressions.
+  This run is also the evidence that `Global`'s new raw-byte inline storage is
+  sound.
+- Measured: `Identity` 24, `UndoMapKey` 24, `FragmentSummary` 56 (baseline 40),
+  `Fragment` 120 (104), `Anchor` 32 (12), `Global` 64 (40).
+- Seed: fixed default `20261003`; the randomised model comparison uses
+  `std::mt19937_64(20261004)`.
+- Artifacts: `build-roadmap-release/verification/20261005T050208Z-3316833`,
+  `build-roadmap-asan/verification/20261005T050845Z-3322359`.
+
+**API/store changes:** `op_lamport()` -> `op_identity()`,
+`idlist_op_lamport()` -> `idlist_op_identity()`, `get_idlist_op_timestamp()` ->
+`get_idlist_op_identity()`; `Lamport::counter()` -> `Identity::counter` field;
+`Lamport::replica_id` -> `Identity::actor`; `Buffer::replica_id()` ->
+`actor_id()`; `Anchor::max()` -> `Anchor::end()` plus an explicit `at_end` flag;
+`CrdtEngine`/`CollabDocument` lost their defaulted replica argument. All three
+public headers state the superseded contract explicitly rather than leaving a
+reader to infer it.
+
+**Known limits:**
+- `Global` grew more than the pair arithmetic predicted (40 -> 64), because the
+  inline capacity fell from 4 pairs to 2 and the heap pointer costs 8 bytes even
+  when the vector never spills. It is off the per-edit path — P03 removed the
+  per-summary Globals — so the cost lands per peer, not per edit.
+- The seed actor and `collabedit`'s private state are content/replica-derived in
+  different ways, and neither is a *device* identity. That is correct (a seed
+  operation must be reproducible), but it means neither path is covered by
+  `ReplicaState`'s durability guarantees.
+- `StreamEntry::replica_id`, `ChatMessage::replica_id` and
+  `Comment::replica_id` are still 16-bit producer ids and are **not** this
+  device's actor. The ack-frontier file key is still a decimal replica id.
+  These are L04's, recorded as inherited obligations.
+
+**Three things worth keeping in view.**
+
+*The narrow thing that caused four failures.* Rewriting the deletion-run encoder
+for the new type dropped the run's opening bracket, so every edit carrying a
+deletion run encoded to `"dr":[["actor",3],5]]` instead of `"dr":[[["actor",3],5]]`.
+The decoder refused it, which is the good outcome: a decoder that accepted it
+would have turned a malformed record into a plausible one. It is worth noticing
+that the *tests* found it and not the diff review.
+
+*The projection was incomplete, not wrong.* `Global` and `Anchor` were not in the
+original cost table at all, and both grew (1.6x and 2.7x). §5 now carries the
+measured numbers including those two rows and says why neither lands on the
+per-edit path. The `FragmentSummary` figure the projection did predict — 40 -> 56,
+1.4x on the SumTree's hottest structure — is exactly what the migration cost.
+
+*Two anti-patterns had to die rather than be widened.* `collabedit` drew a random
+16-bit id, scanned peers' presence files for unused values and wrote the winner
+to a text file; `SeedOp` used replica 0, which was also the *default* replica of
+every engine that did not configure one. Both would have kept compiling with a
+16-bit field bolted onto the side and would have kept minting colliding
+identities. The first is now `ReplicaState::open()`, the second derives its actor
+from the seed content — same determinism requirement, no shared counter range.
+
+**Next ready tasks:** A01, W01, S01 (all independently ready). Within P06a:
+run-interval allocation, then the construction-time rejection of an invalid
+ActorId, then opaque operation values.

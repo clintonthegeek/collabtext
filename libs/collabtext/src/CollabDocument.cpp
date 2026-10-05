@@ -5,9 +5,9 @@
 
 namespace CollabText {
 
-CollabDocument::CollabDocument(uint16_t replicaId, QObject *parent)
+CollabDocument::CollabDocument(const ActorId &actor, QObject *parent)
     : QObject(parent)
-    , m_engine(new CrdtEngine(replicaId))
+    , m_engine(new CrdtEngine(actor))
     , m_qtDoc(new QTextDocument(this))
 {
     m_qtDoc->setDocumentLayout(new QPlainTextDocumentLayout(m_qtDoc));

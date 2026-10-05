@@ -25,6 +25,9 @@
 
 #include <filesystem>
 #include <string>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText;
 using namespace CollabText::Crdt;
@@ -60,10 +63,10 @@ private slots:
         OpStream* op1 = &sync1;
         OpStream* op2 = &sync2;
 
-        IdList list1(1);
-        IdList list2(2);
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        IdList list1(actor(1));
+        IdList list2(actor(2));
+        CrdtEngine engine1(actor(1));
+        CrdtEngine engine2(actor(2));
 
         // Wire IdList ops outbound
         list1.set_on_local_op([&](const IdListOperation& op) {
@@ -165,10 +168,10 @@ private slots:
         OpStream* op1 = &sync1;
         OpStream* op2 = &sync2;
 
-        IdList list1(1);
-        IdList list2(2);
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        IdList list1(actor(1));
+        IdList list2(actor(2));
+        CrdtEngine engine1(actor(1));
+        CrdtEngine engine2(actor(2));
 
         list1.set_on_local_op([&](const IdListOperation& op) {
             op1->push("idlist:structure", encode_idlist_operation(op));

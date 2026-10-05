@@ -17,9 +17,9 @@ void UndoMap::insert(UndoMapEntry entry) {
     m_tree = std::move(new_tree);
 }
 
-uint32_t UndoMap::undo_count(Lamport edit_id) const {
+uint32_t UndoMap::undo_count(Identity edit_id) const {
     uint32_t max_count = 0;
-    UndoTreeKey start_key{edit_id, Lamport::min()};
+    UndoTreeKey start_key{edit_id, Identity::min()};
     auto cursor = m_tree.cursor<UndoTreeKeyDim>();
     cursor.seek(UndoTreeKeyDim{start_key}, Bias::Left);
     while (auto *entry = cursor.item()) {
@@ -32,13 +32,13 @@ uint32_t UndoMap::undo_count(Lamport edit_id) const {
     return max_count;
 }
 
-bool UndoMap::is_undone(Lamport edit_id) const {
+bool UndoMap::is_undone(Identity edit_id) const {
     return undo_count(edit_id) % 2 == 1;
 }
 
-bool UndoMap::was_undone(Lamport edit_id, const Global &version) const {
+bool UndoMap::was_undone(Identity edit_id, const Global &version) const {
     uint32_t max_count = 0;
-    UndoTreeKey start_key{edit_id, Lamport::min()};
+    UndoTreeKey start_key{edit_id, Identity::min()};
     auto cursor = m_tree.cursor<UndoTreeKeyDim>();
     cursor.seek(UndoTreeKeyDim{start_key}, Bias::Left);
     while (auto *entry = cursor.item()) {

@@ -18,7 +18,7 @@ namespace CollabText::Crdt {
 // ============================================================================
 
 struct IdListOpSummary {
-    Lamport max_timestamp = Lamport::min();
+    Identity max_timestamp = Identity::min();
 
     static IdListOpSummary zero() { return {}; }
     void add_summary(const IdListOpSummary& other) {
@@ -30,7 +30,7 @@ struct IdListOpSummary {
 struct IdListOpEntry {
     using Summary = IdListOpSummary;
 
-    Lamport timestamp;
+    Identity timestamp;
     IdListOperation op;
 
     IdListOpSummary summary() const { return {timestamp}; }

@@ -11,6 +11,13 @@
 
 namespace CollabText::Crdt {
 
+/// The deterministic actor simulated replica `index` mints identities under.
+///
+/// Deterministic so a scenario replays identically and a failure is
+/// reproducible; derived per index so two simulated replicas never share one
+/// identity. Not a device identity — see derived_actor().
+ActorId simulator_actor(int index);
+
 /// Network configuration for NetworkSim.
 ///
 /// Latency is drawn uniformly from [min_latency_ms, max_latency_ms] per
@@ -36,7 +43,11 @@ struct NetworkConfig {
 
 struct ScheduledOp {
     uint64_t deliver_at_ms = 0;
-    uint16_t from_replica = 0;
+    /// One-based index of the *simulated replica* that produced this
+    /// operation. This is a lane number for the simulator's own bookkeeping, not
+    /// an identity: the operation carries its author's ActorId, and the actor a
+    /// lane maps to is `simulator_actor(lane - 1)`.
+    uint16_t from_lane = 0;
     Operation op;
 
     bool operator>(const ScheduledOp& other) const {

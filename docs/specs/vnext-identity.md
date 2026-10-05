@@ -2,12 +2,22 @@
 
 **Created:** 2026-10-04, as the design-gate artifact for roadmap task P06a
 **Extended:** 2026-10-05 — §3.1–§3.8 close the allocation-domain gate the review
-required. §1–§3.0 and §4–§6 are unchanged in intent; nothing here is implemented
-in the engine yet, and §5's cost table stays projected until P06a step 4 measures
-a migrated engine.
+required.
+**Measured:** 2026-10-05 — P06a step 3 adopted the types; §5 is now measured
+rather than projected. §3.2's run-interval allocation is *not* yet in the engine:
+allocation is still per-scalar, which is why `apply_validated_local_edit` still
+sets an insert operation's identity to the last item of its own run.
 **Supersedes for identity purposes:** the `Lamport { uint32_t value; uint16_t
-replica_id; }` in `src/crdt/Clock.h`, which this document replaces rather than
-extends.
+replica_id; }` that used to live in `src/crdt/Clock.h`, which this document
+replaced rather than extended. That type no longer exists: `Clock.h` now defines
+`Crdt::Identity`, and nothing in the engine or the public headers is spelled
+`Lamport` any more.
+
+**Status of each section:** §1–§2 are implemented and enforced by the engine.
+§3.1–§3.8 are specified and proved by independent models, but §3.2's run-interval
+allocation is **not** in the engine yet — allocation is still one counter per
+scalar, which is the legacy behaviour §3.2 replaces. §4 is a constraint on
+P07/L04 rather than code here. §5 is measured.
 
 ## 1. What an identity is
 
@@ -309,31 +319,54 @@ refused by the envelope or transport layer *before* it reaches ordering. If it
 reaches ordering, the engine has no way to know and will order it like any other
 operation. P07 and L04 own that refusal.
 
-## 5. Baseline sizes and projected cost
+## 5. Sizes: measured, not projected
 
-The baseline was measured on this branch (`x86_64`, GCC 16.2). The proposed
-24-byte identity is exercised by the gate model; the widened production summary
-and fragment sizes below are projected, not measurements of a migrated engine.
-P06a is still in progress and must measure real layouts after adoption:
+Measured on this branch after adoption (`x86_64`, GCC 16.2, `-std=c++20`), same
+compiler for both columns so the ratio is meaningful. The baseline column was
+measured before the change; the adopted column is
+`libs/collabtext/tests/tst_identity_types.cpp`'s subject, compiled against the
+migrated engine.
 
-| Type | Current bytes | Proposed/projected bytes | Projected ratio |
-|---|---|---|---|
-| `Lamport` → identity | 8 | 24 | 3.0x |
-| `UndoMapKey` | 8 | 24 | 3.0x |
-| `FragmentSummary` | 40 | 56 | 1.4x |
-| `Fragment` | 104 | 120 | 1.15x |
+| Type | Before | After | Ratio | Where it matters |
+|---|---|---|---|---|
+| `Lamport` → `Identity` | 8 | 24 | 3.0x | one per fragment summary |
+| `UndoMapKey` | 8 | 24 | 3.0x | undo map entries, per local edit |
+| `UndoTreeKey` | 16 | 48 | 3.0x | undo map key |
+| `FragmentSummary` | 40 | 56 | 1.4x | **the hot path** — one per SumTree node |
+| `Fragment` | 104 | 120 | 1.15x | one per fragment |
+| `IdListEntry` | 72 | 88 | 1.22x | one per IdList element |
+| `Anchor` | 12 | 32 | 2.7x | cursor anchors, passed by value |
+| `Global` | 40 | 64 | 1.6x | one per version summary |
+| `FragmentOrderDim` | 32 | 56 | 1.75x | seek dimensions, cursor-local |
 
-`FragmentSummary` is the one that matters: the SumTree aggregates one per edit,
-so this is the hot path. The projected 1.4x summary cost is a design tradeoff to verify after adoption, and
-it is recorded here so that X02–X09 inherit a number rather than discovering the
-regression. The threefold identity growth does not multiply into the summary,
+`FragmentSummary` is the one to watch: the SumTree aggregates one per node and
+re-aggregates on every edit, so 40 → 56 bytes is a 1.4x cost on the hottest
+structure in the engine. That is the price of a 128-bit actor and it was accepted
+deliberately; the alternative — narrowing the identity — is §2.1, which breaks
+convergence. The threefold identity growth does not multiply into the summary,
 because the summary holds one identity, not one per fragment.
 
-If measurement later shows this matters, the lever is **not** to shrink the
-identity — that would reintroduce §2.1. It is to stop storing an identity in the
-summary at all, by observing that `max_origin` is only consulted for
-equal-locator comparisons and could be kept as a per-node extremum rather than a
-full copy.
+Two of the rows above are honest surprises rather than predictions:
+
+- **`Global` was not in the original projection at all**, and it grew 1.6x. Its
+  inline capacity dropped from 4 pairs to 2 because a pair is 24 bytes instead
+  of 8, and the heap pointer costs 8 bytes even when the vector never leaves its
+  inline buffer. 40 → 64 is more than the pair arithmetic alone explains. It is
+  off the per-edit path (P03 removed the three per-summary Globals), so the cost
+  lands per *peer* rather than per edit, and version vectors are held per
+  participant. If measurement in X02 says otherwise, the lever is a tagged
+  pointer or a `std::variant` of inline/heap storage, not a smaller actor.
+- **`FragmentOrderDim` grew to 56** because it now holds
+  `std::optional<Identity>`: §"past every origin at this locator" has no
+  spelling in a 128-bit key space, so it became an explicit disengaged state
+  rather than a magic all-ones identity. It is a cursor-local type, never
+  stored per node, so this costs stack rather than aggregate memory.
+
+If measurement later shows the summary growth matters, the lever is **not** to
+shrink the identity — that would reintroduce §2.1. It is to stop storing an
+identity in the summary at all, by observing that `max_origin` is only consulted
+for equal-locator comparisons and could be kept as a per-node extremum rather
+than a full copy.
 
 ## 6. What does not change
 

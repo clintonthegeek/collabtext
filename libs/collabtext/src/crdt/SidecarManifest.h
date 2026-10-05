@@ -7,7 +7,7 @@
 namespace CollabText::Crdt {
 
 struct SidecarManifest {
-    int         schema_version = 3;
+    int         schema_version = 4;
     std::string doc_id;
     std::string enrolled_at;        // ISO 8601 UTC
     std::string original_filename;
@@ -21,7 +21,15 @@ std::string sha256_hex(const std::string& data);
 std::string manifest_to_json(const SidecarManifest& m);
 
 /// Parse a manifest. Returns nullopt for malformed JSON or
-/// schema_version != 3 (schema_version 3 adds IdList operations).
+/// schema_version != 4.
+///
+/// 3 added IdList operations. 4 changed how an identity is written: the 16-bit
+/// `replica_id`/32-bit `value` pair became a 128-bit actor hex plus a 64-bit
+/// counter, and the version vector became a sparse object keyed by actor hex
+/// instead of a dense array indexed by replica id. Schema 3 records do not load,
+/// and that is deliberate: there is no production data to migrate, and a
+/// compatibility path for a field that was never an identity would be worse
+/// than the cut. P06b replaces both encodings with the versioned sparse codec.
 std::optional<SidecarManifest> manifest_from_json(const std::string& json);
 
 /// Atomically write the manifest to a path (write-temp + rename).

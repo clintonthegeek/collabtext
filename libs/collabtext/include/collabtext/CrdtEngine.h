@@ -1,5 +1,6 @@
 #pragma once
 
+#include <collabtext/ActorId.h>
 #include <collabtext/Operations.h>
 
 #include <cstdint>
@@ -11,7 +12,14 @@ namespace CollabText {
 
 class CrdtEngine {
 public:
-    explicit CrdtEngine(uint16_t replica_id = 0);
+    /// The actor this engine mints identities for.
+    ///
+    /// There is no default. The previous signature was
+    /// `CrdtEngine(uint16_t replica_id = 0)`, whose default argument silently
+    /// produced an engine that stamped every operation as actor 0 — and two
+    /// processes constructed that way produced indistinguishable operations.
+    /// A caller must now name a real actor.
+    explicit CrdtEngine(const ActorId &actor);
     ~CrdtEngine();
     CrdtEngine(const CrdtEngine &) = delete;
     CrdtEngine &operator=(const CrdtEngine &) = delete;
@@ -37,7 +45,7 @@ public:
     /// Crdt::Operation and decides whether to encode and broadcast it.
     ///
     /// Only a stable subset of Operation is part of the public contract — use
-    /// op_lamport() to identify the op, and encode_operation() /
+    /// op_identity() to identify the op, and encode_operation() /
     /// decode_operation() in <collabtext/Serialization.h> for wire transport.
     /// See docs/handoff/2026-05-08-d5-joint-design-outcomes.md §1 for the full
     /// contract.

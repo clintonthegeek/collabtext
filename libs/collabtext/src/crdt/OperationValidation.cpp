@@ -22,8 +22,13 @@ using Limits = ValidationLimits;
 /// is a half-open range [start, start + count); if that sum does not fit in
 /// the counter's width then the interval is not describable, and letting the
 /// arithmetic wrap turns a malformed operation into a plausible one.
-bool interval_fits(uint32_t start, uint32_t count) {
-    return count <= std::numeric_limits<uint32_t>::max() - start;
+bool interval_fits(uint64_t start, uint32_t count) {
+    // Tested by subtraction: `start + count` may itself overflow. The bound is
+    // UINT64_MAX rather than UINT64_MAX - 1 because the interval is half-open,
+    // so [start, start + count) ending at UINT64_MAX means the last counter in
+    // it is UINT64_MAX - 1, which is issuable. UINT64_MAX itself is the
+    // exhaustion sentinel and is never issued (identity spec §3.5).
+    return count <= std::numeric_limits<uint64_t>::max() - start;
 }
 
 [[nodiscard]] ValidationResult malformed(std::string message) {
@@ -41,22 +46,29 @@ bool interval_fits(uint32_t start, uint32_t count) {
         Error(ErrorCode::counter_exhausted, std::move(message)));
 }
 
-/// Describe a Lamport for an error message.
-[[nodiscard]] std::string describe(Lamport ts) {
-    return "actor " + std::to_string(ts.replica_id) + " counter " +
-           std::to_string(ts.value);
+/// Describe an identity for an error message.
+[[nodiscard]] std::string describe(Identity id) {
+    return "actor " + id.actor.to_string() + " counter " +
+           std::to_string(id.counter);
 }
 
-/// A counter of zero is not an identity here.
+/// A counter of zero is not an identity here, and neither is an invalid actor.
 ///
-/// `Global::observe` discards value 0 and `observed()` is trivially satisfied
+/// `Global::observe` discards counter 0 and `observed()` is trivially satisfied
 /// by it, so an operation stamped 0 can neither be recorded in the version
 /// vector nor deduplicated. Both engines start their clock at 1 for exactly
 /// this reason, so a zero can only come from a malformed or hand-built record.
-[[nodiscard]] ValidationResult check_counter(Lamport ts, const char* what) {
-    if (ts.value == 0) {
+/// An all-zero ActorId is rejected for the same class of reason: there is no
+/// actor 0 (P02), so a record carrying one has no author and cannot be ordered
+/// against any real identity without inventing a tie-break.
+[[nodiscard]] ValidationResult check_counter(Identity id, const char* what) {
+    if (id.counter == 0) {
         return invalid_identity(std::string(what) + " has counter 0, which is "
                                  "not an observable identity");
+    }
+    if (!id.actor.valid()) {
+        return invalid_identity(std::string(what) + " carries an invalid actor "
+                                 "id, which is not an identity at all");
     }
     return ValidationResult::valid();
 }
@@ -66,10 +78,11 @@ bool interval_fits(uint32_t start, uint32_t count) {
 /// Returning the identity rather than a bare "deferred" is what lets a caller
 /// show what it is actually waiting for, and what makes the deferral testable
 /// without inspecting engine internals.
-[[nodiscard]] std::optional<Lamport> first_unmet_dependency(
+[[nodiscard]] std::optional<Identity> first_unmet_dependency(
     const Global& required, const Global& current) {
     for (size_t i = 0; i < required.pair_count(); ++i) {
-        const Lamport dependency = required.pair(i);
+        const auto& [who, counter] = required.pair(i);
+        const Identity dependency{who, counter};
         if (!current.observed(dependency)) return dependency;
     }
     return std::nullopt;
@@ -131,7 +144,7 @@ bool interval_fits(uint32_t start, uint32_t count) {
 
 ValidationResult ValidationResult::valid() { return ValidationResult{}; }
 
-ValidationResult ValidationResult::defer(Lamport missing) {
+ValidationResult ValidationResult::defer(Identity missing) {
     ValidationResult result;
     result.verdict = ValidationVerdict::deferred;
     result.awaiting = missing;
@@ -272,13 +285,12 @@ ValidationResult validate_edit_operation(const EditOperation& op,
                              " inserts no scalars, which is not an insertion");
         }
 
-        if (!interval_fits(fragment.origin.value, fragment.length)) {
+        if (!interval_fits(fragment.origin.counter, fragment.length)) {
             return counter_exhausted(where + " covers counters [" +
-                                     std::to_string(fragment.origin.value) +
+                                     std::to_string(fragment.origin.counter) +
                                      "," +
-                                     std::to_string(
-                                         static_cast<uint64_t>(fragment.origin.value) +
-                                         fragment.length) +
+                                     std::to_string(fragment.origin.counter +
+                                                    fragment.length) +
                                      "), which leaves the counter width");
         }
 
@@ -299,12 +311,15 @@ ValidationResult validate_edit_operation(const EditOperation& op,
             return malformed(where +
                              " deletes nothing, so it carries no information");
         }
-        if (!interval_fits(run.start_value, run.count)) {
+        if (auto r = check_counter(run.first, where.c_str());
+            r.verdict != ValidationVerdict::valid) {
+            return r;
+        }
+        if (!interval_fits(run.first.counter, run.count)) {
             return counter_exhausted(where + " covers counters [" +
-                                     std::to_string(run.start_value) + "," +
-                                     std::to_string(
-                                         static_cast<uint64_t>(run.start_value) +
-                                         run.count) +
+                                     std::to_string(run.first.counter) + "," +
+                                     std::to_string(run.first.counter +
+                                                    run.count) +
                                      "), which leaves the counter width");
         }
     }
@@ -326,13 +341,13 @@ ValidationResult validate_edit_operation(const EditOperation& op,
                              std::to_string(reloc.fragment_length) +
                              " characters");
         }
-        if (!interval_fits(reloc.fragment_origin.value, reloc.fragment_length)) {
+        if (!interval_fits(reloc.fragment_origin.counter,
+                          reloc.fragment_length)) {
             return counter_exhausted(where + " covers counters [" +
-                                     std::to_string(reloc.fragment_origin.value) +
+                                     std::to_string(reloc.fragment_origin.counter) +
                                      "," +
                                      std::to_string(
-                                         static_cast<uint64_t>(
-                                             reloc.fragment_origin.value) +
+                                         reloc.fragment_origin.counter +
                                          reloc.fragment_length) +
                                      "), which leaves the counter width");
         }
@@ -549,7 +564,11 @@ Result<void> validate_local_edit(
 
 namespace {
 
-size_t lamport_bytes(Lamport ts) { return sizeof(Lamport) + (ts.value ? 1 : 0); }
+size_t identity_bytes(Identity id) {
+    // The actor is a fixed 16 bytes whether or not it is valid; the counter is
+    // only carried when it is non-zero, matching what the operation holds.
+    return sizeof(Identity) + (id.counter ? 1 : 0);
+}
 
 size_t locator_bytes(const Locator& locator) {
     return sizeof(Locator) + locator.depth() * sizeof(uint64_t);
@@ -558,7 +577,7 @@ size_t locator_bytes(const Locator& locator) {
 }  // namespace
 
 size_t estimate_operation_bytes(const Operation& op) {
-    size_t bytes = sizeof(Lamport) * 2;  // timestamp + deletion_id
+    size_t bytes = sizeof(Identity) * 2;  // timestamp + deletion_id
     return std::visit(
         [&](const auto& concrete) {
             size_t total = bytes;
@@ -567,18 +586,18 @@ size_t estimate_operation_bytes(const Operation& op) {
                 total += concrete.ranges.size() * sizeof(std::pair<uint32_t, uint32_t>);
                 for (const auto& text : concrete.new_text) total += text.size();
                 for (const auto& fragment : concrete.inserted_fragments) {
-                    total += sizeof(Lamport) + locator_bytes(fragment.locator) +
+                    total += sizeof(Identity) + locator_bytes(fragment.locator) +
                              fragment.content.size() + sizeof(uint32_t);
                 }
                 total += concrete.deletion_runs.size() * sizeof(uint32_t) * 2;
                 for (const auto& reloc : concrete.split_relocations) {
-                    total += sizeof(Lamport) * 2 + locator_bytes(reloc.new_locator) +
+                    total += sizeof(Identity) * 2 + locator_bytes(reloc.new_locator) +
                              sizeof(uint32_t) * 2;
                 }
                 total += concrete.version.pair_count() * sizeof(uint64_t);
             } else {
                 for (const auto& count : concrete.counts) {
-                    total += sizeof(Lamport) + sizeof(uint32_t);
+                    total += sizeof(Identity) + sizeof(uint32_t);
                 }
                 total += concrete.version.pair_count() * sizeof(uint64_t);
             }
@@ -588,7 +607,7 @@ size_t estimate_operation_bytes(const Operation& op) {
 }
 
 size_t estimate_operation_bytes(const IdListOperation& op) {
-    size_t total = sizeof(Lamport);
+    size_t total = sizeof(Identity);
     total += get_idlist_op_version(op).pair_count() * sizeof(uint64_t);
     return std::visit(
         [&](const auto& concrete) {
@@ -597,9 +616,9 @@ size_t estimate_operation_bytes(const IdListOperation& op) {
             if constexpr (std::is_same_v<T, IdListInsertOp>) {
                 inner += sizeof(uint64_t) + locator_bytes(concrete.locator);
             } else if constexpr (std::is_same_v<T, IdListRemoveOp>) {
-                inner += sizeof(Lamport);
+                inner += sizeof(Identity);
             } else {
-                inner += concrete.counts.size() * (sizeof(Lamport) + sizeof(uint32_t));
+                inner += concrete.counts.size() * (sizeof(Identity) + sizeof(uint32_t));
             }
             return inner;
         },

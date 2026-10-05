@@ -9,6 +9,9 @@
 #include "crdt/Serialization.h"
 
 #include <filesystem>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 namespace fs = std::filesystem;
@@ -34,7 +37,7 @@ private slots:
     void ordinary_remote_undo_redo() {
         QFETCH(bool, idlist);
         if (idlist) {
-            IdList a(1), b(2);
+            IdList a(actor(1)), b(actor(2));
             b.apply_ops({a.insert_after(Anchor::min(), 42)});
             QCOMPARE(b.ids(), std::vector<uint64_t>{42});
             auto undo = a.undo();
@@ -44,12 +47,12 @@ private slots:
             QVERIFY(b.ids().empty());
             auto redo = a.redo();
             QVERIFY(redo.has_value());
-            QVERIFY(get_idlist_op_timestamp(*undo) < get_idlist_op_timestamp(*redo));
+            QVERIFY(get_idlist_op_identity(*undo) < get_idlist_op_identity(*redo));
             b.apply_ops({*redo});
             QCOMPARE(a.ids(), std::vector<uint64_t>{42});
             QCOMPARE(b.ids(), a.ids());
         } else {
-            Buffer a(1), b(2);
+            Buffer a(actor(1)), b(actor(2));
             b.apply_ops({a.apply_local_edit({{0, 0}}, {"abc"})});
             QCOMPARE(b.text(), std::string("abc"));
             auto undo = a.undo();
@@ -70,7 +73,7 @@ private slots:
     void f1_local_gc_preserves_insertion_redo() {
         QFETCH(bool, idlist);
         if (idlist) {
-            IdList a(1);
+            IdList a(actor(1));
             a.insert_after(Anchor::min(), 42);
             QVERIFY(a.undo().has_value());
             QVERIFY(a.ids().empty());
@@ -78,7 +81,7 @@ private slots:
             QVERIFY(a.redo().has_value());
             QCOMPARE(a.ids(), std::vector<uint64_t>{42}); // passing local IdList control
         } else {
-            Buffer a(1);
+            Buffer a(actor(1));
             a.apply_local_edit({{0, 0}}, {"abc"});
             QVERIFY(a.undo().has_value());
             QCOMPARE(a.text(), std::string());
@@ -92,7 +95,7 @@ private slots:
     void f1_remote_gc_preserves_insertion_redo() {
         QFETCH(bool, idlist);
         if (idlist) {
-            IdList a(1), b(2);
+            IdList a(actor(1)), b(actor(2));
             b.apply_ops({a.insert_after(Anchor::min(), 42)});
             auto undo = a.undo();
             QVERIFY(undo.has_value());
@@ -105,7 +108,7 @@ private slots:
             QCOMPARE(a.ids(), std::vector<uint64_t>{42});
             QCOMPARE(b.ids(), a.ids());
         } else {
-            Buffer a(1), b(2);
+            Buffer a(actor(1)), b(actor(2));
             b.apply_ops({a.apply_local_edit({{0, 0}}, {"abc"})});
             auto undo = a.undo();
             QVERIFY(undo.has_value());
@@ -124,7 +127,7 @@ private slots:
     void f2_compact_preserves_remote_delete_undo() {
         QFETCH(bool, idlist);
         if (idlist) {
-            IdList a(1), b(2);
+            IdList a(actor(1)), b(actor(2));
             b.apply_ops({a.insert_after(Anchor::min(), 42)});
             a.apply_ops({b.remove_at(b.anchor_at_index(0))});
             QVERIFY(a.ids().empty());
@@ -140,7 +143,7 @@ private slots:
             QCOMPARE(b.ids(), std::vector<uint64_t>{42});
             QCOMPARE(a.ids(), b.ids());
         } else {
-            Buffer a(1), b(2);
+            Buffer a(actor(1)), b(actor(2));
             b.apply_ops({a.apply_local_edit({{0, 0}}, {"abc"})});
             a.apply_ops({b.apply_local_edit({{0, 3}}, {""})});
             QCOMPARE(a.text(), std::string());
@@ -162,24 +165,24 @@ private slots:
         // still not a watermark. Both behaviours are pinned here so the
         // distinction cannot quietly disappear again.
         Global observed, empty;
-        observed.observe(Lamport(1, 10));
-        QCOMPARE(observed.get(1), 10u);
+        observed.observe(Identity(actor(1), 10));
+        QCOMPARE(observed.get(actor(1)), 10u);
 
         // The watermark: a peer with no history has seen none of it.
-        QCOMPARE(observed.coverage_intersection(empty).get(1), 0u);
+        QCOMPARE(observed.coverage_intersection(empty).get(actor(1)), 0u);
         QVERIFY(observed.coverage_intersection(empty).empty());
 
         // meet() is the other question, and answers differently on purpose.
         Global aggregated = observed;
         aggregated.meet(empty);
-        QCOMPARE(aggregated.get(1), 10u);
+        QCOMPARE(aggregated.get(actor(1)), 10u);
     }
 
     void f4_sender_restart_delivers_distinct_operation() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         const fs::path root(tmp.path().toStdString());
-        Buffer a(1), b(2);
+        Buffer a(actor(1)), b(actor(2));
         StreamSync receiver(root, "B", 2);
         receiver.register_stream("doc", StreamSync::StreamType::AppendOnly);
         receiver.start();
@@ -220,14 +223,14 @@ private slots:
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         const fs::path root(tmp.path().toStdString());
-        Buffer a(1);
+        Buffer a(actor(1));
         StreamSync sender(root, "A", 1);
         sender.register_stream("doc", StreamSync::StreamType::AppendOnly);
         sender.start();
         sender.push("doc", encode_operation(a.apply_local_edit({{0, 0}}, {"abc"})));
         sender.flush();
         for (int session = 0; session != 2; ++session) {
-            Buffer b(2);
+            Buffer b(actor(2));
             StreamSync receiver(root, "B", 2);
             receiver.register_stream("doc", StreamSync::StreamType::AppendOnly);
             receiver.start();
@@ -278,7 +281,7 @@ private slots:
     }
 
     void f7_insertion_obeys_boundary_affinity() {
-        Buffer a(1);
+        Buffer a(actor(1));
         a.apply_local_edit({{0, 0}}, {"ab"});
         auto left = a.anchor_at(1, Bias::Left);
         auto right = a.anchor_at(1, Bias::Right);
@@ -290,7 +293,7 @@ private slots:
     }
 
     void f8_concurrent_passages_remain_contiguous() {
-        Buffer a(1), b(2);
+        Buffer a(actor(1)), b(actor(2));
         auto first = a.apply_local_edit({{0, 0}}, {"abc"});
         auto second = b.apply_local_edit({{0, 0}}, {"XYZ"});
         a.apply_ops({second}); b.apply_ops({first});

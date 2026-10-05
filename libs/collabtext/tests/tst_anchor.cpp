@@ -1,5 +1,8 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -8,7 +11,7 @@ class TestAnchor : public QObject {
 private slots:
 
     void anchor_at_beginning() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto anchor = buf.anchor_at(0, Bias::Left);
@@ -16,7 +19,7 @@ private slots:
     }
 
     void anchor_at_end() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto anchor = buf.anchor_at(5, Bias::Left);
@@ -25,7 +28,7 @@ private slots:
     }
 
     void anchor_in_middle() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto anchor = buf.anchor_at(2, Bias::Left);
@@ -33,7 +36,7 @@ private slots:
     }
 
     void anchor_survives_insert_before() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         // Anchor at position 2 (between 'e' and 'l')
@@ -48,7 +51,7 @@ private slots:
     }
 
     void anchor_survives_insert_after() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         // Anchor at position 2
@@ -62,7 +65,7 @@ private slots:
     }
 
     void anchor_survives_delete_before() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         // Anchor at position 3 ('l')
@@ -77,7 +80,7 @@ private slots:
     }
 
     void anchor_min_always_zero() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto anchor = Anchor::min();
@@ -88,10 +91,10 @@ private slots:
     }
 
     void anchor_max_always_end() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
-        auto anchor = Anchor::max();
+        auto anchor = Anchor::end();
         QCOMPARE(buf.resolve_anchor(anchor), 5u);
 
         buf.apply_local_edit({{5, 5}}, {" world"});
@@ -99,7 +102,7 @@ private slots:
     }
 
     void compare_anchors_ordering() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto a = buf.anchor_at(1, Bias::Left);
@@ -111,7 +114,7 @@ private slots:
     }
 
     void anchor_on_deleted_text() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         // Anchor at position 2 ('l')
@@ -126,7 +129,7 @@ private slots:
     }
 
     void anchor_with_multiple_edits() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
 
         // Anchor at position 3 ('d')
@@ -147,7 +150,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void anchor_through_undo_redo() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         auto anchor = buf.anchor_at(3, Bias::Left);
         QCOMPARE(buf.resolve_anchor(anchor), 3u);
@@ -163,7 +166,7 @@ private slots:
     }
 
     void anchor_with_remote_insert() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op = bufA.apply_local_edit({{0, 0}}, {"abcdef"});
         bufB.apply_ops({op});
 
@@ -177,7 +180,7 @@ private slots:
     }
 
     void anchor_with_concurrent_inserts_at_same_position() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op = bufA.apply_local_edit({{0, 0}}, {"abc"});
         bufB.apply_ops({op});
 
@@ -195,11 +198,11 @@ private slots:
     }
 
     void anchor_min_max_always_stable() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto amin = Anchor::min();
-        auto amax = Anchor::max();
+        auto amax = Anchor::end();
 
         QCOMPARE(buf.resolve_anchor(amin), 0u);
         QCOMPARE(buf.resolve_anchor(amax), 5u);
@@ -218,7 +221,7 @@ private slots:
     }
 
     void anchor_through_many_edits() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"0123456789"});
         auto anchor = buf.anchor_at(5, Bias::Left);
 
@@ -233,7 +236,7 @@ private slots:
     }
 
     void compare_anchors_with_edits() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
 
         auto a = buf.anchor_at(2, Bias::Left);
@@ -249,7 +252,7 @@ private slots:
     }
 
     void anchor_on_empty_document() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         auto anchor = buf.anchor_at(0, Bias::Left);
         QCOMPARE(buf.resolve_anchor(anchor), 0u);
 
@@ -259,7 +262,7 @@ private slots:
     }
 
     void anchor_on_fully_deleted_text() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         auto anchor = buf.anchor_at(2, Bias::Left);
         QCOMPARE(buf.resolve_anchor(anchor), 2u);

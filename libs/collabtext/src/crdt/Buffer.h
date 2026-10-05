@@ -40,7 +40,7 @@ struct TextEdit {
 
 class Buffer {
 public:
-    explicit Buffer(uint16_t replica_id);
+    explicit Buffer(const ActorId &actor);
 
     /// Local edit: ranges are byte offsets in visible text.
     /// Each range is a (start, end) pair denoting bytes to delete.
@@ -160,8 +160,8 @@ public:
     /// Returns the current version vector.
     const Global &version() const;
 
-    /// Returns the replica ID of this buffer.
-    uint16_t replica_id() const;
+    /// The persistent actor this buffer mints identities for.
+    const ActorId &actor_id() const;
 
     /// Create an Anchor at a visible byte offset.
     Anchor anchor_at(uint32_t byte_offset, Bias bias = Bias::Left) const;
@@ -248,7 +248,7 @@ private:
 
     /// Queue `op` if the budget allows, otherwise quarantine it with a reason.
     /// Never drops it silently: a dropped operation is lost work.
-    ApplyOutcome defer_or_quarantine(const Operation& op, Lamport awaiting);
+    ApplyOutcome defer_or_quarantine(const Operation& op, Identity awaiting);
 
     /// The existing edit body, which assumes its arguments were validated.
     Operation apply_validated_local_edit(
@@ -264,26 +264,29 @@ private:
     /// Atomize multi-character fragments at shared locators.
     void normalize_fragments(std::vector<Fragment>& frags) const;
 
-    /// Apply deletion runs: batch-delete characters identified by Lamport
-    /// timestamp ranges, splitting fragments as needed.
+    /// Apply deletion runs: batch-delete characters identified by runs of
+    /// consecutive item identities, splitting fragments as needed.
     void apply_deletion_runs(
         std::vector<Fragment>& frags,
         const std::vector<EditOperation::DeletionRun>& runs,
-        Lamport deletion_id);
+        Identity deletion_id);
 
-    uint16_t m_replica_id;
-    Lamport m_clock;
+    ActorId m_actor;
+    Identity m_clock;
     Global m_version;
     UndoMap m_undo_map;
 
     FragmentTree m_fragment_tree;
     InsertionIndex m_insertion_index;
 
-    /// Per-replica origin index: maps (replica_id -> sorted map of origin_value -> Locator).
-    /// Used by the fast path to find a fragment's locator in O(log n).
-    std::unordered_map<uint16_t, std::map<uint32_t, Locator>> m_origin_index;
+    /// Per-actor origin index: maps (actor -> sorted map of origin counter ->
+    /// Locator). Used by the fast path to find a fragment's locator in O(log n).
+    /// The outer map needs an order-insensitive hash: ActorId is opaque bytes,
+    /// so std::hash<ActorId> is specialised from the byte array.
+    std::unordered_map<ActorId, std::map<uint64_t, Locator>, ActorIdHash> m_origin_index;
     void rebuild_origin_index();
-    std::optional<Locator> origin_index_lookup(uint16_t replica_id, uint32_t origin_value) const;
+    std::optional<Locator> origin_index_lookup(const ActorId &actor,
+                                               uint64_t origin_counter) const;
 
     /// Rebuild the insertion index from the current fragment list.
     void rebuild_insertion_index(const std::vector<Fragment>& frags);
@@ -293,7 +296,7 @@ private:
 
     /// Deferred operations awaiting causal dependencies.
     OperationQueue m_deferred_queue;
-    std::set<uint16_t> m_deferred_replicas;
+    std::set<ActorId> m_deferred_actors;
 
     /// Size of the deferral queue and its approximate retained bytes, tracked
     /// explicitly because the queue is a tree with no O(1) length.
@@ -314,7 +317,7 @@ private:
     /// Ctrl+Z reverses every grouped local edit at once.
     struct UndoEntry {
         std::vector<UndoMapKey> inserted_keys;
-        std::vector<Lamport> deletion_ids;
+        std::vector<Identity> deletion_ids;
     };
     std::vector<UndoEntry> m_undo_stack;
     size_t m_undo_cursor = 0;  // Points past the last undoable entry

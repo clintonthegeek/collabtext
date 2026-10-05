@@ -10,31 +10,46 @@ namespace CollabText::Crdt {
 // Anchor — a stable reference to a position in the document
 // ============================================================================
 
-/// An Anchor identifies a position by the Lamport timestamp of a specific
-/// character. Unlike byte offsets, Anchors do not change when text is
-/// inserted or deleted elsewhere in the document.
+/// An Anchor identifies a position by the identity of a specific item.
 ///
-/// The `bias` field determines behavior when text is inserted exactly at
-/// the anchor's position:
+/// Unlike byte offsets, Anchors do not change when text is inserted or deleted
+/// elsewhere in the document.
+///
+/// The `bias` field determines behavior when text is inserted exactly at the
+/// anchor's position:
 ///   - Left: anchor stays before the new text
 ///   - Right: anchor moves after the new text
+///
+/// `at_end` is an explicit past-the-end position, not a magic identity. The
+/// legacy type spelled it as the largest representable (replica_id, value) pair,
+/// which was only a maximum because the replica space was a bounded integer
+/// range. With a 128-bit actor there is no largest actor, so a sentinel built
+/// out of one would be an ordinary identity that happens to compare high —
+/// which is precisely the kind of value a caller could not tell apart from a
+/// real position. Start-of-document keeps its identity-based spelling, because
+/// `Identity::min()` is a true minimum.
 struct Anchor {
-    uint16_t replica_id = 0;     ///< Replica that created the character
-    uint32_t char_value = 0;     ///< Lamport sequence value of the character
-    Bias bias = Bias::Left;      ///< Left or Right bias
+    Identity position;              ///< Identity of the item this names
+    Bias bias = Bias::Left;        ///< Left or Right bias
+    bool at_end = false;           ///< Resolves past the last item
 
     Anchor() = default;
-    Anchor(uint16_t rid, uint32_t cv, Bias b = Bias::Left)
-        : replica_id(rid), char_value(cv), bias(b) {}
+    Anchor(Identity id, Bias b = Bias::Left, bool end = false)
+        : position(std::move(id)), bias(b), at_end(end) {}
 
     /// Sentinel: resolves to document start (offset 0).
-    static Anchor min() { return {0, 0, Bias::Left}; }
+    static Anchor min() { return {Identity::min(), Bias::Left}; }
 
     /// Sentinel: resolves to document end.
-    static Anchor max() { return {UINT16_MAX, UINT32_MAX, Bias::Right}; }
+    static Anchor end() { return {Identity::min(), Bias::Right, true}; }
 
-    bool is_min() const { return replica_id == 0 && char_value == 0 && bias == Bias::Left; }
-    bool is_max() const { return replica_id == UINT16_MAX && char_value == UINT32_MAX; }
+    bool is_min() const { return !at_end && position == Identity::min(); }
+    bool is_end() const { return at_end; }
+
+    /// True when this anchor names a real item identity rather than a
+    /// sentinel. An anchor carrying an invalid actor is a sentinel, never an
+    /// ordinary position: there is no such thing as actor 0 (P02).
+    [[nodiscard]] bool is_item() const { return !at_end && position.actor.valid(); }
 
     bool operator==(const Anchor&) const = default;
 };

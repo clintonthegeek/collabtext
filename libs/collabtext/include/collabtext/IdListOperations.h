@@ -6,11 +6,14 @@
 ///
 /// ─── Stable contract (safe to depend on across schema_version bumps) ────────
 ///
-///   • idlist_op_lamport(const IdListOperation& op) -> Lamport
-///       Free function returning the Lamport timestamp of any IdListOperation.
+///   • idlist_op_identity(const IdListOperation& op) -> Identity
+///       Free function returning the identity of any IdListOperation.
 ///
-///   • Lamport::counter() const -> uint64_t
-///       Returns the logical clock value (see <collabtext/Operations.h>).
+///   • Identity::actor / Identity::counter
+///       The two halves of an operation identity: a persistent 128-bit ActorId
+///       and a checked uint64_t counter, compared counter-first
+///       (docs/specs/vnext-identity.md §1–§2).  See <collabtext/Operations.h>,
+///       which carries the same contract and the note on what it supersedes.
 ///
 ///   • encode_idlist_operation / decode_idlist_operation
 ///       (in <collabtext/Serialization.h>)
@@ -33,7 +36,7 @@
 ///
 ///   auto op = decode_idlist_operation(wire_bytes);
 ///   if (!op) { warn("skipping unknown op"); continue; }
-///   Lamport ts = idlist_op_lamport(*op);   // stable accessor
+///   Identity id = idlist_op_identity(*op);   // stable accessor
 ///
 #pragma once
 
@@ -51,7 +54,7 @@ namespace CollabText::Crdt {
 ///
 /// All fields other than timestamp are evolution-reserved.
 struct IdListInsertOp {
-    Lamport timestamp;     ///< Origin of the new element (== insertion Lamport).
+    Identity timestamp;    ///< Origin of the new element (== this operation's identity).
     Global version;        ///< Causal dependencies. Evolution-reserved.
     uint64_t id = 0;       ///< Opaque application-owned element value. Evolution-reserved.
     Locator locator;       ///< Pre-computed fractional position. Evolution-reserved.
@@ -62,37 +65,37 @@ struct IdListInsertOp {
 ///
 /// All fields other than timestamp are evolution-reserved.
 struct IdListRemoveOp {
-    Lamport timestamp;      ///< Lamport of this deletion op (the deletion_id).
+    Identity timestamp;     ///< Identity of this deletion op (the deletion_id).
     Global version;         ///< Causal dependencies. Evolution-reserved.
-    Lamport target_origin;  ///< Origin of the entry being removed. Evolution-reserved.
+    Identity target_origin; ///< Item identity of the entry being removed. Evolution-reserved.
 };
 
 /// Undo/redo operation for IdList; mirrors Buffer's UndoOperation exactly.
 ///
 /// All fields other than timestamp are evolution-reserved.
 struct IdListUndoOpVariant {
-    Lamport timestamp;
+    Identity timestamp;
     Global version;                                        ///< Evolution-reserved.
-    std::vector<std::pair<Lamport, uint32_t>> counts;     ///< Evolution-reserved.
+    std::vector<std::pair<Identity, uint32_t>> counts;    ///< Evolution-reserved.
 };
 
 /// The variant type wrapping all IdList operation kinds.
 ///
 /// std::variant index (discriminator) is evolution-reserved.
-/// Use idlist_op_lamport() to extract the Lamport timestamp in a kind-agnostic way.
+/// Use idlist_op_identity() to extract the identity in a kind-agnostic way.
 using IdListOperation =
     std::variant<IdListInsertOp, IdListRemoveOp, IdListUndoOpVariant>;
 
-/// Stable accessor: returns the Lamport timestamp of any IdListOperation.
+/// Stable accessor: returns the identity of any IdListOperation.
 /// This is the canonical way to identify an IdList op across schema versions.
-inline Lamport idlist_op_lamport(const IdListOperation& op) {
-    return std::visit([](const auto& o) -> Lamport { return o.timestamp; }, op);
+inline Identity idlist_op_identity(const IdListOperation& op) {
+    return std::visit([](const auto& o) -> Identity { return o.timestamp; }, op);
 }
 
 /// Internal helper — also exposed here for code sharing with internal uses.
-/// Prefer idlist_op_lamport() in consumer code.
-inline Lamport get_idlist_op_timestamp(const IdListOperation& op) {
-    return idlist_op_lamport(op);
+/// Prefer idlist_op_identity() in consumer code.
+inline Identity get_idlist_op_identity(const IdListOperation& op) {
+    return idlist_op_identity(op);
 }
 
 /// Internal helper — also exposed here for code sharing with internal uses.

@@ -1,4 +1,5 @@
 #include "crdt/NetworkSim.h"
+#include "crdt/DerivedActor.h"
 #include <QTest>
 #include <algorithm>
 #include <cassert>
@@ -10,13 +11,18 @@ NetworkSim::NetworkSim(int num_replicas, NetworkConfig config, uint64_t seed)
 {
     m_replicas.reserve(num_replicas);
     for (int i = 0; i < num_replicas; ++i)
-        m_replicas.emplace_back(static_cast<uint16_t>(i + 1));
+        m_replicas.emplace_back(simulator_actor(i));
     m_queues.resize(num_replicas);
     m_offline.resize(num_replicas, false);
     m_pending_outbound.resize(num_replicas);
     m_links.assign(num_replicas, std::vector<bool>(num_replicas, false));
     m_last_scheduled.assign(num_replicas,
                             std::vector<uint64_t>(num_replicas, 0));
+}
+
+ActorId simulator_actor(int index) {
+    return derived_actor("collabtext/simulator-actor/v1",
+                         std::to_string(index));
 }
 
 uint64_t NetworkSim::random_latency() {
@@ -30,7 +36,7 @@ void NetworkSim::schedule_delivery(int target, const ScheduledOp& proto) {
     ScheduledOp sop = proto;
     // from_replica is the one-based Buffer replica id; lanes are zero-based.
     const size_t producer =
-        static_cast<size_t>(sop.from_replica) - 1;
+        static_cast<size_t>(sop.from_lane) - 1;
     sop.deliver_at_ms = m_clock + random_latency();
     if (!m_config.allow_reorder) {
         // Per-(target, producer) monotonicity: this operation may not come due
@@ -60,7 +66,7 @@ void NetworkSim::schedule_to_peers(int source, const Operation& op) {
     for (int r = 0; r < static_cast<int>(m_replicas.size()); ++r) {
         if (r == source) continue;
         ScheduledOp sop;
-        sop.from_replica = static_cast<uint16_t>(source + 1);
+        sop.from_lane = static_cast<uint16_t>(source + 1);
         sop.op = op;
         schedule_delivery(r, sop);
     }
@@ -133,7 +139,7 @@ void NetworkSim::tick(uint64_t ms) {
         while (!m_queues[r].empty() && m_queues[r].top().deliver_at_ms <= m_clock) {
             ScheduledOp sop = m_queues[r].top();
             m_queues[r].pop();
-            const int from = static_cast<int>(sop.from_replica) - 1;
+            const int from = static_cast<int>(sop.from_lane) - 1;
             if (from < 0 || from >= static_cast<int>(m_links.size())) continue;
             if (m_links[from][r]) {
                 held.push_back(sop);

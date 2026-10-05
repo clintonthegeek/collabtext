@@ -3,16 +3,15 @@
 
 namespace CollabText::Crdt {
 
-IdList::IdList(uint16_t replica_id)
-    : m_replica_id(replica_id)
-    , m_clock(replica_id, 1)
+IdList::IdList(const ActorId &actor)
+    : m_actor(actor)
+    , m_clock(actor, 1)
 {}
 
 size_t IdList::find_origin(const std::vector<IdListEntry>& entries,
                            const Anchor& target) const {
     for (size_t i = 0; i < entries.size(); ++i) {
-        if (entries[i].origin.replica_id == target.replica_id &&
-            entries[i].origin.value == target.char_value) {
+        if (entries[i].origin == target.position) {
             return i;
         }
     }
@@ -35,8 +34,8 @@ Result<IdListOperation> IdList::try_insert_after(const Anchor& after, uint64_t i
     if (!after.is_min() && find_origin(get_entries(), after) == static_cast<size_t>(-1)) {
         return Error(ErrorCode::unresolvable_anchor,
                      "insert_after: anchor names actor " +
-                         std::to_string(after.replica_id) + " counter " +
-                         std::to_string(after.char_value) +
+                         after.position.actor.to_string() + " counter " +
+                         std::to_string(after.position.counter) +
                          ", which is not in this list");
     }
     return insert_after_resolved(after, id);
@@ -70,13 +69,13 @@ IdListOperation IdList::insert_after_resolved(const Anchor& after, uint64_t id) 
     Locator new_loc = Locator::between(predecessor, successor);
 
     // d. Capture origin before bumping clock
-    Lamport origin(m_replica_id, m_clock.value);
+    Identity origin(m_actor, m_clock.counter);
 
     // e. Capture version before observing this op
     Global version_before = m_version;
 
     // f. Bump clock
-    m_clock = Lamport(m_replica_id, m_clock.value + 1);
+    m_clock = Identity(m_actor, m_clock.counter + 1);
 
     // g. Record this op in the version vector
     m_version.observe(origin);
@@ -122,8 +121,8 @@ Result<IdListOperation> IdList::try_remove_at(const Anchor& target) {
         // then tombstoned whatever happened to be there.
         return Error(ErrorCode::unresolvable_anchor,
                      "remove_at: anchor names actor " +
-                         std::to_string(target.replica_id) + " counter " +
-                         std::to_string(target.char_value) +
+                         target.position.actor.to_string() + " counter " +
+                         std::to_string(target.position.counter) +
                          ", which is not in this list");
     }
     return remove_at_resolved(target);
@@ -139,13 +138,13 @@ IdListOperation IdList::remove_at_resolved(const Anchor& target) {
            "remove_at_resolved: anchor must be resolved first");
 
     // c. Capture target_origin before any moves
-    Lamport target_origin = entries[idx].origin;
+    Identity target_origin = entries[idx].origin;
 
-    // d. Allocate deletion Lamport from current clock value
-    Lamport del_id(m_replica_id, m_clock.value);
+    // d. Allocate deletion identity from current clock value
+    Identity del_id(m_actor, m_clock.counter);
 
     // e. Bump clock
-    m_clock = Lamport(m_replica_id, m_clock.value + 1);
+    m_clock = Identity(m_actor, m_clock.counter + 1);
 
     // f. Capture version before observing this op
     Global version_before = m_version;
@@ -195,7 +194,7 @@ std::optional<IdListOperation> IdList::undo() {
     op.timestamp = m_clock.tick();
 
     for (auto& key : entry.inserted_keys) {
-        Lamport edit_id(key.replica_id, key.lamport_value);
+        const Identity edit_id = key.position;
         uint32_t current = m_undo_map.undo_count(edit_id);
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
         op.counts.push_back({edit_id, current + 1});
@@ -225,7 +224,7 @@ std::optional<IdListOperation> IdList::redo() {
     op.timestamp = m_clock.tick();
 
     for (auto& key : entry.inserted_keys) {
-        Lamport edit_id(key.replica_id, key.lamport_value);
+        const Identity edit_id = key.position;
         uint32_t current = m_undo_map.undo_count(edit_id);
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
         op.counts.push_back({edit_id, current + 1});
@@ -290,13 +289,13 @@ uint32_t IdList::size() const {
 
 Anchor IdList::anchor_at_index(uint32_t index, Bias bias) const {
     uint32_t visible_seen = 0;
-    Anchor result = Anchor::max();
+    Anchor result = Anchor::end();
     bool found = false;
     m_entry_tree.for_each([&](const IdListEntry& e) {
         if (found) return;
         if (!e.visible) return;
         if (visible_seen == index) {
-            result = Anchor(e.origin.replica_id, e.origin.value, bias);
+            result = Anchor(e.origin, bias);
             found = true;
             return;
         }
@@ -306,17 +305,17 @@ Anchor IdList::anchor_at_index(uint32_t index, Bias bias) const {
 }
 
 Anchor IdList::anchor_of(uint64_t id, Bias bias) const {
-    return try_anchor_of(id, bias).value_or(Anchor::max());
+    return try_anchor_of(id, bias).value_or(Anchor::end());
 }
 
 Result<Anchor> IdList::try_anchor_of(uint64_t id, Bias bias) const {
-    Anchor result = Anchor::max();
+    Anchor result = Anchor::end();
     bool found = false;
     m_entry_tree.for_each([&](const IdListEntry& e) {
         if (found) return;
         if (!e.visible) return;
         if (e.id == id) {
-            result = Anchor(e.origin.replica_id, e.origin.value, bias);
+            result = Anchor(e.origin, bias);
             found = true;
         }
     });
@@ -328,14 +327,13 @@ Result<Anchor> IdList::try_anchor_of(uint64_t id, Bias bias) const {
 
 uint32_t IdList::resolve_anchor(const Anchor& a) const {
     if (a.is_min()) return 0;
-    if (a.is_max()) return size();
+    if (a.is_end()) return size();
     uint32_t accumulated = 0;
     uint32_t result = size();
     bool found = false;
     m_entry_tree.for_each([&](const IdListEntry& e) {
         if (found) return;
-        if (e.origin.replica_id == a.replica_id &&
-            e.origin.value == a.char_value) {
+        if (e.origin == a.position) {
             result = accumulated;
             found = true;
             return;
@@ -405,7 +403,7 @@ void IdList::local_clear() noexcept {
     m_deferred_bytes = 0;
     m_quarantined.clear();
     m_quarantined_bytes = 0;
-    // Intentionally preserved: m_replica_id, m_clock, m_version,
+    // Intentionally preserved: m_actor, m_clock, m_version,
     // m_max_undo_depth, m_on_change, m_on_local_op.
     // Intentionally not fired: m_on_change, m_on_local_op.
 }
@@ -421,7 +419,7 @@ void IdList::insert_entry(std::vector<IdListEntry>& entries, IdListEntry entry) 
 }
 
 ApplyOutcome IdList::defer_or_quarantine(const IdListOperation& op,
-                                         Lamport awaiting) {
+                                         Identity awaiting) {
     const size_t bytes = estimate_operation_bytes(op);
 
     if (deferred_budget_exhausted(m_deferred_budget, m_deferred_count,
@@ -432,8 +430,8 @@ ApplyOutcome IdList::defer_or_quarantine(const IdListOperation& op,
                 "/" + std::to_string(m_deferred_budget.max_operations) +
                 " operations and " + std::to_string(m_deferred_bytes) + "/" +
                 std::to_string(m_deferred_budget.max_bytes) + " bytes held",
-            "waiting on actor " + std::to_string(awaiting.replica_id) +
-                " counter " + std::to_string(awaiting.value));
+            "waiting on actor " + awaiting.actor.to_string() +
+                " counter " + std::to_string(awaiting.counter));
         if (!deferred_budget_exhausted(m_quarantine_budget, m_quarantined.size(),
                                        m_quarantined_bytes, bytes)) {
             m_quarantined.push_back(QuarantinedIdListOp{op, reason});
@@ -445,14 +443,14 @@ ApplyOutcome IdList::defer_or_quarantine(const IdListOperation& op,
         return ApplyOutcome::rejected(reason);
     }
 
-    enqueue_deferred(IdListOpEntry{get_idlist_op_timestamp(op), op});
+    enqueue_deferred(IdListOpEntry{get_idlist_op_identity(op), op});
     m_deferred_count += 1;
     m_deferred_bytes += bytes;
     return ApplyOutcome::deferred(awaiting);
 }
 
 ApplyOutcome IdList::apply_one(const IdListOperation& op) {
-    const Lamport ts = get_idlist_op_timestamp(op);
+    const Identity ts = get_idlist_op_identity(op);
 
     // Identity first, and deliberately before the duplicate check: `observed()`
     // is vacuously true for counter 0, so an operation with no usable identity
@@ -498,7 +496,7 @@ void IdList::retry_deferred() {
         size_t remaining_count = 0;
         size_t remaining_bytes = 0;
         m_deferred_queue.for_each([&](const IdListOpEntry& entry) {
-            if (m_version.observed(get_idlist_op_timestamp(entry.op))) {
+            if (m_version.observed(get_idlist_op_identity(entry.op))) {
                 // Already applied while it waited. Not a visible change, and
                 // apply_concrete would not fire for it either.
                 progress = true;
@@ -538,8 +536,7 @@ bool IdList::apply_concrete(const IdListRemoveOp& op) {
     auto entries = get_entries();
     bool found = false;
     for (auto& e : entries) {
-        if (e.origin.replica_id == op.target_origin.replica_id &&
-            e.origin.value == op.target_origin.value) {
+        if (e.origin == op.target_origin) {
             e.deletions.push_back(op.timestamp);
             found = true;
             break;

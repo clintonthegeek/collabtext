@@ -8,6 +8,9 @@
 #include <numeric>
 #include <random>
 #include <set>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 using namespace CollabText::Test;
@@ -518,7 +521,7 @@ private slots:
         uint64_t seed = 0;
         std::mt19937 rng = scenario_rng("rapid_multi_range_edits", &seed);
 
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"abcdefghijklmnopqrstuvwxyz"});
         check_invariants(buf, "initial");
 
@@ -610,11 +613,11 @@ private slots:
                               << (artifact.empty() ? "" : (" artifact=" + artifact))
                               << "\n"
                               << "  anchor[" << (a-1) << "] (replica="
-                              << anchors[a-1].replica_id << " cv="
-                              << anchors[a-1].char_value << ") = " << pos_prev << "\n"
+                              << anchors[a-1].position.actor << " cv="
+                              << anchors[a-1].position.counter << ") = " << pos_prev << "\n"
                               << "  anchor[" << a << "] (replica="
-                              << anchors[a].replica_id << " cv="
-                              << anchors[a].char_value << ") = " << pos_curr << "\n"
+                              << anchors[a].position.actor << " cv="
+                              << anchors[a].position.counter << ") = " << pos_curr << "\n"
                               << "  text=\"" << buf.text() << "\"\n"
                               << "  visible_length=" << buf.visible_length() << "\n"
                               << "  fragments:\n";
@@ -622,8 +625,8 @@ private slots:
                     for (size_t fi = 0; fi < frags.size(); ++fi) {
                         std::cerr << "    [" << fi << "] loc_depth="
                                   << frags[fi].locator.depth()
-                                  << " origin=(" << frags[fi].origin.replica_id
-                                  << "," << frags[fi].origin.value
+                                  << " origin=(" << frags[fi].origin.actor
+                                  << "," << frags[fi].origin.counter
                                   << ") len=" << frags[fi].length
                                   << " vis=" << frags[fi].visible
                                   << " dels=" << frags[fi].deletions.size()
@@ -767,7 +770,7 @@ private slots:
         // a(1) é(2) 中(3) 🚀(4) b(1) ñ(2) 日(3) 😀(4)
         std::string text = "a\xc3\xa9\xe4\xb8\xad\xf0\x9f\x9a\x80"
                            "b\xc3\xb1\xe6\x97\xa5\xf0\x9f\x98\x80";
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {text});
         QCOMPARE(buf.text(), text);
         check_invariants(buf, "utf8_mix_initial");
@@ -787,7 +790,7 @@ private slots:
         for (size_t i = boundaries.size(); i > 0; --i) {
             // Work backwards so byte offsets remain valid
             uint32_t pos = boundaries[i - 1];
-            Buffer test_buf(1);
+            Buffer test_buf(actor(1));
             test_buf.apply_local_edit({{0, 0}}, {text});
             test_buf.apply_local_edit({{pos, pos}}, {"X"});
             check_invariants(test_buf, qPrintable(
@@ -800,7 +803,7 @@ private slots:
 
         // Delete each single character
         for (size_t i = 0; i + 1 < boundaries.size(); ++i) {
-            Buffer test_buf(1);
+            Buffer test_buf(actor(1));
             test_buf.apply_local_edit({{0, 0}}, {text});
             test_buf.apply_local_edit({{boundaries[i], boundaries[i+1]}}, {""});
             check_invariants(test_buf, qPrintable(

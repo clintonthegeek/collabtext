@@ -120,7 +120,7 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
                     ++count;
                     if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
                     if (auto op = decode_operation(e->payload)) {
-                        uint64_t lc = op_lamport(*op).counter();
+                        uint64_t lc = op_identity(*op).counter;
                         auto& ack = m_ack_state[e->replica_id];
                         if (lc > ack.max_lamport) {
                             ack.max_lamport = lc;
@@ -135,7 +135,7 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
                     ++count;
                     if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
                     if (auto op = decode_operation(e->payload)) {
-                        uint64_t lc = op_lamport(*op).counter();
+                        uint64_t lc = op_identity(*op).counter;
                         auto& ack = m_ack_state[e->replica_id];
                         if (lc > ack.max_lamport) {
                             ack.max_lamport = lc;
@@ -147,7 +147,7 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
                     ++count;
                     if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
                     if (auto op = decode_operation(e->payload)) {
-                        uint64_t lc = op_lamport(*op).counter();
+                        uint64_t lc = op_identity(*op).counter;
                         auto& ack = m_ack_state[e->replica_id];
                         if (lc > ack.max_lamport) {
                             ack.max_lamport = lc;

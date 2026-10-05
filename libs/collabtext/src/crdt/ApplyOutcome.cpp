@@ -12,7 +12,7 @@ ApplyOutcome ApplyOutcome::duplicate() {
     return outcome;
 }
 
-ApplyOutcome ApplyOutcome::deferred(Crdt::Lamport awaiting) {
+ApplyOutcome ApplyOutcome::deferred(Crdt::Identity awaiting) {
     ApplyOutcome outcome;
     outcome.m_kind = ApplyOutcomeKind::deferred;
     outcome.m_awaiting = awaiting;

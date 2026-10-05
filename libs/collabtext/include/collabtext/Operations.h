@@ -6,23 +6,33 @@
 ///
 /// ─── Stable contract (safe to depend on across schema_version bumps) ────────
 ///
-///   • Lamport::counter() const -> uint64_t
-///       Returns the logical clock value for this timestamp.
+///   • Identity::actor / Identity::counter
+///       The two halves of an operation identity: a persistent 128-bit ActorId
+///       and a checked uint64_t counter, compared counter-first
+///       (docs/specs/vnext-identity.md §1–§2).  Both are public fields, and
+///       both are stable, because a consumer that cannot read the identity of
+///       an operation it received cannot deduplicate it.
 ///
-///   • Lamport::replica_id  (public field, uint16_t)
-///       The replica that produced this timestamp.  Directly accessible as a
-///       field.  This is a deliberate carve-out: Lamport's two members
-///       (value / replica_id) are both stable despite the general rule below
-///       that field layout is evolution-reserved.  Only Lamport is carved out;
-///       EditOperation and UndoOperation fields remain evolution-reserved.
+///   • op_identity(const Operation& op) -> Identity
+///       Free function returning the identity of any Operation.
 ///
-///   • op_lamport(const Operation& op) -> Lamport
-///       Free function returning the Lamport timestamp of any Operation.
+///   • Identity::valid_reachable() is NOT part of the contract: whether an
+///       identity is acceptable is the receiver's decision, made by P05's
+///       validation, not something a consumer should infer from the bytes.
 ///
 ///   • encode_operation / decode_operation  (in <collabtext/Serialization.h>)
 ///       Round-trip serialisation is the stable wire contract.
 ///       decode_operation returns std::nullopt on schema mismatch; consumers
 ///       MUST warn-and-skip rather than treating nullopt as fatal.
+///
+/// ─── Superseded ─────────────────────────────────────────────────────────────
+///
+///   The previous contract exposed `Lamport::counter()`, the public
+///   `Lamport::replica_id` field, and `op_lamport()`.  All three are gone: a
+///   16-bit replica id is not a persistent identity, it is a number a process
+///   happened to be constructed with, so two devices could be handed the same
+///   one.  This is a deliberate break, not an oversight — there is no production
+///   data to migrate and no compatibility shim is planned.
 ///
 /// ─── Evolution-reserved (DO NOT depend on) ──────────────────────────────────
 ///
@@ -42,7 +52,7 @@
 ///   // Receiving an op from the network:
 ///   auto op = decode_operation(wire_bytes);
 ///   if (!op) { warn("skipping unknown op"); continue; }
-///   Lamport ts = op_lamport(*op);   // stable accessor
+///   Identity id = op_identity(*op);   // stable accessor
 ///
 #pragma once
 
@@ -61,30 +71,33 @@ namespace CollabText::Crdt {
 /// contract above.  In particular, do NOT rely on the internal types
 /// EditOperation::InsertedFragment::locator (Locator) or any field of Global.
 struct EditOperation {
-    Lamport timestamp;        ///< Lamport clock value when edit was created.
+    Identity timestamp;       ///< Operation identity of the edit.
     Global version;           ///< Causal dependencies (version vector). Evolution-reserved.
     std::vector<std::pair<uint32_t, uint32_t>> ranges;  ///< (start, end) byte offsets in visible text. Evolution-reserved.
     std::vector<std::string> new_text;                   ///< One replacement string per range. Evolution-reserved.
 
     struct InsertedFragment {
-        Lamport origin;
+        Identity origin;        ///< Item identity of this fragment's first item.
         Locator locator;      ///< Evolution-reserved.
         std::string content;
         uint32_t length;
     };
     std::vector<InsertedFragment> inserted_fragments;    ///< Evolution-reserved.
 
+    /// A run of consecutive item identities from one actor, all deleted by the
+    /// same operation. One actor per run is a property of the allocation scheme
+    /// (docs/specs/vnext-identity.md §3.2): an operation's items are consecutive
+    /// positions of its reserved interval, so a fragment's items are consecutive.
     struct DeletionRun {
-        uint16_t replica_id;
-        uint32_t start_value;
+        Identity first;
         uint32_t count;
     };
     std::vector<DeletionRun> deletion_runs;              ///< Evolution-reserved.
 
-    Lamport deletion_id;                                 ///< Evolution-reserved.
+    Identity deletion_id;     ///< Operation identity that deleted. Evolution-reserved.
 
     struct SplitRelocation {
-        Lamport fragment_origin;
+        Identity fragment_origin;
         uint32_t split_offset;
         uint32_t fragment_length;
         Locator new_locator;  ///< Evolution-reserved.
@@ -96,21 +109,21 @@ struct EditOperation {
 ///
 /// All fields are evolution-reserved except the stable contract accessors.
 struct UndoOperation {
-    Lamport timestamp;
+    Identity timestamp;
     Global version;                                       ///< Evolution-reserved.
-    std::vector<std::pair<Lamport, uint32_t>> counts;    ///< Evolution-reserved.
+    std::vector<std::pair<Identity, uint32_t>> counts;   ///< Evolution-reserved.
 };
 
 /// The variant type wrapping all Buffer operation kinds.
 ///
 /// std::variant index (discriminator) is evolution-reserved.
-/// Use op_lamport() to extract the Lamport timestamp in a kind-agnostic way.
+/// Use op_identity() to extract the identity in a kind-agnostic way.
 using Operation = std::variant<EditOperation, UndoOperation>;
 
-/// Stable accessor: returns the Lamport timestamp of any Operation.
+/// Stable accessor: returns the identity of any Operation.
 /// This is the canonical way to identify an op across schema versions.
-inline Lamport op_lamport(const Operation& op) {
-    return std::visit([](const auto& o) -> Lamport { return o.timestamp; }, op);
+inline Identity op_identity(const Operation& op) {
+    return std::visit([](const auto& o) -> Identity { return o.timestamp; }, op);
 }
 
 } // namespace CollabText::Crdt

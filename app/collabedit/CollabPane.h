@@ -3,6 +3,7 @@
 #include "collabtext/Identity.h"
 #include "collabtext/IdentityProjector.h"
 #include "collabtext/PresenceManager.h"
+#include <collabtext/ActorId.h>
 #include "crdt/Anchor.h"
 #include "crdt/Buffer.h"
 #include "crdt/FileSync.h"
@@ -71,6 +72,10 @@ private:
 
     CollabText::Identity::Identity m_identity;
     std::string m_replicaName;
+    /// This device's private state: the durable owner of the actor identity
+    /// and the per-(actor, stream) counter. Held rather than borrowed, because
+    /// it owns an OS lock for as long as this pane is open.
+    CollabText::ReplicaState m_replicaState;
 
     CollabText::Crdt::Buffer m_buffer;
     CollabText::Crdt::FileSync m_sync;

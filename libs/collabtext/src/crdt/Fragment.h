@@ -4,6 +4,7 @@
 #include "crdt/Locator.h"
 #include "crdt/UndoMap.h"
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,7 +31,7 @@ struct FragmentSummary {
     uint32_t visible_bytes = 0;    ///< Total visible bytes in subtree
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
     Locator max_locator;           ///< Maximum fragment Locator in subtree
-    Lamport max_origin = Lamport::min(); ///< Origin of fragment with max (locator, origin)
+    Identity max_origin = Identity::min(); ///< Origin of fragment with max (locator, origin)
 
     static FragmentSummary zero() { return {}; }
 
@@ -89,11 +90,22 @@ struct LocatorDim {
 };
 
 /// Seek by (locator, origin) for sorted insertion point finding.
+///
+/// `origin` is optional because there is no greatest identity to ask for
+/// "everything at this locator": a 128-bit actor space has no maximum. A
+/// disengaged `origin` therefore means *past every origin at this locator*,
+/// which is what an insertion between same-locator fragments needs when it has
+/// to find the next distinct locator above. Spelled as a magic all-ones
+/// identity it would be an ordinary value a caller could not distinguish from a
+/// real position, and a real actor could in principle exceed it.
 struct FragmentOrderDim {
     Locator locator;
-    Lamport origin = Lamport::min();
+    std::optional<Identity> origin;
 
-    static FragmentOrderDim zero() { return {Locator::min(), Lamport::min()}; }
+    static FragmentOrderDim zero() { return {Locator::min(), Identity::min()}; }
+    /// Every origin at `locator`, in order.
+    static FragmentOrderDim past_origin(Locator at) { return {at, std::nullopt}; }
+
     void add_summary(const FragmentSummary& s) {
         locator = s.max_locator;
         origin = s.max_origin;
@@ -101,9 +113,15 @@ struct FragmentOrderDim {
 
     auto operator<=>(const FragmentOrderDim& other) const {
         if (auto cmp = locator <=> other.locator; cmp != 0) return cmp;
-        return origin <=> other.origin;
+        if (!origin.has_value() && !other.origin.has_value())
+            return std::strong_ordering::equal;
+        if (!origin.has_value()) return std::strong_ordering::greater;
+        if (!other.origin.has_value()) return std::strong_ordering::less;
+        return *origin <=> *other.origin;
     }
-    bool operator==(const FragmentOrderDim&) const = default;
+    bool operator==(const FragmentOrderDim& other) const {
+        return (*this <=> other) == std::strong_ordering::equal;
+    }
 };
 
 // ============================================================================
@@ -111,8 +129,8 @@ struct FragmentOrderDim {
 // ============================================================================
 
 /// A Fragment represents a contiguous run of characters inserted by the
-/// same replica in a single burst. Each character in the fragment has:
-///   - Lamport timestamp: (replica_id, origin_lamport + offset)
+/// same actor in a single burst. Each character in the fragment has:
+///   - Identity: (actor, origin.counter + offset)
 ///   - Position: locator (same for all chars in the fragment since they
 ///     were inserted contiguously)
 ///
@@ -121,25 +139,29 @@ struct FragmentOrderDim {
 struct Fragment {
     using Summary = FragmentSummary;
 
-    Lamport origin;          ///< Timestamp of the first character
+    Identity origin;         ///< Identity of the first character
     Locator locator;         ///< Fractional position in the document
     uint32_t byte_length = 0; ///< Byte length of text content
     uint32_t length = 0;     ///< Number of characters (may differ from byte_length for multi-byte)
-    std::vector<Lamport> deletions;  ///< Lamport timestamps of deletion operations
+    std::vector<Identity> deletions;  ///< Identities of the deletion operations
     bool visible = true;     ///< Cached visibility (set during tree construction)
     std::string text;        ///< Inline text content owned by this fragment
 
     Fragment() = default;
-    Fragment(Lamport orig, Locator loc, uint32_t byte_len, uint32_t char_len)
-        : origin(orig), locator(loc), byte_length(byte_len), length(char_len) {}
-    Fragment(Lamport orig, Locator loc, uint32_t byte_len, uint32_t char_len,
+    Fragment(Identity orig, Locator loc, uint32_t byte_len, uint32_t char_len)
+        : origin(std::move(orig)), locator(loc), byte_length(byte_len), length(char_len) {}
+    Fragment(Identity orig, Locator loc, uint32_t byte_len, uint32_t char_len,
              std::string txt)
         : origin(orig), locator(loc), byte_length(byte_len), length(char_len),
           text(std::move(txt)) {}
 
-    /// Lamport timestamp of the character at `offset` within this fragment.
-    Lamport timestamp_at(uint32_t offset) const {
-        return Lamport(origin.replica_id, origin.value + offset);
+    /// Identity of the item at `offset` within this fragment.
+    ///
+    /// Derived, never allocated: the fragment's items are consecutive
+    /// positions of the owning operation's reserved interval
+    /// (docs/specs/vnext-identity.md §3.3), so a split partitions them.
+    Identity item_at(uint32_t offset) const {
+        return Identity(origin.actor, origin.counter + offset);
     }
 
     /// True if this fragment has been deleted (by any replica).

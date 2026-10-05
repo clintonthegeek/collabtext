@@ -1,5 +1,8 @@
 #include <QTest>
 #include "crdt/IdList.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -7,9 +10,9 @@ class TestIdListGc : public QObject {
     Q_OBJECT
 private slots:
     void collect_garbage_retains_trimmed_tombstones() {
-        IdList list(1);
+        IdList list(actor(1));
         list.insert_after(Anchor::min(), 0xAA);
-        list.remove_at(Anchor(1, 1, Bias::Left));
+        list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
         list.set_max_undo_depth(0);   // discard all undo entries
         list.set_max_undo_depth(1000);
         QCOMPARE(list.tombstone_count(), size_t{1});
@@ -19,10 +22,10 @@ private slots:
     }
 
     void collect_garbage_skips_remote_deletions() {
-        IdList alice(1), bob(2);
+        IdList alice(actor(1)), bob(actor(2));
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op_a});
-        auto rm_b = bob.remove_at(Anchor(1, 1, Bias::Left));
+        auto rm_b = bob.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
         alice.apply_ops({rm_b});
         alice.set_max_undo_depth(0);
         alice.set_max_undo_depth(1000);
@@ -30,10 +33,10 @@ private slots:
     }
 
     void compact_with_watermark_preserves_remote_undo() {
-        IdList alice(1), bob(2);
+        IdList alice(actor(1)), bob(actor(2));
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op_a});
-        auto rm_b = bob.remove_at(Anchor(1, 1, Bias::Left));
+        auto rm_b = bob.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
         alice.apply_ops({rm_b});
 
         // Watermark = meet of all replicas' versions (everything everyone has seen).
@@ -53,9 +56,9 @@ private slots:
     }
 
     void gc_protects_entries_in_undo_stack() {
-        IdList list(1);
+        IdList list(actor(1));
         list.insert_after(Anchor::min(), 0xAA);
-        list.remove_at(Anchor(1, 1, Bias::Left));  // deletion id is in undo stack
+        list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));  // deletion id is in undo stack
         QCOMPARE(list.collect_garbage(), size_t{0});  // protected
         list.set_max_undo_depth(0);   // drop undo entry
         list.set_max_undo_depth(1000);
@@ -67,7 +70,7 @@ private slots:
         // Entry was inserted then undone (no deletion tombstone), only visible=false
         // because its origin is flagged in undo_map. GC must not collect it while
         // the insertion is still in the undo stack (redo would break otherwise).
-        IdList list(1);
+        IdList list(actor(1));
         list.insert_after(Anchor::min(), 0xAA);  // origin (1,1), undo entry: inserted_keys={(1,1)}
         list.undo();                              // invisible now, no deletion, but insertion protected
         QCOMPARE(list.size(), size_t{0});

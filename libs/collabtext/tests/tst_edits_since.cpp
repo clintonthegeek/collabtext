@@ -1,5 +1,8 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -8,7 +11,7 @@ class TestEditsSince : public QObject {
 
 private slots:
     void no_edits_returns_empty() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         Global v = buf.version();
         // No changes since current version
@@ -17,7 +20,7 @@ private slots:
     }
 
     void simple_remote_insert() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -35,7 +38,7 @@ private slots:
     }
 
     void simple_remote_delete() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op1});
 
@@ -53,7 +56,7 @@ private slots:
     }
 
     void remote_replace() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op1});
 
@@ -79,7 +82,7 @@ private slots:
     }
 
     void insert_at_beginning() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"world"});
         bufB.apply_ops({op1});
 
@@ -96,7 +99,7 @@ private slots:
     }
 
     void multiple_remote_edits() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"aaa bbb ccc"});
         bufB.apply_ops({op1});
 
@@ -121,7 +124,7 @@ private slots:
     }
 
     void concurrent_edits_produce_correct_edits() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op0 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op0});
 
@@ -161,7 +164,7 @@ private slots:
     }
 
     void undo_produces_edits() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -187,7 +190,7 @@ private slots:
     }
 
     void empty_document_insert() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         Global before = bufB.version();
 
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});

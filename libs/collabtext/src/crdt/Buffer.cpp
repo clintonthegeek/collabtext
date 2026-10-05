@@ -6,9 +6,9 @@
 
 namespace CollabText::Crdt {
 
-Buffer::Buffer(uint16_t replica_id)
-    : m_replica_id(replica_id)
-    , m_clock(replica_id, 1)  // Start at 1; value 0 is the "unseen" sentinel
+Buffer::Buffer(const ActorId &actor)
+    : m_actor(actor)
+    , m_clock(actor, 1)  // Start at 1; counter 0 is the "unseen" sentinel
 {
 }
 
@@ -35,19 +35,19 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
 void Buffer::rebuild_origin_index() {
     m_origin_index.clear();
     m_fragment_tree.for_each([this](const Fragment& f) {
-        m_origin_index[f.origin.replica_id][f.origin.value] = f.locator;
+        m_origin_index[f.origin.actor][f.origin.counter] = f.locator;
     });
 }
 
 std::optional<Locator> Buffer::origin_index_lookup(
-    uint16_t replica_id, uint32_t origin_value) const
+    const ActorId &actor, uint64_t origin_counter) const
 {
-    auto rep_it = m_origin_index.find(replica_id);
-    if (rep_it == m_origin_index.end()) return std::nullopt;
-    auto& rep_map = rep_it->second;
-    if (rep_map.empty()) return std::nullopt;
-    auto it = rep_map.upper_bound(origin_value);
-    if (it == rep_map.begin()) return std::nullopt;
+    auto actor_it = m_origin_index.find(actor);
+    if (actor_it == m_origin_index.end()) return std::nullopt;
+    auto& counter_map = actor_it->second;
+    if (counter_map.empty()) return std::nullopt;
+    auto it = counter_map.upper_bound(origin_counter);
+    if (it == counter_map.begin()) return std::nullopt;
     --it;
     return it->second;
 }
@@ -270,7 +270,7 @@ static uint32_t chars_to_bytes(const std::string &s, uint32_t char_offset) {
 Anchor Buffer::anchor_at(uint32_t byte_offset, Bias bias) const {
     if (m_fragment_tree.empty()) return Anchor::min();
     uint32_t accumulated = 0;
-    Anchor result = Anchor::max();
+    Anchor result = Anchor::end();
     bool found = false;
     m_fragment_tree.for_each([&](const Fragment& f) {
         if (found) return;
@@ -278,7 +278,7 @@ Anchor Buffer::anchor_at(uint32_t byte_offset, Bias bias) const {
         if (accumulated + f.byte_length > byte_offset) {
             uint32_t offset_in_frag = byte_offset - accumulated;
             uint32_t char_offset = count_chars(f.text, offset_in_frag);
-            result = Anchor(f.origin.replica_id, f.origin.value + char_offset, bias);
+            result = Anchor(f.item_at(char_offset), bias);
             found = true;
             return;
         }
@@ -289,17 +289,18 @@ Anchor Buffer::anchor_at(uint32_t byte_offset, Bias bias) const {
 
 uint32_t Buffer::resolve_anchor(const Anchor& anchor) const {
     if (anchor.is_min()) return 0;
-    if (anchor.is_max()) return visible_length();
+    if (anchor.is_end()) return visible_length();
     uint32_t accumulated = 0;
     uint32_t result = visible_length();
     bool found = false;
     m_fragment_tree.for_each([&](const Fragment& f) {
         if (found) return;
-        if (f.origin.replica_id == anchor.replica_id &&
-            anchor.char_value >= f.origin.value &&
-            anchor.char_value < f.origin.value + f.length) {
+        if (f.origin.actor == anchor.position.actor &&
+            anchor.position.counter >= f.origin.counter &&
+            anchor.position.counter < f.origin.counter + f.length) {
             if (f.visible) {
-                uint32_t char_offset = anchor.char_value - f.origin.value;
+                uint32_t char_offset =
+                    static_cast<uint32_t>(anchor.position.counter - f.origin.counter);
                 uint32_t byte_off = chars_to_bytes(f.text, char_offset);
                 result = accumulated + byte_off;
             } else {
@@ -329,8 +330,8 @@ const Global &Buffer::version() const {
     return m_version;
 }
 
-uint16_t Buffer::replica_id() const {
-    return m_replica_id;
+const ActorId &Buffer::actor_id() const {
+    return m_actor;
 }
 
 // ---------------------------------------------------------------------------
@@ -410,7 +411,7 @@ size_t Buffer::split_fragment_at(std::vector<Fragment>& frags,
     uint32_t char_count = count_utf8_chars(orig.text, offset_in_frag);
 
     Fragment second;
-    second.origin = Lamport(orig.origin.replica_id, orig.origin.value + char_count);
+    second.origin = orig.item_at(char_count);
     second.locator = orig.locator;
     second.text = orig.text.substr(offset_in_frag);
     second.byte_length = static_cast<uint32_t>(second.text.size());
@@ -422,7 +423,7 @@ size_t Buffer::split_fragment_at(std::vector<Fragment>& frags,
     orig.byte_length = offset_in_frag;
     orig.length = char_count;
 
-    Lamport second_origin = second.origin;
+    Identity second_origin = second.origin;
     Locator saved_locator = orig.locator;
     insert_fragment(frags, std::move(second));
 
@@ -463,16 +464,16 @@ void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
         while (run_end < frags.size() && frags[run_end].locator == loc)
             run_end++;
 
-        bool multi_replica = false;
-        uint16_t first_replica = frags[run_start].origin.replica_id;
+        bool multi_actor = false;
+        ActorId first_actor = frags[run_start].origin.actor;
         for (size_t j = run_start + 1; j < run_end; ++j) {
-            if (frags[j].origin.replica_id != first_replica) {
-                multi_replica = true;
+            if (frags[j].origin.actor != first_actor) {
+                multi_actor = true;
                 break;
             }
         }
 
-        if (multi_replica) {
+        if (multi_actor) {
             std::vector<Fragment> extracted;
             for (size_t j = run_start; j < run_end; ++j) {
                 auto &f = frags[j];
@@ -488,7 +489,7 @@ void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
                         else if (ch >= 0xE0) char_bytes = 3;
                         else if (ch >= 0xC0) char_bytes = 2;
 
-                        Lamport single_origin(f.origin.replica_id, f.origin.value + c);
+                        Identity single_origin = f.item_at(c);
                         Fragment single;
                         single.origin = single_origin;
                         single.locator = f.locator;
@@ -583,11 +584,11 @@ Operation Buffer::apply_validated_local_edit(
     op.new_text = new_text;
     op.version = m_version;
     UndoEntry undo_entry;
-    Lamport deletion_ts = m_clock.tick();
+    Identity deletion_ts = m_clock.tick();
     bool had_deletions = false;
 
     // Track actually-deleted character timestamps for building deletion_runs.
-    std::vector<Lamport> deleted_timestamps;
+    std::vector<Identity> deleted_timestamps;
 
     // Sort ranges ascending (left-to-right) — offsets are in the OLD tree's
     // visible space and never change during processing.
@@ -606,7 +607,7 @@ Operation Buffer::apply_validated_local_edit(
     // will have their locator changed to new_locator.
     struct DeferredReloc {
         Locator old_loc;
-        Lamport min_origin;
+        Identity min_origin;
         Locator new_loc;
     };
     std::vector<DeferredReloc> deferred_relocs;
@@ -624,7 +625,7 @@ Operation Buffer::apply_validated_local_edit(
         f.visible = false;
         had_deletions = true;
         for (uint32_t c = 0; c < f.length; ++c) {
-            deleted_timestamps.push_back(f.timestamp_at(c));
+            deleted_timestamps.push_back(f.item_at(c));
         }
     };
 
@@ -643,7 +644,7 @@ Operation Buffer::apply_validated_local_edit(
         first.visible = f.visible;
 
         Fragment second;
-        second.origin = Lamport(f.origin.replica_id, f.origin.value + char_count);
+        second.origin = f.item_at(char_count);
         second.locator = f.locator;
         second.text = f.text.substr(byte_off);
         second.byte_length = f.byte_length - byte_off;
@@ -811,7 +812,7 @@ Operation Buffer::apply_validated_local_edit(
                 {
                     auto loc_cursor = m_fragment_tree.cursor<FragmentOrderDim>();
                     auto _prefix = loc_cursor.slice(
-                        FragmentOrderDim{lo, Lamport::max()});
+                        FragmentOrderDim::past_origin(lo));
                     if (loc_cursor.item() && loc_cursor.item()->locator > lo) {
                         hi = loc_cursor.item()->locator;
                     }
@@ -825,7 +826,7 @@ Operation Buffer::apply_validated_local_edit(
             if (needs_relocation) {
                 Locator new_next_loc = Locator::between(lo, hi);
 
-                Lamport reloc_origin;
+                Identity reloc_origin;
                 uint32_t reloc_length = 0;
 
                 if (pending) {
@@ -861,7 +862,7 @@ Operation Buffer::apply_validated_local_edit(
             uint32_t char_count = count_utf8_chars(
                 replacement, static_cast<uint32_t>(replacement.size()));
 
-            Lamport frag_origin = m_clock.tick();
+            Identity frag_origin = m_clock.tick();
             for (uint32_t c = 1; c < char_count; ++c) m_clock.tick();
 
             Fragment frag(frag_origin, new_loc,
@@ -879,7 +880,7 @@ Operation Buffer::apply_validated_local_edit(
 
             for (uint32_t c = 0; c < char_count; ++c) {
                 undo_entry.inserted_keys.push_back(
-                    UndoMapKey(frag_origin.replica_id, frag_origin.value + c));
+                    UndoMapKey(Identity(frag_origin.actor, frag_origin.counter + c)));
             }
         }
 
@@ -893,11 +894,16 @@ Operation Buffer::apply_validated_local_edit(
     }
     new_tree.push_tree(cursor.suffix());
 
-    // ---- Timestamp ----
+    // ---- Identity ----
+    // Still the legacy per-scalar allocation: an insert operation takes the
+    // identity of the last item of its own run, so an operation and one of its
+    // characters share an identity. Run-interval allocation
+    // (docs/specs/vnext-identity.md §3.2) removes that overlap; this pass only
+    // widens the type.
     if (op.inserted_fragments.empty()) {
         op.timestamp = m_clock.tick();
     } else {
-        op.timestamp = Lamport(m_replica_id, m_clock.value - 1);
+        op.timestamp = Identity(m_actor, m_clock.counter - 1);
     }
     op.deletion_id = deletion_ts;
     m_version.observe(op.timestamp);
@@ -915,7 +921,7 @@ Operation Buffer::apply_validated_local_edit(
     bool ordering_ok = true;
     {
         Locator prev_loc;
-        Lamport prev_origin;
+        Identity prev_origin;
         bool first = true;
         new_tree.for_each([&](const Fragment& f) {
             if (!ordering_ok) return;
@@ -942,7 +948,7 @@ Operation Buffer::apply_validated_local_edit(
 
         // Incremental origin index update for inserted fragments
         for (auto& ins : op.inserted_fragments) {
-            m_origin_index[ins.origin.replica_id][ins.origin.value] = ins.locator;
+            m_origin_index[ins.origin.actor][ins.origin.counter] = ins.locator;
         }
         used_fast_path = true;
     }
@@ -954,17 +960,17 @@ Operation Buffer::apply_validated_local_edit(
         auto frags = new_tree.items();
 
         for (auto& dr : deferred_relocs) {
-            Lamport next_expected = dr.min_origin;
+            Identity next_expected = dr.min_origin;
             uint32_t total_chars = 0;
             for (auto& f : frags) {
-                if (f.origin.replica_id != dr.min_origin.replica_id) continue;
-                if (f.origin.value != next_expected.value) continue;
+                if (f.origin.actor != dr.min_origin.actor) continue;
+                if (f.origin.counter != next_expected.counter) continue;
                 if (f.locator == dr.old_loc) {
                     f.locator = dr.new_loc;
                 }
                 total_chars += f.length;
-                next_expected = Lamport(f.origin.replica_id,
-                                        f.origin.value + f.length);
+                next_expected = Identity(f.origin.actor,
+                                         f.origin.counter + f.length);
             }
             for (auto& sr : op.split_relocations) {
                 if (sr.fragment_origin == dr.min_origin && sr.new_locator == dr.new_loc) {
@@ -982,20 +988,20 @@ Operation Buffer::apply_validated_local_edit(
         set_fragments(std::move(frags));
     }
 
-    // Build run-length encoded deletion descriptors from the deleted timestamps.
-    // Sort by (replica_id, value) then group contiguous runs.
+    // Build run-length encoded deletion descriptors from the deleted identities.
+    // Sort by (actor, counter) then group consecutive runs.
     {
         std::sort(deleted_timestamps.begin(), deleted_timestamps.end());
         for (size_t i = 0; i < deleted_timestamps.size(); ) {
-            uint16_t rid = deleted_timestamps[i].replica_id;
-            uint32_t start = deleted_timestamps[i].value;
+            const ActorId who = deleted_timestamps[i].actor;
+            const uint64_t start = deleted_timestamps[i].counter;
             uint32_t count = 1;
             while (i + count < deleted_timestamps.size() &&
-                   deleted_timestamps[i + count].replica_id == rid &&
-                   deleted_timestamps[i + count].value == start + count) {
+                   deleted_timestamps[i + count].actor == who &&
+                   deleted_timestamps[i + count].counter == start + count) {
                 ++count;
             }
-            op.deletion_runs.push_back({rid, start, count});
+            op.deletion_runs.push_back({Identity(who, start), count});
             i += count;
         }
     }
@@ -1012,26 +1018,27 @@ Operation Buffer::apply_validated_local_edit(
 void Buffer::apply_deletion_runs(
     std::vector<Fragment>& frags,
     const std::vector<EditOperation::DeletionRun>& runs,
-    Lamport deletion_id)
+    Identity deletion_id)
 {
-    // Process each deletion run. Each run targets characters from a single
-    // replica with contiguous Lamport values. Find the fragment(s) containing
-    // those characters, split at boundaries, and mark deleted.
+    // Process each deletion run. Each run targets consecutive item identities
+    // from a single actor. Find the fragment(s) containing those items, split
+    // at boundaries, and mark deleted.
     for (auto& run : runs) {
         uint32_t remaining = run.count;
-        uint32_t next_val = run.start_value;
+        uint64_t next_counter = run.first.counter;
 
         while (remaining > 0) {
-            // Find the fragment containing character (run.replica_id, next_val)
+            // Find the fragment containing item (run.first.actor, next_counter)
             bool found = false;
             for (size_t fi = 0; fi < frags.size(); ++fi) {
                 auto &f = frags[fi];
-                if (f.origin.replica_id != run.replica_id) continue;
-                if (next_val < f.origin.value ||
-                    next_val >= f.origin.value + f.length) continue;
+                if (f.origin.actor != run.first.actor) continue;
+                if (next_counter < f.origin.counter ||
+                    next_counter >= f.origin.counter + f.length) continue;
 
                 found = true;
-                uint32_t char_off = next_val - f.origin.value;
+                uint32_t char_off =
+                    static_cast<uint32_t>(next_counter - f.origin.counter);
                 uint32_t avail = f.length - char_off;
                 uint32_t to_del = std::min(remaining, avail);
 
@@ -1056,11 +1063,11 @@ void Buffer::apply_deletion_runs(
                     frags[fi].deletions.push_back(deletion_id);
                 }
 
-                next_val += to_del;
+                next_counter += to_del;
                 remaining -= to_del;
                 break;
             }
-            if (!found) break; // Character not found, skip remaining
+            if (!found) break; // Item not found, skip remaining
         }
     }
 }
@@ -1081,7 +1088,7 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
     for (auto &ins : op.inserted_fragments) {
         auto check_cursor = m_fragment_tree.cursor<FragmentOrderDim>();
         check_cursor.seek(
-            FragmentOrderDim{ins.locator, Lamport::min()}, Bias::Right);
+            FragmentOrderDim{ins.locator, Identity::min()}, Bias::Right);
         if (check_cursor.item() && check_cursor.item()->locator == ins.locator)
             return false;
     }
@@ -1090,13 +1097,13 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
     // Handles partial deletions by splitting fragments in place.
     for (auto& run : op.deletion_runs) {
         uint32_t remaining = run.count;
-        uint32_t next_val = run.start_value;
+        uint64_t next_counter = run.first.counter;
 
         while (remaining > 0) {
-            auto loc_opt = origin_index_lookup(run.replica_id, next_val);
+            auto loc_opt = origin_index_lookup(run.first.actor, next_counter);
             if (!loc_opt) return false;  // Can't find fragment, fall back
 
-            FragmentOrderDim target{*loc_opt, Lamport(run.replica_id, next_val)};
+            FragmentOrderDim target{*loc_opt, run.first};
 
             // Capture fragment info for potential splitting
             struct SplitInfo {
@@ -1114,12 +1121,13 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
             bool found = m_fragment_tree.edit_item<FragmentOrderDim>(
                 target,
                 [&](Fragment& f) {
-                    if (f.origin.replica_id != run.replica_id) return;
-                    if (next_val < f.origin.value ||
-                        next_val >= f.origin.value + f.length) return;
+                    if (f.origin.actor != run.first.actor) return;
+                    if (next_counter < f.origin.counter ||
+                        next_counter >= f.origin.counter + f.length) return;
 
                     info.found = true;
-                    info.char_off = next_val - f.origin.value;
+                    info.char_off =
+                        static_cast<uint32_t>(next_counter - f.origin.counter);
                     uint32_t avail = f.length - info.char_off;
                     info.to_del = std::min(remaining, avail);
 
@@ -1150,9 +1158,7 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
                             // "after" fragment: chars [char_off + to_del, length)
                             info.needs_split_after = true;
                             uint32_t after_char_start = info.char_off + info.to_del;
-                            info.after_frag.origin = Lamport(
-                                f.origin.replica_id,
-                                f.origin.value + after_char_start);
+                            info.after_frag.origin = f.item_at(after_char_start);
                             info.after_frag.locator = f.locator;
                             info.after_frag.text = f.text.substr(byte_off_end);
                             info.after_frag.byte_length = static_cast<uint32_t>(
@@ -1163,8 +1169,7 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
                         }
 
                         // Mutate f in place to become the deleted middle part
-                        f.origin = Lamport(f.origin.replica_id,
-                                           f.origin.value + info.char_off);
+                        f.origin = f.item_at(info.char_off);
                         f.text = f.text.substr(byte_off_start,
                                                byte_off_end - byte_off_start);
                         f.byte_length = static_cast<uint32_t>(f.text.size());
@@ -1172,7 +1177,7 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
                         f.deletions.push_back(op.deletion_id);
                     }
 
-                    next_val += info.to_del;
+                    next_counter += info.to_del;
                     remaining -= info.to_del;
                 });
 
@@ -1184,8 +1189,8 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
                     info.before_frag.locator, info.before_frag.origin};
                 m_fragment_tree.insert_item<FragmentOrderDim>(
                     before_target, std::move(info.before_frag));
-                m_origin_index[info.before_frag.origin.replica_id]
-                              [info.before_frag.origin.value] =
+                m_origin_index[info.before_frag.origin.actor]
+                              [info.before_frag.origin.counter] =
                     info.before_frag.locator;
             }
             if (info.needs_split_after) {
@@ -1193,8 +1198,8 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
                     info.after_frag.locator, info.after_frag.origin};
                 m_fragment_tree.insert_item<FragmentOrderDim>(
                     after_target, std::move(info.after_frag));
-                m_origin_index[info.after_frag.origin.replica_id]
-                              [info.after_frag.origin.value] =
+                m_origin_index[info.after_frag.origin.actor]
+                              [info.after_frag.origin.counter] =
                     info.after_frag.locator;
             }
         }
@@ -1208,7 +1213,7 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
         frag.visible = true;
         FragmentOrderDim target{ins.locator, ins.origin};
         m_fragment_tree.insert_item<FragmentOrderDim>(target, std::move(frag));
-        m_origin_index[ins.origin.replica_id][ins.origin.value] = ins.locator;
+        m_origin_index[ins.origin.actor][ins.origin.counter] = ins.locator;
     }
 
     m_clock.observe(op.timestamp);
@@ -1216,7 +1221,7 @@ bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
     m_clock.observe(op.deletion_id);
     m_version.observe(op.deletion_id);
     for (auto &ins : op.inserted_fragments) {
-        Lamport last_ts(ins.origin.replica_id, ins.origin.value + ins.length - 1);
+        Identity last_ts(ins.origin.actor, ins.origin.counter + ins.length - 1);
         m_clock.observe(last_ts);
         m_version.observe(last_ts);
     }
@@ -1243,36 +1248,38 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
 
     // Apply split relocations.
     for (auto &reloc : op.split_relocations) {
-        Lamport target_ts(reloc.fragment_origin.replica_id,
-                          reloc.fragment_origin.value + reloc.split_offset);
+        Identity target_ts(reloc.fragment_origin.actor,
+                           reloc.fragment_origin.counter + reloc.split_offset);
 
         for (size_t fi = 0; fi < frags.size(); ++fi) {
             auto &f = frags[fi];
-            if (f.origin.replica_id != target_ts.replica_id) continue;
-            if (target_ts.value < f.origin.value ||
-                target_ts.value >= f.origin.value + f.length) continue;
+            if (f.origin.actor != target_ts.actor) continue;
+            if (target_ts.counter < f.origin.counter ||
+                target_ts.counter >= f.origin.counter + f.length) continue;
 
-            uint32_t char_off = target_ts.value - f.origin.value;
+            uint32_t char_off =
+                static_cast<uint32_t>(target_ts.counter - f.origin.counter);
             if (char_off > 0) {
                 uint32_t byte_off = char_to_byte_offset(f.text, char_off);
                 fi = split_fragment_at(frags, fi, byte_off);
             }
 
-            uint32_t end_ts = reloc.fragment_origin.value + reloc.fragment_length;
-            uint32_t next_expected = target_ts.value;
+            uint64_t end_counter =
+                reloc.fragment_origin.counter + reloc.fragment_length;
+            uint64_t next_expected = target_ts.counter;
             struct RelocEntry { size_t idx; Locator effective; };
             std::vector<RelocEntry> to_relocate;
             for (size_t si = 0; si < frags.size(); ++si) {
-                if (next_expected >= end_ts) break;
+                if (next_expected >= end_counter) break;
                 auto &sf = frags[si];
-                if (sf.origin.replica_id != target_ts.replica_id) continue;
-                if (sf.origin.value != next_expected) continue;
+                if (sf.origin.actor != target_ts.actor) continue;
+                if (sf.origin.counter != next_expected) continue;
                 Locator eff = (reloc.new_locator > sf.locator)
                               ? reloc.new_locator : sf.locator;
                 if (eff != sf.locator) {
                     to_relocate.push_back({si, eff});
                 }
-                next_expected = sf.origin.value + sf.length;
+                next_expected = sf.origin.counter + sf.length;
             }
 
             for (auto it = to_relocate.rbegin(); it != to_relocate.rend(); ++it) {
@@ -1300,7 +1307,7 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
     m_version.observe(op.deletion_id);
 
     for (auto &ins : op.inserted_fragments) {
-        Lamport last_ts(ins.origin.replica_id, ins.origin.value + ins.length - 1);
+        Identity last_ts(ins.origin.actor, ins.origin.counter + ins.length - 1);
         m_clock.observe(last_ts);
         m_version.observe(last_ts);
     }
@@ -1352,7 +1359,7 @@ bool Buffer::try_apply(const Operation& op) {
     }, op);
 }
 
-ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Lamport awaiting) {
+ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Identity awaiting) {
     const size_t bytes = estimate_operation_bytes(op);
 
     if (deferred_budget_exhausted(m_deferred_budget, m_deferred_count,
@@ -1365,8 +1372,8 @@ ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Lamport awaiting) 
                 "/" + std::to_string(m_deferred_budget.max_operations) +
                 " operations and " + std::to_string(m_deferred_bytes) + "/" +
                 std::to_string(m_deferred_budget.max_bytes) + " bytes held",
-            "waiting on actor " + std::to_string(awaiting.replica_id) +
-                " counter " + std::to_string(awaiting.value));
+            "waiting on actor " + awaiting.actor.to_string() +
+                " counter " + std::to_string(awaiting.counter));
         if (!deferred_budget_exhausted(m_quarantine_budget, m_quarantined.size(),
                                        m_quarantined_bytes, bytes)) {
             m_quarantined.push_back(QuarantinedBufferOp{op, reason});
@@ -1385,7 +1392,7 @@ ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Lamport awaiting) 
 }
 
 ApplyOutcome Buffer::apply_one(const Operation& op) {
-    const Lamport ts = get_op_timestamp(op);
+    const Identity ts = get_op_timestamp(op);
 
     // Identity first, and deliberately before the duplicate check.
     // `observed()` is vacuously true for counter 0, so asking "have I seen
@@ -1409,7 +1416,7 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
     case ValidationVerdict::rejected:
         return ApplyOutcome::rejected(verdict.error);
     case ValidationVerdict::deferred:
-        m_deferred_replicas.insert(ts.replica_id);
+        m_deferred_actors.insert(ts.actor);
         return defer_or_quarantine(op, *verdict.awaiting);
     case ValidationVerdict::valid:
         break;
@@ -1417,13 +1424,14 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
 
     // Head-of-line blocking within a replica. Operations from one replica are
     // causally ordered, so if an earlier one is waiting, this one is too.
-    if (m_deferred_replicas.count(ts.replica_id)) {
+    if (m_deferred_actors.count(ts.actor)) {
         // The identity this one is ultimately waiting for is the earliest thing
-        // its replica is still missing; the blocked replica's own pending
+        // its actor is still missing; the blocked actor's own pending
         // operation is the honest answer when it is not otherwise derivable.
-        const Lamport awaiting = ts.value > 0 ? Lamport(ts.replica_id, ts.value - 1)
-                                              : ts;
-        m_deferred_replicas.insert(ts.replica_id);
+        const Identity awaiting = ts.counter > 0
+                                      ? Identity(ts.actor, ts.counter - 1)
+                                      : ts;
+        m_deferred_actors.insert(ts.actor);
         return defer_or_quarantine(op, awaiting);
     }
 
@@ -1431,7 +1439,7 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
         // Validation said this was applicable, so a refusal here means the
         // engine's own causal gate disagrees. Treat it as a deferral rather
         // than pretending it applied: the operation is still owed.
-        m_deferred_replicas.insert(ts.replica_id);
+        m_deferred_actors.insert(ts.actor);
         return defer_or_quarantine(op, ts);
     }
 
@@ -1453,13 +1461,13 @@ void Buffer::retry_deferred() {
     bool progress = true;
     while (progress) {
         progress = false;
-        m_deferred_replicas.clear();
+        m_deferred_actors.clear();
 
         OperationQueue remaining;
         size_t remaining_count = 0;
         size_t remaining_bytes = 0;
         m_deferred_queue.for_each([&](const OperationEntry& entry) {
-            if (m_deferred_replicas.count(entry.timestamp.replica_id)) {
+            if (m_deferred_actors.count(entry.timestamp.actor)) {
                 remaining.push_item(entry);
                 ++remaining_count;
                 remaining_bytes += estimate_operation_bytes(entry.op);
@@ -1470,7 +1478,7 @@ void Buffer::retry_deferred() {
                 progress = true;
                 if (m_on_change) m_on_change();
             } else {
-                m_deferred_replicas.insert(entry.timestamp.replica_id);
+                m_deferred_actors.insert(entry.timestamp.actor);
                 remaining.push_item(entry);
                 ++remaining_count;
                 remaining_bytes += estimate_operation_bytes(entry.op);
@@ -1534,7 +1542,7 @@ std::optional<Operation> Buffer::undo() {
     op.timestamp = m_clock.tick();
 
     for (auto &key : entry.inserted_keys) {
-        Lamport edit_id(key.replica_id, key.lamport_value);
+        const Identity edit_id = key.position;
         uint32_t current = m_undo_map.undo_count(edit_id);
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
         op.counts.push_back({edit_id, current + 1});
@@ -1567,7 +1575,7 @@ std::optional<Operation> Buffer::redo() {
     op.timestamp = m_clock.tick();
 
     for (auto &key : entry.inserted_keys) {
-        Lamport edit_id(key.replica_id, key.lamport_value);
+        const Identity edit_id = key.position;
         uint32_t current = m_undo_map.undo_count(edit_id);
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
         op.counts.push_back({edit_id, current + 1});

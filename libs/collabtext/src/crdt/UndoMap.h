@@ -6,15 +6,17 @@
 
 namespace CollabText::Crdt {
 
-/// Key identifying a character by its Lamport timestamp.
-/// Retained for backward compatibility with Buffer::UndoEntry and UndoOperation.
+/// Key identifying one inserted item, by that item's identity.
+///
+/// This is the *item* domain, not the operation domain
+/// (docs/specs/vnext-identity.md §3.1): an UndoMap entry is keyed by what was
+/// inserted, while the undo that reverses it is an operation of its own. No
+/// UndoMap entry can therefore collide with the operation that produced it.
 struct UndoMapKey {
-    uint16_t replica_id = 0;
-    uint32_t lamport_value = 0;
+    Identity position;
 
     UndoMapKey() = default;
-    UndoMapKey(uint16_t r, uint32_t v) : replica_id(r), lamport_value(v) {}
-    explicit UndoMapKey(Lamport ts) : replica_id(ts.replica_id), lamport_value(ts.value) {}
+    explicit UndoMapKey(Identity id) : position(std::move(id)) {}
 
     auto operator<=>(const UndoMapKey &) const = default;
     bool operator==(const UndoMapKey &) const = default;
@@ -25,8 +27,8 @@ struct UndoMapKey {
 // ============================================================================
 
 struct UndoTreeKey {
-    Lamport edit_id;
-    Lamport undo_id;
+    Identity edit_id;   ///< Item identity of what was edited
+    Identity undo_id;   ///< Operation identity of the undo
 
     auto operator<=>(const UndoTreeKey &) const = default;
     bool operator==(const UndoTreeKey &) const = default;
@@ -68,13 +70,11 @@ public:
     UndoMap() = default;
 
     void insert(UndoMapEntry entry);
-    uint32_t undo_count(Lamport edit_id) const;
-    bool is_undone(Lamport edit_id) const;
-    bool was_undone(Lamport edit_id, const Global &version) const;
+    uint32_t undo_count(Identity edit_id) const;
+    bool is_undone(Identity edit_id) const;
+    bool was_undone(Identity edit_id, const Global &version) const;
 
-    bool is_undone(UndoMapKey key) const {
-        return is_undone(Lamport(key.replica_id, key.lamport_value));
-    }
+    bool is_undone(UndoMapKey key) const { return is_undone(key.position); }
 
     size_t size() const;
     void clear();

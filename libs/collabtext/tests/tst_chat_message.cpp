@@ -1,6 +1,9 @@
 #include <QTest>
 #include "crdt/ChatMessage.h"
 #include "crdt/Anchor.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -86,7 +89,7 @@ private slots:
         msg.author = "alice-a1b2c3";
         msg.author_name = "Alice";
         msg.body = "Check this paragraph";
-        msg.anchor = Anchor(3, 200, Bias::Left);
+        msg.anchor = Anchor(Identity(actor(3), 200), Bias::Left);
 
         StreamEntry entry = chat_message_to_entry(msg);
         QVERIFY(entry.payload.find("anchor") != std::string::npos);
@@ -94,8 +97,8 @@ private slots:
         auto decoded = chat_message_from_entry(entry);
         QVERIFY(decoded.has_value());
         QVERIFY(decoded->anchor.has_value());
-        QCOMPARE(decoded->anchor->replica_id, uint16_t(3));
-        QCOMPARE(decoded->anchor->char_value, uint32_t(200));
+        QCOMPARE(decoded->anchor->position.actor, actor(3));
+        QCOMPARE(decoded->anchor->position.counter, quint64(200));
         QCOMPARE(decoded->anchor->bias, Bias::Left);
         QCOMPARE(decoded->body, msg.body);
         QCOMPARE(decoded->author, msg.author);

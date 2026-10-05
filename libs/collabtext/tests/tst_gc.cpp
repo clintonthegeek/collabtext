@@ -1,6 +1,9 @@
 #include <QTest>
 #include "crdt/Buffer.h"
 #include <random>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -39,20 +42,20 @@ class TestGC : public QObject {
 private slots:
 
     void fragment_count_empty() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         QCOMPARE(buf.fragment_count(), size_t(0));
         QCOMPARE(buf.tombstone_count(), size_t(0));
     }
 
     void fragment_count_after_insert() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         QVERIFY(buf.fragment_count() > 0);
         QCOMPARE(buf.tombstone_count(), size_t(0));
     }
 
     void tombstone_count_after_delete() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{0, 5}}, {""});  // delete all
         QCOMPARE(buf.text(), std::string(""));
@@ -60,12 +63,12 @@ private slots:
     }
 
     void max_undo_depth_default() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         QCOMPARE(buf.max_undo_depth(), size_t(1000));
     }
 
     void set_max_undo_depth() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.set_max_undo_depth(50);
         QCOMPARE(buf.max_undo_depth(), size_t(50));
     }
@@ -75,7 +78,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void gc_removes_tombstones() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"hello world"});
         buf.apply_local_edit({{0, 5}}, {""});  // delete "hello"
         QCOMPARE(buf.text(), std::string(" world"));
@@ -91,7 +94,7 @@ private slots:
     }
 
     void gc_retains_after_local_history_trim() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.set_max_undo_depth(1);
         buf.apply_local_edit({{0, 0}}, {"hello world"});  // undo entry 1
         buf.apply_local_edit({{0, 5}}, {""});              // undo entry 2, pushes entry 1 out
@@ -115,7 +118,7 @@ private slots:
     }
 
     void gc_preserves_visible_text() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.set_max_undo_depth(0);  // local undo is disabled; global eligibility is still unknown
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{1, 3}}, {""});  // delete "bc"
@@ -135,7 +138,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void gc_protects_undoable_deletions() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.apply_local_edit({{0, 0}}, {"abc"});
         buf.apply_local_edit({{0, 3}}, {""});  // delete all
         QCOMPARE(buf.text(), std::string(""));
@@ -150,7 +153,7 @@ private slots:
     }
 
     void gc_after_undo_redo_cycle() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.set_max_undo_depth(0);  // nothing protected
         buf.apply_local_edit({{0, 0}}, {"abc"});
         buf.apply_local_edit({{0, 3}}, {""});  // delete
@@ -168,7 +171,7 @@ private slots:
 
     void gc_partial_protection() {
         // Two separate deletions: one protected, one not
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.set_max_undo_depth(1);
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{0, 3}}, {""});  // delete "abc" — undo entry 1
@@ -194,7 +197,7 @@ private slots:
     }
 
     void gc_with_multiple_deletions_on_same_fragment() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.set_max_undo_depth(2);
         buf.apply_local_edit({{0, 0}}, {"hello"});   // entry 0
         buf.apply_local_edit({{0, 5}}, {""});         // entry 1: delete "hello"
@@ -213,7 +216,7 @@ private slots:
     void gc_preserves_fragment_layout() {
         // Two replicas insert at the same position → normalization atomizes
         // into single-char fragments. GC must retain their identity/layout.
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"aaa"});
         auto op2 = bufB.apply_local_edit({{0, 0}}, {"bbb"});
 
@@ -232,7 +235,7 @@ private slots:
     }
 
     void gc_preserves_deleted_anchor_context() {
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.set_max_undo_depth(0);
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         const auto anchor = buf.anchor_at(2, Bias::Left);
@@ -250,7 +253,7 @@ private slots:
 
     void gc_preserves_distinct_insertions() {
         // Distinct insertion contexts remain untouched by an uncertified request.
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.set_max_undo_depth(0);
         buf.apply_local_edit({{0, 0}}, {"abc"});
         buf.apply_local_edit({{3, 3}}, {"def"});  // separate insertion → different locator
@@ -270,7 +273,7 @@ private slots:
         qDebug() << "Seed:" << seed;
         std::mt19937 rng(seed);
 
-        Buffer buf(1);
+        Buffer buf(actor(1));
         buf.set_max_undo_depth(20);
 
         for (int i = 0; i < 200; ++i) {
@@ -321,7 +324,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void gc_preserves_convergence() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
 
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op1});
@@ -351,7 +354,7 @@ private slots:
         qDebug() << "Seed:" << seed;
         std::mt19937 rng(seed);
 
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         bufA.set_max_undo_depth(10);
         bufB.set_max_undo_depth(10);
         std::vector<Operation> queueA, queueB;
@@ -434,7 +437,7 @@ private slots:
 
     void compact_retains_remote_tombstones() {
         // Neither local history nor observed coverage retires remote undo.
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -467,7 +470,7 @@ private slots:
     }
 
     void compact_respects_undo_protection() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -488,7 +491,7 @@ private slots:
     }
 
     void compact_ignores_deletions_beyond_watermark() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -509,7 +512,7 @@ private slots:
 
     void compact_convergence_both_replicas() {
         // Both replicas compact at the same watermark — convergence preserved
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op1});
 
@@ -551,7 +554,7 @@ private slots:
         qDebug() << "Seed:" << seed;
         std::mt19937 rng(seed);
 
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(actor(1)), bufB(actor(2));
         bufA.set_max_undo_depth(10);
         bufB.set_max_undo_depth(10);
         std::vector<Operation> queueA, queueB;
