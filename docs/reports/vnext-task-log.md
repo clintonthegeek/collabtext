@@ -2095,3 +2095,39 @@ adapter and the result matrix; S04a/S04b supply the live API behind it.
 here, and it encodes the rule the probes keep asking for: a resolution carries an
 offset **or** a typed error, a failure state must say why, and `Collapsed` is not
 `Resolved`.
+
+
+## 2026-10-05 — Complete P06a's opaque values and resume native boundary design
+
+Baseline `2157cfb`; implementation `01614af`. Public text/list operation
+variants and payload fields moved behind distinct immutable values. The private
+payload header is not installed. Builders freeze before publication and private
+access is const-only. Copyable shared const ownership revises P01's move-only
+draft to retain existing independent queue/callback/transport lifetimes without
+mutable aliases or a new clone protocol. The API guide records that choice.
+
+New lifetime tests cover retained copies, builder mutation, decoder/input
+destruction and empty/moved-from rejection. Public codec tests now exercise real
+engine outputs using public headers. A first timestamp-only type predicate missed
+legacy variants; the final variant-exclusion predicate demonstrably fails for
+both baseline operation types and accepts opaque headers. This is compile-time
+API evidence, not behavioral ordering evidence. Identity remains 24 bytes,
+FragmentSummary 56; both opaque handles are 16 bytes plus private heap storage.
+
+Verification: **Debug bounded 72/72**, relocated installed Core package/consumer
+passes; **Release selected 9/9**, **ASan/UBSan/LSan selected 9/9**. The restricted
+sanitizer run passed assertions but could not perform LSan's process inspection;
+only the unrestricted run with leak checks enabled is accepted. Exact selection
+and paths are in TASKS.json. No fresh full rebuild, realistic simulation or
+benchmarks; allocation/order laws are unchanged and their models run in all
+three configurations.
+
+W01's 31 corruption kinds/351 applications reproduced. Competitor figures remain
+attributed observations. Direct Wave source review found an affinity-comment
+mismatch and a UTF-8 conversion requiring text-safe token wrapping; the review
+report gives paths and adapter obligations. A pending strict-referent fixture
+also conflates a visible range with a caret gap; S04a will define those precisely.
+
+P06a is complete; **S04a is now structurally ready**, alongside W02/P06b. Proceed
+with scoped boundary semantics and independent model before S04b production code.
+Publication/master/consumer edits remain outside this local implementation.

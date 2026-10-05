@@ -13,16 +13,18 @@ W1–W6 consumer cases.
 
 ## Where the work is, as of 2026-10-05
 
-**Done:** V01–V08, D01, P01–P05, L01, S01, and packaging A01, A02a,
-A06a. The registry has 72 tasks. S01 supplies desired histories, not an engine
-ordering repair. W01 is **not done**; its consumer probe fixtures are absent.
+**Done:** V01–V08, D01, P01–P06a, L01, S01, W01 and packaging
+A01/A02a/A06a. Registry count: 72. S01/W01 are validated desired histories and
+probe fixtures, not production F7/F8 fixes. P06a's final operation-opacity step
+has passed affected Debug/Release/sanitizer and installed-consumer checks.
 
-**Do next:** W01's eight-probe specification/corpus and P06a step 6 (opaque
-operation values). P06a steps 1–5 adopted persistent ActorId/counter allocation.
-Its remaining opacity work is implementation, not a pending user-policy choice:
-P01's API specification already requires opaque operation values. S04a depends
-on all of P06a, S01 and W01 in TASKS.json; do not treat partial completion as a
-finished prerequisite. See the corrected state-at-handoff and throughput review.
+**Do next: S04a**, scoped boundary specification and independent reference model.
+Its complete P06a/S01/W01 prerequisites are now met. The takeover review records
+Wave source integration findings and a pending fixture's range/caret distinction.
+Finish exact collapse/strict attachment/undo restoration rules here; these are
+technical design choices within the accepted contract, not new product questions.
+W02 and P06b are separately ready. No comparator-only or draft-API shortcut may
+replace the boundary/order model gates.
 
 **Then:** S04a → S04b, installed W02/W03 probes, S02/S03 and E07a/E07b,
 following the actual registry dependencies and the early consumer lane. S04a is

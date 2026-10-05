@@ -950,7 +950,7 @@
     "R1"
    ],
    "gate": "Ordering and identity-allocation contracts and independent models must exist and run before engine types change; comparator-only evidence leaves allocation/recovery obligations incomplete.",
-   "status": "in_progress",
+   "status": "complete",
    "split_rationale": "Split out of P06 on 2026-10-04. P06 asked for opaque values and versioned sparse codecs in one step, but the actor identity is serialized by both the wire codec and the store, so the identity change cannot land before the codecs without either changing those formats outside this task's ownership or introducing a representation the codec task immediately rewrites. The identity work is therefore sequenced first *within* P06 rather than before it, which keeps it a discrete reviewable step without an impossible ordering.",
    "baseline_revision": "2fd5a76",
    "implementation_commits": [
@@ -959,7 +959,8 @@
     "9e172c1",
     "c1931b9",
     "4d5ca29",
-    "36e3fca"
+    "36e3fca",
+    "01614af3ff2c06ce8cb2f1ca02316e446e03efde"
    ],
    "gate_evidence": [
     "docs/specs/vnext-identity.md -- the contract: what an identity is, the order and the three places it is used, why locally assigned slots diverge, the seven laws, counter rules, why epoch is deliberately not here, and baseline/projected cost.",
@@ -991,15 +992,21 @@
     "asan": "18/18 on the allocation step (verification/20261005T064034Z-3395786); 12/12 on the invalid-identity step (verification/20261005T074436Z-3464803) -- address, undefined-behaviour and leak checks clean, no suppressions",
     "sizes": "unchanged by this step: Identity 24, UndoMapKey 24, FragmentSummary 56, Fragment 120, Anchor 32, Global 64. Allocation policy moved; no type changed width.",
     "seed": "fixed default 20261003; the randomised model comparison uses std::mt19937_64(20261004)",
-    "artifacts": "build-roadmap-release/verification/20261005T062636Z-3388724; build-roadmap-release/verification/20261005T072729Z-3439371; build-roadmap-asan/verification/20261005T064034Z-3395786; build-roadmap-asan/verification/20261005T074436Z-3464803"
+    "artifacts": "build-roadmap-release/verification/20261005T062636Z-3388724; build-roadmap-release/verification/20261005T072729Z-3439371; build-roadmap-asan/verification/20261005T064034Z-3395786; build-roadmap-asan/verification/20261005T074436Z-3464803",
+    "opacity_debug": "72/72 bounded correctness CTest executables plus installed Core relocation/header/isolation/negative-component checks pass; 211.548 s total (20261005T224510Z-changed-lj3tw6o6). Long realistic simulation excluded; no benchmarks.",
+    "opacity_release": "9/9 affected identity ordering/allocation/types/engine, Buffer/IdList convergence, value lifetime, validation and public serialization suites pass (20261005T224842Z-changed-r5kokhz8).",
+    "opacity_asan": "Same 9/9 ASan/UBSan/LSan suites pass outside sandbox process-inspection restriction (20261005T225439Z-changed-pi5njjs8), leak checking enabled and no suppressions. Restricted run asserted correctly but failed LSan shutdown, and is not counted as passing evidence.",
+    "opacity_api": "Compile predicate rejects std::variant_size access for both operation types against baseline 2157cfb headers and passes new headers; public codec tests now use engine-emitted operations instead of private payload construction.",
+    "opacity_sizes": "Identity 24 and FragmentSummary 56 unchanged; text and list operation handles each 16 bytes, plus privately owned heap payload/control block. No throughput claim or benchmark."
    },
-   "remaining_scope": [
-    "Step 6: opaque operation values. Note the tension recorded in TASKS.json and the public API guide rather than resolved unilaterally: 'field layout out of the public header' cannot be done for a std::variant of by-value structs without either handle types (which is the A02 rename and collides with it) or leaving the layout visible and routing engine access through internal accessors (which is weaker than the step asks for). A02 owns the public boundary; this step should be settled with it rather than half-done here.",
-    "Inherited obligations this step created for other tasks: P06b must carry each operation's interval length and the gap-record kind, and the versioned sparse codec replaces the interim JSON identity/version-vector encodings. P07 must refuse a mismatched interval and a gap that is not terminal, and owns unifying Crdt::Identity with OperationId. L02 owns gap-record publication, partial-append reconciliation and the reopen path that emits gap records for abandoned intervals -- a durable reservation that is never published now burns a whole interval, not one value. L04 owns the stream envelope: StreamEntry::replica_id, ChatMessage::replica_id and Comment::replica_id are still 16-bit producer ids and are NOT this device's actor, and the ack-frontier file key is still a decimal replica id. The decided *structure* of acks.json is unchanged; only the key's spelling follows the identity.",
-    "Left deliberately alone: SegmentFormat's first_lamport/last_lamport u64 header fields keep their names. They are counters, and segment framing belongs to L02.",
-    "Not claimed: durable-allocation behaviour across a real power loss (L02/L08), and convergence of the new allocation against the independent model under partition (S06)."
-   ],
-   "opacity_baseline_revision": "2157cfb"
+   "remaining_scope": "P06a complete. P06b still owes version/error codec work; P07 still owes scoped operation envelopes. No F7/F8 anchor/ordering repair is claimed.",
+   "opacity_baseline_revision": "2157cfb",
+   "artifacts": [
+    "docs/reports/2026-10-05-takeover-review.md",
+    "build-roadmap-debug/verification/20261005T224510Z-changed-lj3tw6o6/",
+    "build-roadmap-release/verification/20261005T224842Z-changed-r5kokhz8/",
+    "build-roadmap-asan/verification/20261005T225439Z-changed-pi5njjs8/"
+   ]
   },
   {
    "id": "A01",
