@@ -82,7 +82,7 @@ python3 docs/roadmap/2026-10-reliability/check-scope.py --strict
 
 It scans the task registry for a Rust rewrite, Yrs adoption, a backend
 experiment, or legacy-data migration being *required* rather than prohibited, and
-exits nonzero if any task's text needs a human decision. The current registry has 63 tasks after splitting P06. Run the command above
+exits nonzero if any task's text needs a human decision. The current registry has 72 tasks after the Wave ask2 sequencing amendment. Run the command above
 for the current classified-hit count; the review requires 0 needing review.
 
 Documenting these decisions does not complete unimplemented tasks and does not
@@ -102,3 +102,23 @@ legacy-data conversion requirement: future published vNext tokens carry the
 supported reader/translation obligation. Plain-text/IdList scope is retained;
 Wave owns formatting and its canonical authorization/event-log protocol.
 There is no new backend decision or automatic retirement policy.
+
+## Early consumer integration amendment — 2026-10-04
+
+The user authorized writing the accepted Wave ask2 sequencing into the worktree
+roadmap. Provide an installed evolving API and continuous consumer probes early;
+develop scoped typed live anchors after identity/boundary gates, without waiting
+for full ordering or file recovery. [00 — consumer integration](00-consumer-integration.md)
+records the single-executor route and exact eight-probe ownership. S04a separates
+boundary specification/model from S02 ordering repair; S04 certifies their later
+composition with real recovery. S05 and G-series retention/GC gates remain.
+
+Core stays plaintext/IdList and transport-agnostic. Consumer block existence,
+formatting, event logs, cross-block undo and transport are consumer-owned;
+DocumentSession is an optional reference composition. Typed collapse information
+supports caret and strict attachment policies without silent relocation.
+No new product policy question is introduced. Preparing E07a/E07b candidates is
+authorized roadmap work; pushing tags/packages, changing consumer repositories,
+sending messages or merging master is not authorized by this planning instruction.
+Approved published supported token bytes carry future reader/translation
+obligations; pre-vNext experiments still require no preservation.

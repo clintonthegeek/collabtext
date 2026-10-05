@@ -1,8 +1,74 @@
 # 08. Fresh release, documentation, and acceptance gates
 
-Goal: deliver an installable new package and complete usage examples. The user confirmed no existing production data, stores, or history; legacy inspection and migration tasks E01/E02 were removed, with their IDs retained in the change record.
+Goal: prepare early package/position alphas before the final supported release, then certify the complete package and usage examples. E07a/E07b are early tasks despite their IDs; final acceptance remains E03–E06. The user confirmed no existing production data, stores, or history; legacy inspection and migration tasks E01/E02 were removed, with their IDs retained in the change record.
 
 Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starting. Task dependencies refer to the [master task registry](TASKS.json). New file paths below are intentional; do not assume they already exist.
+
+## E07a — Prepare a package alpha and reproducible consumer pin instructions
+
+**Status:** see TASKS.json (initially not started)\
+**Depends on:** W02\
+**Coverage:** R11, R13\
+
+**Files / scope:**
+
+- `CMakeLists.txt`
+- `docs/releases/integration-alpha.md`
+- `docs/USING_VNEXT.md`
+- `docs/specs/vnext-alpha-capabilities.md`
+- `tools/prepare-integration-alpha.sh`
+
+**Steps:**
+
+1. Choose and record an unused SemVer prerelease candidate for the current 0.1.0 baseline (for example 0.2.0-alpha.1), keeping the roadmap branch name separate from a major-version promise. Prepare version metadata and notes around the installed package and baseline probe results; anchors/recovery/pins may remain explicitly unavailable.
+2. Create a local preparation script that requires the intended branch and a clean tree, records the exact candidate commit, compiler/options, dependency versions, package/component list, capability manifest, supported format identifiers and verification artifacts, and produces checksums for locally staged artifacts. Keep output in ignored release/build directories; do not commit an archive or recursively vendor a checkout.
+3. Document consumer pinning by a full Git commit SHA and, once published, an immutable annotated alpha tag. Include a clean-clone build/install/find_package example, source accessibility requirements, and how to run the probe script. A local worktree cannot be fetched; a remote branch commit can be pinned by SHA without a tag.
+4. Prepare the exact proposed tag name, target SHA, annotation/release text, destination remote and verification commands as a reviewable publication checklist. The script must not push, create a remote release, publish packages, merge master, or send messages. External publication is a separately authorized action; preparation completes when the concrete candidate is reviewable.
+5. Record alpha API/ABI instability separately from supported serialized format obligations. Do not call the package a completed reliability release, promise crash-safe stores/persistent undo, or imply an experimental position encoding is an approved durable token format. Classify any still-prototype operation/store encoding as experimental and unsupported for durable interoperability; publishing a package alpha does not retroactively certify those formats or require keeping obsolete prototype readers.
+
+**Acceptance:**
+
+- A concrete package alpha candidate has reproducible build/install/probe instructions, a full target SHA, version/tag proposal, capability matrix, checksummed local artifacts and exact known limits.
+- Preparation can run without publishing or merging; release notes distinguish available alpha features from target-only contracts and supported serialized formats.
+- No external action is performed by this task. Unpublished source accessibility and pending remote CI are explicitly recorded rather than reported as delivered availability.
+
+**Verification:**
+
+Run the local preparation script after the required package/baseline checks, verify checksums and version consistency, and test the build commands from a separate local checkout at the candidate SHA. Review the publication checklist without executing it.
+
+## E07b — Prepare a position-capable alpha with a supported token manifest
+
+**Status:** see TASKS.json (initially not started)\
+**Depends on:** E07a, W03\
+**Coverage:** F7, R11, R13\
+
+**Files / scope:**
+
+- `docs/releases/integration-alpha.md`
+- `docs/USING_VNEXT.md`
+- `docs/specs/vnext-alpha-capabilities.md`
+- `docs/specs/vnext-boundary-semantics.md`
+- `tools/prepare-integration-alpha.sh`
+- `tests/consumer-smoke/wave-contract/`
+- `docs/specs/vnext-external-position-contract.md`
+
+**Steps:**
+
+1. Prepare the next alpha candidate from a clean tested revision using E07a's process, now requiring the strict W03 live-position set. Include exact public anchor APIs, byte-offset/list-index units, supported token format/version, typed failure/collapse semantics, replay assumptions and the probe evidence.
+2. Before listing a token format as supported for consumer persistence, review S04a/S04b evidence that its identity/context is independent of fragment/locator layout and can preserve meaning through the planned S03 repair. Record canonical golden bytes and supported reader fixtures. Once an approved alpha publishes a supported token version, later supported releases keep its readers and required translation; alpha API instability does not excuse silently reinterpreting stored tokens.
+3. If the representation gate is incomplete, retain the reduced counterexample, leave this task incomplete, and refine S04a/S04b. Do not advertise an experimental token as durable or invent a reset policy for already published supported tokens. No pre-vNext stored data conversion is required.
+4. State exact early guarantees: usable live positions and bounded token/replay behavior with physical GC disabled; full crash recovery, persisted undo/redo, durable external pins and repaired concurrent passages remain later gates. Include the consumer-owned block/formatting/transport responsibilities and a separate strict-reference versus caret example.
+5. Produce an updated tag/SHA/artifact publication checklist and a saved reply draft for the user to relay. Preserve immutable prior tags and distinguish the prepared local candidate from an actually published/fetchable release. Do not push, merge, publish or contact consumers without the separate user instruction.
+
+**Acceptance:**
+
+- The position alpha candidate contains installed strict-probe evidence and an explicit supported-token reader manifest with golden fixtures and future-reader obligations.
+- Consumer instructions demonstrate plaintext text/list edits, stored token bytes and typed failure handling while recording unfinished lifecycle/ordering/pin gates.
+- The candidate and draft response are concrete and reviewable; no publication, external edits/messages, unsupported token stability claim or final-release status promotion occurs.
+
+**Verification:**
+
+Rerun the package and strict live-position checks at the candidate revision, run prepare-integration-alpha.sh, review supported-token golden fixtures and manifest, and verify every advertised capability against its named passing evidence. Prepare only; publication remains pending separate authorization.
 
 ## E03 — Compile fresh API consumers and custom transport examples
 
@@ -85,6 +151,7 @@ Validate local links and API examples; compare each advertised guarantee to a na
 2. Review model independence, fresh-format rejection, error paths, single-owner threading, GC certificates, and recovery fallback invariants. Recheck original report probes against new facades.
 3. Document residual risks and make incomplete tasks visible; a green test runner is insufficient if tasks or policy decisions remain unresolved.
 4. Map W1-W6 and every named external-position case to implementation commits and executable evidence. Rerun installed_headless_wave_contract with completed G-series reclamation and supported token-version readers. Report formatting as explicitly consumer-owned outside this plain-text release; a requirement document or passing historical probe cannot substitute for the new public-API gate.
+5. Audit WP1-WP8, early package/alpha tasks and the Markoff-shaped plaintext fixture as well as W1-W6. Require final strict mode with no unsupported or known-failure substitution for promised features. Distinguish locally prepared alpha candidates from actually published tags/remote CI; external publication is not claimed without recorded authorization and fetchable artifacts.
 
 **Acceptance:**
 

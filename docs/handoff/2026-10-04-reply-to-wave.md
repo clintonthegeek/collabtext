@@ -1,5 +1,13 @@
 # Draft reply to Wave: external positions and integration gates
 
+**Sequencing update:** This saved reply's initial scheduling is superseded by the user-authorized
+[Wave ask2 roadmap amendment](2026-10-04-wave-sequencing-plan.md). The
+[consumer lane](../roadmap/2026-10-reliability/00-consumer-integration.md) now
+provides early installed packaging, continuous probes, a separate scoped-boundary
+model/live implementation gate, and two reviewable alpha candidates. Final
+recovery, persistent undo/redo, pins and certified GC remain required. This is
+still an unsent draft; no release was published by the planning amendment.
+
 **Date:** 2026-10-04. **Delivery:** draft for the project owner to relay; no message
 has been sent and no Wave files have been changed.
 **Reviewed:** your handoff, accepted ADR 0004, protocol 0001, and stage-4 planning.

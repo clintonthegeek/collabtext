@@ -7,8 +7,9 @@ rules these signatures implement.
 **Authority:** [vnext-design-constraints.md](vnext-design-constraints.md) (D01).
 
 The code in this document is **target signature**, not compiled code: most of
-these types do not exist yet. A02 compiles the examples; E03 compiles them
-against the installed package. Where today's API differs, §9 lists the break so
+these types do not exist yet. A02a/A06a expose and install the actually implemented
+alpha subset early; A02 compiles the complete target examples and E03 compiles them
+against the final installed package. Where today's API differs, §9 lists the break so
 a caller knows what to expect.
 
 ---
@@ -542,8 +543,47 @@ that case. L01 primitives do not yet give the editor or DocumentSession a workin
 save/reopen guarantee. Linux tests do not establish Windows/macOS support.
 
 [External consumer requirements W1–W6](vnext-external-position-contract.md) are
-normative amendments for S04/S05, L05/L06, G01/G06/G08, A02/A06, and E05.
+normative amendments for S04a/S04b/S04/S05, L05/L06, G01/G06/G08,
+A02a/A06a/W01–W03/A02/A06, E07a/E07b, and E05.
 Published supported vNext position-token bytes must remain readable independently
 of C++ layout. External storage does not create a pin; pin recovery precedes GC.
 Historical playback uses its own matching projection/archive. Formatting is
 explicitly consumer-owned outside the active plain-text/IdList release scope.
+
+## 12. Early installed API and live-position sequencing
+
+The [consumer lane](../roadmap/2026-10-reliability/00-consumer-integration.md)
+defines the earlier implementation schedule. A01 splits component targets;
+A02a exposes only compiled current capabilities behind self-contained public
+headers; A06a installs/exports them and verifies a relocated external consumer.
+Target-only signatures in this guide do not become implemented because an alpha
+package exists. Each capability has explicit executable evidence and limits.
+
+S04a specifies scoped boundary identity, affinity, typed resolution/collapse,
+comparison and a bounded canonical token codec using stable item identities.
+Its independent boundary model consumes supplied ordered-item/visibility states;
+the complete S02 ordering interpreter remains a separate design gate. S04b
+implements usable live positions after P06b permits real operation replay. W03
+certifies those positions through the installed surface before S03/L08 complete.
+S04 then certifies repaired ordering and real durable recovery; S05 supplies
+durable pin policy and G-series tasks authorize reclamation. Physical GC remains
+disabled in the early alphas.
+
+Result shapes must distinguish resolved UTF-8 byte/list-index positions, explicit
+collapse, missing causal context, unavailable history, and foreign/malformed or
+unsupported tokens. S04a fixes the precise public names and ownership; no current
+uncompiled code example supplies the missing algorithm. A strict attachment
+consumer can surface detachment while Markoff-style carets retain defined collapse
+behavior. A token from the wrong object receives a typed failure before lookup.
+
+DocumentSession/file transport/Qt adapters are optional compositions. Consumers
+can own their per-block models, Markdown rendering/formatting, operation routing,
+canonical event log, persistence, transport and cross-block undo using Core
+primitives. The early installed smoke and later full examples must demonstrate
+that route without forcing a file-backed session or a Wave-specific event log.
+
+E07a prepares the package alpha; E07b prepares a position alpha and records
+supported-token versions/golden bytes before persistence is advertised. An
+approved published supported token version remains readable through later
+supported releases even if C++ API/ABI changes. Preparing a release candidate
+does not publish it or merge master.

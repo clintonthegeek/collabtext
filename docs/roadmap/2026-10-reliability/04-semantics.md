@@ -17,6 +17,8 @@ The selected route is incremental repair of existing Buffer/IdList integration, 
 - `docs/specs/vnext-sequence-semantics.md`
 - `libs/collabtext/tests/fixtures/sequence-semantics/`
 - `docs/specs/vnext-external-position-contract.md`
+- `libs/collabtext/tests/tst_sequence_fixtures.cpp`
+- `libs/collabtext/CMakeLists.txt`
 
 **Steps:**
 
@@ -24,6 +26,7 @@ The selected route is incremental repair of existing Buffer/IdList integration, 
 2. Create finite fixtures for whole-run paste, per-character forward typing, reverse typing, nested insertions, deleting a neighbor concurrently, undo and reinsert, and editing inside a merged run. Include Buffer and IdList ties; stable expected order derives from actor/operation order and the chosen algorithm.
 3. Keep plain text and IdList only. Do not claim arbitrary semantic merge intent or maximal non-interleaving unless the selected algorithm/spec establishes it.
 4. Add W2 fixtures named boundary_affinity_ab_insert_X, scoped_empty_start_end_tokens, shared_token_concurrent_boundary_inserts, and deleted_neighbors_explicit_collapse. Record the same minted token, its causal state, affinity, exact offsets, and later token comparisons; include all scalar boundaries and list lookup misses. Semantic paragraph recognition after arbitrary replacement is outside the contract.
+5. Register tst_sequence_fixtures to validate the versioned fixture schema, causal graph and exact expected content/positions. Separate desired repaired-order fixtures from current-engine baseline observations; fixture validation does not require the legacy engine to pass F8. Hand boundary-only fixtures to S04a before the complete ordering algorithm is designed.
 
 **Acceptance:**
 
@@ -33,12 +36,12 @@ The selected route is incremental repair of existing Buffer/IdList integration, 
 
 **Verification:**
 
-Review fixture histories against the evaluation and original engine; run fixture parsing tests. No production algorithm change in this task. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
+Run ./tools/verify-roadmap.sh debug tst_sequence_fixtures and review histories against the evaluation and original engine. No production algorithm change in this task. Record exact-content and W-series fixture review separately from later implementation evidence.
 
 ## S02 — Specify the ordering repair within the existing C++ engine
 
 **Status:** see TASKS.json (initially not started)  
-**Depends on:** S01, P06b, L08  
+**Depends on:** S01, P06a, S04a\
 **Coverage:** F8, R12  
 **Design/decision gate:** Requires a complete reviewed incremental repair specification and independent executable model. Unresolved ordering invariants block dependent code changes; replacement engines are outside scope.  
 
@@ -48,19 +51,21 @@ Review fixture histories against the evaluation and original engine; run fixture
 - `docs/reports/vnext-ordering-design.md`
 - `libs/collabtext/tests/reference/SequenceModel.h`
 - `docs/specs/vnext-external-position-contract.md`
+- `docs/specs/vnext-boundary-semantics.md`
+- `libs/collabtext/tests/reference/BoundaryModel.h`
 
 **Steps:**
 
 1. Trace each S01 failing history through existing Buffer/IdList insertion integration, origins, run splitting, Locator ordering, and undo visibility. Identify the first violated invariant and specify the smallest representation/integration repair that satisfies the complete fixtures. Retain current engine components and storage structures where their invariants hold.
-2. Write changed operation fields (if any), integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and anchor boundary interpretation. Include a current→repaired transformation map with exact helper/file scope and justify each changed invariant. Existing origin-neighbor algorithms may inform the repair; do not implement a replacement CRDT/backend.
+2. Write changed operation fields (if any), integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and conformance to the S04a boundary contract. Include a current→repaired transformation map with exact helper/file scope and justify each changed invariant. Existing origin-neighbor algorithms may inform the repair; do not implement a replacement CRDT/backend.
 3. Implement a deliberately simple independent vector/reference interpreter for the repaired semantics. Validate the full fixture and bounded-history corpus. If it fails, record the smallest counterexample and refine this repair specification; do not launch a Rust/backend experiment or ask a routine executor to invent missing rules.
-4. Specify W2 boundary interpretation in the independent model: scoped empty/start/end values, same-token concurrent inserts under every causally valid delivery order, deleted-neighbor collapse reporting, later comparison, and separate UTF-8 byte/list-index units. Review these fixtures before unlocking S03/S04; do not infer semantic attachment intent from convergence.
+4. Compose the independent ordering interpreter with the S04a boundary model: supplied item orders must be generated by the repaired ordering interpreter, while boundary resolution remains independent of production. Cover scoped empty/start/end values, same-token concurrent inserts under every valid delivery order, deleted-neighbor collapse reporting, later comparison, and distinct UTF-8 byte/list-index units. Review compatibility with supported alpha token bytes before unlocking S03; no file-store recovery prerequisite applies to this design gate.
 
 **Acceptance:**
 
 - The repair includes implementable pseudocode, a transformation map within current components, and an independent reference interpreter passing S01.
 - Technical review checks nested/concurrent runs, reverse insertion, post-merge edits, undo, and reuse of existing storage. A superficial comparator tweak or an incomplete specification does not unlock S03.
-- The independent interpreter passes all W2 named fixtures and specifies representable boundary context and typed placement results; missing rules keep the implementation gate closed.
+- The independent interpreter plus BoundaryModel passes all W2 named fixtures and preserves the specified stable identities and token meaning. Missing ordering rules or a supported-token incompatibility keep S03 closed; S04a/S04b live work has its own earlier gate.
 
 **Verification:**
 
@@ -69,7 +74,7 @@ Run the reference interpreter on all S01 fixtures and bounded enumerations; reta
 ## S03 — Apply the ordering repair to existing Buffer and IdList paths
 
 **Status:** see TASKS.json (initially not started)  
-**Depends on:** S02  
+**Depends on:** S02, P06b, S04b\
 **Coverage:** F8  
 
 **Files / scope:**
@@ -78,12 +83,16 @@ Run the reference interpreter on all S01 fixtures and bounded enumerations; reta
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/src/crdt/SequenceOrder.cpp`
 - `libs/collabtext/tests/tst_sequence_semantics.cpp`
+- `docs/specs/vnext-boundary-semantics.md`
+- `libs/collabtext/tests/fixtures/external-position/`
+- `tests/consumer-smoke/wave-contract/`
 
 **Steps:**
 
 1. Apply the S02 transformation map to current Buffer/IdList integration helpers. Use their existing general/slow paths as the initial correctness baseline; preserve logical identities and run compression. Do not create a new production engine alongside them. Production decisions must match the independent reference interpreter.
 2. Adjust existing shared-locator order assumptions and split relocations only where the reviewed repair requires it. Keep unaffected storage/tree/undo behavior; update codecs/schema fixtures for explicitly changed fields and reject obsolete formats.
 3. Disable old fast paths when their invariants no longer apply; do not optimize this task. Remove the F8 expected-fail marker only after all exact-content fixtures pass.
+4. Rerun W03's installed live-position strict set and the supported-token golden fixtures after the ordering repair. Preserve the meaning/readability of any approved published token version; if operation fields change, update their versioned codecs. Retain original token bytes and add reduced post-merge/undo cases rather than reminting tokens to hide a discrepancy.
 
 **Acceptance:**
 
@@ -94,10 +103,88 @@ Run the reference interpreter on all S01 fixtures and bounded enumerations; reta
 
 Run `./tools/verify-roadmap.sh debug 'tst_sequence_semantics|tst_convergence|tst_idlist_convergence|tst_evaluation_regressions'` plus seeded differential traces under ASan.
 
-## S04 — Define and implement stable boundary anchors
+## S04a — Specify scoped boundary identities and an independent position model
+
+**Status:** see TASKS.json (initially not started)\
+**Depends on:** S01, P06a, W01\
+**Coverage:** F7, R2, R4, R13\
+**Design/decision gate:** A complete boundary specification, implementation map, and independent executable model must pass before S04b. An API value declaration or comparator test alone does not satisfy this gate.\
+
+**Files / scope:**
+
+- `docs/specs/vnext-boundary-semantics.md`
+- `docs/specs/vnext-public-api.md`
+- `docs/specs/vnext-sequence-semantics.md`
+- `docs/specs/vnext-alpha-capabilities.md`
+- `libs/collabtext/tests/reference/BoundaryModel.h`
+- `libs/collabtext/tests/tst_boundary_model.cpp`
+- `libs/collabtext/tests/fixtures/external-position/`
+- `docs/specs/vnext-external-position-contract.md`
+
+**Steps:**
+
+1. Trace current anchor_at/resolve_anchor and IdList lookup through origin intervals, fragment splitting, visibility/UndoMap changes, sentinel handling, and ignored bias. Record the exact unsafe helpers and a narrow implementation map for S04b. Use the P06a operation/item allocation domains and per-stream context; never mint a token from a transient fragment pointer, locator, local actor slot, or visible integer offset alone.
+2. Specify opaque text boundary and separate list-element identity tokens, scoped by document/stream/primitive/epoch. Define sufficient immutable item/neighborhood/causal context for both affinities under the S01 concurrent histories. Left/right neighbors alone are not accepted without model evidence. Give creation/resolution pseudocode, sentinel-free empty/start/end representation, and checked limits for context and encoded size.
+3. Specify typed outcomes with actual UTF-8 byte offsets or list indices, plus an explicit collapse/deletion condition. Distinguish invalid input, foreign context/epoch, unsupported token version, awaiting causal state, and unavailable referent/history. State the strict attachment interpretation separately from a caret boundary; list lookup misses never become valid end positions.
+4. Define boundary-token versioning and a bounded canonical encoding independent of the operation codec. Specify truncation/trailing-data rejection, exact enum/context validation, and no mutation or implicit pin on decode/resolve. Define token comparison as a checked operation in a specified document state; do not promise a history-independent ordering of separately minted tokens.
+5. Build an independent ordered-item/visibility reference model for mint/resolve/compare. Fixtures supply exact item order, causal edit groups and visibility states, including both current and intended repaired concurrent-paste orders; the model does not reproduce the complete S02 integration algorithm. Enumerate bounded two/three-actor boundary histories over those supplied states with insertion, deletion, local undo/redo, empty/end boundaries, duplicates and missing causal state. Compare the same minted token across equivalent replica states without calling production anchor/codec helpers.
+6. Review that the representation can express all S01 boundary histories and the intended repaired ordering, not just current interleaving behavior. S02 must consume this boundary contract and preserve its item identities and token meaning; it retains responsibility for the complete ordering algorithm/model. If a history needs more boundary context, retain the reduced counterexample and revise this gate before S04b.
+7. Update the API guide with compilable target signatures and exact result/ownership/offset rules for S04b. Record which obligations are live/model evidence and which remain S04 recovery certification, S05 pins, or G-series GC. No storage milestone or full ordering implementation is required for this specification/model gate.
+
+**Acceptance:**
+
+- A reviewed specification includes implementable mint/resolve/compare pseudocode, sufficient stable context, typed outcomes, canonical token codec rules, and a transformation map inside existing engine helpers.
+- The independent model passes exact WP1-WP4/WP7 expectations and concurrent same-token fixtures with documented bounds, seeds, and reduced traces. Mutations that ignore affinity, erase scope, or map missing IDs to end are detected.
+- The model separates strict content attachment loss from valid caret collapse, and its chosen token meaning is an explicit input to S02 rather than an accidental property of current locator ordering.
+
+**Verification:**
+
+Run ./tools/verify-roadmap.sh debug tst_boundary_model and Release/ASan equivalents; run bounded histories twice with the same seed, retain counts/traces and the three mutation checks, and review the implementation map before unlocking S04b.
+
+## S04b — Implement live scoped positions and their public token codec
+
+**Status:** see TASKS.json (initially not started)\
+**Depends on:** S04a, A02a, P06b\
+**Coverage:** F7, R2, R13\
+
+**Files / scope:**
+
+- `libs/collabtext/include/collabtext/Anchor.h`
+- `libs/collabtext/src/crdt/Anchor.h`
+- `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/src/crdt/IdList.cpp`
+- `libs/collabtext/src/codec/AnchorCodec.cpp`
+- `libs/collabtext/tests/tst_anchor.cpp`
+- `libs/collabtext/tests/tst_anchor_codec.cpp`
+- `libs/collabtext/tests/tst_idlist_anchor.cpp`
+- `docs/specs/vnext-boundary-semantics.md`
+- `docs/specs/vnext-public-api.md`
+- `docs/specs/vnext-alpha-capabilities.md`
+- `docs/specs/vnext-external-position-contract.md`
+
+**Steps:**
+
+1. Implement the reviewed S04a boundary representation and helpers within the existing Buffer/IdList engines. Start with a straightforward checked traversal; preserve item identities through split/deletion/undo and avoid adding a second production sequence engine or an optimization project.
+2. Expose checked mint/resolve/compare and library-owned encode/decode through the A02a public facades. Bind document/stream/primitive/epoch on construction and reject foreign scope before looking up an item. Replace unchecked public paths that can produce an end sentinel, assert, or fabricate a plausible offset on a miss.
+3. Implement exact affinity at insertion boundaries, scoped empty/start/end boundaries, UTF-8 scalar-boundary validation, distinct list-element lookup, and explicit collapsed versus unavailable outcomes. Use S04a rules for missing causal data and for undo restoration. Queries and rejection must leave text, version, undo state and notifications unchanged.
+4. Implement the bounded independently versioned token codec using checked utilities. Test canonical byte stability, malformed/unknown enum or version/context, truncation at every field boundary, and all 256 trailing one-byte suffixes; decoding creates no pin. Publish the token-format manifest and supported-reader rule in the API guide, independent of C++ object layout.
+5. Implement a child-process token test: process A creates context and edits, encodes actual P06b operations and a token; process B constructs a fresh engine from the same seed/context, replays operations, decodes the same bytes, applies remote edits and resolves. This establishes codec/replay evidence, not full file-store crash recovery. Also resolve one minted token in two independently replayed replicas.
+6. Differentially test production positions against BoundaryModel over bounded histories using the actual logical item order/visibility as input; separately check fixed hand-written ordering/position fixtures. Do not treat current interleaving as intended repaired content, or use an anchor-only comparison to close F8. Update the alpha manifest only for passed live/token cases. Preserve F7 retained-position/recovery obligations until S04/S05/G-series evidence exists; do not mark ordering, durable pins or persistent undo complete.
+
+**Acceptance:**
+
+- The original boundary in ab becomes offsets 1/2 for Left/Right after insertion of X; all scoped empty/start/end, Unicode, deletion/undo, wrong-object, and missing-list cases match the independent model.
+- Foreign tokens and malformed inputs return typed failures without assert/abort, fake offsets, mutation or notifications; token bytes round-trip in a fresh-process replay and on a second replica.
+- The public installed surface can expose actual implemented positions; S03/L08 are not prerequisites. Full repaired-order/recovery certification remains S04 and durable retention remains S05.
+
+**Verification:**
+
+Run ./tools/verify-roadmap.sh debug "tst_anchor|tst_anchor_codec|tst_idlist_anchor|tst_boundary_model|tst_convergence|tst_idlist_convergence" plus Release and a bounded ASan differential campaign. Run the fresh-process replay worker and record exact token bytes/fixture hashes; W03 separately certifies the installed adapter.
+
+## S04 — Certify boundary anchors across repaired ordering and durable recovery
 
 **Status:** see TASKS.json (initially not started)  
-**Depends on:** S03  
+**Depends on:** S04b, S03, L08, W03\
 **Coverage:** F7, R2, R13  
 
 **Files / scope:**
@@ -110,23 +197,27 @@ Run `./tools/verify-roadmap.sh debug 'tst_sequence_semantics|tst_convergence|tst
 - `docs/specs/vnext-external-position-contract.md`
 - `libs/collabtext/tests/tst_anchor_codec.cpp`
 - `libs/collabtext/tests/tst_idlist_anchor.cpp`
+- `docs/specs/vnext-boundary-semantics.md`
+- `libs/collabtext/tests/tst_session_recovery.cpp`
+- `docs/reports/vnext-boundary-certification.md`
 
 **Steps:**
 
-1. Represent boundaries and affinity according to S02 using sufficient left/right identity context; cover start/end, empty document, deleted neighbors, and subsequent concurrent insertions.
-2. Return explicit unresolved/wrong-epoch results rather than silently returning document end. Specify IdList element anchors separately from text insertion boundaries.
-3. Encode anchors with their own version, document/stream/primitive/epoch context, and checked affinity. Reject unknown or unsupported formats explicitly. Keep readers for supported published vNext token versions; no pre-vNext anchor conversion is required.
-4. Implement W1/W2 via the public opaque token codec and typed position results carrying UTF-8 byte offsets or list indices plus specified collapse placement. Add checked IdList lookup. Bind document/stream/primitive/epoch/affinity, reject foreign/malformed/unknown tokens without mutation, and round-trip original bytes after reopen and replica replay. Freeze the published token version and its supported-reader contract; pre-vNext anchors require no conversion.
+1. Treat S04a/S04b as the implemented live/token baseline rather than implementing a second anchor system. Review exact boundary interpretation against S02/S03 repaired ordering and every supported alpha token fixture; preserve stable causal identities through splitting, local/remote edits, deletion and undo/redo.
+2. Extend token round-trip from S04b's fresh-process operation replay to the actual L08 file/session lifecycle: close/reopen, own/remote log replay, sender-only and receiver-only restart, duplicate delivery, delayed causal input and failed durable writes. Reuse the same originally minted token bytes in all processes.
+3. Test typed distinction between malformed/foreign/unsupported tokens, temporarily missing causal state, collapsed boundaries and unavailable history. Text results carry scalar-aligned UTF-8 byte offsets; list results carry indices. State remains unchanged on rejection and missing list IDs never fabricate an end anchor.
+4. Rerun the installed strict live-position probes plus repaired-order WP6 using actual durable replay. Publish supported token-version readers and canonical golden fixtures; no pre-vNext anchor conversion is required. S05 still owns durable pin lifecycles and G-series tasks own checkpoint/GC translation.
+5. Record the certification report with exact named cases, modes, fixture/token hashes, supported reader versions and remaining retention limits. Remove only F7 anchor markers whose full acceptance now passes; do not close retained-position/GC obligations based solely on live tests.
 
 **Acceptance:**
 
-- In ab→aXb, preexisting left/right anchors at 1 resolve to 1/2; start/end affinity and remote exact-position tests pass.
-- Deleted-neighbor anchors remain meaningful before reclamation; foreign-stream/epoch anchors cannot resolve accidentally. F7 marker is removed.
-- Named cases external_token_roundtrip_reopen, boundary_affinity_ab_insert_X, scoped_empty_start_end_tokens, shared_token_concurrent_boundary_inserts, deleted_neighbors_explicit_collapse, foreign_or_unsupported_token_is_explicit, and missing_list_id_is_not_an_end_anchor pass through library-owned encode/decode. Resolution returns an actual typed position or error, never an application outcome without an offset.
+- All S04b exact affinity/scope/Unicode/deletion cases pass after S03, and the same original supported bytes resolve identically in recovered equivalent replica states.
+- Actual close/reopen/restart/fault cases pass with explicit incomplete/unavailable results where causal recovery is incomplete; codec-only replay is not substituted for durability evidence.
+- external_token_roundtrip_reopen, boundary_affinity_ab_insert_X, scoped_empty_start_end_tokens, shared_token_concurrent_boundary_inserts, deleted_neighbors_explicit_collapse, foreign_or_unsupported_token_is_explicit and missing_list_id_is_not_an_end_anchor have exact executable evidence; pin/checkpoint/GC cases remain visibly assigned to later tasks.
 
 **Verification:**
 
-Run `./tools/verify-roadmap.sh debug 'tst_anchor_codec|tst_anchor|tst_idlist_anchor|tst_sequence_semantics|tst_evaluation_regressions'`; assert exact positions through undo/redo and concurrent inserts.
+Run ./tools/verify-roadmap.sh debug "tst_anchor_codec|tst_anchor|tst_idlist_anchor|tst_sequence_semantics|tst_session_recovery|tst_evaluation_regressions" plus Release and bounded ASan restart/differential cases; rerun installed strict live-position and repaired-order probes. Record named evidence and supported-token hashes in the certification report.
 
 ## S05 — Define and implement retained external anchors and history policy
 
@@ -150,6 +241,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_anchor_codec|tst_anchor|tst_idlist_anc
 2. Specify which versions edits_since may query and how a checkpoint/GC floor invalidates older queries. Return HistoryUnavailable instead of silently producing an incorrect delta.
 3. Make comment/chat anchor ingestion reject wrong document/epoch and preserve unresolved anchors for later causal resolution. Define anchor translation for epoch transitions before G06 can remove identities.
 4. Implement W3 external durable pin registration/lookup/release keyed by stable consumer reference IDs, independent of author device lifetime. Specify idempotent replay, concurrent release and release-undo policy, recovery-before-GC, and the external canonical-log frontier/orphan protocol. A decoded or externally stored token does not register a pin. Preserve supported original token bytes through approved epoch translations. Document current-state reconstruction separately from isolated historical playback and HistoryUnavailable below the engine floor.
+5. Keep registration/lookup/release and consumer frontier projection available through headless public APIs with consumer-supplied persistence hooks; DocumentSession is an optional reference owner. External canonical-log users must not be forced to adopt the file transport, engine-owned block tree or per-session history as their cross-block undo manager. Add WP8 pin/retirement/recovery cases and expose installed assertions before final A06 certification.
 
 **Acceptance:**
 
@@ -164,7 +256,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_anchor_retention|tst_comment|tst_chat_
 ## S06 — Boundedly enumerate sequence/undo histories against the model
 
 **Status:** see TASKS.json (initially not started)  
-**Depends on:** S05, V04  
+**Depends on:** S05, S03, V04\
 **Coverage:** F7, F8, R4  
 
 **Files / scope:**

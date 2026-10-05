@@ -4,11 +4,11 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status:** V01–V08, D01, P01–P05, and L01 complete. P06a is in progress: both design gates now exist and run (identity ordering, and identity allocation), so what remains is the engine migration itself — steps 3–6. S01 is independently ready. Read the [2026-10-04 progress review](../../reports/2026-10-04-reliability-progress-review.md), [current handoff](../../handoff/2026-10-04-reliability-review.md), and [task registry](TASKS.json). W1–W6 external consumer requirements are accepted into existing tasks; they are not implemented merely by this amendment.
+**Status:** V01–V08, D01, P01–P05, and L01 complete. P06a is in progress: both design gates now exist and run (identity ordering, and identity allocation), so what remains is the engine migration itself — steps 3–6. A01, W01, and S01 are independently ready; the early consumer route follows the running P06a task. Read the [2026-10-04 progress review](../../reports/2026-10-04-reliability-progress-review.md), [current handoff](../../handoff/2026-10-04-reliability-review.md), and [task registry](TASKS.json). W1–W6 and Wave ask2 are accepted into dependency-gated tasks; the [early consumer lane](00-consumer-integration.md) brings packaging, live positions, probes and alpha preparation forward without claiming implementation.
 
-This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **63 active tasks in eight phases**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
+This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **72 active tasks across eight technical areas plus an early consumer integration lane**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
-All breaking implementation work belongs in the worktree above. The user confirmed there is no production data, store, or history to preserve; the new API and formats can start fresh. A copy of these plans is kept in the original checkout's `docs/` for discovery; the worktree is the authoritative implementation copy. The user authorized implementation on this branch. A merge, publication, consumer-repository changes, or external messages require a separate instruction.
+All breaking implementation work belongs in the worktree above. The user confirmed there is no production data, store, or history to preserve; the new API and formats can start fresh. The original checkout's `docs/` contains older discovery copies; this amendment lives in the authoritative worktree. The user authorized implementation on this branch. A merge, publication, consumer-repository changes, or external messages require a separate instruction.
 
 ## Read first
 
@@ -20,8 +20,12 @@ All breaking implementation work belongs in the worktree above. The user confirm
 
 ## Milestones and dependency order
 
+Read [00 — early consumer integration](00-consumer-integration.md) for the preferred serial schedule, probe matrix, exact gates and publication procedure. Milestone labels group final deliverables; they are not an instruction to finish recovery before packaging or live anchors.
+
 | Milestone | Tasks | Deliverable / exit condition | Plan |
 |---|---|---|---|
+| Early consumer package | A01, A02a, A06a, W01–W02, E07a | Implemented installed API, relocated external consumer, eight-probe baseline, prepared package alpha | [00 — consumer lane](00-consumer-integration.md) |
+| Early live positions | S01, S04a–S04b, W03, E07b (after P06a/P06b) | Independent boundary gate, scoped typed live positions/token codec, installed strict probes, prepared position alpha; no L08/S03 prerequisite | [04 — semantics](04-semantics.md) |
 | M0: trustworthy baseline | V01–V08 | Complete: reproducible checks, visible regression cases, unsafe GC contained, replayable traces, corrected benchmarks and simulator, store fault injection, behavioural fixtures and API inventory | [01 — validation](01-validation.md) |
 | M1: explicit protocol | D01, P01–P08, including P06a/P06b (P01–P05 done) | User policies recorded; persistent actors; strict validation; sparse/versioned codecs; transactional transport contract | [02 — protocol](02-protocol.md) |
 | M2: reliable lifecycle | L01–L08 (L01 primitives done) | Actual editor survives local/remote replay, close/reopen, failed writes, sender/receiver restart, and segment arrival gaps | [03 — recovery](03-recovery.md) |
@@ -33,25 +37,44 @@ All breaking implementation work belongs in the worktree above. The user confirm
 
 ```mermaid
 flowchart TD
-    V["M0: evidence and containment"] --> D["D01: user policies"]
-    D --> P["M1: protocol foundations"]
-    P --> L["M2: durable lifecycle"]
-    L --> S["M3: ordering and anchors"]
-    S --> G["M4: checkpoints and safe GC"]
-    G --> A["M5: package and Qt adapter"]
-    A --> X["M6: measured optimization"]
-    X --> E["M7: fresh release dossier"]
+    V["Completed validation / public contracts"] --> P["P06a: finish identity adoption"]
+    V --> A["A01 / A02a / A06a: installed alpha package"]
+    V --> W["W01: versioned probe fixtures"]
+    A --> B["W02 / E07a: baseline probes + package candidate"]
+    W --> B
+    P --> D["S01 / S04a: boundary specification + model"]
+    W --> D
+    P --> C["P06b: versioned operation codec"]
+    D --> S["S04b / W03 / E07b: live positions + alpha candidate"]
+    C --> S
+    B --> S
+    D --> O["S02 / S03: ordering repair"]
+    S --> O
+    C --> L["P07 / P08 / L02-L08: durable lifecycle"]
+    O --> R["S04-S07: recovered positions / pins / combined checks"]
+    L --> R
+    R --> G["G01-G08: validated reclamation"]
+    G --> F["Complete API / Qt / package certification"]
+    F --> X["Measured optimization + final release dossier"]
 ```
 
-The diagram is a conservative serial route. Individual prerequisites in TASKS.json permit some tasks earlier: durable-file work can proceed alongside later codec work; sequence fixtures can be drafted before lifecycle completion; CMake target splitting can start after its own prerequisites. Parallel agents are not required. A single executor following registry order reaches every gate safely.
+The diagram groups work and omits some edges; TASKS.json is authoritative. The
+preferred single-executor order is: finish current P06a; A01 → A02a → A06a;
+W01 → W02 → E07a; S01 → S04a; P06b → S04b → W03 → E07b; S02 → S03;
+P07 → P08 → L02–L08; then S04–S07 and the remaining G/A/X/E tasks in registry
+order. A blocked current task does not prevent independent ready work.
 
-M0–M2 are the first implementation priority. M2 provides a recovery baseline with reclamation disabled, not a declaration that every release guarantee is complete. Shipping the final supported library requires M3–M7 as well. Unsafe GC must remain disabled until G06, even if tests or performance benchmarks previously depended on it.
+Baseline/alpha preparation does not complete recovery, persistent undo/redo,
+durable pins, or repaired ordering. Live positions are usable before those gates
+with explicit limits. Unsafe physical GC remains disabled until G06. External
+publication/merging still requires a separate user instruction; prepared alphas
+are concrete reviewable candidates, not already published availability.
 
 ## Scope and compatibility
 
 The selected route evolves the existing C++20 Buffer and IdList engines, their SumTree/run storage and selective-undo machinery, one file-backed reference transport, and Qt integration. Repairs change only the components/invariants required by their acceptance tests. External algorithms can inform design and isolated comparison benchmarks can inform optimization; neither becomes a replacement engine. Rust rewrites, Yrs adoption, and backend feasibility trials are outside scope.
 
-The implementation priorities are recovery and durability, explicit merge/anchor/undo/GC semantics, a supported public library and Qt adapter, then measured latency/memory improvements. Retain working code and fast paths where their invariants hold. A complete reference model supports local repairs; it is not a second production engine. The roadmap adds no rich text, new CRDT primitives, transport menagerie, SQLite prerequisite, or automatic peer eviction.
+The immediate route completes identity adoption, early packaging/probes and live anchors, then ordering and the full durable lifecycle; persistent undo/redo, pins/GC and final API/Qt certification remain required before the supported release. Measured latency/memory work follows correctness. Retain working code and fast paths where their invariants hold. A complete reference model supports local repairs; it is not a second production engine. The roadmap adds no rich text, new CRDT primitives, transport menagerie, SQLite prerequisite, or automatic peer eviction.
 
 Breaking changes are expected in:
 
@@ -73,6 +96,7 @@ An enrolled device may remain offline indefinitely; only explicit retirement rem
 |---|---|---|
 | D01 | Complete: [design constraints](../../specs/vnext-design-constraints.md) turn the settled policies into C1–C14, R1–R10, B1–B8, with an executable scope check | All user policies are settled; their written implementation contract is complete |
 | P01 | Complete stable types, errors, ownership, counter, and version contracts | Partial API decisions create inconsistent consumers and codecs |
+| S04a | Complete scoped boundary contract, transformation map, codec rules and independent position model | Live anchors need stable causal identities and explicit deletion/affinity outcomes without waiting for full ordering/recovery |
 | S02 | Complete incremental ordering repair, transformation map, pseudocode, independent model, fixture/enumeration evidence | Ordering changes need precise invariants and verification within existing engines |
 | G01 | Full membership/epoch/undo/anchor/checkpoint protocol and independent GC model | Durable observation alone does not permit reclamation |
 
@@ -88,7 +112,7 @@ Technical review at these gates does not mean repeatedly asking the user for rou
 | F4: sender restart drops distinct operations | P02, L02, L04, L08 |
 | F5: cursor/state recovery mismatch and own-log omission | P07, L03–L08, G04–G05 |
 | F6: skipped missing/invalid older segments | L03, L08, G07 |
-| F7: wrong anchor bias and lost retained positions | S04–S06, G01, G06, X07 |
+| F7: wrong anchor bias and lost retained positions | S04a–S04b, W03, S04–S06, G01, G06, X07 |
 | F8: character-interleaved concurrent passages | S01–S07 |
 | F9: fake fsync and unsafe Save ordering | L01–L02, L07–L08 |
 | F10: accepted invalid operations/Unicode/codecs | P04–P06, P08 |
@@ -116,7 +140,7 @@ No recommendation is considered complete merely because it appears in a plan. E0
 
 ## Implementation handoff
 
-- **Next:** P06a steps 3–6 — widen the engine's identity types to the 24-byte identity, allocate per the run-interval contract in vnext-identity.md §3.2 rather than one tick per scalar, then measure the real layout. Both design gates are landed; the migration itself is not. Follow P06b only after its prerequisites. S01 fixtures can proceed independently; S02 and G01 still require complete specifications and independent models before dependent algorithms.
+- **Next:** P06a steps 3–6 — widen the engine's identity types to the 24-byte identity, allocate per the run-interval contract in vnext-identity.md §3.2 rather than one tick per scalar, then measure the real layout. Both design gates are landed; the migration itself is not. Then follow the early consumer sequence in 00-consumer-integration.md rather than the old full-recovery-first route. A01/W01/S01 can proceed independently; P06b still follows its own identity prerequisite; S04a, S02 and G01 require complete specifications and independent models before their dependent algorithms.
 - **Independent review:** the [review report](../../reports/2026-10-04-reliability-progress-review.md) records reproduced defects and fixes in P02/P04/P05/L01, executable evidence, and limitations. The old kickoff handoff is historical.
 - **Identity:** ReplicaState now has one move-only kernel-lease owner per private directory, nonzero counter reservations, strict state directives, and checked atomic persistence. The allocation contract is written and executable (vnext-identity.md §3.1–§3.8, with an independent model and a checked `reserve_run`), including the gap-record obligation a crash between reservation and log append creates. ActorId is still not consumed by the legacy engine; P06a steps 3–6 must finish that adoption.
 - **Validation:** the bounded reader rejects literal/escaped string overflow and duplicate keys; semantic validation also checks actor head-of-line queues. Deferred and diagnostic quarantine queues are separately bounded. The caller/store retains rejected input. Legacy operation serializers remain until P06b; P04/P05 did not complete all of F10.
@@ -154,3 +178,14 @@ the engine migration, remain. Wave's requests were integrated as W1–W6 into 13
 tasks, with no dependency bypass or completed-status promotion. The supported
 published vNext token contract is a future persisted-data obligation; the user's
 permission to discard pre-vNext experimental stores remains unchanged.
+
+On 2026-10-04 the user authorized implementing Wave ask2 sequencing in this
+worktree roadmap. Nine tasks were added (W01–W03, A02a, A06a, S04a–S04b,
+E07a–E07b), bringing the count to 72. A01 no longer waits for P06b/L08;
+packaging/header/export tasks no longer wait for the complete API. Live boundary
+work has a narrow independent-model gate and no S03/L08 dependency. S02 design
+also no longer waits for recovery. S04 retains final order/recovery certification,
+S05 retains durable pin/history prerequisites, and GC remains contained. The
+registry's transitive sequencing guards prevent those broad gates reappearing.
+Existing statuses/implementation evidence were preserved. All alpha publication,
+external consumer edits/messages and master integration remain separate actions.

@@ -131,7 +131,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_transport_commit_contract|tst_opstream
 
 **Steps:**
 
-1. Own the engines, producer lease, log, and transport binding in one single-thread owner. Opening loads seed/context, replays ALL own and remote durable logs, and drains dependencies; do not use previously persisted incremental cursors to bootstrap empty state.
+1. Own the engines, producer lease, log, and transport binding in one single-thread owner. Opening loads seed/context, replays ALL own and remote durable logs, and drains dependencies; do not use previously persisted incremental cursors to bootstrap empty state. This is an optional reference composition: direct headless Buffer/IdList operations, codecs and custom OpStream ownership remain public; a Wave/Markoff consumer is not required to route through this file-backed session.
 2. Recover the own actor clock from accepted own operations before enabling new local edits. Missing causal data remains a visible recovery/incomplete state; never render it as complete and acknowledge it.
 3. After baseline replay, derive incremental read state from the recovered coverage and keep it paired with the recoverable logs. Expose open/recover/apply/save/close results and logical visible deltas.
 4. Define W5 headless embedding under a consumer-owned Document seam: engine operations/pins are idempotent projections of canonical events, local journals/outboxes are recoverable pending state, and accepted event history is never rewound. Specify server rejection and pending-outbox reconciliation without ID reuse. Support read-only historical projection without minting operations; after S05, recover external pins to a declared consumer frontier before any GC can run. Add the consumer_commit_pin_crash_matrix recovery hooks here; S05/G08 complete its pin and GC cases.
@@ -141,6 +141,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_transport_commit_contract|tst_opstream
 - Own-only, mixed-peer, duplicate, reordered, copied, and restart fixtures recover exact CRDT state, not just visible text.
 - F5 receiver-restart failure passes; stale cursors cannot suppress recovery. Opening does not manufacture fresh operations or callbacks for replayed local edits.
 - Headless recovery tests cover canonical replay, pending outbox restart/reconciliation, and isolated historical playback without allocating new IDs. The session exposes the recovery frontier needed for subsequent S05 pin projection; per-session save is not advertised as a multi-block conversation transaction.
+- The reference session is optional. A headless consumer can own its canonical log, per-block engines, block lifecycle, transport and cross-block history while using public primitive APIs.
 
 **Verification:**
 

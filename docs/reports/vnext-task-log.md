@@ -1441,3 +1441,37 @@ Three findings from writing the gate, in the order they mattered:
 What this step does **not** prove: that a migrated engine converges, that
 `sizeof(FragmentSummary)` grows by the projected 1.4x, or anything about durable
 allocation across a power loss. Steps 3–6 own the migration and the measurement.
+
+## Roadmap amendment — Wave ask2 early consumer integration
+
+**Date:** 2026-10-04. **Planning baseline:** `4983bc4`.
+**Status:** roadmap amended; no implementation task promoted.
+
+The user authorized resequencing the worktree plan after reviewing Wave's
+follow-up. Nine tasks were added: W01–W03, A02a, A06a, S04a–S04b and E07a–E07b.
+The registry has 72 tasks. A01/header/install work no longer waits for the full
+identity/codec/recovery milestones; the normal route finishes the running P06a
+first. Live boundary implementation has its own specification/model gate and
+does not wait for S03/L08. S04 later certifies repaired ordering and real recovery;
+S05/G-series preserve durable pin/GC gates. Supported published token readers,
+persistent undo/redo, explicit retirement, optional sessions/transports and the
+native plaintext/IdList engine remain required.
+
+The [consumer lane](../roadmap/2026-10-reliability/00-consumer-integration.md)
+contains the serial route, eight-probe ownership, exact verification-script
+contract, stage capabilities and alpha publication procedure. The
+[executor handoff](../handoff/2026-10-04-wave-sequencing-plan.md), AGENTS.md,
+phase tasks, API/position contracts and execution guidance were synchronized.
+E07a/E07b prepare concrete candidates; no tag/package was published, external
+repository edited, message sent or master merged.
+
+Verification: `validate-plan.py --ready` passes for 72 tasks, topological/acyclic
+ordering, Markdown/JSON agreement, F1–F10/R1–R14/W1–W6 coverage, transitive early
+consumer gates and WP1–WP8 ownership. `check-scope.py --strict` reports 0 hits
+requiring review. Preservation checks confirm all 63 existing statuses and every
+completed/in-progress task record are unchanged; all nine new tasks are
+`not_started`. Four deliberate invalid registries were rejected: adding L08 to
+A01, removing P06a from S04a, removing L08 from final S04, and removing WP7
+ownership. Local-link review found 96 valid links across 20 orientation/roadmap/
+spec/handoff documents before this log entry; `git diff --check` passes.
+No new engine tests/results are claimed by this documentation/validator change.

@@ -14,11 +14,11 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 
 1. Load TASKS.json. Only tasks whose prerequisites have `status=complete` are eligible. A deferred prerequisite is not equivalent to complete; if the user chooses an alternate route, explicitly revise the dependency graph.
 2. Check DECISIONS.md. All Q1–Q4 are resolved: clean API/formats, explicit offline-device retirement with advisory reminders, persistent undo/redo, and incremental improvement of the existing C++ engine. No backend question remains open. Do not ask resolved questions again or reintroduce Yrs adoption/Rust rewrites.
-3. Check the task's design gate. S03 cannot begin merely because someone wrote an S02 title: the complete specification/model/evidence must exist. The same applies to G01/G02/G06.
+3. Check the task's design gate. S03 cannot begin merely because someone wrote an S02 title: the complete specification/model/evidence must exist. The same applies to S04a/S04b and G01/G02/G06. An early alpha changes sequencing, not the requirement for a complete independent boundary model.
 4. Prefer registry order for a serial run. Work on one task at a time. If a task is too broad, split it into new well-defined subtask IDs with dependencies and acceptance criteria before coding; do not silently expand scope.
 5. Mark the task `in_progress`, record the baseline revision and relevant failures, and read every existing file the task will touch. Paths named as new files are not missing prerequisites.
 
-`validate-plan.py --ready` lists structurally ready tasks. It cannot establish technical review or user approval; the executor must still check the decision/design artifacts. V01–V08, D01, P01–P05, and L01 are complete. Continue unfinished P06a: both design gates (ordering and allocation) have landed and run, and the engine migration in steps 3–6 is pending; S01 is separately ready. Read the [current handoff](../../handoff/2026-10-04-reliability-review.md) and [external consumer requirements](../../specs/vnext-external-position-contract.md) before continuing. Acceptance must include the W-series cases assigned to each task; a test name in a spec is not implementation evidence.
+`validate-plan.py --ready` lists structurally ready tasks. It cannot establish technical review or user approval; the executor must still check the decision/design artifacts. V01–V08, D01, P01–P05, and L01 are complete. Continue unfinished P06a: both design gates (ordering and allocation) have landed and run, and the engine migration in steps 3–6 is pending; A01/W01/S01 are separately ready. After finishing P06a, use the preferred serial route in [00-consumer-integration.md](00-consumer-integration.md): package and baseline probes first, live-position specification/model and implementation next, then full ordering/recovery and final certification. Read the [current handoff](../../handoff/2026-10-04-reliability-review.md) and [external consumer requirements](../../specs/vnext-external-position-contract.md) before continuing. Acceptance must include the W-series cases assigned to each task; a test name in a spec is not implementation evidence.
 
 ## Implementing the selected task
 
@@ -57,7 +57,7 @@ Set `COLLABTEXT_VERIFY_JOBS` to a positive integer to change the default two wor
 
 Leak checking stays enabled by default; the runner does not hide failures with global suppressions. A restricted sandbox may block LeakSanitizer's process inspection even when all test assertions pass. Rerun outside that restriction when authorized, and distinguish this environment failure from a leak report. Do not disable leak detection or suppress Qt allocations without recording the limitation and actual evidence. V01's successful unrestricted smoke run covers Buffer/IdList with Qt and requires no Qt leak suppression.
 
-Before A01, the full project still needs Qt6 and zstd. After A01, support these independent configurations:
+Before A01, the full project still needs Qt6 and zstd. A01 is now independently ready and is not gated by recovery or codec work. After A01, support these independent configurations:
 
 ```sh
 cmake -S . -B build-roadmap-core \
@@ -76,7 +76,7 @@ cmake --build build-roadmap-consumer -j 2
 ctest --test-dir build-roadmap-consumer --output-on-failure
 ```
 
-The exact options/paths become authoritative when A01/A06 implement them. The task registry names intended new tests; each creating task must register its executable so verification does not pass with “No tests were found.” The script must fail if a selected regex matches zero tests.
+The exact options/paths become authoritative when A01/A06a implement them; A06 extends final certification rather than first creating installation. tools/verify-consumer-package.sh becomes the installed producer/consumer entry point in A06a and gains baseline/strict probe modes in W02/W03. Read its implemented --help for exact mode/option syntax; the roadmap does not pretend those scripts exist yet. The task registry names intended new tests; each creating task must register its executable so verification does not pass with “No tests were found.” The script must fail if a selected regex matches zero tests.
 
 ## Randomized test contract (V04)
 
@@ -128,7 +128,7 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir build-roadmap-debug \
   --output-on-failure -E 'tst_benchmark|tst_realistic'
 ```
 
-The full acceptance run at E05 includes all correctness executables, bounded model/fuzz tests, sanitizer corpus, installed-consumer checks, and selected corrected benchmarks. Expensive benchmark campaigns are not mandatory for every small code change; targeted performance work uses the frozen trace matrix.
+Early package/probe gates run only implemented capability sets and explicitly record unsupported/known-failure cases. W03 requires strict WP1–WP5/WP7; E05 requires all promised final cases. No unsupported or skipped case is passing feature evidence. The full acceptance run at E05 includes all correctness executables, bounded model/fuzz tests, sanitizer corpus, installed-consumer checks, and selected corrected benchmarks. Expensive benchmark campaigns are not mandatory for every small code change; targeted performance work uses the frozen trace matrix.
 
 ## Invariants that must remain visible
 
@@ -166,3 +166,24 @@ Next ready tasks: <IDs whose prerequisites now pass>
 ```
 
 Do not write elapsed estimates as deadlines. Small routine tasks should fit one focused implementation/review cycle; S02/G01 and large lifecycle tasks can span several cycles and must retain a written state/checklist between sessions.
+
+## Early integration and alpha handoff
+
+Read [00-consumer-integration.md](00-consumer-integration.md) before executing
+W/A/S/E alpha tasks. The task registry order is topological and deliberately pulls
+consumer work before the full lifecycle milestone; do not follow phase numbers
+as a serial schedule or reinstate L08 as a blanket prerequisite. The validator
+checks transitive required/excluded ancestors and all eight probe owners.
+
+When completing an alpha task, report a concrete candidate SHA, tag/version
+proposal, build/install/probe commands, capability and supported-format manifests,
+artifact checksums, named verification evidence and pending external availability.
+The task completes preparation only. Follow the explicit publication procedure in
+the consumer lane after a separate user publication instruction; do not substitute
+waiting for approval for preparation work, and do not claim a local candidate is
+already fetchable. Existing full Git SHAs are valid pins when available remotely.
+
+Later ordering/recovery/checkpoint work reruns the earlier installed position
+probes and retains supported published token golden fixtures. C++ API instability
+does not permit silently breaking an approved persisted token contract. Tests
+must reuse originally minted bytes, not remint positions after merging/reopening.

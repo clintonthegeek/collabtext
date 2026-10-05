@@ -834,6 +834,74 @@
       }
     },
     {
+      "id": "L01",
+      "title": "Implement checked durable filesystem primitives",
+      "phase": 3,
+      "depends_on": [
+        "P01",
+        "V07"
+      ],
+      "files": [
+        "libs/collabtext/src/storage/DurableFile.h",
+        "libs/collabtext/src/storage/DurableFile.cpp",
+        "libs/collabtext/tests/tst_durable_file.cpp"
+      ],
+      "steps": [
+        "Provide checked append/write-all, file sync, atomic replacement, parent-directory sync, close, and process lease primitives behind Linux/Windows/macOS adapters. Define supported durability guarantees and unsupported-operation errors.",
+        "Never delete the old destination before replacement. Check short writes, sync failures, rename failures, and cleanup failures; retain the last durable source and return StoreError.",
+        "Use injected filesystem hooks from V07; add real-platform subprocess smoke tests without claiming a kill test simulates power loss."
+      ],
+      "acceptance": [
+        "The documented write\u2192file-sync\u2192replace\u2192directory-sync order is observable in fault tests.",
+        "Failed writes cannot be reported as committed; atomic replacement preserves either old or new complete data."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_durable_file|tst_store_fault_harness'`; test the platform matrix established by A07.",
+      "addresses": [
+        "F9",
+        "R13"
+      ],
+      "gate": null,
+      "status": "complete",
+      "baseline_revision": "2988a19",
+      "implementation_commits": [
+        "04182ed"
+      ],
+      "verification_results": {
+        "durable_file_cases": "28/28 QtTest cases, including a forked-writer crash test",
+        "targeted_debug": "tst_durable_file and tst_store_fault_harness 2/2",
+        "targeted_asan_ubsan_lsan": "2/2 with leak detection enabled",
+        "debug_fast": "62/62 CTest executables",
+        "release_fast": "62/62",
+        "asan_ubsan_lsan_fast": "62/62 with leak detection enabled",
+        "mutation_checks": "5 of 5 deliberate defects caught: skipped real file sync before rename, destination unlinked before rename, skipped directory sync after rename, short writes not retried, operations double-counted"
+      },
+      "artifacts": [
+        "libs/collabtext/src/storage/DurableFile.h",
+        "libs/collabtext/src/storage/DurableFile.cpp",
+        "libs/collabtext/tests/tst_durable_file.cpp",
+        "docs/reports/vnext-task-log.md",
+        "docs/reports/2026-10-04-review-artifacts/"
+      ],
+      "limitations": [
+        "Verified on Linux/GCC only. The Windows and macOS paths exist behind adapters and are compiled nowhere in this environment; Windows reports unsupported_operation for a directory sync and uses MoveFileEx with REPLACE_EXISTING. A07 owns the real platform matrix, so nothing here should be read as cross-platform certification.",
+        "Sync calls request stable storage from the filesystem/device stack, including a containing-directory barrier. Linux process-kill tests exercise committed replacement and local lease recovery; they do not certify power-loss or other platforms.",
+        "SegmentWriter and FileSync are NOT yet converted to use these primitives; that is L02. Until then the F9 defect is fixed in the new primitive but still live in SegmentWriter::flush() and seal_open_().",
+        "The injected-fault tests double-count as platform tests on Linux because the real syscalls are exercised; they do not substitute for running the suite on each platform.",
+        "Local process ownership uses a kernel lock on a persistent inode. PID text may be empty or stale and does not grant ownership. Missing/inaccessible files fail explicitly; never unlink a lease file to reclaim ownership."
+      ],
+      "review_commits": [
+        "bbe8434ce979258e61d9b680203e84fc7aea9d61"
+      ],
+      "review_date": "2026-10-04",
+      "review_verification": {
+        "debug_fast": "62/62 CTest executables",
+        "release_all": "64/64 including tst_benchmark and tst_realistic",
+        "asan_ubsan_lsan_fast": "62/62, leak checking enabled, no suppressions; timing assertions unchanged",
+        "strict_evaluation": "Expected exit 5 for F4-F8; normal run retains five XFAIL markers",
+        "source_version": "Reviewed baseline fac1ecbb plus b3f4f20 and bbe8434; exact source hashes in artifact manifest"
+      }
+    },
+    {
       "id": "P06a",
       "title": "Adopt persistent actor identity in operations and make values opaque",
       "phase": 2,
@@ -907,6 +975,333 @@
       ]
     },
     {
+      "id": "A01",
+      "title": "Split CMake targets and remove runtime test dependencies",
+      "phase": 6,
+      "depends_on": [
+        "P01",
+        "V08"
+      ],
+      "files": [
+        "CMakeLists.txt",
+        "libs/collabtext/CMakeLists.txt",
+        "app/CMakeLists.txt",
+        "libs/collabtext/src/crdt/SegmentFormat.cpp",
+        "tests/core-smoke/",
+        "tools/verify-roadmap.sh",
+        "docs/specs/vnext-public-api.md"
+      ],
+      "steps": [
+        "Inventory each source file and assign it to Core, FileTransport, QtAdapter, Widgets, or test-only support. Core owns existing Buffer/IdList/tree/undo/identity/value/codec components with C++20-only dependencies; FileTransport owns file sync/segments/compression and durable-store composition. Qt presence/identity UI stays outside Core. Record the target graph before moving source entries, keeping production algorithms unchanged. Trace ReplicaState's DurableFile dependencies explicitly: portable low-level lease/write helpers required by identity ownership must remain in a Qt/compression-free common or Core support unit, so FileTransport depends on Core without Core linking back to FileTransport. Expose the borrowed allocator contract; primitive construction must not automatically open a transport/session.",
+        "Introduce real component targets exported as CollabText::Core, CollabText::FileTransport, CollabText::QtAdapter and CollabText::Widgets. Make dependencies one-way: optional integrations depend on Core, Core never depends on them. Keep NetworkSim, trace/fault workers and QtTest in test support; give internal tests explicit PRIVATE include paths and link only their required targets.",
+        "Add COLLABTEXT_BUILD_TESTS, COLLABTEXT_BUILD_QT, COLLABTEXT_BUILD_APPS and COLLABTEXT_BUILD_FILE_TRANSPORT options at the top-level before dependency discovery. Gate app subdirectories, tools and automoc appropriately; QtTest is found only for enabled Qt tests. A core-only configuration must not call find_package for Qt, zstd or a hash provider.",
+        "Remove QCryptographicHash from portable file-format hashing without changing the currently supported hash algorithm/content identity. Use a documented portable provider such as OpenSSL::Crypto in FileTransport and record its license; compression/hash dependencies belong to FileTransport and must later export correctly for static consumers. Verify known hash vectors and existing segment fixtures.",
+        "Retarget the dogfood apps, existing Qt wrappers, test executables and verification runner using the new components. Keep producer builds working at every commit and keep existing public source includes private wherever possible; A02a completes facade isolation. Do not silently omit a previously selected test or break the runner's zero-match/sanitizer checks.",
+        "Create a plain C++ core-smoke executable without QtTest. Configure/build core-only with Qt6, zstd and OpenSSL package discovery explicitly disabled; separately build FileTransport without Qt and the full app/test configuration. This target split needs no recovery, operation-codec or GC milestone and must not wait for L08."
+      ],
+      "acceptance": [
+        "Core-only configures/builds/runs its plain C++ smoke with Qt6, zstd and OpenSSL discovery disabled. Portable FileTransport builds without Qt; Qt adapter/widgets/apps remain optional.",
+        "Production targets and their exported link interfaces contain no QtTest/NetworkSim/test workers. Core has no mandatory file transport, Qt, event-log or document-session ownership.",
+        "Full builds preserve the current test selection and dogfood linkage; affected segment hash/codec fixtures retain their expected identity and the verification runner still detects instrumentation and zero matches."
+      ],
+      "verification": "Run core-only and FileTransport-without-Qt configure/build/smoke checks plus the full Debug fast suite and targeted hash/segment fixtures. Inspect target include/link interfaces, test selection and core compile commands; use CMAKE_DISABLE_FIND_PACKAGE_Qt6/zstd/OpenSSL=ON for the Core negative-discovery configuration.",
+      "addresses": [
+        "R2",
+        "R7",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "A02a",
+      "title": "Expose the implemented alpha API through self-contained public headers",
+      "phase": 6,
+      "depends_on": [
+        "A01"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/",
+        "libs/collabtext/src/crdt/",
+        "tests/consumer-smoke/",
+        "docs/specs/vnext-public-api.md",
+        "docs/specs/vnext-alpha-capabilities.md",
+        "docs/specs/vnext-external-position-contract.md"
+      ],
+      "steps": [
+        "Inventory the types and callable behavior actually implemented at the task baseline. The normal serial route finishes the already-running P06a before this task, but packaging has no hard identity/codec/recovery milestone prerequisite. Update the API guide with an implementation table: compiled alpha surface, target-only signatures, current identity/codec limits, and future feature-owning task IDs.",
+        "Expose working Buffer and IdList construction, local text/list edits, reads, operation observation, validated remote apply, and available local undo/redo through public facades over the existing engines. Use opaque implementation and operation handles with out-of-line destruction/move definitions; keep Lamport/Global/Locator/Fragment/SumTree layouts and raw variants in private headers. Follow P01 ownership/result contracts where implemented; document any genuinely unfinished target API instead of inventing successful behavior.",
+        "Keep implemented public identity/result/configuration types self-contained and framework-independent. For any capability not yet implemented, either omit that entry point from the advertised alpha surface or return the documented typed unsupported result; do not return fake offsets, empty valid tokens, success-only stubs, or silent ActorId-to-slot conversions. Do not create a replacement engine or compatibility wrappers for obsolete source APIs.",
+        "Remove src from PUBLIC/INTERFACE include directories. Give in-tree engine tests private internal paths explicitly; consumer tests get only the public include tree. Keep Qt-specific headers out of Core and place optional adapter/widget headers in their component surface.",
+        "Compile every advertised public header as the first and only library header in its own translation unit. Build a small plain C++ consumer that edits text and list content and transfers actual available operation values between two independent engines; record unsupported codecs/transport/anchors honestly. A06a turns this source-boundary check into the installed check.",
+        "Create a versioned alpha capability manifest with separate facts for identity adoption, operation codec, live positions, token codec, crash recovery, persistent undo/redo, pins, ordering repair, and certified GC. Tie every true capability to an executable assertion; later tasks update both manifest and tests."
+      ],
+      "acceptance": [
+        "Every advertised public header compiles independently without crdt/ or src includes; public include/link interfaces expose no engine storage layout or QtTest.",
+        "The actual Buffer/IdList alpha consumer can create and edit primitives using public types and receive/apply operations without inspecting fields. Missing features are explicit in the manifest and usage guide.",
+        "A02a completes only the available alpha boundary. P07, S04b, A02 and A06 retain responsibility for their additional implemented capabilities and certification."
+      ],
+      "verification": "Compile the individual public-header translation units and the plain C++ consumer with internal includes disabled; run affected engine/public serialization suites in Debug. Inspect exported include/link properties and record the capability manifest with named passing cases.",
+      "addresses": [
+        "R2",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started",
+      "consumer_requirements": [
+        "W6"
+      ]
+    },
+    {
+      "id": "A06a",
+      "title": "Install and export a relocatable alpha package",
+      "phase": 6,
+      "depends_on": [
+        "A02a"
+      ],
+      "files": [
+        "cmake/CollabTextConfig.cmake.in",
+        "CMakeLists.txt",
+        "libs/collabtext/CMakeLists.txt",
+        "tests/consumer-smoke/CMakeLists.txt",
+        "tools/verify-consumer-package.sh",
+        "docs/USING_VNEXT.md",
+        "docs/specs/vnext-alpha-capabilities.md",
+        "docs/specs/vnext-external-position-contract.md"
+      ],
+      "steps": [
+        "Implement install(TARGETS)/install(EXPORT), public-header installation, package configuration/version files, and CollabText::Core/FileTransport/QtAdapter/Widgets imported targets for the implemented components. Install only supported public headers; do not copy src or expose source/build-machine paths. Make selected components discover their own dependencies rather than always finding Qt/zstd/OpenSSL.",
+        "Make the default Core-only find_package path C++20-only. Add negative configuration checks with Qt6, zstd and OpenSSL discovery disabled for Core; verify requesting an unavailable optional component reports a clear CMake failure. A static FileTransport consumer must receive required compression/hash link dependencies through its exported interface.",
+        "Create a fail-fast tools/verify-consumer-package.sh that configures/builds a producer in a task-specific temporary tree, installs to prefix A, moves the installation to prefix B, and builds/runs a separate consumer using find_package(CollabText CONFIG REQUIRED) and prefix B. Do not delete or move the developer checkout; inspect compile commands so only installed library headers are used. Reject zero consumer tests and retain command/configuration logs. Implement the exact CLI/options and exit/result contract in 00-consumer-integration.md; A06a initially supports gate=package, W02 adds baseline, W03 adds live, and A06/E05 add final. An unimplemented gate must return nonzero rather than silently selecting a weaker mode.",
+        "Exercise the A02a text/list consumer and public-header compilation from the installation. Add optional FileTransport/Qt component configurations only when those components are enabled. The consumer must configure outside the source tree, with no sibling Wave/Markoff checkout and no inherited producer targets.",
+        "Document exact configure/build/install/find_package commands, target names, enabled components, C++ standard, offset units, current alpha capabilities, and expected API changes. This is an evolving integration package; do not advertise durable pins, persistent undo, or full recovery before their tasks pass."
+      ],
+      "acceptance": [
+        "A relocated install builds and runs an independent Core consumer without source-tree include/link paths or Qt/zstd/OpenSSL discovery.",
+        "Optional component discovery and static dependency propagation work for the enabled configurations; every installed public header compiles independently.",
+        "The verification script fails on configuration/build/test failure or zero tests, and produces retained logs plus the exact producer revision and capability manifest."
+      ],
+      "verification": "Run tools/verify-consumer-package.sh for core-only and enabled optional components in Debug and Release; inspect consumer compile/link commands and the installed tree. Record configurations, revision, compiler, test counts, relocation paths, and manifest; remote CI is not claimed by local evidence.",
+      "addresses": [
+        "R2",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started",
+      "consumer_requirements": [
+        "W6"
+      ]
+    },
+    {
+      "id": "W01",
+      "title": "Capture the eight consumer probes as versioned fixtures",
+      "phase": 1,
+      "depends_on": [
+        "V04",
+        "V08"
+      ],
+      "files": [
+        "docs/specs/vnext-consumer-probes.md",
+        "libs/collabtext/tests/fixtures/external-position/",
+        "tests/consumer-smoke/wave-contract/probes/",
+        "docs/reports/vnext-consumer-probe-provenance.md",
+        "docs/specs/vnext-external-position-contract.md",
+        "tools/validate-consumer-fixtures.py"
+      ],
+      "steps": [
+        "Read both Wave asks and its alternatives report using the paths in 00-consumer-integration.md. Inspect the referenced /tmp/opencode sources selectively; record the exact source file, engine/library version, adapter assumptions, license/provenance, and any missing artifact. Copy only relevant reusable fixture/harness source into this repository; never require /tmp, a Wave checkout, network downloads, or another engine toolchain to run native acceptance.",
+        "Give the eight probes permanent IDs WP1-WP8. Store deterministic input histories, actor/document/stream IDs, causal edges, minted-token event, affinity, Unicode offset units, expected typed result, and seed in versioned fixtures. Port their input scenarios to a small C++ harness contract; competitor measurements remain attributed historical observations rather than native expected results.",
+        "Specify WP2 deletion expectations by attachment kind: a valid boundary may resolve with explicit collapse; a strict content attachment must surface detached/unavailable state rather than a bare relocated offset. Define whether undo can restore the referent. Specify WP3 as a consumer-owned block-existence check followed by scoped engine resolution, and WP7 as a library-enforced wrong-context error. Where exact deletion placement depends on S04a, record the mandatory observable outcome and tag the unresolved offset rule design_pending with owner S04a; do not invent universal deletion failure or a fallback integer. S04a must replace every pending boundary expectation with an exact reviewed fixture before S04b unlocks.",
+        "Specify WP4 scalar-boundary checks including zero, length, length+1, empty text, interior UTF-8 bytes, non-BMP text, and distinct list indices. Specify WP5 exact token round-trip, every one-byte trailing suffix, truncation, invalid enum/version/context, fresh-process replay, and unchanged document state on rejection.",
+        "Assign staged executable ownership to W02, S04a/S04b, W03, S03/S04, S05, G06/G08, and E05 using the matrix in 00-consumer-integration.md. Define machine-readable pass/known_failure/unsupported/error results; unsupported is capability information, never passing evidence for that feature. No production anchor or ordering change belongs to W01."
+      ],
+      "acceptance": [
+        "All eight probes have reproducible native fixture inputs and explicit typed expectations; absent competitor source is recorded honestly and does not prevent recreating its documented scenario.",
+        "Fixture review separates carets, strict attachments, deleted containing blocks, wrong-object lookup, no-GC behavior, and durable pin guarantees; it does not infer universal failure from every deletion.",
+        "A fixture parser validates the schema, units, IDs and histories and rejects malformed fixtures. No test depends on a temporary directory or sibling consumer repository."
+      ],
+      "verification": "Run python3 tools/validate-consumer-fixtures.py --self-test and validate the checked-in probe fixtures twice with the fixed seed; compare normalized histories. Review every WP1-WP8 expectation against W1-W6 and retain fixture hashes/provenance. This task specifies cases, not evidence that the engine passes them.",
+      "addresses": [
+        "F7",
+        "F8",
+        "R4",
+        "R11"
+      ],
+      "gate": null,
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W3",
+        "W6"
+      ]
+    },
+    {
+      "id": "W02",
+      "title": "Run installed baseline probes and continuous consumer checks",
+      "phase": 6,
+      "depends_on": [
+        "W01",
+        "A06a"
+      ],
+      "files": [
+        "tests/consumer-smoke/wave-contract/",
+        "tools/verify-consumer-package.sh",
+        ".github/workflows/consumer-alpha.yml",
+        "docs/reports/vnext-consumer-probe-baseline.md",
+        "docs/specs/vnext-alpha-capabilities.md",
+        "docs/specs/vnext-external-position-contract.md"
+      ],
+      "steps": [
+        "Implement a minimal consumer-owned Document adapter entirely in the installed consumer fixture: a block-ID-to-engine map, UTF-8 body access, local/remote operation routing, and capability-aware anchorAt/resolveAnchor forwarding. Keep block lifecycle/formatting/canonical events in this test consumer; do not edit Wave or prescribe its production adapter.",
+        "Execute every WP1-WP8 scenario against the current installed alpha. Produce a versioned result matrix with exact assertions, expected versus observed outcome, capability, engine revision, seed/fixture hash, and subprocess exit status. Missing anchors/pins may be unsupported and known defects may remain known_failure, but neither classification satisfies later strict gates.",
+        "Run wrong-object, malformed-token, and deleted-block scenarios in isolated child processes, recording signals and abnormal exits as errors. Cover local text/list operation transfer even before position support exists, so early packaging yields useful behavioral integration evidence rather than only header compilation.",
+        "Add CI on pushes/pull requests to roadmap/reliability-v2 that invokes the same local package/probe script for Linux Core-only builds and a Qt adapter configuration where available. Run the job without /tmp source harnesses, sibling checkouts, Rust, or network engine downloads; keep final A07 platform claims separate; retain machine-readable results on failure.",
+        "Separate baseline mode from strict capability mode. Baseline succeeds only for its documented implemented behavior and exact known-failure allowlist; a new abort, assertion mismatch, unexpected unsupported feature, or unknown case fails. Strict mode requires the feature-owning task sets specified in the probe matrix and fails on known_failure/unsupported/error. Do not skip missing capability scenarios or remove existing regression markers merely to make baseline green. Use gate=baseline in the shared script and bind the known-failure allowlist to case ID, capability/format and expected failure outcome, not a wildcard or a forever exemption; update it deliberately as owning tasks pass."
+      ],
+      "acceptance": [
+        "The independent installed consumer reports all eight probes and actually tests implemented primitive edits/operation transfer; no claimed pass is produced by an unsupported path.",
+        "The same script runs locally and in the prepared branch CI workflow, with explicit baseline and strict modes and retained logs/results. New errors fail baseline.",
+        "The baseline report records existing failures and assigns each unfinished probe to its owning task; no Wave production-readiness claim is made."
+      ],
+      "verification": "Run installed baseline mode in Debug and Release and compare case coverage; deliberately supply a bad expectation and an abnormal worker exit to verify the runner fails. Validate workflow syntax locally and record remote execution as pending until the workflow is actually pushed/run.",
+      "addresses": [
+        "F7",
+        "F8",
+        "R4",
+        "R11",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W3",
+        "W6"
+      ]
+    },
+    {
+      "id": "E07a",
+      "title": "Prepare a package alpha and reproducible consumer pin instructions",
+      "phase": 8,
+      "depends_on": [
+        "W02"
+      ],
+      "files": [
+        "CMakeLists.txt",
+        "docs/releases/integration-alpha.md",
+        "docs/USING_VNEXT.md",
+        "docs/specs/vnext-alpha-capabilities.md",
+        "tools/prepare-integration-alpha.sh"
+      ],
+      "steps": [
+        "Choose and record an unused SemVer prerelease candidate for the current 0.1.0 baseline (for example 0.2.0-alpha.1), keeping the roadmap branch name separate from a major-version promise. Prepare version metadata and notes around the installed package and baseline probe results; anchors/recovery/pins may remain explicitly unavailable.",
+        "Create a local preparation script that requires the intended branch and a clean tree, records the exact candidate commit, compiler/options, dependency versions, package/component list, capability manifest, supported format identifiers and verification artifacts, and produces checksums for locally staged artifacts. Keep output in ignored release/build directories; do not commit an archive or recursively vendor a checkout.",
+        "Document consumer pinning by a full Git commit SHA and, once published, an immutable annotated alpha tag. Include a clean-clone build/install/find_package example, source accessibility requirements, and how to run the probe script. A local worktree cannot be fetched; a remote branch commit can be pinned by SHA without a tag.",
+        "Prepare the exact proposed tag name, target SHA, annotation/release text, destination remote and verification commands as a reviewable publication checklist. The script must not push, create a remote release, publish packages, merge master, or send messages. External publication is a separately authorized action; preparation completes when the concrete candidate is reviewable.",
+        "Record alpha API/ABI instability separately from supported serialized format obligations. Do not call the package a completed reliability release, promise crash-safe stores/persistent undo, or imply an experimental position encoding is an approved durable token format. Classify any still-prototype operation/store encoding as experimental and unsupported for durable interoperability; publishing a package alpha does not retroactively certify those formats or require keeping obsolete prototype readers."
+      ],
+      "acceptance": [
+        "A concrete package alpha candidate has reproducible build/install/probe instructions, a full target SHA, version/tag proposal, capability matrix, checksummed local artifacts and exact known limits.",
+        "Preparation can run without publishing or merging; release notes distinguish available alpha features from target-only contracts and supported serialized formats.",
+        "No external action is performed by this task. Unpublished source accessibility and pending remote CI are explicitly recorded rather than reported as delivered availability."
+      ],
+      "verification": "Run the local preparation script after the required package/baseline checks, verify checksums and version consistency, and test the build commands from a separate local checkout at the candidate SHA. Review the publication checklist without executing it.",
+      "addresses": [
+        "R11",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started"
+    },
+    {
+      "id": "S01",
+      "title": "Specify sequence ordering and observable edit behavior",
+      "phase": 4,
+      "depends_on": [
+        "P01",
+        "V04"
+      ],
+      "files": [
+        "docs/specs/vnext-sequence-semantics.md",
+        "libs/collabtext/tests/fixtures/sequence-semantics/",
+        "docs/specs/vnext-external-position-contract.md",
+        "libs/collabtext/tests/tst_sequence_fixtures.cpp",
+        "libs/collabtext/CMakeLists.txt"
+      ],
+      "steps": [
+        "State exact properties: convergence, duplicate safety, causal integration, contiguous concurrent passages, intended left/right insertion affinity, selective local undo, and explicit behavior for concurrent replacements.",
+        "Create finite fixtures for whole-run paste, per-character forward typing, reverse typing, nested insertions, deleting a neighbor concurrently, undo and reinsert, and editing inside a merged run. Include Buffer and IdList ties; stable expected order derives from actor/operation order and the chosen algorithm.",
+        "Keep plain text and IdList only. Do not claim arbitrary semantic merge intent or maximal non-interleaving unless the selected algorithm/spec establishes it.",
+        "Add W2 fixtures named boundary_affinity_ab_insert_X, scoped_empty_start_end_tokens, shared_token_concurrent_boundary_inserts, and deleted_neighbors_explicit_collapse. Record the same minted token, its causal state, affinity, exact offsets, and later token comparisons; include all scalar boundaries and list lookup misses. Semantic paragraph recognition after arbitrary replacement is outside the contract.",
+        "Register tst_sequence_fixtures to validate the versioned fixture schema, causal graph and exact expected content/positions. Separate desired repaired-order fixtures from current-engine baseline observations; fixture validation does not require the legacy engine to pass F8. Hand boundary-only fixtures to S04a before the complete ordering algorithm is designed."
+      ],
+      "acceptance": [
+        "F8 fixture accepts only abcXYZ or XYZabc according to the specified tie rule, never aXbYcZ.",
+        "Every example has operation IDs, causal edges, and exact expected content, not just equality between replicas.",
+        "External-position fixtures specify exact left/right and collapse expectations, including empty/end boundaries; equality of separately minted tokens is insufficient."
+      ],
+      "verification": "Run ./tools/verify-roadmap.sh debug tst_sequence_fixtures and review histories against the evaluation and original engine. No production algorithm change in this task. Record exact-content and W-series fixture review separately from later implementation evidence.",
+      "addresses": [
+        "F8",
+        "R4"
+      ],
+      "gate": null,
+      "status": "not_started",
+      "consumer_requirements": [
+        "W2"
+      ]
+    },
+    {
+      "id": "S04a",
+      "title": "Specify scoped boundary identities and an independent position model",
+      "phase": 4,
+      "depends_on": [
+        "S01",
+        "P06a",
+        "W01"
+      ],
+      "files": [
+        "docs/specs/vnext-boundary-semantics.md",
+        "docs/specs/vnext-public-api.md",
+        "docs/specs/vnext-sequence-semantics.md",
+        "docs/specs/vnext-alpha-capabilities.md",
+        "libs/collabtext/tests/reference/BoundaryModel.h",
+        "libs/collabtext/tests/tst_boundary_model.cpp",
+        "libs/collabtext/tests/fixtures/external-position/",
+        "docs/specs/vnext-external-position-contract.md"
+      ],
+      "steps": [
+        "Trace current anchor_at/resolve_anchor and IdList lookup through origin intervals, fragment splitting, visibility/UndoMap changes, sentinel handling, and ignored bias. Record the exact unsafe helpers and a narrow implementation map for S04b. Use the P06a operation/item allocation domains and per-stream context; never mint a token from a transient fragment pointer, locator, local actor slot, or visible integer offset alone.",
+        "Specify opaque text boundary and separate list-element identity tokens, scoped by document/stream/primitive/epoch. Define sufficient immutable item/neighborhood/causal context for both affinities under the S01 concurrent histories. Left/right neighbors alone are not accepted without model evidence. Give creation/resolution pseudocode, sentinel-free empty/start/end representation, and checked limits for context and encoded size.",
+        "Specify typed outcomes with actual UTF-8 byte offsets or list indices, plus an explicit collapse/deletion condition. Distinguish invalid input, foreign context/epoch, unsupported token version, awaiting causal state, and unavailable referent/history. State the strict attachment interpretation separately from a caret boundary; list lookup misses never become valid end positions.",
+        "Define boundary-token versioning and a bounded canonical encoding independent of the operation codec. Specify truncation/trailing-data rejection, exact enum/context validation, and no mutation or implicit pin on decode/resolve. Define token comparison as a checked operation in a specified document state; do not promise a history-independent ordering of separately minted tokens.",
+        "Build an independent ordered-item/visibility reference model for mint/resolve/compare. Fixtures supply exact item order, causal edit groups and visibility states, including both current and intended repaired concurrent-paste orders; the model does not reproduce the complete S02 integration algorithm. Enumerate bounded two/three-actor boundary histories over those supplied states with insertion, deletion, local undo/redo, empty/end boundaries, duplicates and missing causal state. Compare the same minted token across equivalent replica states without calling production anchor/codec helpers.",
+        "Review that the representation can express all S01 boundary histories and the intended repaired ordering, not just current interleaving behavior. S02 must consume this boundary contract and preserve its item identities and token meaning; it retains responsibility for the complete ordering algorithm/model. If a history needs more boundary context, retain the reduced counterexample and revise this gate before S04b.",
+        "Update the API guide with compilable target signatures and exact result/ownership/offset rules for S04b. Record which obligations are live/model evidence and which remain S04 recovery certification, S05 pins, or G-series GC. No storage milestone or full ordering implementation is required for this specification/model gate."
+      ],
+      "acceptance": [
+        "A reviewed specification includes implementable mint/resolve/compare pseudocode, sufficient stable context, typed outcomes, canonical token codec rules, and a transformation map inside existing engine helpers.",
+        "The independent model passes exact WP1-WP4/WP7 expectations and concurrent same-token fixtures with documented bounds, seeds, and reduced traces. Mutations that ignore affinity, erase scope, or map missing IDs to end are detected.",
+        "The model separates strict content attachment loss from valid caret collapse, and its chosen token meaning is an explicit input to S02 rather than an accidental property of current locator ordering."
+      ],
+      "verification": "Run ./tools/verify-roadmap.sh debug tst_boundary_model and Release/ASan equivalents; run bounded histories twice with the same seed, retain counts/traces and the three mutation checks, and review the implementation map before unlocking S04b.",
+      "addresses": [
+        "F7",
+        "R2",
+        "R4",
+        "R13"
+      ],
+      "gate": "A complete boundary specification, implementation map, and independent executable model must pass before S04b. An API value declaration or comparator test alone does not satisfy this gate.",
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W6"
+      ]
+    },
+    {
       "id": "P06b",
       "title": "Implement versioned sparse codecs for the new identity and opaque values",
       "phase": 2,
@@ -937,6 +1332,217 @@
       "gate": null,
       "status": "not_started",
       "split_rationale": "Remaining half of P06 after P06a. See P06a.split_rationale."
+    },
+    {
+      "id": "S04b",
+      "title": "Implement live scoped positions and their public token codec",
+      "phase": 4,
+      "depends_on": [
+        "S04a",
+        "A02a",
+        "P06b"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/Anchor.h",
+        "libs/collabtext/src/crdt/Anchor.h",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/src/codec/AnchorCodec.cpp",
+        "libs/collabtext/tests/tst_anchor.cpp",
+        "libs/collabtext/tests/tst_anchor_codec.cpp",
+        "libs/collabtext/tests/tst_idlist_anchor.cpp",
+        "docs/specs/vnext-boundary-semantics.md",
+        "docs/specs/vnext-public-api.md",
+        "docs/specs/vnext-alpha-capabilities.md",
+        "docs/specs/vnext-external-position-contract.md"
+      ],
+      "steps": [
+        "Implement the reviewed S04a boundary representation and helpers within the existing Buffer/IdList engines. Start with a straightforward checked traversal; preserve item identities through split/deletion/undo and avoid adding a second production sequence engine or an optimization project.",
+        "Expose checked mint/resolve/compare and library-owned encode/decode through the A02a public facades. Bind document/stream/primitive/epoch on construction and reject foreign scope before looking up an item. Replace unchecked public paths that can produce an end sentinel, assert, or fabricate a plausible offset on a miss.",
+        "Implement exact affinity at insertion boundaries, scoped empty/start/end boundaries, UTF-8 scalar-boundary validation, distinct list-element lookup, and explicit collapsed versus unavailable outcomes. Use S04a rules for missing causal data and for undo restoration. Queries and rejection must leave text, version, undo state and notifications unchanged.",
+        "Implement the bounded independently versioned token codec using checked utilities. Test canonical byte stability, malformed/unknown enum or version/context, truncation at every field boundary, and all 256 trailing one-byte suffixes; decoding creates no pin. Publish the token-format manifest and supported-reader rule in the API guide, independent of C++ object layout.",
+        "Implement a child-process token test: process A creates context and edits, encodes actual P06b operations and a token; process B constructs a fresh engine from the same seed/context, replays operations, decodes the same bytes, applies remote edits and resolves. This establishes codec/replay evidence, not full file-store crash recovery. Also resolve one minted token in two independently replayed replicas.",
+        "Differentially test production positions against BoundaryModel over bounded histories using the actual logical item order/visibility as input; separately check fixed hand-written ordering/position fixtures. Do not treat current interleaving as intended repaired content, or use an anchor-only comparison to close F8. Update the alpha manifest only for passed live/token cases. Preserve F7 retained-position/recovery obligations until S04/S05/G-series evidence exists; do not mark ordering, durable pins or persistent undo complete."
+      ],
+      "acceptance": [
+        "The original boundary in ab becomes offsets 1/2 for Left/Right after insertion of X; all scoped empty/start/end, Unicode, deletion/undo, wrong-object, and missing-list cases match the independent model.",
+        "Foreign tokens and malformed inputs return typed failures without assert/abort, fake offsets, mutation or notifications; token bytes round-trip in a fresh-process replay and on a second replica.",
+        "The public installed surface can expose actual implemented positions; S03/L08 are not prerequisites. Full repaired-order/recovery certification remains S04 and durable retention remains S05."
+      ],
+      "verification": "Run ./tools/verify-roadmap.sh debug \"tst_anchor|tst_anchor_codec|tst_idlist_anchor|tst_boundary_model|tst_convergence|tst_idlist_convergence\" plus Release and a bounded ASan differential campaign. Run the fresh-process replay worker and record exact token bytes/fixture hashes; W03 separately certifies the installed adapter.",
+      "addresses": [
+        "F7",
+        "R2",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W6"
+      ]
+    },
+    {
+      "id": "W03",
+      "title": "Certify live position probes through an installed consumer adapter",
+      "phase": 6,
+      "depends_on": [
+        "W02",
+        "S04b"
+      ],
+      "files": [
+        "tests/consumer-smoke/wave-contract/",
+        "tools/verify-consumer-package.sh",
+        ".github/workflows/consumer-alpha.yml",
+        "docs/reports/vnext-consumer-live-position-gate.md",
+        "docs/specs/vnext-alpha-capabilities.md",
+        "docs/specs/vnext-external-position-contract.md",
+        "tests/consumer-smoke/markdown-contract/"
+      ],
+      "steps": [
+        "Replace the fixture adapter's unsupported position paths with the actual installed public APIs. Map engine typed results to consumer Resolved/Stale/Gone-style states without discarding error identity or collapse information. Keep deleted block checks in the consumer-owned map; a valid caret collapse must not be presented as an intact strict content attachment.",
+        "Require strict passes for WP1 affinity, WP2 explicit attachment/collapse handling, WP3 deleted containing block, WP4 exact end/off-end/Unicode boundaries, WP5 token codec and fresh-process operation replay, and WP7 wrong document/stream/block/primitive/epoch. Include text and list APIs and two physically independent engine instances using the same minted token.",
+        "Keep WP6 concurrent-passage repair visibly pending until S03, and WP8 durable pin/GC retention pending until S05/G06/G08. WP8's no-GC smoke must confirm containment remains active; it cannot count as certified reclamation. S04b replay evidence cannot count as L08 crash recovery.",
+        "Enforce the live-position strict set in the branch consumer workflow and local script; remove only the matching baseline known-failure entries after the strict cases pass. Keep a separate complete matrix showing all eight probes, capability states, format versions, and later gates. Use gate=live in the shared script for the exact strict set; later S03 adds repaired-order assertions to the continuing checks without weakening this set.",
+        "Add a Markdown/Markoff-shaped consumer fixture using opaque plain-text operations plus a separate sibling block map: preserve exact Markdown bytes, demonstrate optional transport routing, and show caret collapse independently of strict attachment loss. It must not require a Wave event log, engine-owned block tree, Qt widgets, or DocumentSession/file storage."
+      ],
+      "acceptance": [
+        "Strict installed WP1-WP5/WP7 pass in Debug/Release with no source includes, aborts, fabricated offsets or unsupported substitutions. WP5 includes fresh-process token replay; WP3 tests consumer deletion and WP7 tests library scope enforcement.",
+        "The report and CI enforce the live capability set while listing unfinished ordering/pin/recovery gates explicitly; no result implies full stage-4 readiness.",
+        "The independent Markdown fixture edits and transfers exact plaintext through consumer-owned composition and demonstrates caret versus strict-reference behavior."
+      ],
+      "verification": "Run tools/verify-consumer-package.sh in strict live-position mode for Debug/Release and the installed Core ASan configuration; inspect child exits, named probe results and Markdown fixture assertions. Retain the capability/version manifest and report unavailable remote CI execution separately.",
+      "addresses": [
+        "F7",
+        "R2",
+        "R4",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W6"
+      ]
+    },
+    {
+      "id": "E07b",
+      "title": "Prepare a position-capable alpha with a supported token manifest",
+      "phase": 8,
+      "depends_on": [
+        "E07a",
+        "W03"
+      ],
+      "files": [
+        "docs/releases/integration-alpha.md",
+        "docs/USING_VNEXT.md",
+        "docs/specs/vnext-alpha-capabilities.md",
+        "docs/specs/vnext-boundary-semantics.md",
+        "tools/prepare-integration-alpha.sh",
+        "tests/consumer-smoke/wave-contract/",
+        "docs/specs/vnext-external-position-contract.md"
+      ],
+      "steps": [
+        "Prepare the next alpha candidate from a clean tested revision using E07a's process, now requiring the strict W03 live-position set. Include exact public anchor APIs, byte-offset/list-index units, supported token format/version, typed failure/collapse semantics, replay assumptions and the probe evidence.",
+        "Before listing a token format as supported for consumer persistence, review S04a/S04b evidence that its identity/context is independent of fragment/locator layout and can preserve meaning through the planned S03 repair. Record canonical golden bytes and supported reader fixtures. Once an approved alpha publishes a supported token version, later supported releases keep its readers and required translation; alpha API instability does not excuse silently reinterpreting stored tokens.",
+        "If the representation gate is incomplete, retain the reduced counterexample, leave this task incomplete, and refine S04a/S04b. Do not advertise an experimental token as durable or invent a reset policy for already published supported tokens. No pre-vNext stored data conversion is required.",
+        "State exact early guarantees: usable live positions and bounded token/replay behavior with physical GC disabled; full crash recovery, persisted undo/redo, durable external pins and repaired concurrent passages remain later gates. Include the consumer-owned block/formatting/transport responsibilities and a separate strict-reference versus caret example.",
+        "Produce an updated tag/SHA/artifact publication checklist and a saved reply draft for the user to relay. Preserve immutable prior tags and distinguish the prepared local candidate from an actually published/fetchable release. Do not push, merge, publish or contact consumers without the separate user instruction."
+      ],
+      "acceptance": [
+        "The position alpha candidate contains installed strict-probe evidence and an explicit supported-token reader manifest with golden fixtures and future-reader obligations.",
+        "Consumer instructions demonstrate plaintext text/list edits, stored token bytes and typed failure handling while recording unfinished lifecycle/ordering/pin gates.",
+        "The candidate and draft response are concrete and reviewable; no publication, external edits/messages, unsupported token stability claim or final-release status promotion occurs."
+      ],
+      "verification": "Rerun the package and strict live-position checks at the candidate revision, run prepare-integration-alpha.sh, review supported-token golden fixtures and manifest, and verify every advertised capability against its named passing evidence. Prepare only; publication remains pending separate authorization.",
+      "addresses": [
+        "F7",
+        "R11",
+        "R13"
+      ],
+      "gate": null,
+      "status": "not_started",
+      "consumer_requirements": [
+        "W1",
+        "W2",
+        "W6"
+      ]
+    },
+    {
+      "id": "S02",
+      "title": "Specify the ordering repair within the existing C++ engine",
+      "phase": 4,
+      "depends_on": [
+        "S01",
+        "P06a",
+        "S04a"
+      ],
+      "files": [
+        "docs/specs/vnext-sequence-algorithm.md",
+        "docs/reports/vnext-ordering-design.md",
+        "libs/collabtext/tests/reference/SequenceModel.h",
+        "docs/specs/vnext-external-position-contract.md",
+        "docs/specs/vnext-boundary-semantics.md",
+        "libs/collabtext/tests/reference/BoundaryModel.h"
+      ],
+      "steps": [
+        "Trace each S01 failing history through existing Buffer/IdList insertion integration, origins, run splitting, Locator ordering, and undo visibility. Identify the first violated invariant and specify the smallest representation/integration repair that satisfies the complete fixtures. Retain current engine components and storage structures where their invariants hold.",
+        "Write changed operation fields (if any), integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and conformance to the S04a boundary contract. Include a current\u2192repaired transformation map with exact helper/file scope and justify each changed invariant. Existing origin-neighbor algorithms may inform the repair; do not implement a replacement CRDT/backend.",
+        "Implement a deliberately simple independent vector/reference interpreter for the repaired semantics. Validate the full fixture and bounded-history corpus. If it fails, record the smallest counterexample and refine this repair specification; do not launch a Rust/backend experiment or ask a routine executor to invent missing rules.",
+        "Compose the independent ordering interpreter with the S04a boundary model: supplied item orders must be generated by the repaired ordering interpreter, while boundary resolution remains independent of production. Cover scoped empty/start/end values, same-token concurrent inserts under every valid delivery order, deleted-neighbor collapse reporting, later comparison, and distinct UTF-8 byte/list-index units. Review compatibility with supported alpha token bytes before unlocking S03; no file-store recovery prerequisite applies to this design gate."
+      ],
+      "acceptance": [
+        "The repair includes implementable pseudocode, a transformation map within current components, and an independent reference interpreter passing S01.",
+        "Technical review checks nested/concurrent runs, reverse insertion, post-merge edits, undo, and reuse of existing storage. A superficial comparator tweak or an incomplete specification does not unlock S03.",
+        "The independent interpreter plus BoundaryModel passes all W2 named fixtures and preserves the specified stable identities and token meaning. Missing ordering rules or a supported-token incompatibility keep S03 closed; S04a/S04b live work has its own earlier gate."
+      ],
+      "verification": "Run the reference interpreter on all S01 fixtures and bounded enumerations; retain exact traces and implementation-independent expected outputs. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
+      "addresses": [
+        "F8",
+        "R12"
+      ],
+      "gate": "Requires a complete reviewed incremental repair specification and independent executable model. Unresolved ordering invariants block dependent code changes; replacement engines are outside scope.",
+      "status": "not_started",
+      "consumer_requirements": [
+        "W2"
+      ]
+    },
+    {
+      "id": "S03",
+      "title": "Apply the ordering repair to existing Buffer and IdList paths",
+      "phase": 4,
+      "depends_on": [
+        "S02",
+        "P06b",
+        "S04b"
+      ],
+      "files": [
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/src/crdt/SequenceOrder.cpp",
+        "libs/collabtext/tests/tst_sequence_semantics.cpp",
+        "docs/specs/vnext-boundary-semantics.md",
+        "libs/collabtext/tests/fixtures/external-position/",
+        "tests/consumer-smoke/wave-contract/"
+      ],
+      "steps": [
+        "Apply the S02 transformation map to current Buffer/IdList integration helpers. Use their existing general/slow paths as the initial correctness baseline; preserve logical identities and run compression. Do not create a new production engine alongside them. Production decisions must match the independent reference interpreter.",
+        "Adjust existing shared-locator order assumptions and split relocations only where the reviewed repair requires it. Keep unaffected storage/tree/undo behavior; update codecs/schema fixtures for explicitly changed fields and reject obsolete formats.",
+        "Disable old fast paths when their invariants no longer apply; do not optimize this task. Remove the F8 expected-fail marker only after all exact-content fixtures pass.",
+        "Rerun W03's installed live-position strict set and the supported-token golden fixtures after the ordering repair. Preserve the meaning/readability of any approved published token version; if operation fields change, update their versioned codecs. Retain original token bytes and add reduced post-merge/undo cases rather than reminting tokens to hide a discrepancy."
+      ],
+      "acceptance": [
+        "Production Buffer and IdList match the reference model on every S01 history and delivery permutation.",
+        "All existing valid local editing, duplicate, undo, and convergence tests pass or have explicitly justified semantic expectation updates."
+      ],
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_sequence_semantics|tst_convergence|tst_idlist_convergence|tst_evaluation_regressions'` plus seeded differential traces under ASan.",
+      "addresses": [
+        "F8"
+      ],
+      "gate": null,
+      "status": "not_started"
     },
     {
       "id": "P07",
@@ -1003,74 +1609,6 @@
       ],
       "gate": null,
       "status": "not_started"
-    },
-    {
-      "id": "L01",
-      "title": "Implement checked durable filesystem primitives",
-      "phase": 3,
-      "depends_on": [
-        "P01",
-        "V07"
-      ],
-      "files": [
-        "libs/collabtext/src/storage/DurableFile.h",
-        "libs/collabtext/src/storage/DurableFile.cpp",
-        "libs/collabtext/tests/tst_durable_file.cpp"
-      ],
-      "steps": [
-        "Provide checked append/write-all, file sync, atomic replacement, parent-directory sync, close, and process lease primitives behind Linux/Windows/macOS adapters. Define supported durability guarantees and unsupported-operation errors.",
-        "Never delete the old destination before replacement. Check short writes, sync failures, rename failures, and cleanup failures; retain the last durable source and return StoreError.",
-        "Use injected filesystem hooks from V07; add real-platform subprocess smoke tests without claiming a kill test simulates power loss."
-      ],
-      "acceptance": [
-        "The documented write\u2192file-sync\u2192replace\u2192directory-sync order is observable in fault tests.",
-        "Failed writes cannot be reported as committed; atomic replacement preserves either old or new complete data."
-      ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_durable_file|tst_store_fault_harness'`; test the platform matrix established by A07.",
-      "addresses": [
-        "F9",
-        "R13"
-      ],
-      "gate": null,
-      "status": "complete",
-      "baseline_revision": "2988a19",
-      "implementation_commits": [
-        "04182ed"
-      ],
-      "verification_results": {
-        "durable_file_cases": "28/28 QtTest cases, including a forked-writer crash test",
-        "targeted_debug": "tst_durable_file and tst_store_fault_harness 2/2",
-        "targeted_asan_ubsan_lsan": "2/2 with leak detection enabled",
-        "debug_fast": "62/62 CTest executables",
-        "release_fast": "62/62",
-        "asan_ubsan_lsan_fast": "62/62 with leak detection enabled",
-        "mutation_checks": "5 of 5 deliberate defects caught: skipped real file sync before rename, destination unlinked before rename, skipped directory sync after rename, short writes not retried, operations double-counted"
-      },
-      "artifacts": [
-        "libs/collabtext/src/storage/DurableFile.h",
-        "libs/collabtext/src/storage/DurableFile.cpp",
-        "libs/collabtext/tests/tst_durable_file.cpp",
-        "docs/reports/vnext-task-log.md",
-        "docs/reports/2026-10-04-review-artifacts/"
-      ],
-      "limitations": [
-        "Verified on Linux/GCC only. The Windows and macOS paths exist behind adapters and are compiled nowhere in this environment; Windows reports unsupported_operation for a directory sync and uses MoveFileEx with REPLACE_EXISTING. A07 owns the real platform matrix, so nothing here should be read as cross-platform certification.",
-        "Sync calls request stable storage from the filesystem/device stack, including a containing-directory barrier. Linux process-kill tests exercise committed replacement and local lease recovery; they do not certify power-loss or other platforms.",
-        "SegmentWriter and FileSync are NOT yet converted to use these primitives; that is L02. Until then the F9 defect is fixed in the new primitive but still live in SegmentWriter::flush() and seal_open_().",
-        "The injected-fault tests double-count as platform tests on Linux because the real syscalls are exercised; they do not substitute for running the suite on each platform.",
-        "Local process ownership uses a kernel lock on a persistent inode. PID text may be empty or stale and does not grant ownership. Missing/inaccessible files fail explicitly; never unlink a lease file to reclaim ownership."
-      ],
-      "review_commits": [
-        "bbe8434ce979258e61d9b680203e84fc7aea9d61"
-      ],
-      "review_date": "2026-10-04",
-      "review_verification": {
-        "debug_fast": "62/62 CTest executables",
-        "release_all": "64/64 including tst_benchmark and tst_realistic",
-        "asan_ubsan_lsan_fast": "62/62, leak checking enabled, no suppressions; timing assertions unchanged",
-        "strict_evaluation": "Expected exit 5 for F4-F8; normal run retains five XFAIL markers",
-        "source_version": "Reviewed baseline fac1ecbb plus b3f4f20 and bbe8434; exact source hashes in artifact manifest"
-      }
     },
     {
       "id": "L02",
@@ -1184,7 +1722,7 @@
         "docs/specs/vnext-consumer-session.md"
       ],
       "steps": [
-        "Own the engines, producer lease, log, and transport binding in one single-thread owner. Opening loads seed/context, replays ALL own and remote durable logs, and drains dependencies; do not use previously persisted incremental cursors to bootstrap empty state.",
+        "Own the engines, producer lease, log, and transport binding in one single-thread owner. Opening loads seed/context, replays ALL own and remote durable logs, and drains dependencies; do not use previously persisted incremental cursors to bootstrap empty state. This is an optional reference composition: direct headless Buffer/IdList operations, codecs and custom OpStream ownership remain public; a Wave/Markoff consumer is not required to route through this file-backed session.",
         "Recover the own actor clock from accepted own operations before enabling new local edits. Missing causal data remains a visible recovery/incomplete state; never render it as complete and acknowledge it.",
         "After baseline replay, derive incremental read state from the recovered coverage and keep it paired with the recoverable logs. Expose open/recover/apply/save/close results and logical visible deltas.",
         "Define W5 headless embedding under a consumer-owned Document seam: engine operations/pins are idempotent projections of canonical events, local journals/outboxes are recoverable pending state, and accepted event history is never rewound. Specify server rejection and pending-outbox reconciliation without ID reuse. Support read-only historical projection without minting operations; after S05, recover external pins to a declared consumer frontier before any GC can run. Add the consumer_commit_pin_crash_matrix recovery hooks here; S05/G08 complete its pin and GC cases."
@@ -1192,7 +1730,8 @@
       "acceptance": [
         "Own-only, mixed-peer, duplicate, reordered, copied, and restart fixtures recover exact CRDT state, not just visible text.",
         "F5 receiver-restart failure passes; stale cursors cannot suppress recovery. Opening does not manufacture fresh operations or callbacks for replayed local edits.",
-        "Headless recovery tests cover canonical replay, pending outbox restart/reconciliation, and isolated historical playback without allocating new IDs. The session exposes the recovery frontier needed for subsequent S05 pin projection; per-session save is not advertised as a multi-block conversation transaction."
+        "Headless recovery tests cover canonical replay, pending outbox restart/reconciliation, and isolated historical playback without allocating new IDs. The session exposes the recovery frontier needed for subsequent S05 pin projection; per-session save is not advertised as a multi-block conversation transaction.",
+        "The reference session is optional. A headless consumer can own its canonical log, per-block engines, block lifecycle, transport and cross-block history while using public primitive APIs."
       ],
       "verification": "Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regressions|tst_opstream_replay'`; restart the same temp store twice and continue editing after each open. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
       "addresses": [
@@ -1311,112 +1850,14 @@
       "status": "not_started"
     },
     {
-      "id": "S01",
-      "title": "Specify sequence ordering and observable edit behavior",
-      "phase": 4,
-      "depends_on": [
-        "P01",
-        "V04"
-      ],
-      "files": [
-        "docs/specs/vnext-sequence-semantics.md",
-        "libs/collabtext/tests/fixtures/sequence-semantics/",
-        "docs/specs/vnext-external-position-contract.md"
-      ],
-      "steps": [
-        "State exact properties: convergence, duplicate safety, causal integration, contiguous concurrent passages, intended left/right insertion affinity, selective local undo, and explicit behavior for concurrent replacements.",
-        "Create finite fixtures for whole-run paste, per-character forward typing, reverse typing, nested insertions, deleting a neighbor concurrently, undo and reinsert, and editing inside a merged run. Include Buffer and IdList ties; stable expected order derives from actor/operation order and the chosen algorithm.",
-        "Keep plain text and IdList only. Do not claim arbitrary semantic merge intent or maximal non-interleaving unless the selected algorithm/spec establishes it.",
-        "Add W2 fixtures named boundary_affinity_ab_insert_X, scoped_empty_start_end_tokens, shared_token_concurrent_boundary_inserts, and deleted_neighbors_explicit_collapse. Record the same minted token, its causal state, affinity, exact offsets, and later token comparisons; include all scalar boundaries and list lookup misses. Semantic paragraph recognition after arbitrary replacement is outside the contract."
-      ],
-      "acceptance": [
-        "F8 fixture accepts only abcXYZ or XYZabc according to the specified tie rule, never aXbYcZ.",
-        "Every example has operation IDs, causal edges, and exact expected content, not just equality between replicas.",
-        "External-position fixtures specify exact left/right and collapse expectations, including empty/end boundaries; equality of separately minted tokens is insufficient."
-      ],
-      "verification": "Review fixture histories against the evaluation and original engine; run fixture parsing tests. No production algorithm change in this task. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
-      "addresses": [
-        "F8",
-        "R4"
-      ],
-      "gate": null,
-      "status": "not_started",
-      "consumer_requirements": [
-        "W2"
-      ]
-    },
-    {
-      "id": "S02",
-      "title": "Specify the ordering repair within the existing C++ engine",
-      "phase": 4,
-      "depends_on": [
-        "S01",
-        "P06b",
-        "L08"
-      ],
-      "files": [
-        "docs/specs/vnext-sequence-algorithm.md",
-        "docs/reports/vnext-ordering-design.md",
-        "libs/collabtext/tests/reference/SequenceModel.h",
-        "docs/specs/vnext-external-position-contract.md"
-      ],
-      "steps": [
-        "Trace each S01 failing history through existing Buffer/IdList insertion integration, origins, run splitting, Locator ordering, and undo visibility. Identify the first violated invariant and specify the smallest representation/integration repair that satisfies the complete fixtures. Retain current engine components and storage structures where their invariants hold.",
-        "Write changed operation fields (if any), integration pseudocode, tie-break rules, run splitting/identity, causal deferral, undo interaction, and anchor boundary interpretation. Include a current\u2192repaired transformation map with exact helper/file scope and justify each changed invariant. Existing origin-neighbor algorithms may inform the repair; do not implement a replacement CRDT/backend.",
-        "Implement a deliberately simple independent vector/reference interpreter for the repaired semantics. Validate the full fixture and bounded-history corpus. If it fails, record the smallest counterexample and refine this repair specification; do not launch a Rust/backend experiment or ask a routine executor to invent missing rules.",
-        "Specify W2 boundary interpretation in the independent model: scoped empty/start/end values, same-token concurrent inserts under every causally valid delivery order, deleted-neighbor collapse reporting, later comparison, and separate UTF-8 byte/list-index units. Review these fixtures before unlocking S03/S04; do not infer semantic attachment intent from convergence."
-      ],
-      "acceptance": [
-        "The repair includes implementable pseudocode, a transformation map within current components, and an independent reference interpreter passing S01.",
-        "Technical review checks nested/concurrent runs, reverse insertion, post-merge edits, undo, and reuse of existing storage. A superficial comparator tweak or an incomplete specification does not unlock S03.",
-        "The independent interpreter passes all W2 named fixtures and specifies representable boundary context and typed placement results; missing rules keep the implementation gate closed."
-      ],
-      "verification": "Run the reference interpreter on all S01 fixtures and bounded enumerations; retain exact traces and implementation-independent expected outputs. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.",
-      "addresses": [
-        "F8",
-        "R12"
-      ],
-      "gate": "Requires a complete reviewed incremental repair specification and independent executable model. Unresolved ordering invariants block dependent code changes; replacement engines are outside scope.",
-      "status": "not_started",
-      "consumer_requirements": [
-        "W2"
-      ]
-    },
-    {
-      "id": "S03",
-      "title": "Apply the ordering repair to existing Buffer and IdList paths",
-      "phase": 4,
-      "depends_on": [
-        "S02"
-      ],
-      "files": [
-        "libs/collabtext/src/crdt/Buffer.cpp",
-        "libs/collabtext/src/crdt/IdList.cpp",
-        "libs/collabtext/src/crdt/SequenceOrder.cpp",
-        "libs/collabtext/tests/tst_sequence_semantics.cpp"
-      ],
-      "steps": [
-        "Apply the S02 transformation map to current Buffer/IdList integration helpers. Use their existing general/slow paths as the initial correctness baseline; preserve logical identities and run compression. Do not create a new production engine alongside them. Production decisions must match the independent reference interpreter.",
-        "Adjust existing shared-locator order assumptions and split relocations only where the reviewed repair requires it. Keep unaffected storage/tree/undo behavior; update codecs/schema fixtures for explicitly changed fields and reject obsolete formats.",
-        "Disable old fast paths when their invariants no longer apply; do not optimize this task. Remove the F8 expected-fail marker only after all exact-content fixtures pass."
-      ],
-      "acceptance": [
-        "Production Buffer and IdList match the reference model on every S01 history and delivery permutation.",
-        "All existing valid local editing, duplicate, undo, and convergence tests pass or have explicitly justified semantic expectation updates."
-      ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_sequence_semantics|tst_convergence|tst_idlist_convergence|tst_evaluation_regressions'` plus seeded differential traces under ASan.",
-      "addresses": [
-        "F8"
-      ],
-      "gate": null,
-      "status": "not_started"
-    },
-    {
       "id": "S04",
-      "title": "Define and implement stable boundary anchors",
+      "title": "Certify boundary anchors across repaired ordering and durable recovery",
       "phase": 4,
       "depends_on": [
-        "S03"
+        "S04b",
+        "S03",
+        "L08",
+        "W03"
       ],
       "files": [
         "libs/collabtext/include/collabtext/Anchor.h",
@@ -1426,20 +1867,24 @@
         "libs/collabtext/tests/tst_anchor.cpp",
         "docs/specs/vnext-external-position-contract.md",
         "libs/collabtext/tests/tst_anchor_codec.cpp",
-        "libs/collabtext/tests/tst_idlist_anchor.cpp"
+        "libs/collabtext/tests/tst_idlist_anchor.cpp",
+        "docs/specs/vnext-boundary-semantics.md",
+        "libs/collabtext/tests/tst_session_recovery.cpp",
+        "docs/reports/vnext-boundary-certification.md"
       ],
       "steps": [
-        "Represent boundaries and affinity according to S02 using sufficient left/right identity context; cover start/end, empty document, deleted neighbors, and subsequent concurrent insertions.",
-        "Return explicit unresolved/wrong-epoch results rather than silently returning document end. Specify IdList element anchors separately from text insertion boundaries.",
-        "Encode anchors with their own version, document/stream/primitive/epoch context, and checked affinity. Reject unknown or unsupported formats explicitly. Keep readers for supported published vNext token versions; no pre-vNext anchor conversion is required.",
-        "Implement W1/W2 via the public opaque token codec and typed position results carrying UTF-8 byte offsets or list indices plus specified collapse placement. Add checked IdList lookup. Bind document/stream/primitive/epoch/affinity, reject foreign/malformed/unknown tokens without mutation, and round-trip original bytes after reopen and replica replay. Freeze the published token version and its supported-reader contract; pre-vNext anchors require no conversion."
+        "Treat S04a/S04b as the implemented live/token baseline rather than implementing a second anchor system. Review exact boundary interpretation against S02/S03 repaired ordering and every supported alpha token fixture; preserve stable causal identities through splitting, local/remote edits, deletion and undo/redo.",
+        "Extend token round-trip from S04b's fresh-process operation replay to the actual L08 file/session lifecycle: close/reopen, own/remote log replay, sender-only and receiver-only restart, duplicate delivery, delayed causal input and failed durable writes. Reuse the same originally minted token bytes in all processes.",
+        "Test typed distinction between malformed/foreign/unsupported tokens, temporarily missing causal state, collapsed boundaries and unavailable history. Text results carry scalar-aligned UTF-8 byte offsets; list results carry indices. State remains unchanged on rejection and missing list IDs never fabricate an end anchor.",
+        "Rerun the installed strict live-position probes plus repaired-order WP6 using actual durable replay. Publish supported token-version readers and canonical golden fixtures; no pre-vNext anchor conversion is required. S05 still owns durable pin lifecycles and G-series tasks own checkpoint/GC translation.",
+        "Record the certification report with exact named cases, modes, fixture/token hashes, supported reader versions and remaining retention limits. Remove only F7 anchor markers whose full acceptance now passes; do not close retained-position/GC obligations based solely on live tests."
       ],
       "acceptance": [
-        "In ab\u2192aXb, preexisting left/right anchors at 1 resolve to 1/2; start/end affinity and remote exact-position tests pass.",
-        "Deleted-neighbor anchors remain meaningful before reclamation; foreign-stream/epoch anchors cannot resolve accidentally. F7 marker is removed.",
-        "Named cases external_token_roundtrip_reopen, boundary_affinity_ab_insert_X, scoped_empty_start_end_tokens, shared_token_concurrent_boundary_inserts, deleted_neighbors_explicit_collapse, foreign_or_unsupported_token_is_explicit, and missing_list_id_is_not_an_end_anchor pass through library-owned encode/decode. Resolution returns an actual typed position or error, never an application outcome without an offset."
+        "All S04b exact affinity/scope/Unicode/deletion cases pass after S03, and the same original supported bytes resolve identically in recovered equivalent replica states.",
+        "Actual close/reopen/restart/fault cases pass with explicit incomplete/unavailable results where causal recovery is incomplete; codec-only replay is not substituted for durability evidence.",
+        "external_token_roundtrip_reopen, boundary_affinity_ab_insert_X, scoped_empty_start_end_tokens, shared_token_concurrent_boundary_inserts, deleted_neighbors_explicit_collapse, foreign_or_unsupported_token_is_explicit and missing_list_id_is_not_an_end_anchor have exact executable evidence; pin/checkpoint/GC cases remain visibly assigned to later tasks."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_anchor_codec|tst_anchor|tst_idlist_anchor|tst_sequence_semantics|tst_evaluation_regressions'`; assert exact positions through undo/redo and concurrent inserts.",
+      "verification": "Run ./tools/verify-roadmap.sh debug \"tst_anchor_codec|tst_anchor|tst_idlist_anchor|tst_sequence_semantics|tst_session_recovery|tst_evaluation_regressions\" plus Release and bounded ASan restart/differential cases; rerun installed strict live-position and repaired-order probes. Record named evidence and supported-token hashes in the certification report.",
       "addresses": [
         "F7",
         "R2",
@@ -1474,7 +1919,8 @@
         "Classify ephemeral cursors separately from durable internal and external comments/bookmarks/replies/undo selections. Implement explicit durable anchor pins and their typed outcomes; pins are released through the specified durable lifecycle, never through a device presence timeout.",
         "Specify which versions edits_since may query and how a checkpoint/GC floor invalidates older queries. Return HistoryUnavailable instead of silently producing an incorrect delta.",
         "Make comment/chat anchor ingestion reject wrong document/epoch and preserve unresolved anchors for later causal resolution. Define anchor translation for epoch transitions before G06 can remove identities.",
-        "Implement W3 external durable pin registration/lookup/release keyed by stable consumer reference IDs, independent of author device lifetime. Specify idempotent replay, concurrent release and release-undo policy, recovery-before-GC, and the external canonical-log frontier/orphan protocol. A decoded or externally stored token does not register a pin. Preserve supported original token bytes through approved epoch translations. Document current-state reconstruction separately from isolated historical playback and HistoryUnavailable below the engine floor."
+        "Implement W3 external durable pin registration/lookup/release keyed by stable consumer reference IDs, independent of author device lifetime. Specify idempotent replay, concurrent release and release-undo policy, recovery-before-GC, and the external canonical-log frontier/orphan protocol. A decoded or externally stored token does not register a pin. Preserve supported original token bytes through approved epoch translations. Document current-state reconstruction separately from isolated historical playback and HistoryUnavailable below the engine floor.",
+        "Keep registration/lookup/release and consumer frontier projection available through headless public APIs with consumer-supplied persistence hooks; DocumentSession is an optional reference owner. External canonical-log users must not be forced to adopt the file transport, engine-owned block tree or per-session history as their cross-block undo manager. Add WP8 pin/retirement/recovery cases and expose installed assertions before final A06 certification."
       ],
       "acceptance": [
         "A durable comment on deleted text survives permitted undo and restart; stale ephemeral cursors do not pin history indefinitely.",
@@ -1500,6 +1946,7 @@
       "phase": 4,
       "depends_on": [
         "S05",
+        "S03",
         "V04"
       ],
       "files": [
@@ -1847,44 +2294,11 @@
       ]
     },
     {
-      "id": "A01",
-      "title": "Split CMake targets and remove runtime test dependencies",
-      "phase": 6,
-      "depends_on": [
-        "P06b",
-        "L08"
-      ],
-      "files": [
-        "CMakeLists.txt",
-        "libs/collabtext/CMakeLists.txt",
-        "app/CMakeLists.txt",
-        "libs/collabtext/src/crdt/SegmentFormat.cpp",
-        "tests/core-smoke/"
-      ],
-      "steps": [
-        "Introduce CollabText::Core (C++20 only), CollabText::FileTransport (zstd plus portable SHA-256 provider), CollabText::QtAdapter, CollabText::Widgets, and test-only support. Keep NetworkSim/QtTest out of production archives.",
-        "Use explicit COLLABTEXT_BUILD_TESTS, COLLABTEXT_BUILD_QT, COLLABTEXT_BUILD_APPS, and COLLABTEXT_BUILD_FILE_TRANSPORT options. Core-only configure must not search for Qt or zstd.",
-        "Record the SHA-256 implementation/dependency and license; default portable file-transport provider can use OpenSSL::Crypto, leaving Core dependency-free. Remove QCryptographicHash from mandatory transport code."
-      ],
-      "acceptance": [
-        "Core-only configure/build works with Qt package discovery disabled; FileTransport works without Qt; Qt targets are optional.",
-        "Runtime linkage contains no QtTest. Existing applications/tests link only the targets they actually use."
-      ],
-      "verification": "Configure all-option and core-only builds; use a plain C++ core smoke executable without QtTest. Run the fast suite on the full configuration.",
-      "addresses": [
-        "R2",
-        "R7",
-        "R13"
-      ],
-      "gate": null,
-      "status": "not_started"
-    },
-    {
       "id": "A02",
-      "title": "Establish an installed public header boundary",
+      "title": "Complete and certify the supported public API boundary",
       "phase": 6,
       "depends_on": [
-        "A01",
+        "A02a",
         "P07",
         "S04"
       ],
@@ -1896,9 +2310,9 @@
         "docs/specs/vnext-external-position-contract.md"
       ],
       "steps": [
-        "Move stable public ActorId, OperationId, Anchor, outcome/config types, and engine APIs into self-contained public headers. Keep fragments, locators, raw variants, Global/tree layouts, and writers private.",
+        "Extend the already installed A02a boundary with all now-implemented P07/S04 operation/context/outcome/anchor/transport APIs. Compile the complete P01 target examples and update the supported capability table; keep fragments, locators, raw variants, Global/tree layouts and writers private. Do not redo the packaging split or add obsolete compatibility wrappers.",
         "Ensure Buffer and IdList consumer entry points remain accessible through documented facades, including anchors, undo limits, batch apply, and session integration. A facade must not silently remove required capabilities.",
-        "Remove src from PUBLIC include paths. Public tests compile with only installed headers and libraries, not source-tree includes inherited from the target.",
+        "Keep src absent from PUBLIC/INTERFACE include paths and preserve the A06a export/relocation tests. Compile each complete public header independently and run public tests solely against installed headers/libraries; extend the alpha smoke rather than replacing it with source-tree tests.",
         "Expose W1/W2 opaque token encode/decode, checked mint/lookup, and typed text/list resolution in self-contained installed headers. Publish supported token-version handling and exact offset units; keep consumer outer envelopes independent of internal object layout. Add foreign/version/missing-ID installed tests."
       ],
       "acceptance": [
@@ -1938,7 +2352,8 @@
       "steps": [
         "Bind all supported QTextDocument mutation paths to DocumentSession, and apply engine deltas back using scoped suppression and edit blocks. Handle typing, paste, IME, programmatic insert/delete, selection replacements, undo/redo, and remote changes.",
         "Use one engine-owned undo path; preserve cursor/scroll selections with stable anchors. Remove stale serialization-pending stubs and signal-only pseudo-bindings.",
-        "Make SyncManager a documented presence/transport composition helper or deprecate it with a precise replacement sample. Route dogfood CollabPane through this supported adapter while preserving widgets."
+        "Make SyncManager a documented presence/transport composition helper or deprecate it with a precise replacement sample. Route dogfood CollabPane through this supported adapter while preserving widgets.",
+        "Keep the QTextDocument adapter and durable DocumentSession composition optional. Markoff/Wave can supply their own Document model, undo grouping, transport and block lifecycle using headless facades; do not move markdown parsing, inline formatting or cross-document coordination into Core."
       ],
       "acceptance": [
         "Direct document edits and remote engine operations stay synchronized without feedback loops or double operations.",
@@ -2019,8 +2434,10 @@
       "title": "Install and export the fresh public library package",
       "phase": 6,
       "depends_on": [
+        "A06a",
         "A04",
-        "A05"
+        "A05",
+        "W03"
       ],
       "files": [
         "cmake/CollabTextConfig.cmake.in",
@@ -2031,7 +2448,7 @@
         "tests/consumer-smoke/wave-contract/"
       ],
       "steps": [
-        "Implement install/export/version package metadata, component dependency discovery, stable target names, and separate public include installs. Test a relocated installation prefix.",
+        "Extend and certify the A06a package with all final APIs/components and their complete dependency metadata; preserve target names and relocation checks. Packaging already exists: add the complete consumer scenarios rather than recreating export rules or moving supported headers back into src.",
         "Document the new headers, types, callback/ack semantics, error paths, ownership, offsets, and reset APIs; include Buffer, IdList, and custom transport examples. Explain intentional breaks without preserving obsolete signatures.",
         "Remove obsolete public wrappers and install only the supported surface. Do not create deprecated adapters, scalar-GC wrappers, legacy codecs, or void-push compatibility paths. State fresh-format identifiers and incompatible-format errors.",
         "Add the self-contained W6 installed_headless_wave_contract consumer fixture using a consumer-owned Document adapter and canonical-log envelope. Exercise external_token_roundtrip_reopen, pin registration/recovery, compensating undo, historical_projection_resolves_its_own_tokens, and explicit failures. Build from a relocated install with Qt Widgets/Test disabled and no sibling Wave checkout. Formatting is consumer-owned; demonstrate span endpoints only, with no new formatting CRDT."
@@ -2073,7 +2490,7 @@
       ],
       "steps": [
         "Publish support tier: Linux production verification first; Windows/macOS build and functional durability coverage where runners are available. Do not claim verified power-loss guarantees without evidence.",
-        "Run core-only builds without Qt, full Linux Debug/Release suites, bounded seeded fuzz/model tests, ASan/UBSan on supported compilers, and install-consumer checks.",
+        "Run core-only builds without Qt, full Linux Debug/Release suites, bounded seeded fuzz/model tests, ASan/UBSan on supported compilers, and install-consumer checks. Preserve and extend the early consumer-alpha workflow; do not defer its installed checks until this final matrix or replace strict probe cases with successful skips.",
         "Keep slow campaigns/benchmarks in scheduled or manually triggered jobs; failures retain traces and do not become successful skips. Record any unavailable platform as unsupported/unverified."
       ],
       "acceptance": [
@@ -2535,7 +2952,8 @@
         "Map F1\u2013F10 and R1\u2013R14 to commits, exact passing tests, and any explicitly user-approved deferrals. Verify no expected-fail marker remains for a promised release feature.",
         "Review model independence, fresh-format rejection, error paths, single-owner threading, GC certificates, and recovery fallback invariants. Recheck original report probes against new facades.",
         "Document residual risks and make incomplete tasks visible; a green test runner is insufficient if tasks or policy decisions remain unresolved.",
-        "Map W1-W6 and every named external-position case to implementation commits and executable evidence. Rerun installed_headless_wave_contract with completed G-series reclamation and supported token-version readers. Report formatting as explicitly consumer-owned outside this plain-text release; a requirement document or passing historical probe cannot substitute for the new public-API gate."
+        "Map W1-W6 and every named external-position case to implementation commits and executable evidence. Rerun installed_headless_wave_contract with completed G-series reclamation and supported token-version readers. Report formatting as explicitly consumer-owned outside this plain-text release; a requirement document or passing historical probe cannot substitute for the new public-API gate.",
+        "Audit WP1-WP8, early package/alpha tasks and the Markoff-shaped plaintext fixture as well as W1-W6. Require final strict mode with no unsupported or known-failure substitution for promised features. Distinguish locally prepared alpha candidates from actually published tags/remote CI; external publication is not claimed without recorded authorization and fetchable artifacts."
       ],
       "acceptance": [
         "Every recommendation is implemented/validated or visibly deferred by a recorded user decision.",
@@ -2600,7 +3018,7 @@
     }
   ],
   "revised": "2026-10-04",
-  "revision_reason": "Retain the native C++ plan; P06 split yields 63 tasks. Independent progress review adds W1-W6 external consumer requirements to existing dependency-gated tasks, with formatting explicitly consumer-owned.",
+  "revision_reason": "Wave ask2 sequencing amendment: early installed package/probes, independent live-boundary gate, and reviewable alpha candidates; 72 tasks. Preserve current statuses/evidence, native C++ primitives, optional transport/session composition, and later recovery/pin/GC certification.",
   "removed_tasks": [
     {
       "id": "E01",
@@ -2619,5 +3037,181 @@
     "W4",
     "W5",
     "W6"
-  ]
+  ],
+  "early_consumer_gates": {
+    "A01": {
+      "forbidden_ancestors": [
+        "P06b",
+        "L08"
+      ]
+    },
+    "A02a": {
+      "forbidden_ancestors": [
+        "P06a",
+        "P07",
+        "S04",
+        "L08"
+      ]
+    },
+    "A06a": {
+      "forbidden_ancestors": [
+        "P07",
+        "S04",
+        "L08",
+        "A04",
+        "A05"
+      ]
+    },
+    "S04a": {
+      "required_ancestors": [
+        "P06a",
+        "S01",
+        "W01"
+      ],
+      "forbidden_ancestors": [
+        "S02",
+        "S03",
+        "L08"
+      ]
+    },
+    "S04b": {
+      "required_ancestors": [
+        "S04a",
+        "P06b",
+        "A02a"
+      ],
+      "forbidden_ancestors": [
+        "S03",
+        "L08",
+        "P07"
+      ]
+    },
+    "W03": {
+      "required_ancestors": [
+        "S04b",
+        "A06a",
+        "W01"
+      ],
+      "forbidden_ancestors": [
+        "S03",
+        "L08",
+        "A07"
+      ]
+    },
+    "E07a": {
+      "required_ancestors": [
+        "A06a",
+        "W02"
+      ],
+      "forbidden_ancestors": [
+        "S04",
+        "L08",
+        "E05"
+      ]
+    },
+    "E07b": {
+      "required_ancestors": [
+        "W03",
+        "E07a"
+      ],
+      "forbidden_ancestors": [
+        "S03",
+        "L08",
+        "E05"
+      ]
+    },
+    "S04": {
+      "required_ancestors": [
+        "S03",
+        "L08",
+        "S04b",
+        "W03"
+      ]
+    },
+    "S05": {
+      "required_ancestors": [
+        "S04",
+        "L06"
+      ]
+    },
+    "S02": {
+      "required_ancestors": [
+        "S04a",
+        "S01",
+        "P06a"
+      ],
+      "forbidden_ancestors": [
+        "L08"
+      ]
+    }
+  },
+  "consumer_probe_owners": {
+    "WP1": [
+      "W01",
+      "S04a",
+      "S04b",
+      "W03",
+      "S04",
+      "S06",
+      "E05"
+    ],
+    "WP2": [
+      "W01",
+      "S04a",
+      "S04b",
+      "W03",
+      "S04",
+      "S05",
+      "E05"
+    ],
+    "WP3": [
+      "W01",
+      "W02",
+      "W03",
+      "E05"
+    ],
+    "WP4": [
+      "W01",
+      "S04a",
+      "S04b",
+      "W03",
+      "S04",
+      "E05"
+    ],
+    "WP5": [
+      "W01",
+      "S04b",
+      "W03",
+      "S04",
+      "S05",
+      "G06",
+      "G08",
+      "E05"
+    ],
+    "WP6": [
+      "W01",
+      "S01",
+      "S02",
+      "S03",
+      "S06",
+      "E05"
+    ],
+    "WP7": [
+      "W01",
+      "S04a",
+      "S04b",
+      "W03",
+      "S04",
+      "E05"
+    ],
+    "WP8": [
+      "W01",
+      "W02",
+      "S05",
+      "G01",
+      "G06",
+      "G08",
+      "E05"
+    ]
+  }
 }

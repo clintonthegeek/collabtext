@@ -20,8 +20,11 @@ ownership, counter validity, parsing limits, UTF-8 source boundaries, operation
 deferral, bounded overflow retention, and durable filesystem primitives.
 P06a remains **in progress**: both design gates have landed (ordering, and
 allocation on 2026-10-05) but the engine identity migration did not. Its remaining
-scope is the engine-adoption steps 3–6, then P06b. S01 is independently ready.
-There are 63 tasks after splitting P06; the registry is authoritative.
+scope is the engine-adoption steps 3–6. Then use the new early consumer route
+in [00 — consumer integration](../roadmap/2026-10-reliability/00-consumer-integration.md)
+rather than the former immediate P06b/recovery-first schedule. A01/W01/S01 are
+independently ready. There are 72 tasks after the authorized Wave ask2 amendment;
+the registry is authoritative. Existing implementation status/evidence is unchanged.
 
 **Update, 2026-10-05.** Step 2 is complete: the allocation-domain contract is
 written (vnext-identity.md §3.1–§3.8), it has an independent model plus 16
@@ -45,7 +48,9 @@ Important distinctions to preserve:
 - Physical GC/compaction remain inert until G06 certificates; do not re-enable
   reclamation to satisfy a performance assertion.
 - W1–W6 are accepted requirements, not implemented token/pin guarantees. S02/G01
-  must supply complete specifications and independent models before dependent code.
+  and the new S04a must supply complete specifications and independent models
+  before dependent code. S04b live positions and A02a/A06a packaging no longer
+  wait for the complete ordering/recovery milestones; S04/S05 retain later gates.
 - Store rejected source records; engine diagnostic quarantine is bounded and
   drainable, not durable retention or acknowledgement.
 - An error after publication is not automatic rollback; reconcile uncertain
