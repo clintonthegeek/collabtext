@@ -58,7 +58,10 @@ add_library(collabtext_core STATIC
     src/storage/DurableFile.cpp
 )
 add_library(CollabText::Core ALIAS collabtext_core)
-set_target_properties(collabtext_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(collabtext_core PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    EXPORT_NAME Core          # imported as CollabText::Core
+)
 
 # include/ is the intended public surface. src/ is still on the *build*
 # interface because several public headers genuinely include from it today --
@@ -108,7 +111,9 @@ if(COLLABTEXT_BUILD_FILE_TRANSPORT)
         src/crdt/SidecarManifest.cpp
     )
     add_library(CollabText::FileTransport ALIAS collabtext_filetransport)
-    set_target_properties(collabtext_filetransport PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    set_target_properties(collabtext_filetransport PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        EXPORT_NAME FileTransport)
     # zstd is PRIVATE deliberately: a consumer of the transport needs the
     # symbols, but static-library consumers must not have to *find* zstd to
     # satisfy a link interface. A06a exports the package properly.
@@ -131,7 +136,9 @@ if(COLLABTEXT_BUILD_QT)
         src/SyncManager.cpp
     )
     add_library(CollabText::QtAdapter ALIAS collabtext_qtadapter)
-    set_target_properties(collabtext_qtadapter PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    set_target_properties(collabtext_qtadapter PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        EXPORT_NAME QtAdapter)
     target_link_libraries(collabtext_qtadapter PUBLIC collabtext_core Qt6::Core Qt6::Gui)
     if(TARGET collabtext_filetransport)
         target_link_libraries(collabtext_qtadapter PUBLIC collabtext_filetransport)
@@ -155,7 +162,9 @@ if(COLLABTEXT_BUILD_QT)
         src/ui/MultiCursorController.cpp
     )
     add_library(CollabText::Widgets ALIAS collabtext_widgets)
-    set_target_properties(collabtext_widgets PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    set_target_properties(collabtext_widgets PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        EXPORT_NAME Widgets)
     target_link_libraries(collabtext_widgets
         PUBLIC collabtext_qtadapter Qt6::Widgets)
     target_include_directories(collabtext_widgets
@@ -374,3 +383,105 @@ target_link_libraries(tst_opstream_interface PRIVATE CollabText::TestSupport Qt6
 add_test(NAME tst_opstream_interface COMMAND tst_opstream_interface)
 
 endif() # COLLABTEXT_BUILD_TESTS -- the suites
+
+# ===========================================================================
+# Install and export (roadmap task A06a)
+#
+# The point of the exercise is that a consumer must be able to point at an
+# install tree with no reference back to this source tree. Three things make
+# that true rather than approximately true:
+#
+#   * `src/` is never installed and never on an exported include path, so there
+#     is nothing for a consumer to accidentally depend on.
+#   * The package config performs discovery for exactly the components the
+#     consumer asked for, and refuses a component the producer did not build with
+#     a message naming the option that would enable it.
+#   * A consumer can point at the *build* tree as well as an install tree
+#     (export(EXPORT ...)), which is what makes the relocation check meaningful:
+#     a script can install to prefix A, move it to prefix B, and prove that
+#     nothing resolved back to A or to the source.
+# ===========================================================================
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+set(COLLABTEXT_EXPORTED_COMPONENTS core)
+if(COLLABTEXT_BUILD_FILE_TRANSPORT)
+    list(APPEND COLLABTEXT_EXPORTED_COMPONENTS file-transport)
+endif()
+if(COLLABTEXT_BUILD_QT)
+    list(APPEND COLLABTEXT_EXPORTED_COMPONENTS qt)
+endif()
+set(COLLABTEXT_EXPORTED_COMPONENTS "${COLLABTEXT_EXPORTED_COMPONENTS}"
+    CACHE INTERNAL "components this build exports")
+
+set(_collabtext_export_targets collabtext_core)
+if(COLLABTEXT_BUILD_FILE_TRANSPORT)
+    list(APPEND _collabtext_export_targets collabtext_filetransport)
+endif()
+if(COLLABTEXT_BUILD_QT)
+    list(APPEND _collabtext_export_targets collabtext_qtadapter collabtext_widgets)
+endif()
+
+# Each component exports separately, and the package config includes only the
+# files for the components a consumer actually asked for. That is stricter than
+# necessary for a shared build -- an unused imported target naming Qt6::Widgets
+# would usually be harmless -- and it is the right strictness here: a consumer
+# that asked for Core should not have a Qt dependency visible anywhere in its
+# configure output, even as a string it never reads.
+function(collabtext_install_component name)
+    set(targets ${ARGN})
+    install(TARGETS ${targets}
+        EXPORT CollabText${name}Targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(EXPORT CollabText${name}Targets
+        FILE CollabText${name}Targets.cmake
+        NAMESPACE CollabText::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/collabtext)
+    export(EXPORT CollabText${name}Targets
+        FILE ${CMAKE_CURRENT_BINARY_DIR}/CollabText${name}Targets.cmake
+        NAMESPACE CollabText::)
+endfunction()
+
+collabtext_install_component(Core collabtext_core)
+if(COLLABTEXT_BUILD_FILE_TRANSPORT)
+    collabtext_install_component(FileTransport collabtext_filetransport)
+endif()
+if(COLLABTEXT_BUILD_QT)
+    collabtext_install_component(Qt collabtext_qtadapter collabtext_widgets)
+endif()
+
+# The capability manifest travels with the headers on purpose: it is the
+# contract, and a consumer who installed the library should not have to come
+# back to this repository to find out what it cannot do.
+install(DIRECTORY include/collabtext
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h" PATTERN "ALPHA_CAPABILITIES.md")
+
+configure_package_config_file(
+    ${CMAKE_SOURCE_DIR}/cmake/collabtext-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/collabtext-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/collabtext)
+
+# Compatibility matters here: SameMajorVersion is what lets a consumer keep
+# working across a rebuild that did not break the major version.
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/collabtext-config-version.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/collabtext-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/collabtext-config-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/collabtext)
+
+export(PACKAGE collabtext)
+
+# Each component's export() above also writes a build-tree copy, so a consumer can
+# point at either a build tree or an install tree. That is what makes the
+# relocation check meaningful: a script installs to prefix A, moves it to prefix
+# B, and proves nothing resolved back to A or to the source.
+export(PACKAGE collabtext)

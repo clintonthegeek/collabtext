@@ -10,3 +10,6 @@ Makefile
 compile_commands.json
 .cache/
 .worktrees/
+
+# A06a: per-run producer/install/consumer trees from verify-consumer-package.sh
+build-consumer-verify/
