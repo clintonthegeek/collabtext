@@ -54,8 +54,12 @@ class VerificationTests(unittest.TestCase):
         self.assertFalse(package)
         routes, _ = verify.route(['libs/collabtext/tests/reference/SequenceModel.h'])
         self.assertEqual(set(routes.values()), {'tst_sequence_model'})
+        # The S01 fixtures are the oracle of both the S02 interpreter and the S03
+        # FugueMax reference, so a fixture edit must run both.
         routes, _ = verify.route(['libs/collabtext/tests/fixtures/sequence-semantics/forward-typing.json'])
-        self.assertEqual(set(routes.values()), {'tst_sequence_model'})
+        self.assertEqual(set(routes.values()), {'tst_(sequence|fuguemax)_model'})
+        routes, _ = verify.route(['libs/collabtext/tests/reference/FugueMaxModel.h'])
+        self.assertEqual(set(routes.values()), {'tst_fuguemax_model'})
         routes, package = verify.route(['libs/collabtext/tests/fixtures/external-position/wp2-strict-referent-delete.json',
                                        'libs/collabtext/tests/fixtures/external-position/model/retained-orders.json'])
         for regex in routes.values():

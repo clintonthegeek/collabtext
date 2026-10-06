@@ -340,6 +340,15 @@ target_include_directories(tst_sequence_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR
 target_compile_definitions(tst_sequence_model PRIVATE
     COLLABTEXT_SEQUENCE_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/sequence-semantics")
 add_test(NAME tst_sequence_model COMMAND tst_sequence_model)
+# S03 design gate: a literal FugueMax model (arXiv 2305.00583 Algorithm 1 plus the
+# FugueMax modifications) that the S02 model and, later, production placement are
+# differentially checked against. Links nothing from the engine.
+add_executable(tst_fuguemax_model tests/tst_fuguemax_model.cpp)
+target_link_libraries(tst_fuguemax_model PRIVATE Qt6::Test)
+target_include_directories(tst_fuguemax_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_definitions(tst_fuguemax_model PRIVATE
+    COLLABTEXT_SEQUENCE_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/sequence-semantics")
+add_test(NAME tst_fuguemax_model COMMAND tst_fuguemax_model)
 # S03 drives the PRODUCTION engines through the same S01 fixtures, against the
 # same exact-content oracle. It is the counterpart to tst_sequence_model, not a
 # variant of it: one runs the reference interpreter, the other runs the engine.
