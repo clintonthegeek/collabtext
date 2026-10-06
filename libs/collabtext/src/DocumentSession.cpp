@@ -1,7 +1,9 @@
 #include <collabtext/DocumentSession.h>
 
 #include "crdt/Buffer.h"
+#include "core/Sha256.h"
 #include "identity/ReplicaAllocator.h"
+#include "storage/LocalHistoryLog.h"
 #include "transport/StreamSync.h"
 #include <collabtext/Serialization.h>
 
@@ -19,12 +21,48 @@ struct DocumentSession::Impl {
   std::shared_ptr<Identity::ReplicaAllocator> allocator;
   std::unique_ptr<Crdt::Buffer> buffer;
   std::unique_ptr<Crdt::FileOpStream> transport;
+  std::unique_ptr<Storage::LocalHistoryLog> local_history;
   SessionRecoveryReport report;
   uint64_t next_envelope = 1;
   std::unordered_set<std::string> replayed_tokens;
   std::unordered_map<std::string, Operation> deferred_tokens;
   bool closed = false;
   bool poisoned = false;
+
+  Result<Operation> publish_local(Operation op) {
+    if (next_envelope == UINT64_MAX) {
+      poisoned = true;
+      return Error(ErrorCode::counter_exhausted,
+                   "transport envelope sequence exhausted after local apply");
+    }
+    auto encoded = encode_operation(op);
+    if (!encoded.ok()) {
+      poisoned = true;
+      return encoded.error().with_context(
+          "local operation exists in memory but could not be encoded");
+    }
+    OutboundDelivery delivery{
+        DeliveryToken{config.stream, config.epoch, replica->actor(), next_envelope},
+        std::move(encoded).value()};
+    auto pushed = transport->push(delivery, PushDurability::durable);
+    if (!pushed.ok()) {
+      poisoned = true;
+      report.complete = false;
+      report.issue = pushed.error().with_context(
+          "local operation applied but log publication failed");
+      return pushed.error().with_context(
+          "local operation applied but log publication failed; reopen to reconcile");
+    }
+    replayed_tokens.insert(token_key(delivery.token));
+    ++next_envelope;
+    auto checkpoint = local_history->store_snapshot(buffer->local_history_snapshot());
+    if (!checkpoint.ok()) {
+      poisoned = true;
+      return checkpoint.error().with_context(
+          "operation published but local undo checkpoint failed");
+    }
+    return op;
+  }
 
   [[nodiscard]] bool ready() const noexcept {
     return !closed && !poisoned && report.complete && buffer &&
@@ -59,6 +97,13 @@ struct DocumentSession::Impl {
 
   static std::string token_key(const DeliveryToken &token) {
     return token.producer.to_string() + ":" + std::to_string(token.sequence);
+  }
+
+  static std::filesystem::path history_path(const DocumentSessionConfig &config) {
+    std::string key = config.document + std::string(1, '\0') + config.stream +
+                      std::string(1, '\0') + std::to_string(config.epoch);
+    return config.private_state /
+           ("local-history-" + sha256_hex(key) + ".snapshot");
   }
 
   void update_completeness() {
@@ -139,6 +184,11 @@ DocumentSession::open(DocumentSessionConfig config) {
         &*impl->replica, impl->config.document, impl->config.stream,
         impl->config.epoch);
     impl->buffer = std::make_unique<Crdt::Buffer>(impl->allocator);
+    auto local_history = Storage::LocalHistoryLog::open(
+        Impl::history_path(impl->config), impl->replica->actor());
+    if (!local_history.ok()) return local_history.error();
+    impl->local_history = std::make_unique<Storage::LocalHistoryLog>(
+        std::move(local_history).value());
     impl->transport = std::make_unique<Crdt::FileOpStream>(
         impl->config.shared_store, impl->replica->actor());
     if (auto started = impl->transport->start(); !started.ok())
@@ -154,6 +204,12 @@ DocumentSession::open(DocumentSessionConfig config) {
         });
     if (!replayed.ok())
       return replayed.error();
+    auto history_snapshot = impl->local_history->recover();
+    if (!history_snapshot.ok()) return history_snapshot.error();
+    if (history_snapshot.value()) {
+      auto restored = impl->buffer->restore_local_history(*history_snapshot.value());
+      if (!restored.ok()) return restored.error();
+    }
     impl->update_completeness();
 
     auto *raw = impl.get();
@@ -229,6 +285,12 @@ Result<SessionRecoveryReport> DocumentSession::recover() {
         });
     if (!replayed.ok())
       return replayed.error();
+    auto history_snapshot = m_impl->local_history->recover();
+    if (!history_snapshot.ok()) return history_snapshot.error();
+    if (history_snapshot.value()) {
+      auto restored = m_impl->buffer->restore_local_history(*history_snapshot.value());
+      if (!restored.ok()) return restored.error();
+    }
     m_impl->update_completeness();
     return m_impl->report;
   } catch (const std::filesystem::filesystem_error &error) {
@@ -246,35 +308,29 @@ Result<Operation> DocumentSession::apply_local(
   auto operation = m_impl->buffer->try_apply_local_edit(ranges, replacements);
   if (!operation.ok())
     return operation.error();
-  if (m_impl->next_envelope == UINT64_MAX) {
-    m_impl->poisoned = true;
-    return Error(ErrorCode::counter_exhausted,
-                 "transport envelope sequence exhausted after local apply");
-  }
-  const auto op = operation.value();
-  auto encoded = encode_operation(op);
-  if (!encoded.ok()) {
-    m_impl->poisoned = true;
-    return encoded.error().with_context(
-        "local operation exists in memory but could not be encoded");
-  }
-  OutboundDelivery delivery{
-      DeliveryToken{m_impl->config.stream, m_impl->config.epoch,
-                    m_impl->replica->actor(), m_impl->next_envelope},
-      std::move(encoded).value()};
-  auto pushed = m_impl->transport->push(delivery, PushDurability::durable);
-  if (!pushed.ok()) {
-    m_impl->poisoned = true;
-    m_impl->report.complete = false;
-    m_impl->report.issue = pushed.error().with_context(
-        "local edit applied in memory but log publication failed");
-    return pushed.error().with_context(
-        "local edit applied in memory but log publication failed; reopen to "
-        "reconcile");
-  }
-  m_impl->replayed_tokens.insert(Impl::token_key(delivery.token));
-  ++m_impl->next_envelope;
-  return op;
+  return m_impl->publish_local(std::move(operation).value());
+}
+
+Result<Operation> DocumentSession::undo() {
+  if (!m_impl || !m_impl->ready())
+    return Error(ErrorCode::awaiting_state,
+                 "session recovery is incomplete; undo is disabled");
+  auto operation = m_impl->buffer->undo();
+  if (!operation)
+    return Error(ErrorCode::not_found,
+                 "no undo operation is available or its identity reservation failed");
+  return m_impl->publish_local(std::move(*operation));
+}
+
+Result<Operation> DocumentSession::redo() {
+  if (!m_impl || !m_impl->ready())
+    return Error(ErrorCode::awaiting_state,
+                 "session recovery is incomplete; redo is disabled");
+  auto operation = m_impl->buffer->redo();
+  if (!operation)
+    return Error(ErrorCode::not_found,
+                 "no redo operation is available or its identity reservation failed");
+  return m_impl->publish_local(std::move(*operation));
 }
 
 Result<PollReport> DocumentSession::poll(PollBudget budget) {
@@ -297,6 +353,9 @@ Result<void> DocumentSession::save() {
   auto flushed = m_impl->transport->flush();
   if (!flushed.ok())
     return flushed.error();
+  auto history = m_impl->local_history->store_snapshot(
+      m_impl->buffer->local_history_snapshot());
+  if (!history.ok()) return history.error();
   return m_impl->replica->flush();
 }
 

@@ -139,6 +139,77 @@ private slots:
     }
   }
 
+  void session_undo_and_redo_survive_reopen() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const DocumentSessionConfig config{root / "shared", root / "device",
+                                       "doc-undo", "text-undo", 1};
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QVERIFY(session->apply_local({{0, 0}}, {"local"}).ok());
+      QCOMPARE(session->text(), std::string("local"));
+      QVERIFY(session->close().ok());
+    }
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QCOMPARE(session->text(), std::string("local"));
+      QVERIFY(session->undo().ok());
+      QCOMPARE(session->text(), std::string{});
+      QVERIFY(session->close().ok());
+    }
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QCOMPARE(session->text(), std::string{});
+      QVERIFY(session->redo().ok());
+      QCOMPARE(session->text(), std::string("local"));
+      QVERIFY(session->close().ok());
+    }
+    auto reopened = DocumentSession::open(config);
+    QVERIFY(reopened.ok());
+    auto session = std::move(reopened).value();
+    QCOMPARE(session->text(), std::string("local"));
+    QVERIFY(!session->redo().ok());
+    QVERIFY(session->close().ok());
+  }
+
+  void reopened_local_undo_preserves_a_peers_edit() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const DocumentSessionConfig a_config{root / "shared", root / "device-a",
+                                         "doc-undo-peer", "text-undo-peer", 1};
+    const DocumentSessionConfig b_config{root / "shared", root / "device-b",
+                                         "doc-undo-peer", "text-undo-peer", 1};
+    auto opened_a = DocumentSession::open(a_config);
+    QVERIFY(opened_a.ok());
+    auto a = std::move(opened_a).value();
+    QVERIFY(a->apply_local({{0, 0}}, {"A"}).ok());
+    auto opened_b = DocumentSession::open(b_config);
+    QVERIFY(opened_b.ok());
+    auto b = std::move(opened_b).value();
+    QCOMPARE(b->text(), std::string("A"));
+    QVERIFY(b->apply_local({{1, 1}}, {"B"}).ok());
+    QVERIFY(a->poll().ok());
+    QCOMPARE(a->text(), std::string("AB"));
+    QVERIFY(b->close().ok());
+    QVERIFY(a->close().ok());
+
+    auto reopened = DocumentSession::open(a_config);
+    QVERIFY(reopened.ok());
+    auto recovered = std::move(reopened).value();
+    QCOMPARE(recovered->text(), std::string("AB"));
+    QVERIFY(recovered->undo().ok());
+    QCOMPARE(recovered->text(), std::string("B"));
+    QVERIFY(recovered->close().ok());
+  }
+
   void mixed_peer_replay_survives_prior_transport_receipt() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());

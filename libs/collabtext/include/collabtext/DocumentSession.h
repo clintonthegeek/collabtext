@@ -57,6 +57,8 @@ public:
   [[nodiscard]] Result<Crdt::Operation>
   apply_local(const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
               const std::vector<std::string> &replacements);
+  [[nodiscard]] Result<Crdt::Operation> undo();
+  [[nodiscard]] Result<Crdt::Operation> redo();
   [[nodiscard]] Result<PollReport> poll(PollBudget budget = {});
   [[nodiscard]] Result<void> save();
   [[nodiscard]] Result<void> close();

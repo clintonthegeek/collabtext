@@ -2369,7 +2369,10 @@
         "docs/specs/vnext-external-position-contract.md",
         "libs/collabtext/src/crdt/Buffer.h",
         "libs/collabtext/src/storage/LocalHistoryLog.h",
-        "libs/collabtext/CMakeLists.txt"
+        "libs/collabtext/CMakeLists.txt",
+        "libs/collabtext/include/collabtext/DocumentSession.h",
+        "libs/collabtext/src/DocumentSession.cpp",
+        "libs/collabtext/tests/tst_session_recovery.cpp"
       ],
       "steps": [
         "Durably record local undo groups, coalescing boundaries, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.",
@@ -2393,14 +2396,14 @@
       "consumer_requirements": [
         "W5"
       ],
-      "progress": "Partial: added replay-validated Buffer undo/redo snapshots and an actor-scoped atomic checkpoint for the latest local history state. The low-level fixture replays an edit, restores the saved cursor, and exercises undo plus redo; it also checks that forged history outside replay coverage is rejected. This checkpoint is not yet wired into DocumentSession or paired transactionally with operation publication.",
+      "progress": "Partial: added replay-validated Buffer undo/redo snapshots and an actor-scoped atomic checkpoint for local history. DocumentSession now restores the checkpoint after full operation replay, publishes undo/redo as ordinary durable operations, and checkpoints after local edit/undo/redo. Reopen fixtures cover undo then redo and verify that owner undo preserves a peer edit. Checkpoint publication and operation publication are still separate writes.",
       "verification_results": {
-        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T214819Z-2"
+        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, including session undo\u2192close\u2192reopen\u2192redo and peer-edit preservation; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T215156Z-2"
       },
       "artifacts": [
-        "build-roadmap-debug/verification/20261006T214819Z-2/"
+        "build-roadmap-debug/verification/20261006T215156Z-2/"
       ],
-      "remaining_gap": "Integrate checkpoints with actor-local operation replay and durable local edit/undo/redo commits; add step and retained-byte budgeting with atomic retirement records; cover restart/crash failure points, coalescing, peer edits, and canonical event correlation. IdList history is also not yet persisted."
+      "remaining_gap": "Make operation publication and history checkpoint recover as one transaction, including uncertain publication; add step and retained-byte budgeting with atomic retirement records; cover crash injection, coalescing, and canonical event correlation. IdList history is not yet persisted."
     },
     {
       "id": "L07",

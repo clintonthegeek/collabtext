@@ -114,6 +114,8 @@ Result<LocalHistoryLog> LocalHistoryLog::open(std::filesystem::path path,
 
 Result<std::optional<Crdt::LocalHistorySnapshot>>
 LocalHistoryLog::recover() const {
+  if (!std::filesystem::exists(m_path))
+    return std::optional<Crdt::LocalHistorySnapshot>{};
   std::ifstream file(m_path, std::ios::binary);
   if (!file)
     return Error(ErrorCode::io_error, "cannot read local history log",

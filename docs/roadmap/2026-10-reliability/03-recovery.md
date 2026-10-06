@@ -179,6 +179,9 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 - `libs/collabtext/src/storage/LocalHistoryLog.h`
 - `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/tests/tst_persistent_undo.cpp`
+- `libs/collabtext/include/collabtext/DocumentSession.h`
+- `libs/collabtext/src/DocumentSession.cpp`
+- `libs/collabtext/tests/tst_session_recovery.cpp`
 - `docs/specs/vnext-external-position-contract.md`
 
 **Steps:**
