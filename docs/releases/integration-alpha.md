@@ -16,12 +16,45 @@ document and is the authority.
 | | |
 |---|---|
 | Package version | `0.2.0-alpha.1` (SemVer prerelease) |
-| **Candidate SHA** | _filled in by the preparation commit; see `docs/reports/vnext-task-log.md` (E07a) and the generated `alpha-candidate.json`_ |
+| **Candidate SHA** | `bdbae5c3d310f2388b1d445a254b4ac35474d215` |
 | Branch | `feat/fuguemax-placement` |
 | Proposed tag | `v0.2.0-alpha.1` — **not created** |
 | Destination remote | recorded only (`origin`); this task contacted no remote |
 | Capability manifest | version 8, installed beside the headers |
 | Serialized formats present | `CTBO/0002`, `CTLO/0002`, `CTGV/0001`, `CTGP/0001`, `CTPT/1` |
+| Staged archive | `collabtext-0.2.0-alpha.1-x86_64.tar.gz`, sha256 `356f639526ef146ecb653efd3e93e25f333318e3622a744a2a4e029b41396f9f` |
+| Toolchain | GCC 16.2.1, CMake 4.4.3; libzstd 1.5.7, Qt6 6.11.2, OpenSSL 3.6.4 present but undiscovered by the Core consumer |
+
+The packaged content — headers, `ALPHA_CAPABILITIES.md`, exported CMake config,
+`libcollabtext_core.a` — is identical at this SHA and at the later commit that
+records this table. Only this document and the task registry changed after
+verification.
+
+### How this candidate was verified
+
+All five gate runs completed at `bdbae5c`, in this worktree, from clean
+configuration each time:
+
+| Gate | Mode | Result |
+|---|---|---|
+| `--gate package` | Debug | PASS, 11 steps, manifest v8 |
+| `--gate package` | Release | PASS, 11 steps, manifest v8 |
+| `--gate package` | ASan (Debug + ASan/UBSan, leak detection on) | PASS, 11 steps; no sanitizer or leak report |
+| `--gate baseline` | Debug | PASS, 18 probe rows, 17 pass |
+| `--gate baseline` | Release | PASS, 18 probe rows, 17 pass |
+
+Each gate configures a producer, installs to prefix A, **moves** it to prefix B,
+builds a separate consumer against B with Qt/zstd/OpenSSL made undiscoverable,
+verifies the consumer compiles and links nothing from the source or build tree,
+runs the probes, and refuses an unknown component. Evidence is under
+`build-consumer-verify/e07a-*`; per-run `results.json` records the revision, mode,
+gate, compiler and manifest version.
+
+Separately, the documented clean-clone build was exercised for real: the
+repository was cloned to a fresh directory, checked out at
+`bdbae5c3d310f2388b1d445a254b4ac35474d215`, configured, built, installed, and
+consumed by a separate CMake project against the install prefix with public
+headers only. It prints `text=aXb byte_offset=1 token_bytes=104`.
 
 ### Why `0.2.0-alpha.1` and not `2.0.0`
 
@@ -78,24 +111,28 @@ Stated so a consumer designs around them rather than discovering them:
 
 ### Baseline probe results at this candidate
 
-The eight consumer probes (WP1–WP8) run against the installed package through a
-consumer-owned block map. At this candidate:
+Measured at `bdbae5c` through the installed package, Debug and Release, both
+identical: 18 probe rows, 17 pass, 1 `unsupported`.
 
 | Probe | Result |
 |---|---|
-| WP1 boundary affinity, all scalar boundaries, both affinities, two replicas | strict pass |
-| WP2 caret collapse, strict referent detachment, undo/redo restoration | strict pass |
-| WP3 deleted containing block (consumer-owned check) | strict pass |
-| WP4 exact start/end/empty boundaries, off-end and non-scalar refusal | strict pass |
-| WP5 token round-trip, all trailing suffixes/truncations, fresh-process replay | strict pass |
-| WP6 concurrent paste/typing passage contiguity | strict pass (`abcXYZ`) |
-| WP7 wrong document/stream/primitive/epoch | strict pass |
+| WP1 boundary affinity, all scalar boundaries, both affinities, two replicas | pass (3 cases) |
+| WP2 caret collapse, strict referent detachment, undo/redo restoration | pass (3 cases) |
+| WP3 deleted containing block (consumer-owned check) | pass |
+| WP4 exact start/end/empty boundaries, off-end and non-scalar refusal | pass (3 cases) |
+| WP5 token round-trip, all trailing suffixes/truncations, fresh-process replay | pass (3 cases) |
+| WP6 concurrent paste/typing passage contiguity | pass, observed `abcXYZ` |
+| WP7 wrong document/stream/primitive/epoch | pass (2 cases) |
 | WP8 no-GC containment smoke | pass |
-| WP8 durable pin register/lookup/release | **`unsupported`** — owned by S05/G01/G06/G08 |
+| WP8 durable pin register/lookup/release | **`unsupported`**, owner S05/G01/G06/G08 |
 
-The pre-S03 WP6 known-failure exception has been removed. There is no known
-failure in the baseline matrix at this candidate; the remaining gap is WP8's
-durable pins, which is unimplemented rather than broken.
+The pre-S03 WP6 known-failure exception is gone. There is **no known failure**
+in the baseline matrix at this candidate: the single non-pass is an
+unimplemented capability recorded as `unsupported`, not a defect.
+
+The strict live-position set (WP1–WP5, WP7 plus the containment smoke, plus the
+independent Markdown consumer) passed at `4bf732f` and is re-certified at
+`0.2.0-alpha.2` by E07b.
 
 ## Pinning this candidate
 
@@ -164,9 +201,68 @@ add_executable(my_consumer main.cpp)
 target_link_libraries(my_consumer PRIVATE CollabText::Core)
 ```
 
-Ask for no version, or for `0.2.0`. Read
-`<collabtext/ALPHA_CAPABILITIES.md>` from the install prefix before designing
-against anything.
+This `main.cpp` is the example above, compiled and run against the clean-clone
+install. It is the whole shape of a consumer: supply an allocator, edit, take a
+position, keep the token.
+
+```cpp
+#include <collabtext/ActorId.h>
+#include <collabtext/CrdtEngine.h>
+#include <collabtext/Engine.h>
+#include <collabtext/Identity.h>
+#include <collabtext/Serialization.h>
+
+#include <array>
+#include <cstdint>
+#include <cstdio>
+#include <memory>
+
+// The Core package does not persist identity for you: you supply an allocator.
+class Counter final : public CollabText::Crdt::IdentityAllocator {
+public:
+    explicit Counter(CollabText::ActorId actor) : m_actor(actor) {}
+    CollabText::Result<uint64_t> reserve_run(uint64_t count) override {
+        return m_counter.reserve_run(count, "consumer");
+    }
+    void observe(uint64_t counter) override { (void)m_counter.observe(counter, "consumer"); }
+    uint64_t peek() const noexcept override { return m_counter.peek(); }
+    const CollabText::ActorId &actor() const noexcept override { return m_actor; }
+private:
+    CollabText::ActorId m_actor;
+    CollabText::CheckedCounter m_counter;
+};
+
+int main() {
+    using namespace CollabText;
+    std::array<uint8_t, ActorId::kBytes> bytes{};
+    bytes[ActorId::kBytes - 1] = 1;
+    auto allocator = std::make_shared<Counter>(ActorId::from_bytes(bytes));
+
+    auto created = CrdtEngine::create(allocator, {"doc", "block", Primitive::text, 1});
+    if (!created.ok()) return 1;
+    auto& engine = *created.value();
+
+    engine.insert(0, "ab");                            // editing uses UTF-16 units
+    auto left = engine.boundary_at(1, Affinity::left); // positions use UTF-8 bytes
+    if (!left.ok()) return 2;
+    auto token = encode_position(left.value());        // library-owned CTPT/1 bytes
+    if (!token.ok()) return 3;
+
+    engine.insert(1, "X");
+    auto resolved = engine.resolve(left.value());
+    if (!resolved.ok()) return 4;
+    std::printf("%s %d %zu\n", engine.text().c_str(),
+                static_cast<int>(resolved.value().byte_offset), token.value().size());
+    return 0;
+}
+```
+
+Persist `token`'s bytes, not the C++ fields. The allocator above is volatile by
+construction: a production allocator must persist the actor and the counter
+**before** handing out an identity, or it will reissue after a restart.
+
+Ask for no version, or for `0.2.0`. Read `<collabtext/ALPHA_CAPABILITIES.md>`
+from the install prefix before designing against anything.
 
 ## Running the probes against a candidate
 
@@ -233,8 +329,15 @@ Recorded here rather than left to be discovered:
   table and describes `CTBO`/`CTLO` as version 1. The implemented versions are
   `CTBO/0002` and `CTLO/0002`; version 1 is refused. E04 owns the status-claim
   sweep that corrects it. The codecs are the authority, not that paragraph.
-- `docs/USING_VNEXT.md` is corrected in this candidate; this section is the one
-  remaining stale statement about wire versions.
+  `tools/prepare-integration-alpha.sh` now fails a candidate whose release notes
+  disagree with the codecs, so this drift cannot survive a preparation run — but
+  the spec text itself is still stale.
+- `ALPHA_CAPABILITIES.md` and `docs/USING_VNEXT.md` were corrected in this
+  candidate (they claimed version 1 codecs, and `USING_VNEXT` still described
+  concurrent insertion as interleaving character-by-character after S03 repaired
+  it). The consumer probe runner also recorded hardcoded `CTBO/1`/`CTLO/1` while
+  its own case file declared `CTBO/2`/`CTLO/2`; the retained results in this
+  candidate correctly report `CTBO/2` and `CTLO/2`.
 
 ## Publication checklist
 

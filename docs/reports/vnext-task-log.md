@@ -2484,3 +2484,89 @@ exception, and this entry marks S03 complete. Details are in
 Entries above this one are dated records. Several say the engine still
 interleaves or that WP6 is a known failure. That was true on the day they were
 written. Current instructions are `docs/roadmap/2026-10-reliability/DIRECTION.md`.
+
+## 2026-10-06 — E07a complete: the 0.2.0-alpha.1 package alpha candidate is prepared
+
+```text
+Task: E07a
+Status: complete
+Branch: feat/fuguemax-placement
+Baseline: add5cf1
+Candidate commit: bdbae5c3d310f2388b1d445a254b4ac35474d215
+Implementation commits: 6c56306, 1e6de60, 4bf732f, bdbae5c
+Scope:
+  CMakeLists.txt and libs/collabtext/CMakeLists.txt version metadata
+  cmake/collabtext-config.cmake.in (COLLABTEXT_PRERELEASE, _VERSION_STRING)
+  libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md v7 -> v8
+  docs/releases/integration-alpha.md (new)
+  docs/USING_VNEXT.md, docs/specs/vnext-alpha-capabilities.md
+  tools/prepare-integration-alpha.sh (new)
+  tools/verify_changed.py route + self-test for the new script
+Regression: no failing-test-first step, because this task changes no algorithm.
+  Four defects were found by running the gates and the preparation script rather
+  than by writing a test:
+    1. wave-contract/run.py recorded CTBO/1 and CTLO/1 while its own cases.json
+       declared CTBO/2 and CTLO/2, so every retained probe result disagreed with
+       the codec it exercised. S03's log entry had noticed the mislabel and left
+       it. Now derived from the case file; a missing family fails the run.
+    2. verify-consumer-package.sh took a relative --output-dir, installed
+       successfully, then failed the consumer configure with "Could not find a
+       package configuration file provided by collabtext" -- blaming the package.
+    3. prepare-integration-alpha.sh exited 0 after a failed step: the dependency
+       record died on an unbound $CXX under set -u, the traceback printed, and
+       the script still printed "wrote alpha-candidate.json".
+    4. "${producer_flags[*]}" reached the JSON as literal text, because a
+       parameter reference inside a nested $(...) inside a heredoc is never
+       expanded. The output parsed and looked plausible.
+  Also: SHA256SUMS verification failed on the archive's own entry (verified twice
+  from the two directories now), and the format check compared lists as strings
+  and rejected an identical set in a different order.
+Verification:
+  package gate  Debug    PASS 11 steps, manifest v8, exit 0
+    build-consumer-verify/e07a-debug-package
+  package gate  Release  PASS 11 steps, manifest v8, exit 0
+    build-consumer-verify/e07a-release-package
+  package gate  ASan     PASS 11 steps, manifest v8, exit 0, no sanitizer or leak report
+    build-consumer-verify/e07a-asan-package
+  baseline gate Debug    PASS 18 rows, 17 pass, WP8 durable pins unsupported
+  baseline gate Release  PASS 18 rows, 17 pass, same single unsupported row
+    build-consumer-verify/e07a-{debug,release}-baseline
+  All five at bdbae5c. WP6 observed abcXYZ. No known failure in the matrix.
+  prepare-integration-alpha.sh PREPARED (not published), accepting all three modes
+    build-alpha/integration-alpha-20261006T174015Z-43813
+  archive sha256 356f639526ef146ecb653efd3e93e25f333318e3622a744a2a4e029b41396f9f,
+    identical across two independent runs, 24 checksum entries all re-verified
+  clean clone at the candidate SHA: built, installed, and consumed by a separate
+    CMake project with public headers only; printed text=aXb byte_offset=1
+    token_bytes=104
+  find_package: 0.2.0 accepted, 0.2.1 refused, 0.1.0 accepted
+  negative paths, each observed with its exit status: wrong branch 3, dirty tree
+    3, existing tag 3, version mismatch 3, evidence from another SHA 3, evidence
+    from another gate 3, evidence dir without results.json 3, output dir outside
+    the worktree 2, unknown option 2, injected unexpanded ${...} 3
+API/store changes: no engine API change. The installed manifest is now v8 and
+  names the package version. Three version variables are added to the installed
+  config file; no public header changed. CTPT/1 remains experimental and no
+  format is declared supported for durable storage.
+No external action: no push, no remote tag or release, no package publication, no
+  merge to master, no consumer message. The preparation script performs no network
+  access and has no code path that could. Remote CI is recorded as pending
+  because nothing triggered it.
+Known limits:
+  - Nothing is published. The candidate commit is in a local worktree, so no
+    consumer can fetch it yet; reachability on the remote is a publication step.
+  - docs/specs/vnext-operation-codec.md still describes the pre-bump version 1
+    frame table. prepare-integration-alpha.sh fails a candidate whose notes
+    disagree with the codecs, so the release notes cannot drift, but the spec
+    text is still stale and E04 owns it.
+  - Anchors across a durable reopen, recovery, persistent undo, durable pins and
+    GC are all still pending. WP8's durable pin registration is `unsupported`.
+Next ready tasks: E07b (recommended next), P07.
+```
+
+CMake's `project(VERSION)` accepts only a numeric version, so a SemVer prerelease
+cannot live there. The release line is `0.2.0` and the prerelease label is
+`COLLABTEXT_PRERELEASE`; `COLLABTEXT_VERSION_STRING` carries `0.2.0-alpha.1`.
+The consequence — a `find_package` request cannot name the prerelease label — is
+documented in the manifest, `USING_VNEXT` and the release notes rather than left
+to be discovered.

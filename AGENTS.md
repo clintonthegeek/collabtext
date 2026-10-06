@@ -31,8 +31,21 @@ targeted sweeps passed at `cc7d8cc`. The Debug installed live gate passed with
 WP6 observing `abcXYZ`. WP6's baseline exception for `aXbYcZ` is removed.
 WP8 durable pins stay unsupported.
 
-**Next: E07a, then E07b.** Those prepare reviewable alpha candidates. They do
+**Next: E07b.** That prepares the position-capable alpha `0.2.0-alpha.2` using
+E07a's process, now requiring the strict W03 live-position set, and decides
+whether any position-token version is supported for consumer storage. It does
 not publish, merge, or edit Wave. Do not re-implement placement.
+
+**E07a is complete.** The package alpha candidate is `0.2.0-alpha.1` at
+`bdbae5c3d310f2388b1d445a254b4ac35474d215`; proposed tag `v0.2.0-alpha.1`, not
+created. Installed package gate passed in Debug, Release and ASan there, and the
+baseline probe matrix is 18 rows with 17 passing and WP8 durable pins
+`unsupported`. Nothing was published. Notes and pinning are in
+`docs/releases/integration-alpha.md`; the preparation script is
+`tools/prepare-integration-alpha.sh`, which refuses a dirty tree, the wrong
+branch, and evidence that does not name the candidate SHA.
+
+P07 is also ready but is not next; start it after E07b or on an explicit switch.
 
 P06b and S04b are complete: checked versioned operation/gap codecs and native
 scoped position/CTPT v1 APIs pass Debug/Release/leak-enabled sanitizer and

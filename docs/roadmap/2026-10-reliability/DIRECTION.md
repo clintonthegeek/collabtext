@@ -1,7 +1,7 @@
 # Current direction
 
-**As of:** 2026-10-06. **Branch:** `feat/fuguemax-placement` at `22726d4`,
-which contains `roadmap/reliability-v2` (`76842de`). **Worktree:**
+**As of:** 2026-10-06. **Branch:** `feat/fuguemax-placement`, which contains
+`roadmap/reliability-v2`. **Worktree:**
 `/home/clinton/dev/collabtext/.worktrees/reliability-v2`.
 
 This file is the instruction for the next agent. `TASKS.json` is the status
@@ -27,23 +27,35 @@ is removed. WP6 is not a known failure.
 WP8 is unimplemented. It is not cancelled and FugueMax does not forbid it.
 `collect_garbage()` and `compact()` return zero and retain everything.
 
+**E07a is complete.** The package alpha candidate is `0.2.0-alpha.1` at
+`bdbae5c3d310f2388b1d445a254b4ac35474d215`, proposed tag `v0.2.0-alpha.1`,
+**not created**. The installed package gate passed in Debug, Release and ASan at
+that commit; the baseline probe matrix is 18 rows, 17 passing, one `unsupported`
+row (WP8 durable pins). Nothing was published, pushed, tagged, merged or
+messaged, and the preparation script performs no network access. Release notes
+and pin instructions are in
+[../../releases/integration-alpha.md](../../releases/integration-alpha.md); the
+machine-readable record, checksums and the unexecuted publication checklist are
+under `build-alpha/`.
+
 ## What to do next
 
 One executor. Do not open a second implementation lane.
 
-1. **E07a**, then **E07b**. Both prepare a local alpha candidate: SHA, proposed
-   tag, checksums, pin instructions, capability manifest. They do not publish,
-   tag, push, merge, or edit Wave or Markoff.
+1. **E07b**, the position-capable alpha. It prepares the next candidate
+   (`0.2.0-alpha.2`) with E07a's process, now requiring the strict W03
+   live-position set, and it decides whether any position-token version is
+   supported for consumer storage. It does not publish, tag, push, merge, or
+   edit Wave or Markoff.
 2. **P07** is also unblocked. It is not next. Start it only after E07b, or
    when the user explicitly switches the executor to the recovery lane.
 3. After that, follow registry order: P08, L02–L08, then S04–S07, then the
    G-series. S04 stays blocked on L08. S05 and the G tasks own pins and
    reclamation.
 
-E07a and E07b must re-run the installed package gates at the candidate
-revision in Debug, Release, and ASan. The 2026-10-06 consumer gates that
-observed WP6 `abcXYZ` are Debug only, and they ran before `0984d93`. Do not
-cite them as Release or ASan evidence. Do not cite W02 or W03
+E07b must re-run the installed gates at its candidate revision in Debug, Release
+and ASan, and it needs the `live` gate: E07a's runs cover `package` and
+`baseline` only. Do not cite them as live-gate evidence. Do not cite W02 or W03
 `verification_results` for current WP6 behavior: those rows record the
 pre-S03 known failure.
 

@@ -1391,8 +1391,50 @@
     "R13"
    ],
    "gate": null,
-   "status": "in_progress",
-   "baseline_revision": "add5cf1"
+   "status": "complete",
+   "baseline_revision": "add5cf1",
+   "implementation_commits": [
+    "6c56306",
+    "1e6de60",
+    "4bf732f",
+    "bdbae5c"
+   ],
+   "verification_results": {
+    "candidate_sha": "bdbae5c3d310f2388b1d445a254b4ac35474d215",
+    "candidate_version": "0.2.0-alpha.1",
+    "proposed_tag": "v0.2.0-alpha.1 (not created)",
+    "package_gate_debug": "PASS, 11 steps, manifest v8, exit 0",
+    "package_gate_release": "PASS, 11 steps, manifest v8, exit 0",
+    "package_gate_asan": "PASS, 11 steps, manifest v8, exit 0; no sanitizer or leak report",
+    "baseline_gate_debug": "PASS, 18 probe rows, 17 pass, WP8 durable pins unsupported (S05/G01/G06/G08), exit 0",
+    "baseline_gate_release": "PASS, 18 probe rows, 17 pass, same single unsupported row, exit 0",
+    "prepare_integration_alpha": "PREPARED (not published); evidence accepted for debug/release/asan at the candidate SHA; declared format set equals the set discovered in the codecs",
+    "staged_archive": "collabtext-0.2.0-alpha.1-x86_64.tar.gz sha256 356f639526ef146ecb653efd3e93e25f333318e3622a744a2a4e029b41396f9f, 24 checksum entries, deterministic across two independent runs",
+    "clean_clone": "repository cloned to a separate directory, checked out at the candidate SHA, configured, built, installed; a separate CMake project consumed the prefix with public headers only and printed text=aXb byte_offset=1 token_bytes=104",
+    "version_compatibility": "find_package requests for 0.2.0 accepted, 0.2.1 refused, 0.1.0 accepted",
+    "negative_paths": "wrong branch 3, dirty tree 3, existing tag 3, version mismatch 3, evidence from another SHA 3, evidence from another gate 3, evidence dir without results.json 3, output dir outside the worktree 2, unknown option 2, injected unexpanded ${...} in the record 3",
+    "no_external_action": "no push, no remote tag or release, no package publication, no merge, no consumer message, no network access from the preparation script"
+   },
+   "artifacts": [
+    "build-consumer-verify/e07a-debug-package",
+    "build-consumer-verify/e07a-release-package",
+    "build-consumer-verify/e07a-asan-package",
+    "build-consumer-verify/e07a-debug-baseline",
+    "build-consumer-verify/e07a-release-baseline",
+    "build-alpha/integration-alpha-20261006T174015Z-43813"
+   ],
+   "in_scope_corrections": [
+    "tests/consumer-smoke/wave-contract/run.py recorded formats as hardcoded CTBO/1 and CTLO/1 while its own cases.json declared CTBO/2 and CTLO/2; now derived from the case file. S03's log entry had noted the mislabel without fixing it.",
+    "tools/verify-consumer-package.sh accepted a relative --output-dir and then failed the consumer configure with a message that blamed the package rather than the path; now canonicalised.",
+    "docs/USING_VNEXT.md and ALPHA_CAPABILITIES.md claimed version 1 operation codecs, and USING_VNEXT still claimed concurrent insertion interleaves character-by-character after S03 repaired it.",
+    "ALPHA_CAPABILITIES.md 'Known limits' opened mid-sentence, a truncated line left by S03."
+   ],
+   "known_limits": [
+    "Nothing is published: no tag, no remote release, no package registry entry. Remote CI is pending because nothing triggered it.",
+    "The candidate commit must be reachable on a remote before any consumer can fetch it by SHA; this worktree is not fetchable.",
+    "No serialized format is supported for durable consumer storage at this candidate; CTPT/1 remains experimental. The supported-token decision is E07b's.",
+    "docs/specs/vnext-operation-codec.md still describes the pre-bump version 1 frame table; E04 owns that correction and prepare-integration-alpha.sh fails a candidate whose notes disagree with the codecs."
+   ]
   },
   {
    "id": "S01",
