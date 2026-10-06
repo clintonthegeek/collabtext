@@ -162,6 +162,53 @@ private slots:
         QVERIFY(!conflict.ok()); QCOMPARE(conflict.error().code(), ErrorCode::actor_conflict);
     }
 
+    void file_opstream_reconciles_uncertain_durable_retry() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const std::filesystem::path shared = tmp.path().toStdString();
+        const auto sender_id = actor(71), receiver_id = actor(72);
+        const StreamScope scope{"buffer:uncertain", 4};
+        bool fail_sync_once = true;
+        Storage::StepHook hook;
+        hook.fail = [&](Storage::Step step, const std::filesystem::path& path)
+            -> std::optional<Error> {
+            if (fail_sync_once && step == Storage::Step::FileSync && path.extension() == ".open") {
+                fail_sync_once = false;
+                return Error(ErrorCode::io_error, "injected tail sync failure");
+            }
+            return std::nullopt;
+        };
+        WriterConfig failed_cfg; failed_cfg.step_hook = &hook;
+        {
+            FileOpStream sender(shared, sender_id, failed_cfg);
+            QVERIFY(sender.start().ok()); QVERIFY(sender.register_stream(scope).ok());
+            auto push = sender.push({{scope.stream, scope.epoch, sender_id, 1}, "durable-bytes"},
+                                    PushDurability::durable);
+            QVERIFY(!push.ok());
+        }
+        {
+            FileOpStream restarted(shared, sender_id);
+            QVERIFY(restarted.start().ok()); QVERIFY(restarted.register_stream(scope).ok());
+            auto retried = restarted.push({{scope.stream, scope.epoch, sender_id, 1}, "durable-bytes"},
+                                          PushDurability::durable);
+            QVERIFY(retried.ok());
+            QVERIFY(restarted.close().ok());
+        }
+        FileOpStream receiver(shared, receiver_id);
+        QVERIFY(receiver.start().ok()); QVERIFY(receiver.register_stream(scope).ok());
+        int calls = 0;
+        QVERIFY(receiver.subscribe(scope, [&](const InboundDelivery& d) {
+            ++calls;
+            return d.payload == "durable-bytes"
+                ? DeliveryDecision::commit(RecoveryPoint::replay_from_beginning())
+                : DeliveryDecision::quarantine(Error(ErrorCode::malformed, "payload mismatch"));
+        }).ok());
+        auto polled = receiver.poll(scope);
+        QVERIFY(polled.ok()); QCOMPARE(polled.value().committed, size_t(1));
+        QCOMPARE(calls, 1);
+        QVERIFY(receiver.close().ok());
+    }
+
     void sender_restart_keeps_envelope_identity_for_live_receiver() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());

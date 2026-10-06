@@ -246,8 +246,13 @@ Result<void> FileOpStream::push(const OutboundDelivery& d, PushDurability durabi
     }
     auto& w = *wi->second; const auto existing = w.payloads.find(d.token.sequence);
     if (existing != w.payloads.end()) {
-        if (existing->second == d.payload) return {};
-        return Error(ErrorCode::actor_conflict, "delivery token was reused with different bytes");
+        if (existing->second != d.payload)
+            return Error(ErrorCode::actor_conflict, "delivery token was reused with different bytes");
+        if (durability == PushDurability::durable) {
+            auto reconciled = w.writer->flush();
+            if (!reconciled.ok()) return reconciled.error();
+        }
+        return {};
     }
     if (d.token.sequence != w.next) return Error(d.token.sequence < w.next ? ErrorCode::counter_regression : ErrorCode::counter_regression,
                                                    "delivery sequence must be contiguous");

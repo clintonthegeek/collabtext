@@ -2288,13 +2288,14 @@
       "verification_results": {
         "debug_affected_and_multistream": "PASS: 11/11, including tst_transport_commit_contract, tst_opstream_replay, tst_opstream_idempotent, tst_evaluation_regressions, StreamSync convergence, FileSync, and SegmentReader; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T211710Z-2",
         "debug_changed_path_sweep": "PASS: 79/79 correctness tests; benchmarks excluded; build-roadmap-debug/verification/20261006T211912Z-changed-b68u_063",
-        "file_opstream_targeted": "PASS: tst_transport_commit_contract, tst_opstream_replay, tst_opstream_idempotent, tst_evaluation_regressions; 4/4; GCC 16.2.1 Debug; includes sender and receiver restart, stream isolation, retry, quarantine, budgets, and receipt observer checks; build-roadmap-debug/verification/20261006T212740Z-12",
+        "file_opstream_targeted": "PASS: tst_transport_commit_contract, tst_opstream_replay, tst_opstream_idempotent, tst_evaluation_regressions, tst_session_recovery; 5/5; GCC 16.2.1 Debug; includes sender/receiver restart, stream isolation, retry, quarantine, budgets, receipt observer checks, and injected tail-sync failure followed by durable retry reconciliation; build-roadmap-debug/verification/20261006T214213Z-12",
         "plan_validation": "PASS: all 72 tasks, DAG, ordering and consumer sequencing"
       },
       "artifacts": [
         "build-roadmap-debug/verification/20261006T211710Z-2/",
         "build-roadmap-debug/verification/20261006T211912Z-changed-b68u_063/",
-        "build-roadmap-debug/verification/20261006T212740Z-12/"
+        "build-roadmap-debug/verification/20261006T212740Z-12/",
+        "build-roadmap-debug/verification/20261006T214213Z-12/"
       ],
       "remaining_gap": "The file-backed adapter remains internal and replays logs from the beginning on each polling session; incremental cursor acceleration and installed public transport packaging remain future work. The legacy StreamSync API remains available separately."
     },
@@ -2339,13 +2340,13 @@
       "status": "in_progress",
       "progress": "Partial: implemented the optional single-text DocumentSession over ReplicaState, Buffer, and FileOpStream. Startup full-replays own and remote envelopes irrespective of prior receipts, restores the local operation allocator through replay, reports causal incompleteness, gates edits until dependencies arrive, exposes logical text deltas and explicit save/close results. Added restart, duplicate, mixed-peer, copied-partial-store, missing-causal-arrival, durable pending-outbox reconciliation, append-only accepted-event retention, no-mint historical-projection, and typed invalid-store tests. The consumer seam guidance is documented.",
       "verification_results": {
-        "session_debug": "PASS: tst_session_recovery, tst_evaluation_regressions, tst_opstream_replay; 3/3; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T214013Z-12",
+        "session_debug": "PASS: tst_session_recovery, tst_evaluation_regressions, tst_opstream_replay; 3/3 in required selection, 5/5 in combined transport/session sweep; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T214213Z-12",
         "session_scenarios": "PASS: own-only restart twice with continued edit, mixed-peer convergence after prior receipt, duplicate operation replay, copied partial store remains incomplete until causal log arrives, typed invalid-store error; W5 fixture recovers pending bytes after restart, preserves accepted event rows after rejection, and replays history with an allocator that rejects minting"
       },
       "artifacts": [
-        "build-roadmap-debug/verification/20261006T214013Z-12/"
+        "build-roadmap-debug/verification/20261006T214213Z-12/"
       ],
-      "remaining_gap": "Run the session recovery matrix through explicit storage error and uncertain-publication injection paths. Consumer-owned pins and their crash recovery remain assigned to S05/G08.",
+      "remaining_gap": "Add consumer commit/pin projection crash hook points to the headless consumer fixture. Pin lifecycle and its crash matrix remain shared with S05/G08. Session-specific uncertain local publication injection remains to be covered; the lower file transport now proves restart-and-retry reconciliation after a tail-sync failure.",
       "consumer_requirements": [
         "W3",
         "W5"
