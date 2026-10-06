@@ -111,6 +111,80 @@ Result<void> FileOpStream::start() {
     return {};
 }
 
+Result<void> FileOpStream::replay_all(
+    const StreamScope& scope,
+    const std::function<Result<void>(const InboundDelivery&)>& visitor) const {
+    if (!m_scopes.contains(scope_key(scope)))
+        return Error(ErrorCode::unknown_stream, "stream scope is not registered");
+    if (!visitor) return Error(ErrorCode::malformed, "full replay visitor is empty");
+    const auto replicas = m_shared_folder / "replicas";
+    if (!fs::exists(replicas)) return {};
+    for (const auto& peer : fs::directory_iterator(replicas)) {
+        if (!peer.is_directory()) continue;
+        auto actor = ActorId::parse(peer.path().filename().string());
+        if (!actor.ok()) continue;
+        const auto dir = peer.path() / "log" / "streams" / stream_dir_name(scope.stream)
+                       / std::to_string(scope.epoch);
+        if (!fs::exists(dir)) continue;
+        auto cursor = m_shared_folder / "local" / m_local_actor.to_string() / "read-cursors"
+                    / "replay" / (stream_dir_name(scope.stream) + "-" + std::to_string(scope.epoch)
+                                   + "-" + actor.value().to_string() + ".bin");
+        SegmentReader reader(dir, cursor);
+        reader.start();
+        uint64_t expected = 1;
+        std::string last_payload;
+        for (;;) {
+            auto batch = reader.read_new();
+            if (batch.gap) return batch.gap->with_context("full session replay");
+            if (batch.records.empty()) break;
+            for (const auto& raw : batch.records) {
+                auto delivery = decode_delivery(raw);
+                if (!delivery || delivery->token.stream != scope.stream
+                    || delivery->token.epoch != scope.epoch || delivery->token.producer != actor.value())
+                    return Error(ErrorCode::corrupt_record, "invalid or misplaced delivery in full replay",
+                                 peer.path().string());
+                const auto sequence = delivery->token.sequence;
+                if (sequence == expected) {
+                    ++expected; last_payload = delivery->payload;
+                    auto visited = visitor(*delivery);
+                    if (!visited.ok()) return visited.error();
+                } else if (sequence == expected - 1 && delivery->payload == last_payload) {
+                    // A retry after an uncertain append can leave an identical frame.
+                } else {
+                    return Error(ErrorCode::counter_regression,
+                                 "producer delivery log is not a contiguous idempotent sequence",
+                                 peer.path().string());
+                }
+            }
+            auto committed = reader.commit(batch.token);
+            if (!committed.ok()) return committed.error();
+        }
+    }
+    return {};
+}
+
+Result<void> FileOpStream::flush() {
+    for (auto& [key, state] : m_writers) {
+        (void)key;
+        auto result = state->writer->flush();
+        if (!result.ok()) return result.error();
+    }
+    return {};
+}
+
+Result<void> FileOpStream::close() {
+    for (auto& [key, state] : m_writers) {
+        (void)key;
+        auto result = state->writer->close();
+        if (!result.ok()) return result.error();
+    }
+    m_writers.clear();
+    auto released = m_lease ? m_lease->release() : Result<void>::success();
+    if (!released.ok()) return released.error();
+    m_lease.reset(); m_started = false;
+    return {};
+}
+
 Result<void> FileOpStream::register_stream(const StreamScope& scope) {
     if (!valid_scope(scope)) return Error(ErrorCode::malformed, "invalid stream scope");
     auto key = scope_key(scope); auto found = m_scopes.find(key);
@@ -237,7 +311,7 @@ Result<PollReport> FileOpStream::poll(const StreamScope& scope, PollBudget budge
     PollReport report; if (!state.handler) return report;
     const auto handler = state.handler;
     auto replicas = m_shared_folder / "replicas"; if (!fs::exists(replicas)) return report;
-    bool stop = false;
+    bool stop_all = false;
     for (const auto& peer : fs::directory_iterator(replicas)) {
         if (!peer.is_directory() || peer.path().filename() == m_local_actor.to_string()) continue;
         auto actor = ActorId::parse(peer.path().filename().string()); if (!actor.ok()) continue;
@@ -246,6 +320,7 @@ Result<PollReport> FileOpStream::poll(const StreamScope& scope, PollBudget budge
         SegmentReader reader(dir, m_shared_folder / "local" / m_local_actor.to_string() / "read-cursors"
                             / (stream_dir_name(scope.stream) + "-" + std::to_string(scope.epoch) + "-" + actor.value().to_string() + ".poll"));
         reader.start();
+        bool stop_peer = false;
         for (;;) {
             auto batch = reader.read_new();
             if (batch.gap) return *batch.gap;
@@ -258,7 +333,7 @@ Result<PollReport> FileOpStream::poll(const StreamScope& scope, PollBudget budge
                 const uint64_t accepted = front == state.frontiers.end() ? 0 : front->second.sequence;
                 if (d->token.sequence <= accepted) continue;
                 if (report.offered >= budget.max_records || d->payload.size() > budget.max_payload_bytes - std::min(budget.max_payload_bytes, report.payload_bytes)) {
-                    report.budget_limited = true; stop = true; break;
+                    report.budget_limited = true; stop_peer = true; stop_all = true; break;
                 }
                 if (d->token.sequence != accepted + 1) return Error(ErrorCode::counter_regression, "delivery log has a sequence gap");
                 ++report.offered; report.payload_bytes += d->payload.size();
@@ -266,8 +341,8 @@ Result<PollReport> FileOpStream::poll(const StreamScope& scope, PollBudget budge
                     try { return handler(*d); }
                     catch (...) { return DeliveryDecision::retry(); }
                 }();
-                if (decision.kind() == DeliveryDecision::Kind::retry) { ++report.retried; stop = true; break; }
-                if (decision.kind() == DeliveryDecision::Kind::quarantine) { ++report.quarantined; stop = true; break; }
+                if (decision.kind() == DeliveryDecision::Kind::retry) { ++report.retried; stop_peer = true; break; }
+                if (decision.kind() == DeliveryDecision::Kind::quarantine) { ++report.quarantined; stop_peer = true; break; }
                 if (!decision.recovery_point() || !decision.recovery_point()->valid()
                     || decision.recovery_point()->checkpoint_id().size() > 1024)
                     return Error(ErrorCode::malformed, "commit decision has no valid recovery point");
@@ -279,10 +354,10 @@ Result<PollReport> FileOpStream::poll(const StreamScope& scope, PollBudget budge
                 state.frontiers[actor.value().to_string()] = {d->token.sequence, *decision.recovery_point()};
                 ++report.committed;
             }
-            if (stop) break;
+            if (stop_peer) break;
             auto c = reader.commit(batch.token); if (!c.ok()) return c.error();
         }
-        if (stop) break;
+        if (stop_all) break;
     }
     return report;
 }

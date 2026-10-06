@@ -3,8 +3,9 @@
 namespace CollabText::Identity {
 
 ReplicaAllocator::ReplicaAllocator(ReplicaState* state, std::string document,
-                                   std::string stream)
-    : m_state(state), m_document(std::move(document)), m_stream(std::move(stream)) {
+                                   std::string stream, uint64_t epoch)
+    : m_state(state), m_document(std::move(document)), m_stream(std::move(stream)),
+      m_epoch(epoch) {
     if (m_state) {
         // Peek once so `peek()` is meaningful before the first reservation; a
         // stream with no counter yet starts at the same place a fresh counter

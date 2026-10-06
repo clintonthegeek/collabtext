@@ -144,6 +144,10 @@ and resolving span endpoints; they must not masquerade as a formatting engine.
 
 ## W5 — Durable embedding without competing canonical logs
 
+See [the consumer document and recovery seam](vnext-consumer-session.md) for
+the append-only event, recoverable outbox, rejection, and historical projection
+rules exercised by the optional native `DocumentSession`.
+
 A02a exposes the implemented primitive facade early; A02 later certifies the complete
 supported surface. L05's native `DocumentSession` is an optional reference composition,
 not the only way to embed primitives or own recovery. Consumers may use their own

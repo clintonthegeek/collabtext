@@ -2307,9 +2307,13 @@
         "V03"
       ],
       "files": [
+        "libs/collabtext/CMakeLists.txt",
         "libs/collabtext/include/collabtext/DocumentSession.h",
         "libs/collabtext/src/DocumentSession.cpp",
-        "libs/collabtext/src/crdt/FileSync.cpp",
+        "libs/collabtext/src/crdt/StreamSync.cpp",
+        "libs/collabtext/src/transport/StreamSync.h",
+        "libs/collabtext/src/identity/ReplicaAllocator.cpp",
+        "libs/collabtext/src/identity/ReplicaAllocator.h",
         "libs/collabtext/tests/tst_session_recovery.cpp",
         "docs/specs/vnext-external-position-contract.md",
         "docs/specs/vnext-consumer-session.md"
@@ -2332,7 +2336,16 @@
         "R3"
       ],
       "gate": null,
-      "status": "not_started",
+      "status": "in_progress",
+      "progress": "Partial: implemented the optional single-text DocumentSession over ReplicaState, Buffer, and FileOpStream. Startup full-replays own and remote envelopes irrespective of prior receipts, restores the local operation allocator through replay, reports causal incompleteness, gates edits until dependencies arrive, exposes logical text deltas and explicit save/close results. Added restart, duplicate, mixed-peer, copied-partial-store, missing-causal-arrival, durable pending-outbox reconciliation, append-only accepted-event retention, no-mint historical-projection, and typed invalid-store tests. The consumer seam guidance is documented.",
+      "verification_results": {
+        "session_debug": "PASS: tst_session_recovery, tst_evaluation_regressions, tst_opstream_replay; 3/3; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T214013Z-12",
+        "session_scenarios": "PASS: own-only restart twice with continued edit, mixed-peer convergence after prior receipt, duplicate operation replay, copied partial store remains incomplete until causal log arrives, typed invalid-store error; W5 fixture recovers pending bytes after restart, preserves accepted event rows after rejection, and replays history with an allocator that rejects minting"
+      },
+      "artifacts": [
+        "build-roadmap-debug/verification/20261006T214013Z-12/"
+      ],
+      "remaining_gap": "Run the session recovery matrix through explicit storage error and uncertain-publication injection paths. Consumer-owned pins and their crash recovery remain assigned to S05/G08.",
       "consumer_requirements": [
         "W3",
         "W5"

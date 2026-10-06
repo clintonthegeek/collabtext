@@ -6,7 +6,7 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 
 ## L01 — Implement checked durable filesystem primitives
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json
 **Depends on:** P01, V07  
 **Coverage:** F9, R13  
 
@@ -135,7 +135,11 @@ Run `./tools/verify-roadmap.sh debug 'tst_transport_commit_contract|tst_opstream
 
 - `libs/collabtext/include/collabtext/DocumentSession.h`
 - `libs/collabtext/src/DocumentSession.cpp`
-- `libs/collabtext/src/crdt/FileSync.cpp`
+- `libs/collabtext/src/crdt/StreamSync.cpp`
+- `libs/collabtext/src/transport/StreamSync.h`
+- `libs/collabtext/src/identity/ReplicaAllocator.cpp`
+- `libs/collabtext/src/identity/ReplicaAllocator.h`
+- `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/tests/tst_session_recovery.cpp`
 - `docs/specs/vnext-external-position-contract.md`
 - `docs/specs/vnext-consumer-session.md`

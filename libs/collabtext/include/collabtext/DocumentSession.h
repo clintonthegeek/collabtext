@@ -1,0 +1,78 @@
+/// Optional single-document recovery composition for the native engine.
+///
+/// DocumentSession replays retained operation envelopes before it permits a
+/// local edit. Consumers may instead own their own canonical log, engines,
+/// transport and cross-document history.
+#pragma once
+
+#include <collabtext/ActorId.h>
+#include <collabtext/Engine.h>
+#include <collabtext/OpStream.h>
+#include <collabtext/Operations.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace CollabText {
+
+struct DocumentSessionConfig {
+  std::filesystem::path shared_store;
+  std::filesystem::path private_state;
+  DocumentId document;
+  StreamId stream;
+  uint64_t epoch = 1;
+};
+
+struct SessionRecoveryReport {
+  size_t envelopes = 0;
+  size_t applied = 0;
+  size_t duplicates = 0;
+  size_t deferred = 0;
+  size_t rejected = 0;
+  bool complete = true;
+  std::optional<Error> issue;
+};
+
+struct SessionTextEdit {
+  uint32_t old_start = 0;
+  uint32_t old_end = 0;
+  std::string new_text;
+};
+
+class DocumentSession {
+public:
+  [[nodiscard]] static Result<std::unique_ptr<DocumentSession>>
+      open(DocumentSessionConfig);
+  ~DocumentSession();
+  DocumentSession(const DocumentSession &) = delete;
+  DocumentSession &operator=(const DocumentSession &) = delete;
+
+  [[nodiscard]] Result<SessionRecoveryReport> recover();
+  [[nodiscard]] Result<Crdt::Operation>
+  apply_local(const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
+              const std::vector<std::string> &replacements);
+  [[nodiscard]] Result<PollReport> poll(PollBudget budget = {});
+  [[nodiscard]] Result<void> save();
+  [[nodiscard]] Result<void> close();
+
+  [[nodiscard]] std::string text() const;
+  [[nodiscard]] Crdt::Global recovery_frontier() const;
+  [[nodiscard]] std::vector<SessionTextEdit>
+  edits_since(const Crdt::Global &) const;
+  [[nodiscard]] const SessionRecoveryReport &recovery_report() const noexcept;
+  [[nodiscard]] const ActorId &actor() const noexcept;
+  [[nodiscard]] bool ready() const noexcept;
+
+private:
+  struct Impl;
+  explicit DocumentSession(std::unique_ptr<Impl>);
+  std::unique_ptr<Impl> m_impl;
+};
+
+} // namespace CollabText

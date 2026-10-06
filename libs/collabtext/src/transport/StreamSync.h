@@ -148,6 +148,12 @@ public:
     FileOpStream& operator=(const FileOpStream&) = delete;
 
     [[nodiscard]] Result<void> start();
+    /// Read every retained envelope in a scope without consulting receiver
+    /// receipts or advancing cursors. Used by full-replay session recovery.
+    [[nodiscard]] Result<void> replay_all(
+        const StreamScope&, const std::function<Result<void>(const InboundDelivery&)>& visitor) const;
+    [[nodiscard]] Result<void> flush();
+    [[nodiscard]] Result<void> close();
     [[nodiscard]] Result<void> register_stream(const StreamScope&) override;
     [[nodiscard]] Result<void> push(const OutboundDelivery&, PushDurability) override;
     [[nodiscard]] Result<SubscriptionId> subscribe(const StreamScope&, InboundHandler) override;

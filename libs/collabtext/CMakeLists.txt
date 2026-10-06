@@ -129,6 +129,7 @@ if(COLLABTEXT_BUILD_FILE_TRANSPORT)
         src/crdt/SegmentReader.cpp
         src/crdt/FileSync.cpp
         src/crdt/StreamSync.cpp
+        src/DocumentSession.cpp
         src/crdt/SidecarManifest.cpp
     )
     add_library(CollabText::FileTransport ALIAS collabtext_filetransport)
@@ -431,6 +432,7 @@ add_crdt_test(tst_opstream_convergence_buffer)
 add_crdt_test(tst_opstream_convergence_idlist)
 add_crdt_test(tst_opstream_convergence_mixed)
 add_crdt_test(tst_opstream_replay)
+add_crdt_test(tst_session_recovery)
 add_crdt_test(tst_opstream_idempotent)
 add_crdt_test(tst_idlist)
 add_crdt_test(tst_idlist_anchor)

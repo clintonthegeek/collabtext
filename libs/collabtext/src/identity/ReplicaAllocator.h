@@ -30,7 +30,8 @@ class ReplicaAllocator final : public Crdt::IdentityAllocator {
 public:
     /// `state` must outlive this allocator. `document` and `stream` name the
     /// counter this handle may draw from and are recorded in every reservation.
-    ReplicaAllocator(ReplicaState* state, std::string document, std::string stream);
+    ReplicaAllocator(ReplicaState* state, std::string document, std::string stream,
+                     uint64_t epoch = 1);
 
     [[nodiscard]] Result<uint64_t> reserve_run(uint64_t count) override;
     void observe(uint64_t counter) override;
