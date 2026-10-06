@@ -77,6 +77,9 @@ Run `./tools/verify-roadmap.sh debug 'tst_segment_writer|tst_durable_file'` plus
 - `libs/collabtext/src/crdt/SegmentReader.h`
 - `libs/collabtext/src/crdt/SegmentReader.cpp`
 - `libs/collabtext/tests/tst_segment_reader.cpp`
+- `libs/collabtext/src/crdt/FileSync.cpp`
+- `libs/collabtext/src/crdt/StreamSync.cpp`
+- `libs/collabtext/tests/tst_evaluation_regressions.cpp`
 
 **Steps:**
 

@@ -100,8 +100,17 @@ size_t FileSync::poll() {
         if (m_blocked_records.contains(peer)) continue;
 
         auto& reader = reader_for_(peer);
-        auto records = reader.read_new();
-        if (records.empty()) continue;
+        auto batch = reader.read_new();
+        auto& records = batch.records;
+        if (records.empty() && batch.gap) {
+            m_last_error = batch.gap->with_context("FileSync peer " + peer);
+            continue;
+        }
+        if (records.empty()) {
+            auto committed = reader.commit(batch.token);
+            if (!committed.ok()) m_last_error = committed.error().with_context("FileSync peer " + peer);
+            continue;
+        }
 
         std::vector<Operation> ops;
         ops.reserve(records.size());
@@ -109,7 +118,7 @@ size_t FileSync::poll() {
             auto op = decode_operation(r);
             if (!op.ok()) {
                 m_last_error = op.error().with_context("FileSync peer " + peer);
-                m_blocked_records.emplace(peer, std::move(records));
+                m_blocked_records.emplace(peer, std::move(batch.records));
                 break;
             }
             ops.push_back(std::move(op).value());
@@ -119,7 +128,12 @@ size_t FileSync::poll() {
             m_buffer.apply_ops(ops);
             total_applied += ops.size();
         }
-        reader.commit();
+        auto committed = reader.commit(batch.token);
+        if (!committed.ok()) {
+            m_last_error = committed.error().with_context("FileSync peer " + peer);
+            continue;
+        }
+        if (batch.gap) m_last_error = batch.gap->with_context("FileSync peer " + peer);
     }
 
     if (total_applied > 0 && m_on_remote_ops)

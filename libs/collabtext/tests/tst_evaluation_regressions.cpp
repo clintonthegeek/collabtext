@@ -244,7 +244,6 @@ private slots:
             receiver.poll();
             QVERIFY(decoded);
             if (session == 1) {
-                EVALUATION_EXPECT_FAIL("", "F5 / L03,L05: persisted read progress cannot bootstrap a fresh engine without recovered state");
                 QCOMPARE(b.text(), std::string("abc"));
             } else {
                 QCOMPARE(b.text(), std::string("abc")); // first delivery control
@@ -276,13 +275,14 @@ private slots:
         fs::rename(first, held);
         SegmentReader reader(stream, root / "cursor");
         reader.start();
-        auto delivered = reader.read_new();
-        reader.commit();
+        auto blocked = reader.read_new();
+        QVERIFY(blocked.records.empty());
+        QVERIFY(blocked.gap.has_value());
+        QVERIFY(reader.commit(blocked.token).ok());
         fs::rename(held, first);
         auto later = reader.read_new();
-        delivered.insert(delivered.end(), later.begin(), later.end());
-        EVALUATION_EXPECT_FAIL("", "F6 / L03: committing segment 2 prevents a late segment 1 from ever being read");
-        QCOMPARE(delivered, (std::vector<std::string>{"first", "second"}));
+        QCOMPARE(later.records, (std::vector<std::string>{"first", "second"}));
+        QVERIFY(reader.commit(later.token).ok());
     }
 
     void f7_insertion_obeys_boundary_affinity() {

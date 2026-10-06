@@ -128,7 +128,18 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
         if (!fs::exists(peer_stream_dir)) continue;
         if (s.blocked.contains(peer)) continue;
         auto& reader = reader_for_(s, name, peer);
-        auto records = reader.read_new();
+        auto batch = reader.read_new();
+        auto& records = batch.records;
+        if (records.empty() && batch.gap) {
+            m_last_error = batch.gap->with_context("StreamSync " + name + " peer " + peer);
+            continue;
+        }
+        if (records.empty()) {
+            auto committed = reader.commit(batch.token);
+            if (!committed.ok())
+                m_last_error = committed.error().with_context("StreamSync " + name + " peer " + peer);
+            continue;
+        }
         // Validate this batch before callbacks/merged state can see any entry.
         // Generic streams may carry arbitrary opaque payloads. Only recognized
         // operation families are interpreted here; P07 supplies stream binding.
@@ -145,7 +156,7 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
             }
             if (error) {
                 m_last_error = error.with_context("StreamSync " + name + " peer " + peer);
-                s.blocked.emplace(peer, std::move(records));
+                s.blocked.emplace(peer, std::move(batch.records));
                 break;
             }
         }
@@ -195,7 +206,12 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
                 }
             }
         }
-        reader.commit();
+        auto committed = reader.commit(batch.token);
+        if (!committed.ok()) {
+            m_last_error = committed.error().with_context("StreamSync " + name + " peer " + peer);
+            continue;
+        }
+        if (batch.gap) m_last_error = batch.gap->with_context("StreamSync " + name + " peer " + peer);
     }
     return count;
 }
