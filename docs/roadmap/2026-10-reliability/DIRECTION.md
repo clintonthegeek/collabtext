@@ -38,17 +38,24 @@ and pin instructions are in
 machine-readable record, checksums and the unexecuted publication checklist are
 under `build-alpha/`.
 
+**E07b is in progress, not complete.** Implementation commit `4b8d382` declares
+`CTPT/1` a supported token version in `0.2.0-alpha.2` with 16 retained golden
+cases and a reader fixture (`tst_position_token_reader`, 8/8 pass). The package
+gate passed in Debug/Release/ASan at that commit. **The strict live-position gate
+(`--gate live`) has NOT been run**, `prepare-integration-alpha.sh` has NOT been
+run with `--gate live`, and the release-notes verification section is a
+placeholder. The candidate SHA will change when the remaining work is committed.
+
 ## What to do next
 
 One executor. Do not open a second implementation lane.
 
-1. **E07b**, the position-capable alpha. It prepares the next candidate
-   (`0.2.0-alpha.2`) with E07a's process, now requiring the strict W03
-   live-position set, and it decides whether any position-token version is
-   supported for consumer storage. It does not publish, tag, push, merge, or
-   edit Wave or Markoff.
-2. **P07** is also unblocked. It is not next. Start it only after E07b, or
-   when the user explicitly switches the executor to the recovery lane.
+1. **Finish E07b.** Run `--gate live` in Debug, Release, ASan at the final
+   implementation commit. Run `prepare-integration-alpha.sh --gate live` with
+   the three live-gate evidence directories. Fill in the release-notes
+   verification section. Commit bookkeeping and mark E07b complete.
+2. **P07** is also unblocked. It is not next. Start it only after E07b, or when
+   the user explicitly switches the executor to the recovery lane.
 3. After that, follow registry order: P08, L02–L08, then S04–S07, then the
    G-series. S04 stays blocked on L08. S05 and the G tasks own pins and
    reclamation.

@@ -2570,3 +2570,79 @@ cannot live there. The release line is `0.2.0` and the prerelease label is
 The consequence — a `find_package` request cannot name the prerelease label — is
 documented in the manifest, `USING_VNEXT` and the release notes rather than left
 to be discovered.
+
+## 2026-10-06 — E07b in progress: CTPT/1 declared supported, certification incomplete
+
+```text
+Task: E07b
+Status: in_progress (NOT complete)
+Branch: feat/fuguemax-placement
+Baseline: 77c7897
+Implementation commit: 4b8d382
+Candidate version: 0.2.0-alpha.2
+Proposed tag: v0.2.0-alpha.2 (not created)
+
+Done:
+  - Version bumped to 0.2.0-alpha.2 in both CMakeLists (COLLABTEXT_PRERELEASE).
+  - ALPHA_CAPABILITIES.md v8 -> v9: CTPT/1 declared a supported serialized token
+    version with the reader obligation and explicit scope limits.
+  - docs/specs/vnext-alpha-capabilities.md: supported-token reader manifest added.
+  - docs/USING_VNEXT.md: caret vs strict-reference example, supported-token scope.
+  - docs/releases/integration-alpha.md: alpha.2 release notes, guarantee table,
+    consumer-owned responsibilities, saved reply draft (NOT SENT).
+  - libs/collabtext/tests/fixtures/position-tokens/ctpt-v1-supported.json:
+    16 retained golden cases covering all four token kinds.
+  - libs/collabtext/tests/tst_position_token_reader.cpp: independent literal §4
+    reader, retention round-trip, exhaustive truncation/trailing-byte coverage,
+    negative-version, wrong-kind, per-case replay. 8/8 pass.
+  - tools/prepare-integration-alpha.sh: refuses a candidate whose manifest declares
+    CTPT/1 supported without the retained fixture covering all four kinds.
+  - Package gate at 4b8d382: Debug PASS, Release PASS, ASan PASS (11 steps each,
+    manifest v9).
+
+NOT done (required for completion):
+  - Strict live-position gate (--gate live) has NOT been run at 4b8d382.
+    This is the gate E07b exists to satisfy. Without it the position alpha is
+    not certified.
+  - tools/prepare-integration-alpha.sh has NOT been run with --gate live.
+    No alpha-candidate.json, checksums, or publication checklist exist for
+    0.2.0-alpha.2.
+  - docs/releases/integration-alpha.md "How the position candidate was verified"
+    is still a placeholder.
+  - The candidate SHA will change when the remaining work is committed; the
+    package gates above were run at 4b8d382 and must be re-run at the final SHA.
+  - TASKS.json verification_results record the incomplete state.
+
+Next session:
+  1. Run --gate live in Debug, Release, ASan at the current HEAD (4b8d382 or
+     whatever the final implementation commit is).
+  2. Run prepare-integration-alpha.sh --gate live with the three live-gate
+     evidence directories.
+  3. Fill in the release-notes verification section with actual results.
+  4. Commit bookkeeping, update TASKS.json to complete.
+```
+
+Representation evidence recorded:
+  - AnchorCodec.cpp written by S04b, byte-identical through S03 to HEAD.
+  - No token field names a parent, side, right origin, or locator.
+  - S04b golden bytes still assert unchanged post-S03.
+  - tst_position_token_reader replay check re-mints all 16 goldens on current
+    engines and compares bytes exactly.
+
+Defects found and fixed during E07b:
+  - First draft of goldens shared one actor counter across cases, making them
+    not independently reproducible. The replay check caught it; each case now
+    uses a fresh counter.
+  - A length-only layout assertion PASSED when 24 bytes were injected into a
+    golden (total stayed consistent with "two item fences"). The literal reader
+    rejects it. Header comment corrected.
+  - Literal reader initially had a premature at_end() check before reading
+    frontier entries, and did not handle kind 4 (TextAttachment) fences.
+  - specified_length double-counted the selection byte for attachments (off by
+    one). Fixed.
+
+Negative controls verified (each fails with a diagnostic):
+  - Injected 24-byte field into a golden -> literal reader rejects.
+  - Corrupted fence tag to 0x05 -> literal reader rejects.
+  - Fixture declaring CTPT/2 -> load_goldens refuses.
+  - Recorded byte_length off by one -> length comparison fails.

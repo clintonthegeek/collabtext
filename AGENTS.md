@@ -31,10 +31,13 @@ targeted sweeps passed at `cc7d8cc`. The Debug installed live gate passed with
 WP6 observing `abcXYZ`. WP6's baseline exception for `aXbYcZ` is removed.
 WP8 durable pins stay unsupported.
 
-**Next: E07b.** That prepares the position-capable alpha `0.2.0-alpha.2` using
-E07a's process, now requiring the strict W03 live-position set, and decides
-whether any position-token version is supported for consumer storage. It does
-not publish, merge, or edit Wave. Do not re-implement placement.
+**E07b is in progress, not complete.** Implementation commit `4b8d382` declares
+`CTPT/1` a supported token version in `0.2.0-alpha.2` with 16 retained golden
+cases and a reader fixture. The package gate passed in Debug/Release/ASan at
+that commit. **The strict live-position gate (`--gate live`) has NOT been run**,
+`prepare-integration-alpha.sh` has NOT been run with `--gate live`, and the
+release-notes verification section is a placeholder. The candidate SHA will
+change when the remaining work is committed.
 
 **E07a is complete.** The package alpha candidate is `0.2.0-alpha.1` at
 `bdbae5c3d310f2388b1d445a254b4ac35474d215`; proposed tag `v0.2.0-alpha.1`, not
