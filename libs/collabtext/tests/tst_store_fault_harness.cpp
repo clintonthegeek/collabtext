@@ -366,12 +366,11 @@ private slots:
         remove_segment(stream, 2);
 
         const auto records = read_all(stream, fs::path(dir.path().toStdString()) / "cursor");
-        // The gap is a missing segment, not a silent skip of everything after
-        // it: the later segment is still readable. Whether the *gap* is
-        // detectable is F6, owned by L03/L08; here we pin what happens today.
-        QCOMPARE(records.size(), size_t(4));
+        // Segment 2 is a hard predecessor gap: segment 3 stays unavailable
+        // until the missing segment is repaired.
+        QCOMPARE(records.size(), size_t(2));
         QVERIFY(records.front().find("segment 1 record 0") == 0);
-        QVERIFY(records.back().find("segment 3 record 1") == 0);
+        QVERIFY(records.back().find("segment 1 record 1") == 0);
     }
 
     void out_of_order_arrival_is_observable() {
@@ -384,18 +383,16 @@ private slots:
         auto first = read_all(stream, fs::path(dir.path().toStdString()) / "cursor");
         QCOMPARE(first.size(), size_t(2));
 
-        // Segment 2 arrives, then a *late* segment 0 the reader has never seen.
+        // Segment 3 arrives before its predecessor. The reader exposes the
+        // contiguous prefix only until segment 2 is repaired.
+        write_segments(stream, CollabText::Crdt::SegmentKind::Ops, 3, 1, 2);
+        auto before_repair = read_all(stream, fs::path(dir.path().toStdString()) / "cursor");
+        QCOMPARE(before_repair.size(), size_t(2));
         write_segments(stream, CollabText::Crdt::SegmentKind::Ops, 2, 1, 2);
-        write_segments(stream, CollabText::Crdt::SegmentKind::Ops, 0, 1, 2);
-        auto second = read_all(stream, fs::path(dir.path().toStdString()) / "cursor");
-        QCOMPARE(second.size(), size_t(2));
-
-        // Today the late earlier segment is skipped rather than applied, because
-        // the cursor already advanced past it. This is finding F6: it must
-        // block advancing coverage rather than be skipped, and it belongs to L03.
-        // The assertion documents today's behaviour so the fix has a red test.
-        for (const auto& record : second)
-            QVERIFY(record.find("segment 0") == std::string::npos);
+        auto repaired = read_all(stream, fs::path(dir.path().toStdString()) / "cursor");
+        QCOMPARE(repaired.size(), size_t(6));
+        QVERIFY(repaired[2].find("segment 2") == 0);
+        QVERIFY(repaired.back().find("segment 3 record 1") == 0);
     }
 
     void partial_tail_is_read_up_to_the_last_complete_record() {

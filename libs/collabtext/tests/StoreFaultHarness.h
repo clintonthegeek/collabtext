@@ -593,8 +593,9 @@ inline std::vector<std::string> read_all(const fs::path& dir, const fs::path& cu
         auto batch = reader.read_new();
         if (batch.empty()) break;
         records.insert(records.end(), batch.begin(), batch.end());
+        auto committed = reader.commit(batch.token);
+        if (!committed.ok()) break;
     }
-    reader.commit();
     return records;
 }
 

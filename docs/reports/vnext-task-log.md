@@ -2789,6 +2789,10 @@ Verification: Debug 11/11 across transport contract, replay, idempotence,
   Owned direct-entry pushes also reject gaps/regressions and sequence exhaustion
   before append, while exact same-token retries are idempotent.
 Artifacts: build-roadmap-debug/verification/20261006T211710Z-2/
+  Full changed-path sweep also passed 79/79 at
+  build-roadmap-debug/verification/20261006T211912Z-changed-b68u_063; stale
+  StoreFaultHarness cursor usage and pre-L03 gap expectations were updated, and
+  legacy ack observations now require an installed callback.
 Remaining: production StreamSync still exposes only the legacy 16-bit
   replica/void-callback transport. P07 ActorId/epoch DeliveryToken handling,
   explicit durability and commit/retry/quarantine outcomes, and per-stream
