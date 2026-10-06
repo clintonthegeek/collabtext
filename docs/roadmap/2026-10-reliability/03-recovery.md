@@ -174,6 +174,8 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 - `libs/collabtext/src/storage/LocalHistoryLog.cpp`
 - `libs/collabtext/src/crdt/Buffer.cpp`
 - `libs/collabtext/src/crdt/Buffer.h`
+- `libs/collabtext/src/crdt/IdList.h`
+- `libs/collabtext/src/crdt/UndoMap.h`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/src/storage/LocalHistoryLog.cpp`
 - `libs/collabtext/src/storage/LocalHistoryLog.h`

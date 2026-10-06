@@ -2,6 +2,7 @@
 #include <QTest>
 
 #include "crdt/Buffer.h"
+#include "crdt/IdList.h"
 #include "storage/LocalHistoryLog.h"
 #include "TestActor.h"
 
@@ -30,6 +31,36 @@ private slots:
     auto redo = replayed.redo();
     QVERIFY(redo.has_value());
     QCOMPARE(replayed.text(), std::string("abc"));
+  }
+
+  void idlist_snapshot_restores_undo_and_redo_after_replay() {
+    IdList original(Test::test_counter(9));
+    auto insert = original.try_insert_after(Anchor::min(), 42);
+    QVERIFY(insert.ok());
+    const auto snapshot = original.local_history_snapshot();
+
+    IdList replayed(Test::test_counter(9, 100));
+    const auto outcomes = replayed.apply_ops({insert.value()});
+    QCOMPARE(outcomes.size(), size_t(1));
+    QCOMPARE(outcomes[0].kind(), ApplyOutcomeKind::applied);
+    QVERIFY(replayed.restore_local_history(snapshot).ok());
+    auto undo = replayed.undo();
+    QVERIFY(undo.has_value());
+    QCOMPARE(replayed.size(), uint32_t(0));
+    auto redo = replayed.redo();
+    QVERIFY(redo.has_value());
+    QCOMPARE(replayed.ids(), std::vector<uint64_t>{42});
+  }
+
+  void idlist_history_obeys_retained_byte_budget() {
+    IdList list(Test::test_counter(9));
+    list.set_max_undo_bytes(2 * (sizeof(uint64_t) + sizeof(UndoMapKey)));
+    QVERIFY(list.try_insert_after(Anchor::min(), 1).ok());
+    QVERIFY(list.try_insert_after(Anchor::min(), 2).ok());
+    QCOMPARE(list.undo_depth(), size_t(2));
+    list.set_max_undo_bytes(sizeof(uint64_t) + sizeof(UndoMapKey));
+    QCOMPARE(list.undo_depth(), size_t(1));
+    QVERIFY(list.undo_history_bytes() <= list.max_undo_bytes());
   }
 
   void restore_rejects_history_not_covered_by_replay() {

@@ -1,5 +1,6 @@
 #include "crdt/IdList.h"
 #include "crdt/SequenceOrder.h"
+#include <algorithm>
 #include <cassert>
 
 namespace CollabText::Crdt {
@@ -103,7 +104,8 @@ Result<IdListOperation> IdList::insert_after_resolved(const Anchor& after, uint6
 
     // k. Push undo entry
     m_undo_stack.resize(m_undo_cursor);  // truncate redo tail
-    m_undo_stack.push_back(UndoEntry{ {UndoMapKey(origin)}, {} });
+    m_undo_stack.push_back(UndoEntry{
+        {UndoMapKey(origin)}, {}, sizeof(uint64_t) + sizeof(UndoMapKey)});
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
 
@@ -174,7 +176,8 @@ Result<IdListOperation> IdList::remove_at_resolved(const Anchor& target) {
 
     // j. Push undo entry: empty inserted_keys, del_id in deletion_ids
     m_undo_stack.resize(m_undo_cursor);
-    m_undo_stack.push_back(UndoEntry{ {}, {del_id} });
+    m_undo_stack.push_back(UndoEntry{
+        {}, {del_id}, sizeof(uint64_t) + sizeof(Identity)});
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
 
@@ -283,9 +286,13 @@ bool IdList::coalesce_last_undo() {
     previous.deletion_ids.insert(previous.deletion_ids.end(),
                                  latest.deletion_ids.begin(),
                                  latest.deletion_ids.end());
+    previous.retained_bytes = latest.retained_bytes > SIZE_MAX - previous.retained_bytes
+                                  ? SIZE_MAX
+                                  : previous.retained_bytes + latest.retained_bytes;
     m_undo_stack.erase(m_undo_stack.begin()
                        + static_cast<ptrdiff_t>(m_undo_cursor - 1));
     m_undo_cursor--;
+    recalculate_undo_bytes();
     return true;
 }
 
@@ -294,13 +301,89 @@ void IdList::set_max_undo_depth(size_t depth) {
     trim_undo_stack();
 }
 
+void IdList::set_max_undo_bytes(size_t bytes) {
+    m_max_undo_bytes = bytes;
+    trim_undo_stack();
+}
+
+void IdList::recalculate_undo_bytes() {
+    m_undo_bytes = 0;
+    for (const auto &entry : m_undo_stack) {
+        if (entry.retained_bytes > SIZE_MAX - m_undo_bytes) {
+            m_undo_bytes = SIZE_MAX;
+            return;
+        }
+        m_undo_bytes += entry.retained_bytes;
+    }
+}
+
 void IdList::trim_undo_stack() {
-    if (m_undo_stack.size() <= m_max_undo_depth) return;
-    size_t excess = m_undo_stack.size() - m_max_undo_depth;
-    m_undo_stack.erase(m_undo_stack.begin(),
-                       m_undo_stack.begin() + static_cast<ptrdiff_t>(excess));
-    if (excess > m_undo_cursor) m_undo_cursor = 0;
-    else m_undo_cursor -= excess;
+    recalculate_undo_bytes();
+    while (!m_undo_stack.empty() &&
+           (m_undo_stack.size() > m_max_undo_depth ||
+            m_undo_bytes > m_max_undo_bytes)) {
+        m_undo_stack.erase(m_undo_stack.begin());
+        if (m_undo_cursor != 0) --m_undo_cursor;
+        recalculate_undo_bytes();
+    }
+}
+
+LocalHistorySnapshot IdList::local_history_snapshot() const {
+    LocalHistorySnapshot snapshot;
+    snapshot.cursor = m_undo_cursor;
+    snapshot.entries.reserve(m_undo_stack.size());
+    for (const auto &entry : m_undo_stack) {
+        LocalUndoEntrySnapshot saved;
+        saved.inserted_items.reserve(entry.inserted_keys.size());
+        for (const auto &key : entry.inserted_keys)
+            saved.inserted_items.push_back(key.position);
+        saved.deletion_operations = entry.deletion_ids;
+        saved.retained_bytes = entry.retained_bytes;
+        snapshot.entries.push_back(std::move(saved));
+    }
+    return snapshot;
+}
+
+Result<void> IdList::restore_local_history(const LocalHistorySnapshot &snapshot) {
+    if (snapshot.cursor > snapshot.entries.size() ||
+        snapshot.entries.size() > m_max_undo_depth)
+        return Error(ErrorCode::malformed,
+                     "IdList history cursor or depth is outside configured bounds");
+    const auto &owner = m_allocator->actor();
+    size_t restored_bytes = 0;
+    std::vector<UndoEntry> restored;
+    restored.reserve(snapshot.entries.size());
+    auto valid_local_id = [&](const Identity &id) {
+        return id.actor == owner && id.counter != 0 &&
+               id.counter <= m_version.get(owner);
+    };
+    for (const auto &saved : snapshot.entries) {
+        if (saved.retained_bytes > m_max_undo_bytes -
+                                       std::min(restored_bytes, m_max_undo_bytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "IdList history exceeds configured byte bound");
+        restored_bytes += saved.retained_bytes;
+        UndoEntry entry;
+        entry.inserted_keys.reserve(saved.inserted_items.size());
+        for (const auto &id : saved.inserted_items) {
+            if (!valid_local_id(id))
+                return Error(ErrorCode::history_unavailable,
+                             "IdList undo item is absent from replayed owner history");
+            entry.inserted_keys.emplace_back(id);
+        }
+        for (const auto &id : saved.deletion_operations) {
+            if (!valid_local_id(id))
+                return Error(ErrorCode::history_unavailable,
+                             "IdList deletion is absent from replayed owner history");
+            entry.deletion_ids.push_back(id);
+        }
+        entry.retained_bytes = saved.retained_bytes;
+        restored.push_back(std::move(entry));
+    }
+    m_undo_stack = std::move(restored);
+    m_undo_cursor = snapshot.cursor;
+    m_undo_bytes = restored_bytes;
+    return Result<void>::success();
 }
 
 std::vector<uint64_t> IdList::ids() const {
@@ -427,13 +510,14 @@ void IdList::local_clear() noexcept {
     m_undo_map.clear();
     m_undo_stack.clear();
     m_undo_cursor = 0;
+    m_undo_bytes = 0;
     m_deferred_queue = IdListOperationQueue{};
     m_deferred_count = 0;
     m_deferred_bytes = 0;
     m_quarantined.clear();
     m_quarantined_bytes = 0;
     // Intentionally preserved: m_allocator, m_version,
-    // m_max_undo_depth, m_on_change, m_on_local_op.
+    // m_max_undo_depth, m_max_undo_bytes, m_on_change, m_on_local_op.
     // Intentionally not fired: m_on_change, m_on_local_op.
 }
 

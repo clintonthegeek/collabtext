@@ -22,6 +22,20 @@ struct UndoMapKey {
     bool operator==(const UndoMapKey &) const = default;
 };
 
+/// Actor-local undo state persisted alongside replayable operation history.
+/// Document/list contents are rebuilt by replay; snapshots keep only identity
+/// references and the step/byte charges for their local history.
+struct LocalUndoEntrySnapshot {
+    std::vector<Identity> inserted_items;
+    std::vector<Identity> deletion_operations;
+    size_t retained_bytes = 0;
+};
+
+struct LocalHistorySnapshot {
+    std::vector<LocalUndoEntrySnapshot> entries;
+    size_t cursor = 0;
+};
+
 // ============================================================================
 // SumTree types for the UndoMap
 // ============================================================================

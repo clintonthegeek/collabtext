@@ -2372,7 +2372,9 @@
         "libs/collabtext/CMakeLists.txt",
         "libs/collabtext/include/collabtext/DocumentSession.h",
         "libs/collabtext/src/DocumentSession.cpp",
-        "libs/collabtext/tests/tst_session_recovery.cpp"
+        "libs/collabtext/tests/tst_session_recovery.cpp",
+        "libs/collabtext/src/crdt/IdList.h",
+        "libs/collabtext/src/crdt/UndoMap.h"
       ],
       "steps": [
         "Durably record local undo groups, coalescing boundaries, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.",
@@ -2396,14 +2398,14 @@
       "consumer_requirements": [
         "W5"
       ],
-      "progress": "Partial: added replay-validated Buffer undo/redo snapshots, a replay-scoped atomic history checkpoint, and a durable pending-commit intent containing the operation token, payload, and resulting snapshot. DocumentSession retries pending delivery idempotently on open, then restores local undo/redo. Buffer history is bounded by step and estimated retained-byte budgets, coalescing combines byte charges, and an oversized single edit is refused before identity reservation. Restart coverage includes pending-intent reconciliation, undo\u2192close\u2192reopen\u2192redo, and owner undo preserving a peer edit.",
+      "progress": "Partial: Buffer and IdList now expose replay-validated local history snapshots. Both enforce step and retained-byte budgets; coalescing carries byte charges, and oversized Buffer edits are refused before reserving identities. DocumentSession persists Buffer history with an atomic checkpoint and retries pending edit/undo/redo commits from durable intent records. Tests cover snapshot restoration for both primitives, byte-budget trim/refusal, pending-intent recovery, reopen undo/redo, and preservation of peer edits.",
       "verification_results": {
-        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, including byte-budget refusal/trim, pending-intent recovery, session undo\u2192close\u2192reopen\u2192redo, and peer-edit preservation; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T215554Z-2"
+        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, including Buffer and IdList history snapshot restoration, byte-budget trim/refusal, pending-intent recovery, reopen undo\u2192redo, and peer-edit preservation; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T215735Z-2"
       },
       "artifacts": [
-        "build-roadmap-debug/verification/20261006T215554Z-2/"
+        "build-roadmap-debug/verification/20261006T215735Z-2/"
       ],
-      "remaining_gap": "Add crash injection at every intent/push/checkpoint/clear boundary and persist coalescing/retirement metadata for consumers. IdList history is not yet persisted. Buffer undo/redo refusal currently maps allocator failure to not_found because the primitive API returns optional. The retained-byte charge is a bounded estimate and has no consumer-configured policy yet; accepted canonical event correlation remains consumer-owned."
+      "remaining_gap": "Persist IdList snapshots in consumer-owned canonical/document storage; inject crashes at every intent/push/checkpoint/clear boundary; expose durable coalescing and retirement group metadata for W5; verify recovery and retained-byte policy under those faults. The retained-byte charge is an estimate, not an allocator-level memory measurement, and Buffer undo/redo identity reservation failures map to not_found because the primitive API returns optional."
     },
     {
       "id": "L07",
