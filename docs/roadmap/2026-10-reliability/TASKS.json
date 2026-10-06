@@ -1854,9 +1854,26 @@
     "R12"
    ],
    "gate": "Requires a complete reviewed incremental repair specification and independent executable model. Unresolved ordering invariants block dependent code changes; replacement engines are outside scope.",
-   "status": "not_started",
+   "status": "complete",
    "consumer_requirements": [
     "W2"
+   ],
+   "baseline_revision": "b5de626",
+   "progress": "Complete: repair specified as pre-order of the insert-after tree with two sibling rules (precedence for groups inserted immediately before a sibling; counter-then-actor-bytes on the operation's first item otherwise), an independent interpreter passing all 17 S01 fixtures, and a transformation map confined to Buffer::normalize_fragments. No production integration code changed; no comparator-only claim, no replacement engine, no weakened oracle.",
+   "verification_results": {
+    "root_cause": "Buffer::normalize_fragments (Buffer.cpp:498) atomizes any same-Locator multi-actor run into single scalars and sorts them by per-scalar identity. Item counters are per-actor, so two 3-scalar pastes rank A/1,B/1,A/2,B/2,A/3,B/3 and interleave into aXbYcZ. Reproduced on the installed build.",
+    "model": "libs/collabtext/tests/reference/SequenceModel.h, linking no production ordering, Locator, identity, Buffer, IdList, Fragment, anchor or codec code. 8/8 tst_sequence_model cases in Debug, Release and leak-enabled ASan.",
+    "fixtures": "17 fixtures exact on order, hidden set and text; all 29 supplied arrival orders converge to identical outcomes; duplicates counted not reapplied; a delivered-before-prerequisite case defers and drains to a!bcXYZ.",
+    "tokens": "8 token-bearing fixtures: 22 named positions and 14 comparisons resolved through the independent BoundaryModel against the model's order, including Left=1/Right=5 for a boundary minted before concurrent xy/XY insertion.",
+    "oracle_teeth": "productionAtomizingRuleIsRejected reconstructs today's atomizing rule and shows the S01 oracle rejects it on exactly the four comparable fixtures (aXbYcZ, aXbYcZ!, cZbYaX, aXbYcZ). Restricted to those four on purpose: seeded fixtures differ for reasons unrelated to ordering.",
+    "review": "nested concurrent runs, reverse insertion, post-merge edits, undo, duplicate/deferred delivery and bounded enumeration (12 generated cases asserting exact text and single-run contiguity per actor) all executed. Storage reuse argued by the transformation map and named as S03's first falsification target.",
+    "bounds": "No production code changed: the engine still interleaves concurrent passages and WP6 remains an exact known failure. No maximal non-interleaving is claimed. Reverse typing depends on Buffer::locator_between producing a strictly decreasing locator, which S03 may touch. Equal-boundary IdList ordering has two fixtures against six text fixtures. No benchmark ran and no fresh acceptance sweep; the routed sweep was 75/75 plus the package gate."
+   },
+   "artifacts": [
+    "docs/specs/vnext-sequence-algorithm.md",
+    "docs/reports/vnext-ordering-design.md",
+    "libs/collabtext/tests/reference/SequenceModel.h",
+    "libs/collabtext/tests/tst_sequence_model.cpp"
    ]
   },
   {

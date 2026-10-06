@@ -13,12 +13,18 @@ W1–W6 consumer cases.
 
 ## Where the work is, as of 2026-10-05
 
-**Done:** V01–V08, D01, P01–P06b, L01, S01, W01–W03, S04a/S04b and packaging
-A01/A02a/A06a. Registry count: 72. S01/W01 are validated desired histories and
+**Done:** V01–V08, D01, P01–P06b, L01, S01, S02, W01–W03, S04a/S04b and
+packaging A01/A02a/A06a. Registry count: 72. S01/W01 are validated desired histories and
 probe fixtures, not production F7/F8 fixes. P06a's final operation-opacity step
 has passed affected Debug/Release/sanitizer and installed-consumer checks.
 
-**Continue E07a/E07b preparation and S02/S03.**
+**Continue S03 and E07a/E07b preparation.** S02 is complete: the ordering repair
+is specified in `docs/specs/vnext-sequence-algorithm.md` and modelled by an
+independent interpreter that passes all 17 S01 fixtures, 29 arrival orders and 22
+named token positions. The defect is `Buffer::normalize_fragments` atomizing a
+same-`Locator` run and ordering it per scalar; the repair keeps whole operations
+contiguous and orders same-position operations by first inserted item. **No
+production code changed — the engine still interleaves.**
 P06b and S04b are complete: checked versioned operation/gap codecs and native
 scoped position/CTPT v1 APIs pass Debug/Release/leak-enabled sanitizer and
 installed-package checks. S04b has 1,050 text/550 list native/model resolutions

@@ -22,9 +22,9 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 technical acceptance: check the referenced artifacts as well. Packaging
 A01/A02a/A06a, P06a, S01/W01 and S04a are complete. The S04a contract/model
 settles affinity, scope, collapse, strict referent restoration and codec rules.
-P06b codecs, S04b native live positions, W02 baseline probes and the W03 strict
-live gate are complete. Continue E07a/E07b preparation and S02/S03; S02 is
-independently ready. A model/fixture pass is not a production capability pass.
+P06b codecs, S04b native live positions, W02 baseline probes, the W03 strict live
+gate and the S02 ordering specification are complete. S03 may now change
+integration; continue with S03 and E07a/E07b preparation. A model/fixture pass is not a production capability pass.
 Read [current handoff](../../handoff/2026-10-05-state-at-handoff.md),
 [boundary contract](../../specs/vnext-boundary-semantics.md) and
 [external requirements](../../specs/vnext-external-position-contract.md).

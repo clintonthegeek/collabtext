@@ -272,3 +272,20 @@ mapping to document end. These are model mutation checks, not a claim of product
 mutation testing. The fixture validator independently checks provenance and exact
 collapse/restoration oracles, with its fail-closed self-test. See task log for actual
 commands, counts, seed, trace digest and configuration evidence.
+
+## Ordering repair (S02)
+
+The relative-order-preservation requirement this contract states for already
+integrated retained items is now specified and modelled:
+[vnext-sequence-algorithm.md](vnext-sequence-algorithm.md). The independent
+interpreter `tests/reference/SequenceModel.h` produces the total order that
+`tests/reference/BoundaryModel.h` then resolves tokens against, and
+`tst_sequence_model` checks all 22 named positions and 14 token comparisons
+across the 8 token-bearing S01 fixtures.
+
+The two models agree that a concurrent insertion at a minted boundary leaves the
+boundary's Left and Right at the edges of the inserted groups rather than between
+their scalars. No token encoding, mint or resolve rule in this document changes,
+and S04a's resolved/detached/collapsed vocabulary is unaffected. The ordering
+repair is still unapplied: production interleaves concurrent passages, and S03
+owns applying it.

@@ -49,6 +49,30 @@ struct Resolution {
     bool collapsed() const { return lost_left || lost_right; }
     bool operator==(const Resolution&) const = default;
 };
+// Named spellings, so a fixture oracle and a model result are compared as text
+// rather than by an enum integer that could drift between them.
+inline std::string_view status_name(Status status) {
+    switch (status) {
+        case Status::resolved: return "resolved";
+        case Status::detached: return "detached";
+        case Status::awaiting_state: return "awaiting_state";
+        case Status::unavailable: return "unavailable";
+        case Status::wrong_document: return "wrong_document";
+        case Status::wrong_stream: return "wrong_stream";
+        case Status::wrong_primitive: return "wrong_primitive";
+        case Status::wrong_epoch: return "wrong_epoch";
+        case Status::invalid_input: return "invalid_input";
+        case Status::not_found: return "not_found";
+    }
+    return "invalid_input";
+}
+inline std::optional<Status> status_from_name(std::string_view name) {
+    constexpr Status all[] = {Status::resolved, Status::detached, Status::awaiting_state, Status::unavailable,
+                              Status::wrong_document, Status::wrong_stream, Status::wrong_primitive,
+                              Status::wrong_epoch, Status::invalid_input, Status::not_found};
+    for (const auto status : all) if (status_name(status) == name) return status;
+    return std::nullopt;
+}
 struct Mutations { bool ignore_affinity = false, erase_scope = false, missing_to_end = false; };
 inline bool valid_context(const Context& c) {
     return (c.primitive == Primitive::text || c.primitive == Primitive::list) &&

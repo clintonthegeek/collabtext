@@ -7,7 +7,7 @@ and registry dependencies; a prose assertion does not complete a task.
 
 ## Completed work
 
-V01–V08, D01, P01–P06b, L01, S01, W01–W03, S04a/S04b and packaging A01/A02a/A06a.
+V01–V08, D01, P01–P06b, L01, S01, S02, W01–W03, S04a/S04b and packaging A01/A02a/A06a.
 P06a includes the final public operation-opacity step (`01614af`, `d52dceb`),
 with immutable shared values and affected Debug/Release/leak-enabled sanitizers.
 S04a supplies a full scoped-boundary contract, implementation map, compile-checked
@@ -26,12 +26,17 @@ Full F7 recovery/retention, F8 ordering, durable undo/pins and store recovery re
    74/74, Release/sanitizers 7/7 and relocated installed Core package pass.
    W03's strict installed live gate is complete too. No backward compatibility
    is needed; all consumers will adapt. Token format is experimental/unpublished.
-3. **S02 is independently ready.** S02 must generate S04a's supplied orders and
-   prove stable relative order of already integrated retained items before S03 can
-   change integration.
-4. **W02 is complete:** the relocated installed baseline has 17 exact cases in
+3. **W02 is complete:** the relocated installed baseline has 17 exact cases in
    Debug/Release (15 pass, WP6 exact known failure, WP8 durable-pins unsupported),
    plus negative expectation/abort and optional Qt/export checks.
+4. **S02 is complete and S03 is unblocked:** the root cause is `Buffer::normalize_fragments`
+   atomizing a same-`Locator` run and ordering its scalars, which interleaves
+   concurrent pastes into `aXbYcZ`. The fix keeps whole operations contiguous and
+   orders same-position operations by first inserted item (counter, then actor
+   bytes), as the pre-order of the insert-after tree. Evidence: 8/8
+   `tst_sequence_model` in Debug/Release/ASan, 75/75 routed. No production code
+   changed; ordering is **not** repaired until S03 lands. S03 may now change
+   integration; S04 then re-runs the installed position probes.
 5. **W03 is complete:** `--gate live` certifies 16 strict rows (WP1-WP5/WP7 plus
    the no-GC containment smoke) in Debug, Release and installed ASan, including a
    two-process replay of originally minted tokens and a second independent

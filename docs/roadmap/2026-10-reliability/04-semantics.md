@@ -41,7 +41,7 @@ Run ./tools/verify-roadmap.sh debug tst_sequence_fixtures and review histories a
 
 ## S02 — Specify the ordering repair within the existing C++ engine
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** complete; see TASKS.json, [algorithm](../specs/vnext-sequence-algorithm.md) and [design record](../reports/vnext-ordering-design.md)  
 **Depends on:** S01, P06a, S04a\
 **Coverage:** F8, R12  
 **Design/decision gate:** Requires a complete reviewed incremental repair specification and independent executable model. Unresolved ordering invariants block dependent code changes; replacement engines are outside scope.  

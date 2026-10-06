@@ -282,3 +282,15 @@ pins/reclamation (S05/G-series); the no-GC row is a containment smoke and is
 never certified reclamation. Fresh-process replay is codec and token evidence,
 not L08 crash recovery. Details and evidence are in
 `docs/reports/vnext-consumer-live-position-gate.md`.
+
+### Ordering basis for the installed surface (S02)
+
+W2's token cases are now specified against an independent ordering
+interpreter. `tests/reference/SequenceModel.h` computes the item order and
+`tests/reference/BoundaryModel.h` resolves the fixtures' tokens against it; the
+token bytes, their version, and the W2 offsets are unchanged. This means the
+offsets W2 promises are stated against an ordering that production does not yet
+implement — WP6 remains an exact known failure until S03 applies
+[vnext-sequence-algorithm.md](vnext-sequence-algorithm.md) and S04 re-runs the
+installed probes. A consumer must not read the W2 token offsets as evidence that
+concurrent passages are ordered correctly.

@@ -4,7 +4,7 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status (2026-10-05):** V01–V08, D01, P01–P06b, L01, S01, W01–W03, S04a/S04b and packaging A01/A02a/A06a are complete. P06a opacity is verified. S04a specifies/model-checks scoped boundaries and S04b implements the native live API/CTPT v1 codec. Debug 74/74, Release/sanitizers 7/7 and installed package pass. Installed baseline (W02) and strict live (W03) consumer gates pass in Debug/Release/ASan. **Next: E07a/E07b preparation; S02 remains independently ready.** See [takeover review](../../reports/2026-10-05-takeover-review.md), [boundary contract](../../specs/vnext-boundary-semantics.md) and TASKS.json. Benchmarks remain separate; engine optimization is deferred.
+**Status (2026-10-05):** V01–V08, D01, P01–P06b, L01, S01, S02, W01–W03, S04a/S04b and packaging A01/A02a/A06a are complete. P06a opacity is verified. S04a specifies/model-checks scoped boundaries and S04b implements the native live API/CTPT v1 codec. Debug 74/74, Release/sanitizers 7/7 and installed package pass. Installed baseline (W02) and strict live (W03) consumer gates pass in Debug/Release/ASan. S02 specifies the ordering repair (unapplied; S03 next). **Next: S03, then E07a/E07b preparation.** See [takeover review](../../reports/2026-10-05-takeover-review.md), [boundary contract](../../specs/vnext-boundary-semantics.md) and TASKS.json. Benchmarks remain separate; engine optimization is deferred.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **72 active tasks across eight technical areas plus an early consumer integration lane**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
@@ -25,7 +25,7 @@ Read [00 — early consumer integration](00-consumer-integration.md) for the pre
 | Milestone | Tasks | Deliverable / exit condition | Plan |
 |---|---|---|---|
 | Early consumer package | A01, A02a, A06a, W01–W02, E07a | Implemented installed API, relocated external consumer, eight-probe baseline, prepared package alpha | [00 — consumer lane](00-consumer-integration.md) |
-| Early live positions | S01, S04a–S04b, W03, E07b (after P06a/P06b) | Independent boundary gate, scoped typed live positions/token codec, installed strict probes, prepared position alpha; no L08/S03 prerequisite | [04 — semantics](04-semantics.md) |
+| Early live positions | S01, S04a–S04b, W03, S02, E07b (after P06a/P06b) | Independent boundary gate, scoped typed live positions/token codec, installed strict probes, specified ordering repair, prepared position alpha; no L08 prerequisite | [04 — semantics](04-semantics.md) |
 | M0: trustworthy baseline | V01–V08 | Complete: reproducible checks, visible regression cases, unsafe GC contained, replayable traces, corrected benchmarks and simulator, store fault injection, behavioural fixtures and API inventory | [01 — validation](01-validation.md) |
 | M1: explicit protocol | D01, P01–P08, including P06a/P06b (P01–P05 done) | User policies recorded; persistent actors; strict validation; sparse/versioned codecs; transactional transport contract | [02 — protocol](02-protocol.md) |
 | M2: reliable lifecycle | L01–L08 (L01 primitives done) | Actual editor survives local/remote replay, close/reopen, failed writes, sender/receiver restart, and segment arrival gaps | [03 — recovery](03-recovery.md) |
@@ -59,7 +59,7 @@ flowchart TD
 ```
 
 The diagram groups work and omits some edges; TASKS.json is authoritative. The
-preferred single-executor order is: P06b → S04b → W03 → E07b;
+preferred single-executor order is: P06b → S04b → W03 → S02 → S03 → E07b;
 W02 → E07a; S02 → S03; P07 → P08 → L02–L08; then S04–S07 and
 remaining G/A/X/E tasks in registry order. A01/A02a/A06a, W01/S01,
 P06a and S04a are complete. Follow actual dependencies; S04b now has both completed boundary and codec prerequisites.

@@ -44,10 +44,18 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(next(iter(routes.values())), 'tst_identity_allocation_model')
 
     def test_boundary_model_change_is_narrow_and_fixture_changes_are_executable(self):
+        # BoundaryModel.h is consumed by two independent model tests since S02:
+        # the boundary model itself, and the sequence model that feeds it a total
+        # order. The route must stay narrow -- both models, never the engine
+        # suites -- and must not demand a package check.
         routes, package = verify.route(['libs/collabtext/tests/reference/BoundaryModel.h',
                                        'libs/collabtext/tests/reference/BoundaryApiContract.h'])
-        self.assertEqual(set(routes.values()), {'tst_boundary_model'})
+        self.assertEqual(set(routes.values()), {'tst_(boundary|sequence)_model'})
         self.assertFalse(package)
+        routes, _ = verify.route(['libs/collabtext/tests/reference/SequenceModel.h'])
+        self.assertEqual(set(routes.values()), {'tst_sequence_model'})
+        routes, _ = verify.route(['libs/collabtext/tests/fixtures/sequence-semantics/forward-typing.json'])
+        self.assertEqual(set(routes.values()), {'tst_sequence_model'})
         routes, package = verify.route(['libs/collabtext/tests/fixtures/external-position/wp2-strict-referent-delete.json',
                                        'libs/collabtext/tests/fixtures/external-position/model/retained-orders.json'])
         for regex in routes.values():

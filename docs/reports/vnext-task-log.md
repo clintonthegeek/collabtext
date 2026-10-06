@@ -2363,3 +2363,80 @@ genuinely `gate: live`, covers exactly WP1–WP5/WP7, has every strict row at
 case strictly.
 
 **Next: E07a/E07b alpha preparation, and S02 for ordering repair.**
+
+## 2026-10-06 sprint — S02 complete: the ordering repair is specified and modelled
+
+```text
+Task: S02
+Status: complete
+Baseline: b5de626
+Implementation commits: (this commit)
+Scope: docs/specs/vnext-sequence-algorithm.md (new),
+  docs/reports/vnext-ordering-design.md (new),
+  libs/collabtext/tests/reference/SequenceModel.h (new),
+  libs/collabtext/tests/tst_sequence_model.cpp (new), BoundaryModel.h named-status
+  helpers, CMake registration, changed-path routes. No production code changed.
+Regression: productionAtomizingRuleIsRejected reproduces today's atomizing rule
+  and shows the S01 oracle rejects it on the four comparable fixtures.
+Verification:
+  tst_sequence_model 8/8 in Debug, Release and leak-enabled ASan
+  tst_boundary_model 8/8 (BoundaryModel.h gained named-status helpers)
+  tools/verify-changed.sh -> 75/75 selected plus the package gate
+Artifacts: docs/specs/vnext-sequence-algorithm.md,
+  docs/reports/vnext-ordering-design.md
+API/store changes: none. No public API, format or store change.
+Known limits: no production code changed — the engine still interleaves concurrent
+  passages and WP6 remains an exact known failure. No maximal non-interleaving is
+  claimed. Reverse typing depends on Buffer::locator_between producing a strictly
+  decreasing locator, which S03 will touch. Equal-boundary IdList ordering is
+  lightly evidenced (2 fixtures vs 6 text fixtures). No benchmark ran; no fresh
+  acceptance sweep.
+Next ready tasks: S03, E07a
+```
+
+The defect is named exactly rather than described. `Buffer::normalize_fragments`
+(`Buffer.cpp:498`) atomizes any same-`Locator` multi-actor run into single scalars
+and sorts the pieces by per-scalar identity. Item counters are per-actor, so two
+three-character pastes own counters `1,2,3` each, counter-first ordering ranks
+`A/1,B/1,A/2,B/2,A/3,B/3`, and the result is `aXbYcZ`. Reproduced against the
+installed build before writing anything.
+
+The repair keeps whole operations contiguous and orders same-position operations
+by their first inserted item — counter ascending, then actor bytes ascending.
+Document order is the pre-order walk of the insert-after tree, with an explicit
+precedence rule for groups inserted immediately before a sibling. That rule is
+what makes reverse typing reverse; the branch rule is the F8 fix.
+
+What makes this more than a comparator tweak, and what the design record makes
+S03 falsify first: the comparator was never the defect. `FragmentOrderDim`'s
+`<=>` is already `(locator, origin)` and `origin` is already the per-operation
+key — feeding it atomized scalars was the error. `Fragment` already *is* the
+group. The transformation map touches one function body and adds no type, field
+or wire format.
+
+The independent interpreter links no production ordering, `Locator`, identity,
+`Buffer`, `IdList`, `Fragment`, anchor or codec code. It reproduces all 17 S01
+fixtures exactly, all 29 arrival orders converge to identical outcomes, and the
+order it computes is handed to the independent `BoundaryModel` for 22 named token
+positions and 14 comparisons.
+
+The oracle was checked for teeth, because a model agreeing with itself proves
+nothing. `productionAtomizingRuleIsRejected` reconstructs today's rule and shows
+the fixtures reject it on exactly the four comparable fixtures — `aXbYcZ`,
+`aXbYcZ!`, `cZbYaX`, `aXbYcZ`. Restricting to four was deliberate: a naive
+atomizing sketch also "disagrees" with the nine seeded fixtures because it
+ignores seeds and deletes, which would have made the assertion look stronger
+while proving less.
+
+Three real bugs in the model surfaced during this work and are written up in the
+design record: undo looked up an item id where the fixture names an operation,
+redo cleared the record but not the per-item visibility flag, and the S01
+`expected.order` field is the *visible* order — a distinction now asserted
+explicitly by checking that visible plus hidden equals the total order, so no item
+can be quietly dropped.
+
+Nothing here is production behavior. The engine still interleaves concurrent
+passages, the installed WP6 probe is still an exact known failure, and the
+capability manifest still records F8 as `not implemented`.
+
+**Next: S03 applies the algorithm; E07a prepares the alpha candidate.**

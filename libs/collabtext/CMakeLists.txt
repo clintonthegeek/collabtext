@@ -331,6 +331,15 @@ target_include_directories(tst_boundary_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR
 target_compile_definitions(tst_boundary_model PRIVATE
     COLLABTEXT_BOUNDARY_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
 add_test(NAME tst_boundary_model COMMAND tst_boundary_model)
+# S02's independent sequence interpreter. Links QtTest and the two reference
+# models only: no production Core, ordering, identity or codec helper, so a
+# defect shared with the engine cannot make these pass.
+add_executable(tst_sequence_model tests/tst_sequence_model.cpp)
+target_link_libraries(tst_sequence_model PRIVATE Qt6::Test)
+target_include_directories(tst_sequence_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_definitions(tst_sequence_model PRIVATE
+    COLLABTEXT_SEQUENCE_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/sequence-semantics")
+add_test(NAME tst_sequence_model COMMAND tst_sequence_model)
 add_crdt_test(tst_identity_ordering_model)
 add_crdt_test(tst_identity_allocation_model)
 add_crdt_test(tst_identity_types)
