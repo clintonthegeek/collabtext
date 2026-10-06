@@ -10,3 +10,15 @@ Makefile
 compile_commands.json
 .cache/
 .worktrees/
+
+# Generated test-run artifacts under docs/reports/*-artifacts/.
+# Covers the per-run harness output set (run.log, targets.txt, exit-code.txt,
+# metadata.json, selected-tests.json) and the trace dumps. Hand-written content
+# in those dirs stays tracked: README.md, manifest.json, the *-report-table.md
+# notes, and the *.cpp probe/benchmark sources.
+docs/reports/*-artifacts/**/*.trace
+docs/reports/*-artifacts/**/*.log
+docs/reports/*-artifacts/**/*.txt
+docs/reports/*-artifacts/**/metadata.json
+docs/reports/*-artifacts/**/*.metadata.json
+docs/reports/*-artifacts/**/selected-tests.json
