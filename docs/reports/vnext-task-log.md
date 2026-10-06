@@ -2628,3 +2628,44 @@ Negative controls verified (each fails with a diagnostic):
   - Corrupted fence tag to 0x05 -> literal reader rejects.
   - Fixture declaring CTPT/2 -> load_goldens refuses.
   - Recorded byte_length off by one -> length comparison fails.
+
+## 2026-10-06 — P07 complete: transactional transport contract
+
+```text
+Task: P07
+Status: complete
+Branch: feat/fuguemax-placement
+Baseline: d3733971614eb578be0948d9237891ac46695d95
+Implementation: 700415d6676d36b525b06c8be9233b8eef302e0e
+
+Delivered:
+  - Replaced OpStream's void payload push, callback-only inbound delivery and
+    scalar lowest-peer Lamport fence with stable envelope tokens, explicit
+    queued/durable push modes, bounded poll, commit/retry/quarantine decisions,
+    recovery points, scoped receipts and subscription lifetimes.
+  - Added normative docs/specs/vnext-transport.md and aligned the public API
+    guide. The stream key follows the current bounded ASCII StreamId contract.
+  - Added tst_transport_commit_contract with a memory-only reference adapter.
+    It exercises missing handlers, retry, quarantine, durable recovery points,
+    per-stream/per-producer receipt isolation, ordering, byte budgets,
+    idempotent push, callback unsubscribe/reentrancy and typed unknown scopes.
+  - StreamSync had already moved to src/transport during A02a, not the planned
+    public include path. It no longer implements OpStream: its legacy cursor and
+    scalar observed-operation ack cannot prove the durable recovery-point
+    transaction. Existing convergence suites now call that internal legacy
+    adapter directly; its file recovery remains L03/L08 work.
+
+Verification at the implementation commit:
+  - Debug and Release: tst_opstream_interface + tst_transport_commit_contract,
+    2/2 each (verification logs under build-roadmap-{debug,release}).
+  - Installed Debug package gate: pass; relocated Core consumer 1/1, installed
+    headers compile independently, unknown component request refused.
+  - Full changed-path sweep on the implementation worktree: 79/79 correctness
+    tests and installed Debug package gate passed.
+  - Six existing legacy StreamSync integration suites passed in Debug/Release.
+  - validate-plan.py: 72-task dependency graph and consumer sequencing valid.
+
+No production transport capability is claimed by the test double. Legacy
+StreamSync remains unadvertised until its durable receiver transaction lands.
+No merge, push, tag, publication or consumer message was made.
+```

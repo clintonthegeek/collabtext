@@ -289,9 +289,16 @@ ordering gate above.
 **Files / scope:**
 
 - `libs/collabtext/include/collabtext/OpStream.h`
-- `libs/collabtext/include/collabtext/StreamSync.h`
+- `libs/collabtext/src/transport/StreamSync.h`
 - `libs/collabtext/tests/tst_opstream_interface.cpp`
+- `libs/collabtext/tests/tst_transport_commit_contract.cpp`
+- `libs/collabtext/tests/tst_opstream_streamsync.cpp`
+- `libs/collabtext/tests/tst_opstream_convergence_buffer.cpp`
+- `libs/collabtext/tests/tst_opstream_convergence_idlist.cpp`
+- `libs/collabtext/tests/tst_opstream_convergence_mixed.cpp`
+- `libs/collabtext/CMakeLists.txt`
 - `docs/specs/vnext-transport.md`
+- `docs/specs/vnext-public-api.md`
 
 **Steps:**
 

@@ -2044,9 +2044,16 @@
       ],
       "files": [
         "libs/collabtext/include/collabtext/OpStream.h",
-        "libs/collabtext/include/collabtext/StreamSync.h",
+        "libs/collabtext/src/transport/StreamSync.h",
         "libs/collabtext/tests/tst_opstream_interface.cpp",
-        "docs/specs/vnext-transport.md"
+        "libs/collabtext/tests/tst_transport_commit_contract.cpp",
+        "libs/collabtext/tests/tst_opstream_streamsync.cpp",
+        "libs/collabtext/tests/tst_opstream_convergence_buffer.cpp",
+        "libs/collabtext/tests/tst_opstream_convergence_idlist.cpp",
+        "libs/collabtext/tests/tst_opstream_convergence_mixed.cpp",
+        "libs/collabtext/CMakeLists.txt",
+        "docs/specs/vnext-transport.md",
+        "docs/specs/vnext-public-api.md"
       ],
       "steps": [
         "Replace scalar GC fence with per-stream/per-producer durable coverage; supply explicit delivery tokens and commit/retry dispositions. A token identifies exact producer/envelope sequence and epoch, not engine Lamport maximum.",
@@ -2066,14 +2073,25 @@
         "R13"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "d3733971614eb578be0948d9237891ac46695d95",
-      "implementation_commits": [],
+      "implementation_commits": [
+        "700415d6676d36b525b06c8be9233b8eef302e0e"
+      ],
       "verification_results": {
-        "baseline": "The public OpStream still accepts void push(payload), callback-only inbound delivery, and scalar lowest_peer_acked_lamport; there are no delivery tokens, commit/retry outcomes, per-stream frontiers or P07 contract tests.",
-        "known_failure": "The legacy surface cannot distinguish accepted/queued data from durably published data and cannot tie acknowledgements to application recovery points.",
-        "new_artifacts": "docs/specs/vnext-transport.md and libs/collabtext/tests/tst_transport_commit_contract.cpp do not exist at baseline."
-      }
+        "implementation_revision": "700415d6676d36b525b06c8be9233b8eef302e0e",
+        "debug": "PASS: tst_opstream_interface and tst_transport_commit_contract, 2/2; build-roadmap-debug/verification/20261006T193425Z-2",
+        "release": "PASS: tst_opstream_interface and tst_transport_commit_contract, 2/2; build-roadmap-release/verification/20261006T193458Z-2",
+        "installed_package_debug": "PASS: Core installed/relocated consumer 1/1, all installed public headers including OpStream independently compile, negative component refused; build-consumer-verify/p07-final-debug-package/results.json",
+        "changed_path_sweep": "PASS: 79 correctness tests and Debug installed package gate; build-roadmap-debug/verification/20261006T192331Z-changed-ju01o1aa",
+        "additional_legacy_integration": "PASS: six OpStream/legacy StreamSync suites in Debug and Release before final task commit; 6/6 each",
+        "plan_validation": "PASS: 72 tasks, acyclic dependency graph, consumer coverage and sequencing validated",
+        "no_external_action": "no merge, tag, publication, push, or consumer message"
+      },
+      "known_limits": [
+        "The in-memory adapter is a contract test double only; it does not claim disk or network durability.",
+        "Legacy file-backed StreamSync remains internal and does not implement OpStream because it cannot bind receiver cursor commit to a durable application recovery point. L03/L08 own that implementation; the old observed-operation scalar is not exposed through OpStream and does not authorize GC."
+      ]
     },
     {
       "id": "P08",
