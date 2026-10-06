@@ -1,0 +1,160 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "typing-into-split-run",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "typing-into-split-run",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [],
+  "operations": [
+    {
+      "id": "A/2",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "START",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "A/1",
+          "value": "a"
+        }
+      ]
+    },
+    {
+      "id": "A/4",
+      "kind": "insert",
+      "after": [
+        "A/2"
+      ],
+      "between": [
+        "A/1",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "A/3",
+          "value": "b"
+        }
+      ]
+    },
+    {
+      "id": "A/6",
+      "kind": "insert",
+      "after": [
+        "A/4"
+      ],
+      "between": [
+        "A/3",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "A/5",
+          "value": "c"
+        }
+      ]
+    },
+    {
+      "id": "A/8",
+      "kind": "insert",
+      "after": [
+        "A/6"
+      ],
+      "between": [
+        "A/5",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "A/7",
+          "value": "d"
+        }
+      ]
+    },
+    {
+      "id": "B/10",
+      "kind": "insert",
+      "after": [
+        "A/8"
+      ],
+      "between": [
+        "A/3",
+        "A/5"
+      ],
+      "items": [
+        {
+          "id": "B/9",
+          "value": "X"
+        }
+      ]
+    },
+    {
+      "id": "A/10",
+      "kind": "insert",
+      "after": [
+        "A/8"
+      ],
+      "between": [
+        "A/7",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "A/9",
+          "value": "e"
+        }
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/2",
+      "A/4",
+      "A/6",
+      "A/8",
+      "B/10",
+      "A/10"
+    ],
+    [
+      "A/10",
+      "B/10",
+      "A/8",
+      "A/6",
+      "A/4",
+      "A/2"
+    ],
+    [
+      "A/2",
+      "A/4",
+      "A/6",
+      "A/8",
+      "A/10",
+      "B/10"
+    ]
+  ],
+  "tokens": [],
+  "expected": {
+    "order": [
+      "A/1",
+      "A/3",
+      "B/9",
+      "A/5",
+      "A/7",
+      "A/9"
+    ],
+    "hidden": [],
+    "positions": {},
+    "text": "abXcde",
+    "comparisons": []
+  }
+}

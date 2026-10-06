@@ -250,9 +250,11 @@ void SequenceModelTest::productionAtomizingRuleIsRejected() {
     }
     // forward-typing, nested-post-merge-edit, reverse-typing and
     // whole-concurrent-pastes: the atomizing rule interleaves every one of them
-    // (`aXbYcZ`, `aXbYcZ!`, `cZbYaX`, `aXbYcZ`). If the fixtures stopped
-    // rejecting those four, the oracle would have lost the defect it exists for.
-    QCOMPARE(rejected, 4);
+    // (`aXbYcZ`, `aXbYcZ!`, `cZbYaX`, `aXbYcZ`). typing-into-split-run is the
+    // fifth: a peer splitting a typed run while its author keeps typing at the
+    // end. If the fixtures stopped rejecting these, the oracle would have lost
+    // the defect it exists for.
+    QCOMPARE(rejected, 5);
 
     const auto reverse = load(root + "/reverse-typing.json");
     QCOMPARE(QString::fromStdString(production_atomized_text(reverse)), QStringLiteral("cZbYaX"));
@@ -265,7 +267,7 @@ void SequenceModelTest::productionAtomizingRuleIsRejected() {
 /// agree" -- agreement is what let `aXbYcZ` pass as convergence.
 void SequenceModelTest::everyFixtureOrderAndText() {
     const auto names = fixture_names(QString::fromUtf8(COLLABTEXT_SEQUENCE_FIXTURE_DIR));
-    QCOMPARE(names.size(), 17);
+    QCOMPARE(names.size(), 18);
     for (const auto& name : names) {
         const auto fixture = load(QString::fromUtf8(COLLABTEXT_SEQUENCE_FIXTURE_DIR) + QLatin1Char('/') + name);
         auto document = build(fixture);
@@ -320,7 +322,7 @@ void SequenceModelTest::everyArrivalOrderConverges() {
             ++orders;
         }
     }
-    QCOMPARE(orders, 29);
+    QCOMPARE(orders, 32);
 }
 
 /// Duplicates must be counted, not silently reapplied, and delivering an
