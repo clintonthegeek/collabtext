@@ -196,10 +196,16 @@ fi
 
 if [[ -z "$output_dir" ]]; then
     output_dir="$repo_root/build-alpha/integration-alpha-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+elif [[ "$output_dir" != /* ]]; then
+    # Resolve a relative path against the invoking directory first. Rejecting it
+    # outright was unhelpful: the caller has a perfectly good reason to name a
+    # path next to the worktree, and the real constraint is only that the
+    # staging tree stays inside the worktree where it is gitignored.
+    output_dir="$(pwd -P)/$output_dir"
 fi
 case "$output_dir" in
     "$repo_root"/*) ;;
-    *) echo "!! --output-dir must be inside the worktree ($repo_root); got '$output_dir'" >&2
+    *) echo "!! --output-dir must resolve inside the worktree ($repo_root); got '$output_dir'" >&2
        echo "   The staging tree is a build artifact and is gitignored; anything outside" >&2
        echo "   the worktree is outside this task's blast radius." >&2
        exit 2 ;;
@@ -367,7 +373,12 @@ print(' '.join(f'{k}/{v}' for k, v in sorted(found.items())))
 PY
 )
 printf '  declared:  %s\n  discovered:%s\n' "$declared_formats" " $discovered"
-if [[ " $discovered " != *" $declared_formats "* ]]; then
+# Compare as sets. The order of a space-separated list is not a property of what
+# the codecs implement, and an earlier version of this check compared the strings
+# and so rejected a candidate whose declared and discovered sets were identical.
+declared_sorted=$(printf '%s\n' $declared_formats | LC_ALL=C sort | tr '\n' ' ')
+discovered_sorted=$(printf '%s\n' $discovered | LC_ALL=C sort | tr '\n' ' ')
+if [[ "$declared_sorted" != "$discovered_sorted" ]]; then
     echo "!! the codecs do not implement the formats this candidate claims." >&2
     echo "   declared:  $declared_formats" >&2
     echo "   discovered: $discovered" >&2
@@ -517,22 +528,30 @@ sha_file="$output_dir/SHA256SUMS"
 archive_sum=$(sha256sum "$archive" | cut -d' ' -f1)
 printf '%s  %s\n' "$archive_sum" "$archive_name" >> "$sha_file"
 printf '  %s  %s\n' "$archive_sum" "$archive_name"
-printf '  %s files in prefix/, listed in SHA256SUMS\n' "$(wc -l < "$sha_file")"
+printf '  %s entries in SHA256SUMS\n' "$(wc -l < "$sha_file")"
 
 # Recompute every staged file and compare. A checksum that was written and never
-# read is a decoration.
-( cd "$prefix" && sha256sum -c --quiet "$sha_file" 2>/dev/null ) \
-    || {
-        echo "!!! staged checksums do not verify" >&2
-        trap - EXIT; finish 3
-    }
+# read is a decoration. SHA256SUMS holds prefix-relative paths plus one entry
+# naming the archive, so it is verified twice from the two directories those
+# paths are relative to -- running sha256sum -c over the whole file from inside
+# the prefix fails on the archive line and looks like a corrupted artifact.
+( cd "$prefix" && grep -v "  $archive_name\$" "$sha_file" | sha256sum -c --quiet - ) \
+    || { echo "!!! staged prefix checksums do not verify" >&2; trap - EXIT; finish 3; }
+( cd "$output_dir" && grep "  $archive_name\$" "$sha_file" | sha256sum -c --quiet - ) \
+    || { echo "!!! the archive checksum does not verify" >&2; trap - EXIT; finish 3; }
 note_step "staged-artifact-checksums: ok"
 
 # ---------------------------------------------------------------------------
 # Toolchain and dependency record
+#
+# Every generated artifact below is written by a child process, and a child that
+# fails must not leave a half-written record behind a "wrote ..." line. An
+# earlier version of this script did exactly that: the JSON emitter raised, the
+# message still printed, and the script exited 0. So each one is guarded, and a
+# generator failure is a failure of this script.
 # ---------------------------------------------------------------------------
-dep_record=$(python3 - "$CXX" <<'PY'
-import json, subprocess, sys
+if ! dep_record=$(python3 - <<PY
+import json, subprocess
 def pkg(name):
     try:
         out = subprocess.run(['pkg-config', '--modversion', name],
@@ -540,17 +559,28 @@ def pkg(name):
     except (OSError, subprocess.SubprocessError):
         return 'not probed (pkg-config unavailable)'
     return out.stdout.strip() if out.returncode == 0 else 'not installed'
-json.dump({name: pkg(name) for name in
-           ['libzstd', 'Qt6Core', 'Qt6Widgets', 'openssl']}, sys.stdout, indent=2)
+print(json.dumps({name: pkg(name) for name in
+                  ['libzstd', 'Qt6Core', 'Qt6Widgets', 'openssl']}, indent=2))
 PY
-)
+); then
+    echo "!! could not record dependency versions; no candidate produced" >&2
+    trap - EXIT; finish 3
+fi
 
 # ---------------------------------------------------------------------------
 # alpha-candidate.json
 # ---------------------------------------------------------------------------
+# The producer options go through the environment rather than into a nested
+# $(...) inside the heredoc. A parameter reference inside a nested command
+# substitution's single-quoted Python string is never expanded by the shell, so
+# the emitted JSON contained the literal text "${producer_flags[*]}" -- which
+# looks like a plausible value and is not one.
+producer_options_flat=$(printf '%s\n' "${producer_flags[@]}")
+export COLLABTEXT_PREP_PRODUCER_OPTIONS="$producer_options_flat"
+
 candidate_json="$output_dir/alpha-candidate.json"
-python3 - "$candidate_json" <<PY
-import json
+run_step candidate-manifest python3 - "$candidate_json" "$evidence_json" <<PY || { trap - EXIT; finish 3; }
+import json, os, sys
 json.dump({
   "schema": "collabtext-alpha-candidate/1",
   "tool": "tools/prepare-integration-alpha.sh",
@@ -592,7 +622,7 @@ json.dump({
     "jobs": "$jobs",
     "ccache": "${CCACHE_DIR:-not used}",
     "producer_build_type": "Release",
-    "producer_options": $(python3 -c 'import json,sys;print(json.dumps("""${producer_flags[*]}""".split()))'),
+    "producer_options": os.environ["COLLABTEXT_PREP_PRODUCER_OPTIONS"].splitlines(),
     "dependencies": json.loads('''$dep_record'''),
   },
   "capability_manifest": {
@@ -607,7 +637,7 @@ json.dump({
     "note": "No format version is supported for consumer persistence at this candidate. "
             "CTPT/1 is experimental. No store or checkpoint format exists.",
   },
-  "verification_evidence": json.load(open("$evidence_json")),
+  "verification_evidence": json.load(open(sys.argv[2])),
   "known_limits": [
     "Not a supported release and not published.",
     "C++ API/ABI is unstable between candidates; pin the SHA and rebuild.",
@@ -617,6 +647,18 @@ json.dump({
   ],
 }, open("$candidate_json", "w"), indent=2)
 PY
+
+# A record that still carries a shell metavariable is a record whose expansion
+# was missed. It parses, it looks plausible, and it is wrong -- so refuse it
+# rather than shipping it into a release dossier.
+if grep -q '\${' "$candidate_json"; then
+    echo "!!! $candidate_json still contains an unexpanded shell reference:" >&2
+    grep -n '\${' "$candidate_json" | sed 's/^/    /' >&2
+    trap - EXIT; finish 3
+fi
+python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$candidate_json" \
+    || { echo "!!! $candidate_json is not valid JSON" >&2; trap - EXIT; finish 3; }
+note_step "candidate-manifest-complete-and-parsed: ok"
 printf '\nwrote %s\n' "$candidate_json"
 
 # ---------------------------------------------------------------------------
