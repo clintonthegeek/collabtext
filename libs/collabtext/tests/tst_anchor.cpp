@@ -1,4 +1,5 @@
 #include <QTest>
+#include <collabtext/CrdtEngine.h>
 #include "crdt/Buffer.h"
 #include "TestActor.h"
 
@@ -6,9 +7,30 @@ using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
+template<class Engine> bool scoped_left_affinity_probe() {
+    if constexpr (requires(Engine& e) {
+        e.boundary_at(1, {});
+        Engine::create(CollabText::Test::test_counter(1), {"doc", "block", {}, 1});
+    }) {
+        auto created = Engine::create(CollabText::Test::test_counter(1), {"doc", "block", {}, 1});
+        if (!created.ok()) return false;
+        auto& engine = *created.value();
+        engine.insert(0, "ab");
+        auto token = engine.boundary_at(1, {});
+        if (!token.ok()) return false;
+        engine.insert(1, "X");
+        auto resolved = engine.resolve(token.value());
+        return resolved.ok() && resolved.value().byte_offset == 1 && engine.text() == "aXb";
+    }
+    return false;
+}
+
 class TestAnchor : public QObject {
     Q_OBJECT
 private slots:
+    void scoped_left_affinity_under_insertion() {
+        QVERIFY(scoped_left_affinity_probe<CollabText::CrdtEngine>());
+    }
 
     void anchor_at_beginning() {
         Buffer buf(CollabText::Test::test_counter(1));

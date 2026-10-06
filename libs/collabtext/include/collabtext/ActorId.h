@@ -60,6 +60,17 @@ enum class ErrorCode {
     counter_exhausted,
     // apply
     unresolvable_anchor,    // anchor names a position this engine does not have
+    // scoped positions
+    off_end,
+    not_scalar_boundary,
+    not_found,
+    wrong_document,
+    wrong_stream,
+    wrong_primitive,
+    awaiting_state,
+    detached,
+    limit_exceeded,
+    history_unavailable,
     // store
     corrupt_record,
     io_error,

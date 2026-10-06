@@ -181,6 +181,20 @@ Run ./tools/verify-roadmap.sh debug tst_boundary_model and Release/ASan equivale
 
 - `libs/collabtext/src/identity/ReplicaState.cpp`
 
+- `libs/collabtext/src/crdt/Buffer.h`
+- `libs/collabtext/src/crdt/IdList.h`
+- `libs/collabtext/src/crdt/PositionPayload.h`
+- `libs/collabtext/src/crdt/PositionTraversal.h`
+- `libs/collabtext/src/crdt/PositionTraversal.cpp`
+- `libs/collabtext/tests/tst_positions.cpp`
+- `libs/collabtext/tests/position-replay/main.cpp`
+- `libs/collabtext/tests/public-headers/only_Anchor_h.cpp`
+- `libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md`
+- `docs/USING_VNEXT.md`
+
+- `tests/consumer-smoke/main.cpp`
+- `libs/collabtext/tests/tst_operation_values.cpp` (qualify the private payload namespace after adding public position types)
+
 **Steps:**
 
 1. Implement the reviewed S04a boundary representation and helpers within the existing Buffer/IdList engines. Start with a straightforward checked traversal; preserve item identities through split/deletion/undo and avoid adding a second production sequence engine or an optimization project.
@@ -198,7 +212,7 @@ Run ./tools/verify-roadmap.sh debug tst_boundary_model and Release/ASan equivale
 
 **Verification:**
 
-Run ./tools/verify-roadmap.sh debug "tst_anchor|tst_anchor_codec|tst_idlist_anchor|tst_boundary_model|tst_convergence|tst_idlist_convergence" plus Release and a bounded ASan differential campaign. Run the fresh-process replay worker and record exact token bytes/fixture hashes; W03 separately certifies the installed adapter.
+Run ./tools/verify-changed.sh --target "^tst_(anchor|anchor_codec|positions|idlist_anchor|boundary_model|convergence|idlist_convergence)$" plus Release and a bounded ASan differential campaign. Run the fresh-process replay worker and record exact token bytes/fixture hashes; W03 separately certifies the installed adapter.
 
 ## S04 — Certify boundary anchors across repaired ordering and durable recovery
 

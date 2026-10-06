@@ -99,8 +99,8 @@ private slots:
     void sizes_are_recorded_without_timing_measurements() {
         qInfo("Identity=%zu FragmentSummary=%zu Operation=%zu IdListOperation=%zu", sizeof(Identity),
               sizeof(FragmentSummary), sizeof(Operation), sizeof(IdListOperation));
-        QVERIFY(sizeof(Operation) == sizeof(std::shared_ptr<const detail::OperationPayload>));
-        QVERIFY(sizeof(IdListOperation) == sizeof(std::shared_ptr<const detail::IdListOperationPayload>));
+        QVERIFY(sizeof(Operation) == sizeof(std::shared_ptr<const CollabText::Crdt::detail::OperationPayload>));
+        QVERIFY(sizeof(IdListOperation) == sizeof(std::shared_ptr<const CollabText::Crdt::detail::IdListOperationPayload>));
     }
 };
 QTEST_GUILESS_MAIN(TestOperationValues)

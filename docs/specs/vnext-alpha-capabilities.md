@@ -1,17 +1,17 @@
 # Position capability staging
 
-Status after S04a: a scoped boundary specification and an independent executable
-model exist. They are design evidence, not implemented public positions. The
-installed authoritative manifest remains
-`libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md`; S04a does not promote
-any of its runtime capabilities.
+Status after native S04b implementation: scoped live boundaries, strict attachments,
+list elements and CTPT version 1 codec/replay are implemented. Acceptance results
+are recorded in TASKS.json. The installed authoritative capability manifest is
+`libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md` version 5. No alpha has
+been published and no persisted token version has been approved for release.
 
 | Obligation | Evidence now / implementation owner |
 |---|---|
-| Exact affinity, scoped empty/end and units | S04a supplied-order model; production S04b |
-| Caret collapse and strict referent restoration | S04a exact fixtures/model; production S04b |
-| Scope rejection and missing list-value lookup | S04a model plus existing typed legacy list miss; full scoped API S04b |
-| Binary token version / codec / replay process | Candidate format specified; implementation S04b |
+| Exact affinity, scoped empty/end and units | S04a model and native S04b exact/differential checks |
+| Caret collapse and strict referent restoration | Native deletion/undo/redo and competing-delete checks |
+| Scope rejection and missing list-value lookup | Native scoped typed API and full-width/duplicate list-value cases |
+| Binary token version / codec / replay process | Native CTPT v1 goldens, strict decoder and fresh-process original-token replay |
 | Installed strict probe pass | W03 after S04b; no pass claimed now |
 | Full repaired sequence ordering | S02 model and S03 integration remain pending |
 | Actual file/session reopen, persistent undo | L06/L08 and S04 remain pending |

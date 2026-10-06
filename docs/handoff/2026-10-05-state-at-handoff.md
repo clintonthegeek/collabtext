@@ -7,13 +7,13 @@ and registry dependencies; a prose assertion does not complete a task.
 
 ## Completed work
 
-V01–V08, D01, P01–P06b, L01, S01, W01, S04a and packaging A01/A02a/A06a.
+V01–V08, D01, P01–P06b, L01, S01, W01, S04a/S04b and packaging A01/A02a/A06a.
 P06a includes the final public operation-opacity step (`01614af`, `d52dceb`),
 with immutable shared values and affected Debug/Release/leak-enabled sanitizers.
 S04a supplies a full scoped-boundary contract, implementation map, compile-checked
 target signatures and independent model. Exact W01 collapse/restoration rules are
-resolved; corrected WP2/WP8 fixtures select the actual referent. F7/F8 production
-fixes, public token bytes, durable undo/pins and store recovery remain pending.
+resolved; corrected WP2/WP8 fixtures select the actual referent. S04b implements native live scoped positions and experimental CTPT v1 bytes.
+Full F7 recovery/retention, F8 ordering, durable undo/pins and store recovery remain pending.
 
 ## Next implementation work
 
@@ -21,10 +21,11 @@ fixes, public token bytes, durable undo/pins and store recovery remain pending.
    scalars, allocation/gap metadata and bounded readers/writers. Debug 72/72,
    Release/sanitizers 14/14, installed package passes. Failures retain and block
    decoder batches; full store recovery/gap integration remains P07/L02/L03/L08.
-2. **Continue S04b:** implement vnext-boundary-semantics.md and the checked facade
-   signatures using native fragment/entry storage. Golden bytes and a fresh-process
-   replay establish public token codec evidence. Include scoped typed failures and
-   clear-history invalidation. No backward API/format compatibility is needed.
+2. **S04b is complete:** native live scoped queries, exact affinity/collapse/strict
+   restore, bounded token codec and original-byte fresh-process replay. Debug
+   74/74, Release/sanitizers 7/7 and relocated installed Core package pass.
+   **Continue W02 → W03 installed consumer gates.** No backward compatibility
+   is needed; all consumers will adapt. Token format is experimental/unpublished.
 3. **W02/S02** are independently ready. W02 establishes installed baseline probes;
    S02 must generate S04a's supplied orders and prove stable relative order of
    already integrated retained items before S03 can change integration.

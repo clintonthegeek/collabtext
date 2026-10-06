@@ -1,4 +1,5 @@
 #pragma once
+#include <collabtext/Anchor.h>
 
 #include <collabtext/ActorId.h>
 #include <collabtext/Engine.h>
@@ -13,6 +14,18 @@ namespace CollabText {
 
 class CrdtEngine {
 public:
+    /// Checked scope binding. No implicit default document or stream.
+    static Result<std::unique_ptr<CrdtEngine>> create(Crdt::SharedIdentityAllocator, PositionScope);
+    /// UTF-8 byte offsets at scalar boundaries; editing remains UTF-16.
+    Result<TextBoundary> boundary_at(uint32_t utf8_byte_offset, Affinity) const;
+    Result<TextAttachment> attachment_at(uint32_t utf8_byte_offset, Affinity, ReferentSide) const;
+    Result<ResolvedTextPosition> resolve(const TextBoundary&) const;
+    Result<ResolvedTextPosition> resolve(const TextAttachment&) const;
+    Result<int> compare(const TextBoundary&, const TextBoundary&) const;
+    /// Clears local retained history without resetting the allocator/version.
+    /// Invalidates position history, including empty edge tokens; no callback/op.
+    void local_clear() noexcept;
+
     /// Takes the allocator this engine mints identities from, which is also where
     /// it learns its actor.
     ///

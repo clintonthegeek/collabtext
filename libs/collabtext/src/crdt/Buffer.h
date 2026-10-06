@@ -1,4 +1,5 @@
 #pragma once
+#include "crdt/PositionTraversal.h"
 
 #include "crdt/Anchor.h"
 #include "crdt/Clock.h"
@@ -214,6 +215,9 @@ public:
     /// Temporarily retains all fragments and returns zero. Observation in a
     /// raw watermark does not establish safe reclamation or release remote undo.
     size_t compact(const Global& watermark);
+
+    void local_clear() noexcept;
+    Result<std::vector<CollabText::detail::PositionItem>> position_items() const;
 
 private:
     // ---- Fragment vector helpers ----

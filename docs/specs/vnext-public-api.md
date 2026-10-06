@@ -7,8 +7,8 @@ rules these signatures implement.
 **Authority:** [vnext-design-constraints.md](vnext-design-constraints.md) (D01).
 
 The code in this document gives **target signatures**: most types do not exist
-yet. S04a compile-checks the isolated position declarations in §6.1; that check
-does not install or implement them. A02a/A06a expose and install the actually implemented
+yet. Section 6.1 is now implemented by S04b; its compile checks refer to the
+actual public types and facades. A02a/A06a expose and install the actually implemented
 alpha subset early; A02 compiles the complete target examples and E03 compiles them
 against the final installed package. Where today's API differs, §9 lists the break so
 a caller knows what to expect.
@@ -320,117 +320,50 @@ Two consequences worth stating:
 from a successful one. It is not a collaboration operation and peers never see
 it.
 
-### 6.1 Scoped positions: S04a's checked target signatures
+### 6.1 Implemented scoped positions
 
-[vnext-boundary-semantics.md](vnext-boundary-semantics.md) now supplies the
-binding mint/resolve/compare and canonical codec contract. The declarations
-below compile in `tests/reference/BoundaryApiContract.h` as part of
-`tst_boundary_model`; that compile check is not an installed feature claim.
-`PositionApiTarget` isolates draft names from today's installed facades. S04b
-adds these methods to the existing CrdtEngine/IdListEngine and publishes the
-opaque types in `<collabtext/Anchor.h>`. The generic legacy `Anchor` signatures
-above are superseded for the supported scoped position API by these distinct
-text-boundary, strict-attachment, list-boundary and list-element types.
+The binding [boundary contract](vnext-boundary-semantics.md) is implemented in
+`<collabtext/Anchor.h>`, `<collabtext/CrdtEngine.h>` and
+`<collabtext/IdListEngine.h>`. `tests/reference/BoundaryApiContract.h` now checks
+actual public signatures rather than declaring draft classes. The distinct
+TextBoundary, TextAttachment, ListBoundary and ListElement opaque values replace
+legacy generic Anchor semantics for scoped queries.
 
-Factories validate and permanently bind scope, returning typed errors for invalid
-context; old allocator-only construction remains temporarily unbound for editing.
-Positions own immutable payloads, are copyable, cannot be directly constructed or
-converted across primitives, and never allocate an actor identity. A moved-from
-position is invalid input. Query results contain an actual scalar-aligned UTF-8
-byte offset or element index with endpoint-loss flags. Strict selected-referent
-loss is a failure (`detached`), so no fallback integer can be consumed.
+Both facades expose `create(SharedIdentityAllocator, PositionScope)` returning
+`Result<std::unique_ptr<...>>`. Scope permanently binds document, stream,
+primitive and epoch; invalid context is refused before construction. Allocator-only
+engines can edit but cannot mint/resolve scoped positions. No default scope exists.
 
-S04b extends `ErrorCode` with `off_end`, `not_scalar_boundary`, `not_found`,
-`wrong_document`, `wrong_stream`, `wrong_primitive`, `awaiting_state`, `detached`
-and `limit_exceeded`; existing `malformed`, `wrong_epoch`, `unsupported_version`,
-`unknown_format` and `invalid_identity` retain their meanings.
-`history_unavailable`, previously target-only in this guide, is also added by S04b.
-Success/failure use the existing Result<T>, never bool or ApplyOutcome. The factory
-must reject a scope whose primitive differs from its engine. Decode owns bytes
-independently, rejects malformed data with no mutation and creates no pin; a
-standalone decoder cannot decide whether a valid context belongs to a given engine.
-That check occurs in resolution. All returned values remain local in-memory
-objects until encoded; only encoded token bytes are a persistence contract.
+| Facade | Mint | Resolve | Compare |
+|---|---|---|---|
+| CrdtEngine | `boundary_at(uint32_t utf8_byte_offset, Affinity)`; `attachment_at(uint32_t utf8_byte_offset, Affinity, ReferentSide)` | overloads for TextBoundary and TextAttachment returning `Result<ResolvedTextPosition>` | `compare(TextBoundary, TextBoundary)` returning `Result<int>` |
+| IdListEngine | `boundary_at(uint32_t element_index, Affinity)`; `element_of(uint64_t application_value)` | overloads for ListBoundary and ListElement returning `Result<ResolvedListPosition>` | `compare(ListBoundary, ListBoundary)` returning `Result<int>` |
 
-```cpp
-#pragma once
-// Compile-only S04a target declarations. These are not installed APIs or a backend.
-#include <collabtext/ActorId.h>
-#include <collabtext/Engine.h>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <string_view>
-#include <variant>
-namespace CollabText::PositionApiTarget {
-enum class Primitive { text, list };
-enum class Affinity { left, right };
-enum class ReferentSide { preceding, following };
-struct PositionScope {
-    DocumentId document;
-    StreamId stream;
-    Primitive primitive;
-    uint64_t epoch;
-};
-template<class Tag> class OpaquePosition {
-public:
-    OpaquePosition(const OpaquePosition&) = default;
-    OpaquePosition(OpaquePosition&&) noexcept = default;
-    OpaquePosition& operator=(const OpaquePosition&) = default;
-    OpaquePosition& operator=(OpaquePosition&&) noexcept = default;
-    ~OpaquePosition() = default;
-private:
-    friend struct PositionAccess; // private S04b factory/codec access, never a public builder
-    struct Payload;
-    std::shared_ptr<const Payload> payload;
-    explicit OpaquePosition(std::shared_ptr<const Payload> p) : payload(std::move(p)) {}
-};
-using TextBoundary = OpaquePosition<struct TextBoundaryTag>;
-using TextAttachment = OpaquePosition<struct TextAttachmentTag>;
-using ListBoundary = OpaquePosition<struct ListBoundaryTag>;
-using ListElement = OpaquePosition<struct ListElementTag>;
-struct ResolvedTextPosition {
-    uint32_t byte_offset;
-    bool lost_left, lost_right;
-    bool collapsed() const noexcept { return lost_left || lost_right; }
-};
-struct ResolvedListPosition {
-    uint32_t element_index;
-    bool lost_left, lost_right;
-    bool collapsed() const noexcept { return lost_left || lost_right; }
-};
-using PositionToken = std::variant<TextBoundary,TextAttachment,ListBoundary,ListElement>;
-[[nodiscard]] Result<std::string> encode_position(const PositionToken&);
-[[nodiscard]] Result<PositionToken> decode_position(std::string_view);
-// Add these members to the actual existing facades in S04b; no new engine.
-class CrdtEngine {
-public:
-    [[nodiscard]] static Result<std::unique_ptr<CrdtEngine>> create(
-        Crdt::SharedIdentityAllocator, PositionScope);
-    [[nodiscard]] Result<TextBoundary> boundary_at(uint32_t utf8_byte_offset, Affinity) const;
-    [[nodiscard]] Result<TextAttachment> attachment_at(uint32_t utf8_byte_offset, Affinity, ReferentSide) const;
-    [[nodiscard]] Result<ResolvedTextPosition> resolve(const TextBoundary&) const;
-    [[nodiscard]] Result<ResolvedTextPosition> resolve(const TextAttachment&) const;
-    [[nodiscard]] Result<int> compare(const TextBoundary&, const TextBoundary&) const;
-};
-class IdListEngine {
-public:
-    [[nodiscard]] static Result<std::unique_ptr<IdListEngine>> create(
-        Crdt::SharedIdentityAllocator, PositionScope);
-    [[nodiscard]] Result<ListBoundary> boundary_at(uint32_t element_index, Affinity) const;
-    [[nodiscard]] Result<ListElement> element_of(uint64_t application_value) const;
-    [[nodiscard]] Result<ResolvedListPosition> resolve(const ListBoundary&) const;
-    [[nodiscard]] Result<ResolvedListPosition> resolve(const ListElement&) const;
-    [[nodiscard]] Result<int> compare(const ListBoundary&, const ListBoundary&) const;
-};
-} // namespace CollabText::PositionApiTarget
-```
+Positions share immutable owned payloads, are copyable, cannot be default
+constructed or converted across kinds, and mint no actor identity. Moved-from
+positions are refused. Resolutions contain scalar-aligned UTF-8 byte offsets or
+list indices with `lost_left`, `lost_right` and `collapsed()`. Strict selected-item
+loss returns `detached` without an offset. Undo can restore the original token.
+Text editing retains its existing UTF-16 units; position reads use UTF-8 bytes.
+`local_clear()` makes retained position history unavailable, including edge tokens.
 
-The core codec returns binary `std::string` bytes. Consumers using JSON string
-wrappers must ASCII-encode them before Unicode conversion. A supported token
-version will be frozen with golden bytes/readers at S04b/E07b. S04a specifies a
-candidate version; production positions, durable retention, store reopen and
-persistent undo remain unavailable until their named implementation gates pass.
+Typed failures include `off_end`, `not_scalar_boundary`, `not_found`,
+`wrong_document`, `wrong_stream`, `wrong_primitive`, `wrong_epoch`,
+`awaiting_state`, `detached`, `history_unavailable`, `limit_exceeded`,
+`malformed`, `unknown_format` and `unsupported_version`. Scope is checked before
+item lookup. Queries and refusals create no operation, pin, reservation or callback.
+
+`encode_position(PositionToken)` returns `Result<std::string>` containing binary
+CTPT v1 bytes. `decode_position(std::string_view)` returns `Result<PositionToken>`;
+`decode_position_as<T>` refuses a different kind. The decoder owns its value,
+requires exact EOF and rejects malformed fields. JSON wrappers must ASCII-encode
+bytes before Unicode conversion. See [USING_VNEXT](../USING_VNEXT.md) for an example.
+
+The version is experimental and unpublished; E07b prepares the supported-format
+reader obligation for approval. Golden bytes, all-prefix/all-suffix refusal,
+native differential histories and fresh-process replay are tested by S04b.
+Installed adapter certification remains W03; repaired ordering S02/S03 and real
+store recovery, persistent undo and durable retention remain their named gates.
 
 ## 7. Callbacks: single-owner, non-reentrant
 

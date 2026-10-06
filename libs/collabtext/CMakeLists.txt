@@ -42,6 +42,8 @@ add_library(collabtext_core STATIC
     src/crdt/Buffer.cpp
     src/crdt/IdList.cpp
     src/codec/OperationCodec.cpp
+    src/crdt/PositionTraversal.cpp
+    src/codec/AnchorCodec.cpp
     src/crdt/ApplyOutcome.cpp
     src/crdt/OperationValues.cpp
     src/crdt/OperationValidation.cpp
@@ -258,6 +260,7 @@ endif()
 # that reaches into crdt/ or src/ -- or that pulls Qt into Core -- fails here.
 add_library(collabtext_public_headers_core OBJECT
     tests/public-headers/only_ActorId_h.cpp
+    tests/public-headers/only_Anchor_h.cpp
     tests/public-headers/only_ApplyOutcome_h.cpp
     tests/public-headers/only_CrdtEngine_h.cpp
     tests/public-headers/only_Engine_h.cpp
@@ -298,6 +301,13 @@ add_crdt_test(tst_buffer)
 add_crdt_test(tst_convergence)
 add_crdt_test(tst_sumtree)
 add_crdt_test(tst_anchor)
+add_crdt_test(tst_anchor_codec)
+add_crdt_test(tst_positions)
+add_executable(collabtext_position_replay_worker tests/position-replay/main.cpp)
+target_link_libraries(collabtext_position_replay_worker PRIVATE collabtext_core)
+add_dependencies(tst_positions collabtext_position_replay_worker)
+target_compile_definitions(tst_positions PRIVATE
+    COLLABTEXT_POSITION_REPLAY_WORKER="$<TARGET_FILE:collabtext_position_replay_worker>")
 add_crdt_test(tst_opqueue)
 add_crdt_test(tst_utf8)
 add_crdt_test(tst_rope)

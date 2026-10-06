@@ -2230,3 +2230,33 @@ that codec case to a valid start insertion, with no engine semantic change.
 Logs: `/tmp/collabtext-sprint-codecs-{debug-full,package,release,asan}.log`;
 exact build/package artifacts are retained in TASKS.json. No benchmark or long
 realistic simulation ran. **Next is S04b's production positions.**
+
+## 2026-10-05 sprint — S04b complete: native scoped positions
+
+Added immutable scope-bound text boundaries, strict content attachments, list
+boundaries and stable insertion-identity list elements through the existing
+native Buffer/IdList facades. Checked traversal projects retained native items;
+no new sequence engine. Exact affinity, real empty/start/end tokens, UTF-8 scalar
+boundaries, explicit collapse and strict detach/undo restoration are implemented.
+Foreign context is refused before item lookup; local_clear invalidates even edge
+history. Reads reserve no identities and emit no callbacks or operations.
+
+CTPT v1 owns binary bytes with bounded canonical scope/frontier/fence fields.
+All four kinds have golden/ownership/enum/cap checks, every truncated prefix and
+all 256 trailing-byte values. Tests explicitly reject success before inspecting
+an error code; default Error.code alone is not negative evidence. The initial
+incorrect corruption offsets were fixed, and the broad build's ambiguous private
+namespace reference was qualified without changing assertions.
+
+Debug **74/74**, **7.11 s** CTest; Release **7/7**, **0.55 s**; leak-enabled
+ASan/UBSan/LSan **7/7**, **22.94 s**. Relocated installed Core/header/isolation
+checks pass. Native/model differential coverage: **1,050 text**, **550 list**
+resolutions plus concurrent/hidden-mint histories. Independent fresh processes
+reuse original operation/token bytes (artifact SHA256
+`a0b7cb07d590643bc9621f9a9064829fff0243ec7c38b53c6f761c2487a7eb8a`).
+Warm arc rebuilds took 140.518/164.72 s; routine checks stay targeted. No benchmarks.
+
+Manifest v5 advertises actual live APIs and labels token bytes experimental and
+unpublished. Installed strict consumer certification is W03. Repaired ordering,
+real store recovery, persistent undo and durable retention remain outstanding.
+**Next: W02 → W03 installed consumer gates.**

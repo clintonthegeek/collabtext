@@ -13,25 +13,21 @@ W1–W6 consumer cases.
 
 ## Where the work is, as of 2026-10-05
 
-**Done:** V01–V08, D01, P01–P06b, L01, S01, W01, S04a and packaging
+**Done:** V01–V08, D01, P01–P06b, L01, S01, W01, S04a/S04b and packaging
 A01/A02a/A06a. Registry count: 72. S01/W01 are validated desired histories and
 probe fixtures, not production F7/F8 fixes. P06a's final operation-opacity step
 has passed affected Debug/Release/sanitizer and installed-consumer checks.
 
-**Continue S04b**, live scoped positions. P06b's checked version 1 operation,
-vector and gap codecs have passed Debug/Release/leak-enabled sanitizer and
-installed-package checks. No legacy format/API compatibility is required.
-Follow `docs/specs/vnext-boundary-semantics.md` and the completed S04a gate.
-S04a is complete: exact scoped boundary semantics, strict selected-referent loss
-and original-token undo restoration, canonical codec candidate and independent
-model. Debug/Release/sanitizer gates passed; production positions remain pending.
-W02/S02 are separately ready. The takeover review records Wave's ASCII token
-wrapping/affinity adapter obligations and corrected W01 fixtures.
+**Continue W02 → W03**, installed baseline and strict live-position probes.
+P06b and S04b are complete: checked versioned operation/gap codecs and native
+scoped position/CTPT v1 APIs pass Debug/Release/leak-enabled sanitizer and
+installed-package checks. S04b has 1,050 text/550 list native/model resolutions
+and original-token fresh-process replay. No old API/format compatibility required.
 
-**Then:** S04b, installed W02/W03 probes, S02/S03 and E07a/E07b,
-following the actual registry dependencies and the early consumer lane. S04a is
-the independent live-boundary model gate; F7/F8 remain outstanding. Complete
-required design/model gates before production changes.
+W02/S02 are independently ready; finish installed consumer gates on the critical
+path, then E07a/E07b preparation and S02/S03. Token v1 is experimental and
+unpublished. Ordering, store recovery, persistent undo and durable pins remain
+pending; do not claim full F7/F8 repair. Follow actual registry dependencies.
 
 ## Read this before trusting a green run
 

@@ -185,6 +185,31 @@ int main() {
         if (decoded.ok()) check(decoded.value() == frontier, "frontier stays exact");
     }
 
+    auto scoped = CrdtEngine::create(std::make_shared<VolatileAllocator>(actor(3)),
+                                    {"doc", "block", Primitive::text, 1});
+    check(scoped.ok(), "installed scope factory is available");
+    if (scoped.ok()) {
+        auto& engine = *scoped.value();
+        engine.insert(0, "ab");
+        auto left = engine.boundary_at(1, Affinity::left);
+        auto right = engine.boundary_at(1, Affinity::right);
+        check(left.ok() && right.ok(), "installed boundary mint succeeds");
+        if (left.ok() && right.ok()) {
+            auto bytes = encode_position(left.value());
+            check(bytes.ok(), "installed position encoder succeeds");
+            engine.insert(1, "X");
+            auto l = engine.resolve(left.value()), r = engine.resolve(right.value());
+            check(l.ok() && r.ok(), "installed scoped resolution succeeds");
+            if (l.ok() && r.ok()) check(l.value().byte_offset == 1 && r.value().byte_offset == 2,
+                                      "installed exact affinity is 1/2");
+            if (bytes.ok()) {
+                auto decoded = decode_position_as<TextBoundary>(bytes.value());
+                check(decoded.ok(), "installed token decoder succeeds");
+                if (decoded.ok()) check(engine.resolve(decoded.value()).ok(), "decoded token owns its value");
+            }
+        }
+    }
+
     if (failures == 0)
         std::printf("consumer: ok (text=%zu bytes, list=%zu ids)\n",
                     alice.text().size(), list.ids().size());

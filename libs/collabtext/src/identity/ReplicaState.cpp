@@ -164,6 +164,16 @@ std::string_view to_string(ErrorCode code) {
     case ErrorCode::counter_regression: return "counter_regression";
     case ErrorCode::counter_exhausted: return "counter_exhausted";
     case ErrorCode::unresolvable_anchor: return "unresolvable_anchor";
+    case ErrorCode::off_end: return "off_end";
+    case ErrorCode::not_scalar_boundary: return "not_scalar_boundary";
+    case ErrorCode::not_found: return "not_found";
+    case ErrorCode::wrong_document: return "wrong_document";
+    case ErrorCode::wrong_stream: return "wrong_stream";
+    case ErrorCode::wrong_primitive: return "wrong_primitive";
+    case ErrorCode::awaiting_state: return "awaiting_state";
+    case ErrorCode::detached: return "detached";
+    case ErrorCode::limit_exceeded: return "limit_exceeded";
+    case ErrorCode::history_unavailable: return "history_unavailable";
     case ErrorCode::corrupt_record: return "corrupt_record";
     case ErrorCode::io_error: return "io_error";
     case ErrorCode::commit_uncertain: return "commit_uncertain";

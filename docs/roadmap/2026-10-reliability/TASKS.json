@@ -1592,7 +1592,8 @@
     "/tmp/collabtext-sprint-codecs-asan.log"
    ],
    "implementation_commits": [
-    "3b19e2205b4fadcceb444066571ac8615a13dbe3"
+    "3b19e2205b4fadcceb444066571ac8615a13dbe3",
+    "270c7b0509c4e2782da931ae09fa807319bf7c42"
    ]
   },
   {
@@ -1624,7 +1625,19 @@
     "libs/collabtext/src/IdListEngine.cpp",
     "libs/collabtext/tests/reference/BoundaryApiContract.h",
     "libs/collabtext/CMakeLists.txt",
-    "libs/collabtext/src/identity/ReplicaState.cpp"
+    "libs/collabtext/src/identity/ReplicaState.cpp",
+    "libs/collabtext/src/crdt/Buffer.h",
+    "libs/collabtext/src/crdt/IdList.h",
+    "libs/collabtext/src/crdt/PositionPayload.h",
+    "libs/collabtext/src/crdt/PositionTraversal.h",
+    "libs/collabtext/src/crdt/PositionTraversal.cpp",
+    "libs/collabtext/tests/tst_positions.cpp",
+    "libs/collabtext/tests/position-replay/main.cpp",
+    "libs/collabtext/tests/public-headers/only_Anchor_h.cpp",
+    "libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md",
+    "docs/USING_VNEXT.md",
+    "tests/consumer-smoke/main.cpp",
+    "libs/collabtext/tests/tst_operation_values.cpp"
    ],
    "steps": [
     "Implement the reviewed S04a boundary representation and helpers within the existing Buffer/IdList engines. Start with a straightforward checked traversal; preserve item identities through split/deletion/undo and avoid adding a second production sequence engine or an optimization project.",
@@ -1639,18 +1652,38 @@
     "Foreign tokens and malformed inputs return typed failures without assert/abort, fake offsets, mutation or notifications; token bytes round-trip in a fresh-process replay and on a second replica.",
     "The public installed surface can expose actual implemented positions; S03/L08 are not prerequisites. Full repaired-order/recovery certification remains S04 and durable retention remains S05."
    ],
-   "verification": "Run ./tools/verify-roadmap.sh debug \"tst_anchor|tst_anchor_codec|tst_idlist_anchor|tst_boundary_model|tst_convergence|tst_idlist_convergence\" plus Release and a bounded ASan differential campaign. Run the fresh-process replay worker and record exact token bytes/fixture hashes; W03 separately certifies the installed adapter.",
+   "verification": "Run ./tools/verify-changed.sh --target \"^tst_(anchor|anchor_codec|positions|idlist_anchor|boundary_model|convergence|idlist_convergence)$\" plus Release and a bounded ASan differential campaign. Run the fresh-process replay worker and record exact token bytes/fixture hashes; W03 separately certifies the installed adapter.",
    "addresses": [
     "F7",
     "R2",
     "R13"
    ],
    "gate": null,
-   "status": "not_started",
+   "status": "complete",
    "consumer_requirements": [
     "W1",
     "W2",
     "W6"
+   ],
+   "baseline_revision": "270c7b0509c4e2782da931ae09fa807319bf7c42",
+   "progress": "Native scoped positions and CTPT v1 implemented and verified; no replacement sequence engine or compatibility shim. Installed strict adapter certification remains W03; ordering/recovery/pins remain S02/S03/S04/L08/S05/G-series.",
+   "verification_results": {
+    "red": "Runtime factory/affinity probe failed before implementation (20261006T003351Z-changed-je4yug81).",
+    "debug": "74/74 bounded suites, 7.11 s CTest, 140.518 s warm rebuild/package arc; relocated installed Core/header/dependency isolation/negative-component checks passed. Broad build exposed ambiguous private detail namespace in tst_operation_values; explicitly qualified without weakening its assertions.",
+    "release": "7/7 anchored position/model/Buffer+IdList convergence suites, 0.55 s CTest, 164.72 s rebuild.",
+    "asan": "Same 7/7 ASan/UBSan/LeakSanitizer suites, 22.94 s, already-built CTest outside restricted process inspection; no suppression or leak disabling. Actual compilation of traversal, codec and fresh-process worker instrumented.",
+    "differential": "1,050 native/model text and 550 list resolutions plus fixed concurrent post-merge/hidden-mint cases, scope/read-purity/Unicode/independent deletes and original-token selective undo. Reference model consumes actual retained order/visibility, independently derives scalar widths.",
+    "codec": "All four opaque kinds, independent golden bytes, every proper prefix and all 256 one-byte suffixes per kind; caps/enums/context/frontier/ownership refusal. Negative helper refuses success before comparing error code, avoiding default malformed Error false evidence. Initially inactive byte mutations corrected at the exact layout offsets.",
+    "replay": "Separate mint and two resolve processes; identical original SPR1 test artifact SHA256 a0b7cb07d590643bc9621f9a9064829fff0243ec7c38b53c6f761c2487a7eb8a; exact output left=1 right=2 strict=2 list=0. This is operation replay, not store recovery.",
+    "limits": "Manifest v5 records unpublished experimental CTPT v1, UTF8 read/UTF16 edit units and native live positions. No repaired ordering, persistent undo, durable pin/GC or store-recovery certification. No benchmarks/long realistic simulation."
+   },
+   "artifacts": [
+    "build-roadmap-debug/verification/20261006T003351Z-changed-je4yug81",
+    "build-roadmap-debug/verification/20261006T005009Z-changed-01xos608",
+    "build-consumer-verify/debug-package-20261006T005223Z-1687",
+    "build-roadmap-release/verification/20261006T005011Z-changed-r381m4mk",
+    "/tmp/collabtext-sprint-positions-asan-build.log",
+    "/tmp/collabtext-sprint-positions-asan.log"
    ]
   },
   {

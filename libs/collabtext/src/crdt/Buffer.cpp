@@ -1,5 +1,6 @@
 #include "crdt/Buffer.h"
 #include "crdt/OperationQueue.h"
+#include "codec/Utf.h"
 #include <algorithm>
 #include <cassert>
 #include <numeric>
@@ -16,6 +17,39 @@ Buffer::Buffer(SharedIdentityAllocator allocator)
     // bug: an engine may exist before its private state has an identity. Minting
     // is refused at the reservation site instead (check_allocator), where the
     // refusal can be reported to a caller instead of vanishing in Release.
+}
+
+Result<std::vector<CollabText::detail::PositionItem>> Buffer::position_items() const {
+    std::vector<CollabText::detail::PositionItem> items;
+    for (const auto& fragment : get_fragments()) {
+        size_t scalars = 0;
+        if (!Codec::utf8_length(fragment.text, scalars).ok())
+            return Error(ErrorCode::invalid_unicode, "invalid retained fragment text");
+        if (scalars != fragment.length || fragment.text.size() != fragment.byte_length)
+            return Error(ErrorCode::history_unavailable, "retained fragment length mismatch");
+        if (fragment.length && (!fragment.origin.actor.valid() || !fragment.origin.counter ||
+            fragment.length > UINT64_MAX - fragment.origin.counter))
+            return Error(ErrorCode::history_unavailable, "retained item interval is invalid");
+        size_t byte = 0;
+        for (uint32_t scalar = 0; scalar < fragment.length; ++scalar) {
+            const auto lead = static_cast<unsigned char>(fragment.text[byte]);
+            const uint32_t width = lead < 0x80 ? 1 : lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4;
+            items.push_back({fragment.item_at(scalar), width, fragment.visible, std::nullopt});
+            byte += width;
+        }
+    }
+    return items;
+}
+
+void Buffer::local_clear() noexcept {
+    auto allocator = m_allocator;
+    auto version = m_version;
+    const auto undo_limit = max_undo_depth();
+    auto changed = std::move(m_on_change);
+    *this = Buffer(std::move(allocator));
+    m_version = std::move(version);
+    m_on_change = std::move(changed);
+    set_max_undo_depth(undo_limit);
 }
 
 // ---------------------------------------------------------------------------

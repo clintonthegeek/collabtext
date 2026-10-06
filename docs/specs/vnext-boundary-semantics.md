@@ -1,6 +1,6 @@
 # Scoped positions: S04a contract and implementation map
 
-Status: independent design/model gate. S04b implements the public types and codec;
+Status: reviewed independent design/model gate and implemented S04b live API/codec;
 S02 supplies the complete ordering interpreter and S03 changes integration.
 This specification resolves WP2's pending placement/restoration decisions. It
 adds no replacement engine. The native fragment tree, item origins and selective
@@ -15,7 +15,7 @@ actor table slots and tree locators are not scope identities. Bind a validated
 scope immutably on engine construction. Existing allocator-only facades may
 continue editing temporarily, but cannot mint or accept scoped positions until
 constructed with an explicit scope. The Result-returning `create(allocator, scope)`
-factory validates scope before constructing the bound engine. S04b adds contextual construction overloads.
+factory validates scope before constructing the bound engine.
 There is no default document shared by all engines. A local_clear marks position
 history unavailable, including for old START/END-only tokens: preserving a version
 counter cannot manufacture missing history. Queries/mints refuse until complete
@@ -154,7 +154,7 @@ missing element token. Element resolution and boundary affinity are distinct.
 
 ## 4. Canonical token format candidate, version 1
 
-This is the S04b implementation contract, **not currently supported/published
+This is the implemented S04b codec contract, **not currently supported/published
 bytes**. Encoding owns its returned binary bytes; decoding owns an immutable
 value independent of input lifetime. Binary content is allowed, including NUL.
 No C++ layout, Qt type or operation-codec version is the format. No authentication

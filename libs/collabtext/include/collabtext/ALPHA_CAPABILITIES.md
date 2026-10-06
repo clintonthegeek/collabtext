@@ -1,6 +1,6 @@
 # collabtext alpha capability manifest
 
-**Version:** 4
+**Version:** 5
 **Introduced by:** roadmap task A02a
 **Branch:** `roadmap/reliability-v2`
 **Status:** alpha. Not a supported release, and not published. E07a prepares a
@@ -27,6 +27,10 @@ documentation. A capability with no evidence is marked `not implemented`, not
 | Opaque immutable text/list operation values; read-only copies survive engine/callback lifetime | **available** | `tst_operation_values`, installed `consumer_main`, `tst_serialization_public` compile-time variant exclusion |
 | Checked version 1 text/list/global/counter-gap codecs: CTBO/CTLO/CTGV/CTGP frames, fixed-width hex integers, allocation interval validation | **available** | `tst_serialization_public` golden/width/shape/interval/version tests, `tst_serialization`, installed `consumer_main` |
 | Public JSON decoders reject trailing garbage, duplicate keys, invalid Unicode/escapes and bounded input overflow; valid escaped non-BMP text remains exact | **available** | `tst_serialization_public::public_decoders_reject_untrusted_json_syntax`, `escaped_non_bmp_text_preserves_the_actual_operation`, `tst_decode_validation` |
+| Scoped immutable text boundaries/strict attachments and list boundaries/elements; explicit document/stream/primitive/epoch factory | **available** | `tst_positions`, installed `consumer_main` |
+| Exact affinity, scoped empty/start/end, UTF-8 scalar-boundary positions, explicit collapse and selected-referent detachment/undo restoration | **available** | `tst_anchor`, `tst_positions` exact/concurrent/differential cases |
+| Typed wrong-context, delayed-state, missing-history/off-end/list-value failures; position queries allocate no identity and emit no callback | **available** | `tst_positions`, `tst_anchor_codec` |
+| Independently versioned binary CTPT v1 position bytes, strict EOF and owned decode; original token replay in a fresh process | **available, experimental unpublished format** | `tst_anchor_codec` goldens/all prefixes/all 256 trailing values; `tst_positions::fresh_process_original_token_replay` |
 | Per-operation outcome vocabulary (applied / duplicate / deferred / rejected) on the **list** facade | **available** | `collabtext_alpha_consumer`, `tst_operation_validation` |
 | Two peers converge over the wire codec | **available, with a known limit** | `tst_convergence`, `tst_opstream_convergence_*` — see "Ordering repair" below |
 | Core builds and links with no Qt, no zstd, no hash provider | **available** | `collabtext_core_smoke` under `CMAKE_DISABLE_FIND_PACKAGE_Qt6/zstd/OpenSSL=ON` |
@@ -41,10 +45,7 @@ These are stated so a consumer designs around them rather than discovering them.
 | Capability | State | Why / who owns it |
 |---|---|---|
 | **Terminal gap integration and transactional transport/recovery.** Gap codecs only validate metadata. Legacy FileSync/StreamSync retain and block a failed codec batch before cursor commit; this is containment, not recovery or durable coverage certification. | **not implemented** | P07/L02/L03/L08 own gap publication, terminal coverage, retries and recovered state/cursor transactions. |
-| **Affinity semantics.** An anchor's `Bias` is stored but **not read** by `resolve_anchor`. Left and right of the same character resolve identically. | **not implemented** | Named by the external consumer as its critical path. S04a specifies it, S04b implements it. A consumer needing it must treat every resolved offset as approximate. |
-| **Typed unresolvable anchors.** `resolve_anchor` falls back to end-of-document when an anchor names an item the engine does not have, and says nothing. | **not implemented** | The consumer's requirement R3: a silent relocation is data corruption. S05 specifies retention or a typed miss; G06/G08 own the GC interaction. `IdList::try_anchor_of` **is** typed (`unresolvable_anchor`) — the engine's item lookup is fixed, the position resolution path is not. |
-| **End-of-document position tokens.** `Anchor::end()` is an explicit past-the-end flag, not a token comparable with later-minted positions. | **not implemented** | S04b mints real scoped positions. |
-| **Position token persistence.** No stable, versioned, library-owned encoding of a position exists. Do not store `Anchor`/`Locator` fields in an external log: the public header reserves their layout as evolution-reserved, and it now has 128-bit actors in it. | **not implemented** | S04a/S04b, then W03/E07b certify it against a fresh process. |
+| **Persisting legacy Anchor/Locator fields.** Scoped `TextBoundary`/`TextAttachment`/`ListBoundary`/`ListElement` and `encode_position` are the supported API shape. Legacy internal resolution still ignores bias or falls back on a miss. | **unsupported legacy helper path** | S04b adds the checked scoped path; A02/S04 and presence integration retire remaining legacy usage. Do not serialize raw layout. |
 | **Ordering repair (F8).** Two peers inserting at the same position interleave character-by-character. Convergent, and wrong for prose. | **not implemented** | S01 specifies, S02 designs, S03 applies. The core smoke asserts the character *multiset* for exactly this reason. |
 | **Typed outcome on the text facade.** `CrdtEngine::applyRemoteOp` returns a bool, so deferred and rejected are indistinguishable. | **partial** | A02 renames it to `apply_remote(...) -> ApplyOutcome`. A02a fixed the worse bug — it used to return true unconditionally, which would have told a retrying caller that a rejected operation succeeded. |
 | **Persistent undo/redo.** Undo is in-memory and does not survive a reopen. | **not implemented** | L06. Consumer requirement R5. |
@@ -61,7 +62,8 @@ These are stated so a consumer designs around them rather than discovering them.
 - **Core link dependencies:** none. No Qt, no zstd, no crypto provider.
 - **Offset units:** text offsets are UTF-16 code units (`CrdtEngine::insert`,
   `remove`, `length`). Item identities and counters are 64-bit unsigned.
-  `IdListEngine` has no offset space at all.
+  Scoped list queries use element indices; legacy list mutation uses item anchors.
+- **Position units:** `boundary_at` / `attachment_at` use UTF-8 bytes at scalar boundaries; `resolve` returns byte offsets or list indices with loss flags. Text editing remains UTF-16.
 - **Byte lengths vs scalars:** internal fragment accounting tracks both; a
   fragment's `length` is Unicode scalars and `byte_length` is UTF-8 bytes. Not
   part of the public surface.

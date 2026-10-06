@@ -27,20 +27,19 @@
 ///
 /// ─── Known gaps, recorded rather than hidden ────────────────────────────────
 ///
-/// Anchor *resolution* is not yet correct: the engine does not honour `bias`,
-/// and it falls back to end-of-list for an anchor it cannot resolve. Positions
-/// minted here are therefore exact, and positions read back may be wrong at a
-/// boundary. The capability manifest says so; S04a/S04b/S05 fix it.
+/// Scoped boundary/element queries return typed outcomes and explicit collapse.
+/// Legacy internal Anchor resolution is approximate; do not persist Anchor fields.
+/// Construct with create(allocator, scope) to use scoped position queries.
 ///
 /// The same counter value in two streams is two independent facts, so an
 /// element id is only unique within the list that produced it. Do not hash or
 /// truncate a caller's own identifier into `insert_after`'s `id` expecting it to
 /// be globally unique — it is a caller-owned opaque value.
 ///
-/// Offsets: none. This list has no offset space at all; the only positions it
-/// understands are anchors and element ids.
+/// Scoped reads use element indices. Existing mutations use item anchors.
 
 #pragma once
+#include <collabtext/Anchor.h>
 
 #include <collabtext/ActorId.h>
 #include <collabtext/ApplyOutcome.h>
@@ -58,6 +57,13 @@ namespace CollabText {
 /// A replicated ordered list of caller-owned opaque values.
 class IdListEngine {
 public:
+    static Result<std::unique_ptr<IdListEngine>> create(Crdt::SharedIdentityAllocator, PositionScope);
+    Result<ListBoundary> boundary_at(uint32_t element_index, Affinity) const;
+    Result<ListElement> element_of(uint64_t application_value) const;
+    Result<ResolvedListPosition> resolve(const ListBoundary&) const;
+    Result<ResolvedListPosition> resolve(const ListElement&) const;
+    Result<int> compare(const ListBoundary&, const ListBoundary&) const;
+
     /// Takes the allocator this list mints identities from, and learns its actor
     /// from it. Constructing with no allocator is not possible by design.
     explicit IdListEngine(Crdt::SharedIdentityAllocator allocator);

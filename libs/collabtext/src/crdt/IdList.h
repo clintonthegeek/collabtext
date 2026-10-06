@@ -1,4 +1,5 @@
 #pragma once
+#include "crdt/PositionTraversal.h"
 
 #include "crdt/Anchor.h"
 #include "crdt/IdentityAllocator.h"
@@ -213,6 +214,8 @@ public:
     /// pass), not a raw replay of the original CRDT log.
     ///
     void local_clear() noexcept;
+
+    Result<std::vector<CollabText::detail::PositionItem>> position_items() const;
 
 private:
     SharedIdentityAllocator m_allocator;

@@ -3,6 +3,17 @@
 
 namespace CollabText::Crdt {
 
+Result<std::vector<CollabText::detail::PositionItem>> IdList::position_items() const {
+    std::vector<CollabText::detail::PositionItem> items;
+    for (const auto& entry : get_entries()) {
+        if (!entry.origin.actor.valid() || !entry.origin.counter || entry.origin.counter == UINT64_MAX)
+            return Error(ErrorCode::history_unavailable, "retained list identity is invalid");
+        items.push_back({entry.origin, 1, entry.visible, entry.id});
+    }
+    return items;
+}
+
+
 IdList::IdList(SharedIdentityAllocator allocator)
     : m_allocator(std::move(allocator))
 {

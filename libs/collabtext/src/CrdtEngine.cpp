@@ -8,6 +8,8 @@ struct CrdtEngine::Impl {
     Crdt::Buffer buffer;
     ChangeCallback on_change;
     LocalOpCallback on_local_op;
+    std::optional<PositionScope> scope;
+    bool position_history_available = true;
 
     explicit Impl(Crdt::SharedIdentityAllocator allocator) : buffer(std::move(allocator)) {}
 
@@ -26,6 +28,55 @@ CrdtEngine::CrdtEngine(Crdt::SharedIdentityAllocator allocator)
 }
 
 CrdtEngine::~CrdtEngine() = default;
+
+Result<std::unique_ptr<CrdtEngine>> CrdtEngine::create(Crdt::SharedIdentityAllocator allocator, PositionScope scope) {
+    auto valid = detail::validate_scope(scope, Primitive::text);
+    if (!valid) return valid.error();
+    if (!allocator || !allocator->actor().valid()) return Error(ErrorCode::invalid_identity, "invalid allocator");
+    auto engine = std::make_unique<CrdtEngine>(std::move(allocator));
+    engine->m_impl->scope = std::move(scope);
+    return engine;
+}
+Result<TextBoundary> CrdtEngine::boundary_at(uint32_t offset, Affinity affinity) const {
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
+    if (!m_impl->position_history_available) return Error(ErrorCode::history_unavailable, "local history was cleared");
+    auto items = m_impl->buffer.position_items(); if (!items) return items.error();
+    auto p = detail::mint_boundary(*m_impl->scope, m_impl->buffer.version(), items.value(), offset, affinity);
+    if (!p) return p.error();
+    return detail::PositionAccess::make<TextBoundary>(std::move(p).value());
+}
+Result<TextAttachment> CrdtEngine::attachment_at(uint32_t offset, Affinity affinity, ReferentSide side) const {
+    auto boundary = boundary_at(offset, affinity); if (!boundary) return boundary.error();
+    auto p = *detail::PositionAccess::get(boundary.value());
+    p.kind = detail::PositionKind::text_attachment; p.selection = side;
+    auto valid = detail::validate_position(p); if (!valid) return valid.error();
+    return detail::PositionAccess::make<TextAttachment>(std::move(p));
+}
+Result<ResolvedTextPosition> CrdtEngine::resolve(const TextBoundary& token) const {
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
+    auto p = detail::PositionAccess::get(token);
+    auto valid = detail::check_position_context(*m_impl->scope, p, m_impl->buffer.version(), m_impl->position_history_available);
+    if (!valid) return valid.error();
+    auto items = m_impl->buffer.position_items(); if (!items) return items.error();
+    return detail::resolve_boundary(*p, items.value());
+}
+Result<ResolvedTextPosition> CrdtEngine::resolve(const TextAttachment& token) const {
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
+    auto p = detail::PositionAccess::get(token);
+    auto valid = detail::check_position_context(*m_impl->scope, p, m_impl->buffer.version(), m_impl->position_history_available);
+    if (!valid) return valid.error();
+    auto items = m_impl->buffer.position_items(); if (!items) return items.error();
+    return detail::resolve_boundary(*p, items.value());
+}
+Result<int> CrdtEngine::compare(const TextBoundary& a, const TextBoundary& b) const {
+    auto x = resolve(a); if (!x) return x.error();
+    auto y = resolve(b); if (!y) return y.error();
+    return x.value().byte_offset < y.value().byte_offset ? -1 : x.value().byte_offset > y.value().byte_offset ? 1 : 0;
+}
+void CrdtEngine::local_clear() noexcept {
+    m_impl->buffer.local_clear();
+    m_impl->position_history_available = false;
+}
 
 void CrdtEngine::insert(int position, const std::string &text)
 {

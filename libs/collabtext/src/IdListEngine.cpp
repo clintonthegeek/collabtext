@@ -19,6 +19,8 @@ public:
         : list(std::move(allocator)) {}
 
     Crdt::IdList list;
+    std::optional<PositionScope> scope;
+    bool position_history_available = true;
 };
 
 IdListEngine::IdListEngine(Crdt::SharedIdentityAllocator allocator)
@@ -27,6 +29,58 @@ IdListEngine::IdListEngine(Crdt::SharedIdentityAllocator allocator)
 IdListEngine::~IdListEngine() = default;
 IdListEngine::IdListEngine(IdListEngine &&) noexcept = default;
 IdListEngine &IdListEngine::operator=(IdListEngine &&) noexcept = default;
+
+Result<std::unique_ptr<IdListEngine>> IdListEngine::create(Crdt::SharedIdentityAllocator allocator, PositionScope scope) {
+    auto valid = detail::validate_scope(scope, Primitive::list);
+    if (!valid) return valid.error();
+    if (!allocator || !allocator->actor().valid()) return Error(ErrorCode::invalid_identity, "invalid allocator");
+    auto engine = std::make_unique<IdListEngine>(std::move(allocator));
+    engine->m_impl->scope = std::move(scope);
+    return engine;
+}
+Result<ListBoundary> IdListEngine::boundary_at(uint32_t offset, Affinity affinity) const {
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
+    if (!m_impl->position_history_available) return Error(ErrorCode::history_unavailable, "local history was cleared");
+    auto items = m_impl->list.position_items(); if (!items) return items.error();
+    auto p = detail::mint_boundary(*m_impl->scope, m_impl->list.version(), items.value(), offset, affinity);
+    if (!p) return p.error();
+    return detail::PositionAccess::make<ListBoundary>(std::move(p).value());
+}
+Result<ListElement> IdListEngine::element_of(uint64_t value) const {
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
+    if (!m_impl->position_history_available) return Error(ErrorCode::history_unavailable, "local history was cleared");
+    auto items = m_impl->list.position_items(); if (!items) return items.error();
+    for (const auto& item : items.value()) if (item.visible && item.application_value == value) {
+        detail::PositionPayload p{*m_impl->scope, detail::PositionKind::list_element};
+        p.referent = item.identity; p.frontier = m_impl->list.version();
+        auto valid = detail::validate_position(p); if (!valid) return valid.error();
+        return detail::PositionAccess::make<ListElement>(std::move(p));
+    }
+    return Error(ErrorCode::not_found, "application value has no visible list element");
+}
+Result<ResolvedListPosition> IdListEngine::resolve(const ListBoundary& token) const {
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
+    auto p = detail::PositionAccess::get(token);
+    auto valid = detail::check_position_context(*m_impl->scope, p, m_impl->list.version(), m_impl->position_history_available);
+    if (!valid) return valid.error();
+    auto items = m_impl->list.position_items(); if (!items) return items.error();
+    auto result = detail::resolve_boundary(*p, items.value()); if (!result) return result.error();
+    const auto& value = result.value();
+    return ResolvedListPosition{value.byte_offset, value.lost_left, value.lost_right};
+}
+Result<ResolvedListPosition> IdListEngine::resolve(const ListElement& token) const {
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
+    auto p = detail::PositionAccess::get(token);
+    auto valid = detail::check_position_context(*m_impl->scope, p, m_impl->list.version(), m_impl->position_history_available);
+    if (!valid) return valid.error();
+    auto items = m_impl->list.position_items(); if (!items) return items.error();
+    return detail::resolve_element(*p, items.value());
+}
+Result<int> IdListEngine::compare(const ListBoundary& a, const ListBoundary& b) const {
+    auto x = resolve(a); if (!x) return x.error();
+    auto y = resolve(b); if (!y) return y.error();
+    return x.value().element_index < y.value().element_index ? -1 : x.value().element_index > y.value().element_index ? 1 : 0;
+}
 
 Result<Crdt::IdListOperation> IdListEngine::try_insert_after(
     const Crdt::Anchor &after, uint64_t id) {
@@ -70,6 +124,9 @@ void IdListEngine::set_max_undo_depth(size_t depth) {
 }
 size_t IdListEngine::max_undo_depth() const { return m_impl->list.max_undo_depth(); }
 
-void IdListEngine::local_clear() noexcept { m_impl->list.local_clear(); }
+void IdListEngine::local_clear() noexcept {
+    m_impl->list.local_clear();
+    m_impl->position_history_available = false;
+}
 
 }  // namespace CollabText

@@ -4,9 +4,8 @@ This is the consumer-facing guide for the alpha on branch `roadmap/reliability-v
 It is an alpha: not a supported release, not published, and expected to change its
 API between candidates. What it can and cannot do is stated in
 `<collabtext/ALPHA_CAPABILITIES.md>`, which is installed beside the headers and
-versioned independently of this document. **Read that before designing against
-this** — several things a text editor normally assumes are not implemented, and
-one of them (affinity) will silently give you wrong answers rather than an error.
+versioned independently of this document. **Read that before designing against this**. Scoped live positions are implemented;
+store recovery, persistent undo and durable pins remain pending.
 
 ## What is installed
 
@@ -124,24 +123,51 @@ three build modes. Read its `--help`.
 - **You supply the allocator.** Engines retain a shared `Crdt::IdentityAllocator`;
   the interface itself does not persist anything. Persist the 128-bit actor and the 64-bit counter before you
   use an operation, or you will reissue identities after a restart.
-- **Do not store `Anchor` or `Locator` in an external log.** Their layout is
-  reserved for evolution, and there is no supported token encoding yet. Storing
-  them means your stored positions break when the struct grows.
+- **Persist library-owned position bytes, not `Anchor` or `Locator` fields.**
+  Those legacy layouts remain reserved for evolution.
 - **Do not call `collect_garbage()` or `compact()` expecting reclamation.** They
   return zero and retain everything.
+
+## Scoped positions
+
+```cpp
+auto created = CollabText::CrdtEngine::create(allocator,
+    {"document-id", "block-id", CollabText::Primitive::text, 1});
+if (!created.ok()) return created.error();
+auto& engine = *created.value();
+engine.insert(0, "ab"); // editing uses UTF-16 units
+auto left = engine.boundary_at(1, CollabText::Affinity::left); // UTF-8 bytes
+if (!left.ok()) return left.error();
+auto bytes = CollabText::encode_position(left.value());
+if (!bytes.ok()) return bytes.error();
+engine.insert(1, "X");
+auto resolved = engine.resolve(left.value()); // byte_offset == 1
+```
+
+Right affinity at that same original gap resolves to byte 2. Carets expose
+`lost_left`/`lost_right` and `collapsed()`. A strict `attachment_at` selects a
+preceding/following item; hiding that selected item returns `detached` with no
+usable offset. Selective undo can restore the same original token. Resolve also
+reports wrong document/stream/primitive/epoch, awaiting mint state or unavailable
+history explicitly. `local_clear()` invalidates history even for empty-edge
+tokens. Allocator-only engines can edit but have no position scope.
+
+`encode_position` returns library-owned **binary** CTPT v1 bytes; persist those
+bytes, not C++ fields. `decode_position_as<TextBoundary>` refuses another token
+kind. A decoder owns its value independently of input lifetime and rejects every
+trailing byte. Wave's JSON adapter must ASCII-wrap bytes (for example base64url);
+raw binary must not pass through UTF-8 conversion. Wave owns block existence and
+its UI's stale/gone interpretation. Position queries create no pins.
+
+No alpha has been published. This version is experimental until approved release
+preparation freezes its supported-reader obligation. See
+[the position contract](specs/vnext-boundary-semantics.md) for exact guarantees
+and the retained-order assumption that S02/S03 still certify.
 
 ## What is not implemented
 
 Summarised here; the manifest is authoritative and versioned.
 
-- **Affinity.** An anchor's `Bias` is stored but never read. Left and right of the
-  same character resolve identically. Treat every resolved offset as approximate.
-- **Typed unresolvable anchors.** On the text facade, an anchor naming an unknown
-  item silently resolves to end-of-document. A silent relocation is data
-  corruption; do not build repair logic that assumes you will be told.
-  `IdListEngine::try_anchor_of` *is* typed and returns
-  `ApplyOutcome::unresolvable_anchor`.
-- **End-of-document position tokens**, and **position token persistence**.
 - **Ordering repair.** Two peers inserting at the same position interleave
   character-by-character. Convergent, and wrong for prose.
 - **Persistent undo**, **crash recovery**, **GC/pins/checkpoints**, **epoch on the
@@ -182,16 +208,8 @@ through the public encode functions. Concrete edit/list/undo payload structs and
 `std::get`/`std::visit` access are no longer public. No consumer can mutate an
 emitted operation. An empty or moved-from value is rejected before application.
 
-This changes the C++ surface, not wire schema 4, operation allocation or merge
-order. Document/stream/epoch envelopes and typed version-decode errors remain
-P07/P06b work. Keep unknown or rejected input for diagnostics/recovery.
-
-
-The interim public operation decoders now validate complete bounded JSON, reject
-duplicate keys/malformed Unicode/trailing garbage, and correctly decode escaped
-non-BMP scalars. Payloads still have no explicit wire version; optional errors
-cannot distinguish newer formats from corruption. Retain original failed records
-and block progress over them. [P06b's codec contract](specs/vnext-operation-codec.md)
-specifies the remaining Result API, versioned frames and interval/gap metadata.
-The stricter decoder does not certify legacy file-reader cursor transactions or
-recovery. Positions remain specified/model-checked, awaiting S04b implementation.
+P06b replaces the old unversioned schema with checked version 1 codecs. The
+public encode/decode functions return `Result` and preserve exact 64-bit values.
+Document/stream/epoch operation envelopes remain P07 work. Failed records must
+be retained and progress blocked; full transactional file recovery is not yet
+certified. Live scoped positions are implemented as described above.
