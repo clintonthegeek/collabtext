@@ -2066,7 +2066,14 @@
         "R13"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "in_progress",
+      "baseline_revision": "d3733971614eb578be0948d9237891ac46695d95",
+      "implementation_commits": [],
+      "verification_results": {
+        "baseline": "The public OpStream still accepts void push(payload), callback-only inbound delivery, and scalar lowest_peer_acked_lamport; there are no delivery tokens, commit/retry outcomes, per-stream frontiers or P07 contract tests.",
+        "known_failure": "The legacy surface cannot distinguish accepted/queued data from durably published data and cannot tie acknowledgements to application recovery points.",
+        "new_artifacts": "docs/specs/vnext-transport.md and libs/collabtext/tests/tst_transport_commit_contract.cpp do not exist at baseline."
+      }
     },
     {
       "id": "P08",

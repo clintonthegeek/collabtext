@@ -1,7 +1,7 @@
 #include "CodecTest.h"
-/// tst_opstream_convergence_buffer.cpp — Two-replica Buffer convergence over OpStream
+/// tst_opstream_convergence_buffer.cpp — Two-replica Buffer convergence over StreamSync
 ///
-/// Proves that two CrdtEngines wired through StreamSync (via the OpStream interface)
+/// Proves that two CrdtEngines wired through StreamSync (through the internal legacy adapter)
 /// converge correctly:
 ///   - Sequential edits: engine1 inserts, engine2 receives and appends, both converge.
 ///   - Divergent concurrent edits: both engines edit before syncing, then exchange ops
@@ -15,7 +15,6 @@
 #include <collabtext/Operations.h>
 #include <collabtext/Serialization.h>
 #include "transport/StreamSync.h"
-#include <collabtext/OpStream.h>
 
 #include <filesystem>
 #include <string>
@@ -38,7 +37,7 @@ private slots:
     // engine2's op.  Both replicas must converge to the same text containing both
     // "hello" and "world".
 
-    void two_replica_buffer_convergence_over_opstream() {
+    void two_replica_buffer_convergence_over_streamsync() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         std::filesystem::path shared = tmp.path().toStdString();
@@ -51,8 +50,8 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
         CrdtEngine engine1(CollabText::Test::test_counter(1));
         CrdtEngine engine2(CollabText::Test::test_counter(2));
@@ -128,8 +127,8 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
         CrdtEngine engine1(CollabText::Test::test_counter(1));
         CrdtEngine engine2(CollabText::Test::test_counter(2));
@@ -194,7 +193,7 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
+        StreamSync* op1 = &sync1;
 
         CrdtEngine engine1(CollabText::Test::test_counter(1));
         CrdtEngine engine2(CollabText::Test::test_counter(2));

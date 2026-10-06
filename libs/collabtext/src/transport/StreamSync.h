@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <collabtext/OpStream.h>
 #include <collabtext/ActorId.h>
 #include <crdt/SegmentReader.h>
 #include <crdt/SegmentWriter.h>
@@ -39,7 +38,10 @@ struct StreamEntry {
     bool tombstone = false;
 };
 
-class StreamSync : public CollabText::OpStream {
+// Legacy file-backed synchronization implementation. P07's OpStream contract
+// requires a durable receiver recovery-point transaction; this implementation
+// does not provide that guarantee and therefore is not an OpStream adapter.
+class StreamSync {
 public:
     enum class StreamType { AppendOnly, AnchorKeyed };
 
@@ -51,8 +53,8 @@ public:
     void start();
     void register_stream(const std::string& name, StreamType type);
 
-    // OpStream::push override — constructs StreamEntry internally
-    void push(const std::string& stream_name, const std::string& payload) override;
+    // Legacy push — constructs StreamEntry internally.
+    void push(const std::string& stream_name, const std::string& payload);
 
     // Existing low-level push — takes a fully populated StreamEntry
     void push(const std::string& stream, const StreamEntry& entry);
@@ -61,7 +63,7 @@ public:
 
     const std::optional<Error>& last_error() const { return m_last_error; }
     /// Codec failures retain the entire uncommitted batch and freeze its reader.
-    /// P07/L03 replace this containment with transactional retry/recovery.
+    /// P07 defines the new contract; L03/L08 must implement it for this adapter.
     const std::vector<std::string>& blocked_records(const std::string& stream,
                                                    const std::string& peer) const;
 
@@ -78,10 +80,10 @@ public:
         std::function<void(const std::string& stream_name,
                            uint16_t           producer_replica_id,
                            const std::string& payload)>;
-    void set_on_inbound(InboundCallback cb) override;
+    void set_on_inbound(InboundCallback cb);
 
-    uint64_t lowest_peer_acked_lamport() const override;
-    void set_on_ack_update(std::function<void(uint64_t)> cb) override;
+    uint64_t lowest_peer_acked_lamport() const;
+    void set_on_ack_update(std::function<void(uint64_t)> cb);
 
 private:
     struct StreamState {

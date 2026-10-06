@@ -454,6 +454,10 @@ add_executable(tst_opstream_interface tests/tst_opstream_interface.cpp)
 target_link_libraries(tst_opstream_interface PRIVATE CollabText::TestSupport Qt6::Test)
 add_test(NAME tst_opstream_interface COMMAND tst_opstream_interface)
 
+add_executable(tst_transport_commit_contract tests/tst_transport_commit_contract.cpp)
+target_link_libraries(tst_transport_commit_contract PRIVATE CollabText::TestSupport Qt6::Test)
+add_test(NAME tst_transport_commit_contract COMMAND tst_transport_commit_contract)
+
 endif() # COLLABTEXT_BUILD_TESTS -- the suites
 
 # ===========================================================================

@@ -1,12 +1,12 @@
 #include "CodecTest.h"
-/// tst_opstream_convergence_mixed.cpp — Mixed Buffer + IdList convergence over OpStream
+/// tst_opstream_convergence_mixed.cpp — Mixed Buffer + IdList convergence over StreamSync
 ///
 /// Models the "document with structure" scenario: one IdList for block ordering
 /// and one CrdtEngine per block for text content.  Both stream types travel over
-/// the same OpStream pair (StreamSync), and all four convergence properties are
+/// the same legacy StreamSync pair, and all four convergence properties are
 /// verified:
 ///
-///   - mixed_idlist_and_buffer_convergence_over_opstream:
+///   - mixed_idlist_and_buffer_convergence_over_streamsync:
 ///       Sequential structural + text ops — both streams arrive at replica 2,
 ///       which appends text, and the edit propagates back to replica 1.
 ///
@@ -19,7 +19,6 @@
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/Operations.h>
 #include "transport/StreamSync.h"
-#include <collabtext/OpStream.h>
 #include <collabtext/IdListOperations.h>
 #include <collabtext/Serialization.h>
 #include "crdt/IdList.h"
@@ -46,7 +45,7 @@ private slots:
     // Sync delivers replica 2's text edit back to replica 1.
     // Both list1/list2 and engine1/engine2 must converge.
 
-    void mixed_idlist_and_buffer_convergence_over_opstream() {
+    void mixed_idlist_and_buffer_convergence_over_streamsync() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         std::filesystem::path shared = tmp.path().toStdString();
@@ -61,8 +60,8 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
         IdList list1(CollabText::Test::test_counter(1));
         IdList list2(CollabText::Test::test_counter(2));
@@ -166,8 +165,8 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
         IdList list1(CollabText::Test::test_counter(1));
         IdList list2(CollabText::Test::test_counter(2));

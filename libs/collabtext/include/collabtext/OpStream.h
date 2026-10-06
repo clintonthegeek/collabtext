@@ -1,109 +1,170 @@
-/// OpStream.h — Transport-agnostic op delivery boundary for collabtext
+/// OpStream.h — transactional, transport-agnostic operation delivery contract.
 ///
-/// This header defines the public `OpStream` interface introduced under the
-/// OpStream extraction (Task 2.1).  See also:
-///   docs/handoff/2026-05-08-d5-joint-design-outcomes.md  §"Public type-surface form"
-///   docs/specs/2026-05-08-d5-negotiation-response.md
-///
-/// ─── Ordering contract ───────────────────────────────────────────────────────
-///
-///   An implementation MUST deliver inbound entries within a single stream in
-///   the order they were pushed by a given producer.  Entries from different
-///   streams MAY be reordered.  Entries from different producers within the
-///   same stream MAY be reordered.
-///
-/// ─── Stream naming ───────────────────────────────────────────────────────────
-///
-///   `stream_name` identifies which CRDT stream an op belongs to, e.g.:
-///     "buffer:doc"       — Buffer ops for a named document
-///     "idlist:structure" — IdList structural ops
-///
-///   The `producer_replica_id` in the inbound callback identifies the replica
-///   that pushed the payload.  The `payload` is raw encoded op bytes (UTF-8
-///   JSON from encode_operation / encode_idlist_operation).
-///
-/// ─── Method contract (mirrors Markoff's ITransport four-method form) ─────────
-///
-///   push()                   — send an op onto a named stream
-///   set_on_inbound()         — register a callback for received ops
-///   lowest_peer_acked_lamport() — cached receipt summary; never does I/O
-///   set_on_ack_update()      — register a callback for acknowledgement advances
-///
-/// ─── Usage ───────────────────────────────────────────────────────────────────
-///
-///   #include <collabtext/OpStream.h>
-///
-///   class MyTransport : public CollabText::OpStream {
-///   public:
-///       void push(const std::string& stream_name,
-///                 const std::string& payload) override { /* … */ }
-///       void set_on_inbound(
-///           std::function<void(const std::string&, uint16_t, const std::string&)> cb)
-///           override { m_inbound = std::move(cb); }
-///       uint64_t lowest_peer_acked_lamport() const override { return m_fence; }
-///       void set_on_ack_update(std::function<void(uint64_t)> cb) override
-///           { m_ack_cb = std::move(cb); }
-///   private:
-///       std::function<void(const std::string&, uint16_t, const std::string&)> m_inbound;
-///       std::function<void(uint64_t)> m_ack_cb;
-///       uint64_t m_fence = 0;
-///   };
-///
+/// The durable receipt contract is specified in docs/specs/vnext-transport.md.
+/// A successful transport receipt is per stream, epoch and producer, and never
+/// serves as semantic garbage-collection authorization.
 #pragma once
 
+#include <collabtext/ActorId.h>
+
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace CollabText {
 
-/// Transport-agnostic op delivery boundary.
-///
-/// Implementations deliver serialised CRDT operations between replicas.
-/// `StreamSync` (the file-backed reference implementation) implements this
-/// interface.  Consumers that need direct-channel transports (TCP, WebRTC)
-/// provide their own implementations.
-///
-/// See ordering contract in the file-level comment above.
+struct StreamScope {
+    StreamId stream; ///< 1-128 ASCII bytes: letters, digits, underscore, hyphen, period, colon.
+    uint64_t epoch = 0; ///< Nonzero membership epoch.
+
+    [[nodiscard]] bool operator==(const StreamScope&) const = default;
+};
+
+/// Stable identity of one transport envelope. Sequence is independent of the
+/// CRDT operation counter and contiguous within (stream, epoch, producer).
+struct DeliveryToken {
+    StreamId stream;
+    uint64_t epoch = 0;
+    ActorId producer;
+    uint64_t sequence = 0;
+
+    [[nodiscard]] bool operator==(const DeliveryToken&) const = default;
+};
+
+struct OutboundDelivery {
+    DeliveryToken token;
+    std::string payload; // Opaque bytes; transports preserve them exactly.
+};
+
+struct InboundDelivery {
+    DeliveryToken token;
+    std::string payload;
+};
+
+enum class PushDurability {
+    queued,  ///< Accepted in volatile transport memory; process crash may lose it.
+    durable  ///< Recoverable sender-side copy exists before push succeeds.
+};
+
+/// A durable application recovery point associated with a committed delivery.
+class RecoveryPoint {
+public:
+    enum class Kind { replay_from_beginning, checkpoint };
+
+    [[nodiscard]] static RecoveryPoint replay_from_beginning() {
+        return RecoveryPoint(Kind::replay_from_beginning, {});
+    }
+    [[nodiscard]] static RecoveryPoint checkpoint(std::string id) {
+        return RecoveryPoint(Kind::checkpoint, std::move(id));
+    }
+
+    [[nodiscard]] Kind kind() const noexcept { return m_kind; }
+    [[nodiscard]] std::string_view checkpoint_id() const noexcept { return m_checkpoint_id; }
+    [[nodiscard]] bool valid() const noexcept {
+        return m_kind == Kind::replay_from_beginning || !m_checkpoint_id.empty();
+    }
+
+private:
+    RecoveryPoint(Kind kind, std::string id)
+        : m_kind(kind), m_checkpoint_id(std::move(id)) {}
+    Kind m_kind;
+    std::string m_checkpoint_id;
+};
+
+class DeliveryDecision {
+public:
+    enum class Kind { commit, retry, quarantine };
+
+    [[nodiscard]] static DeliveryDecision commit(RecoveryPoint point) {
+        return DeliveryDecision(Kind::commit, std::move(point), {});
+    }
+    [[nodiscard]] static DeliveryDecision retry() {
+        return DeliveryDecision(Kind::retry, std::nullopt, {});
+    }
+    [[nodiscard]] static DeliveryDecision quarantine(Error reason) {
+        return DeliveryDecision(Kind::quarantine, std::nullopt, std::move(reason));
+    }
+
+    [[nodiscard]] Kind kind() const noexcept { return m_kind; }
+    [[nodiscard]] const std::optional<RecoveryPoint>& recovery_point() const noexcept {
+        return m_recovery_point;
+    }
+    [[nodiscard]] const Error& error() const noexcept { return m_error; }
+
+private:
+    DeliveryDecision(Kind kind, std::optional<RecoveryPoint> recovery_point, Error error)
+        : m_kind(kind), m_recovery_point(std::move(recovery_point)), m_error(std::move(error)) {}
+    Kind m_kind;
+    std::optional<RecoveryPoint> m_recovery_point;
+    Error m_error;
+};
+
+using InboundHandler = std::function<DeliveryDecision(const InboundDelivery&)>;
+using SubscriptionId = uint64_t;
+
+/// A sender-side snapshot of a remote receiver's contiguous committed frontier.
+/// The key is (peer, stream, epoch, producer); `through` names the last token.
+struct StreamReceipt {
+    ActorId peer;
+    DeliveryToken through;
+
+    [[nodiscard]] bool operator==(const StreamReceipt&) const = default;
+};
+using ReceiptHandler = std::function<void(const StreamReceipt&)>;
+
+struct PollBudget {
+    size_t max_records = 256;
+    size_t max_payload_bytes = 1024 * 1024;
+};
+
+struct PollReport {
+    size_t offered = 0;
+    size_t committed = 0;
+    size_t retried = 0;
+    size_t quarantined = 0;
+    size_t payload_bytes = 0;
+    bool budget_limited = false;
+};
+
+/// Abstract transport contract. Implementations own callbacks and invoke them
+/// synchronously from poll(), without holding internal locks.
 class OpStream {
 public:
     virtual ~OpStream() = default;
 
-    /// Push serialised op bytes onto a named stream.
-    ///
-    /// \param stream_name   Identifies the CRDT stream (e.g. "buffer:doc").
-    /// \param payload       Encoded op bytes (UTF-8 JSON).
-    virtual void push(const std::string& stream_name,
-                      const std::string& payload) = 0;
+    /// Register the current membership epoch for a stream. Unknown streams are
+    /// never created implicitly by any other method.
+    [[nodiscard]] virtual Result<void> register_stream(const StreamScope& scope) = 0;
 
-    /// Register a callback fired for each inbound op on a stream.
-    ///
-    /// Callback parameters:
-    ///   stream_name        — which stream the op arrived on
-    ///   producer_replica_id — the replica that pushed this payload
-    ///   payload            — encoded op bytes (UTF-8 JSON)
-    ///
-    /// Only one callback is active at a time; calling this again replaces
-    /// the previous registration.
-    virtual void set_on_inbound(
-        std::function<void(const std::string& /*stream_name*/,
-                           uint16_t          /*producer_replica_id*/,
-                           const std::string& /*payload*/)> cb) = 0;
+    /// Push using the caller's stable envelope token. `durable` success means
+    /// recoverable sender-side bytes; it says nothing about peer receipt.
+    [[nodiscard]] virtual Result<void> push(const OutboundDelivery& delivery,
+                                            PushDurability durability) = 0;
 
-    /// Return the lowest Lamport counter all enrolled peers have acked from us.
-    ///
-    /// This is a transport receipt summary, not authorization to reclaim state.
-    /// It does not establish per-stream durability, membership, or release of
-    /// retained undo/redo, anchor, and checkpoint obligations. The value is
-    /// cached from the last poll cycle and never performs I/O. Returns 0 if no
-    /// peers are enrolled.
-    virtual uint64_t lowest_peer_acked_lamport() const = 0;
+    /// One inbound handler may be active for a scope at a time.
+    [[nodiscard]] virtual Result<SubscriptionId> subscribe(
+        const StreamScope& scope, InboundHandler handler) = 0;
 
-    /// Register a callback fired when lowest_peer_acked_lamport() advances.
-    ///
-    /// Only one callback is active at a time; calling this again replaces
-    /// the previous registration.
-    virtual void set_on_ack_update(std::function<void(uint64_t /*new_fence*/)> cb) = 0;
+    /// Observe receipt advances. This callback cannot authorize collection.
+    [[nodiscard]] virtual Result<SubscriptionId> subscribe_receipts(
+        ReceiptHandler handler) = 0;
+
+    /// Remove either kind of subscription. Idempotent for an already removed id.
+    [[nodiscard]] virtual Result<void> unsubscribe(SubscriptionId id) = 0;
+
+    /// Offer bounded inbound work for one known scope. Without a handler this is
+    /// idle and consumes nothing. `retry` and `quarantine` never advance receipts.
+    [[nodiscard]] virtual Result<PollReport> poll(
+        const StreamScope& scope, PollBudget budget = {}) = 0;
+
+    /// Snapshot committed frontiers. The query performs no I/O.
+    [[nodiscard]] virtual Result<std::vector<StreamReceipt>> receipts(
+        const StreamScope& scope) const = 0;
 };
 
 } // namespace CollabText

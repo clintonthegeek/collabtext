@@ -2,8 +2,9 @@
 
 **Status:** binding design-gate artifact (P01). This is the API that P02–P08, the
 L/S/G/A/X/E phases, and the installed examples in E03 are written against.
-**Paired with:** [vnext-protocol.md](vnext-protocol.md) for the wire and lifecycle
-rules these signatures implement.
+**Paired with:** [vnext-protocol.md](vnext-protocol.md) for wire and lifecycle
+rules, and [vnext-transport.md](vnext-transport.md) for transactional transport
+receipt and commit semantics.
 **Authority:** [vnext-design-constraints.md](vnext-design-constraints.md) (D01).
 
 The code in this document gives **target signatures**: most types do not exist
@@ -412,33 +413,30 @@ The rules, stated once for every callback in the library:
 ```cpp
 class OpStream {
 public:
-    virtual Result<void> push(std::string_view stream, std::string_view payload) = 0;
-    virtual void set_on_inbound(InboundCallback) = 0;   // replacement semantics
-    virtual void clear_on_inbound() = 0;
-
-    // Per-stream receipt summary. Receipt is not application and never
-    // authorizes reclamation.
-    virtual std::vector<StreamAck> receipts() const = 0;
-    virtual void set_on_receipts_update(ReceiptsCallback) = 0;
-};
-
-enum class PollOutcomeKind { progress, idle, quarantined, coverage_gap, error };
-
-class PollOutcome {
-public:
-    [[nodiscard]] PollOutcomeKind kind() const noexcept;
-    [[nodiscard]] std::size_t applied() const noexcept;      // operations applied
-    [[nodiscard]] std::size_t quarantined_records() const noexcept;
-    [[nodiscard]] std::optional<Error> error() const noexcept;
-    [[nodiscard]] std::optional<RecoveryPoint> frontier() const noexcept;
+    virtual Result<void> register_stream(const StreamScope&) = 0;
+    virtual Result<void> push(const OutboundDelivery&, PushDurability) = 0;
+    virtual Result<SubscriptionId> subscribe(const StreamScope&, InboundHandler) = 0;
+    virtual Result<SubscriptionId> subscribe_receipts(ReceiptHandler) = 0;
+    virtual Result<void> unsubscribe(SubscriptionId) = 0;
+    virtual Result<PollReport> poll(const StreamScope&, PollBudget = {}) = 0;
+    virtual Result<std::vector<StreamReceipt>> receipts(const StreamScope&) const = 0;
 };
 ```
 
-`lowest_peer_acked_lamport()` is **replaced** by per-stream receipts, because a
-scalar across streams is the coverage error described in
-[vnext-protocol.md](vnext-protocol.md) §1.2. `PollOutcome` reports quarantine and
-coverage gaps as outcomes rather than as silence, which is what F5/F6/F10 all
-needed and did not have.
+Every envelope has a caller-stable
+`DeliveryToken {stream, epoch, producer, sequence}`. The sequence is independent
+of the CRDT operation counter. Inbound handlers return `commit(recovery_point)`,
+`retry()`, or `quarantine(error)`; only `commit` after durable application state
+can advance a per-stream/per-epoch/per-producer receipt. `queued` and `durable`
+push modes distinguish volatile acceptance from recoverable sender-side bytes.
+See [vnext-transport.md](vnext-transport.md) for token ordering, budgets,
+subscription lifetime, retry/rejection behavior, and the exact durability
+boundary. Receipts are transport progress evidence, never GC certificates.
+
+The internal file-backed `StreamSync` does not implement this new contract yet.
+Its observed-operation scalar is not a durable receipt; L03/L08 must supply
+recoverable receiver state before that adapter can claim the transactional
+interface.
 
 ## 9. Breaks from today's API
 
@@ -613,8 +611,12 @@ buffer.clear_on_change();
 ### 10.6 Transport receipts are not authority
 
 ```cpp
-for (const auto& ack : stream.receipts()) {
-    log(ack.stream, ack.actor, ack.counter);   // per stream, per actor
+auto snapshot = stream.receipts(scope);
+if (snapshot) {
+    for (const auto& receipt : snapshot.value()) {
+        log(receipt.peer, receipt.through.stream, receipt.through.producer,
+            receipt.through.sequence);
+    }
 }
 // Deliberately absent: anything that would treat a receipt as permission to
 // reclaim state. Reclamation is authorized by a validated certificate (G06).
@@ -624,9 +626,9 @@ for (const auto& ack : stream.receipts()) {
 
 Merge ordering (S02), reclamation eligibility (G01), snapshot and recovery
 layouts (L03/G04), and the Qt adapter (A03) are specified by their own tasks.
-Where this guide names a type they will define — `RecoveryPoint`, `StreamAck`,
-`ChangeInfo`, `Affinity`, `TextRange`, `Anchor` — it fixes the *shape of the
-contract* (what it means, when it may fail, who owns it), not the internals.
+Where this guide names a type they will define — `ChangeInfo`, `Affinity`,
+`TextRange`, `Anchor` — it fixes the *shape of the contract* (what it means,
+when it may fail, who owns it), not the internals.
 Amendments to this guide are amendments to the plan and update both documents.
 
 
