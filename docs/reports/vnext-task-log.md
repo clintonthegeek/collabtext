@@ -2290,3 +2290,76 @@ Evidence: `build-consumer-verify/debug-baseline-20261006T010146Z-2`,
 `docs/reports/vnext-consumer-probe-baseline.md`.
 
 **Next: W03 strict installed live-position probes.**
+
+## 2026-10-06 sprint — W03 complete: strict installed live-position gate
+
+```text
+Task: W03
+Status: complete
+Baseline: ad0ae59
+Implementation commits: (this commit)
+Scope: tests/consumer-smoke/wave-contract (WP5 two-process replay, phase-aware
+  runner), tests/consumer-smoke/markdown-contract (new independent consumer),
+  tests/consumer-smoke/CMakeLists.txt, tools/verify-consumer-package.sh
+  (--gate live plus retained-evidence assertions), .github/workflows/
+  consumer-alpha.yml, capability manifest v6, report and specs.
+Regression: a wrong strict expectation injected into cases.json fails
+  consumer_wave_contract and the gate exits 3; the retained-evidence checker fed
+  a baseline result refuses it; wrong Markdown expectation and injected SIGABRT
+  each exit 1 with signal 6 recorded.
+Verification:
+  tools/verify-consumer-package.sh --mode debug   --gate live --components core
+  tools/verify-consumer-package.sh --mode release --gate live --components core
+  tools/verify-consumer-package.sh --mode asan    --gate live --components core
+  All 3/3 CTest, 16/16 strict wave rows of 18, 4/4 Markdown, manifest v6.
+  W02 baseline gate re-checked at its own 2/2 contract.
+Artifacts: build-consumer-verify/debug-live-20261006T015403Z-347884,
+  build-consumer-verify/release-live-20261006T015432Z-348930,
+  build-consumer-verify/asan-live-20261006T015505Z-349802,
+  /tmp/opencode/w03-live-negative.log,
+  docs/reports/vnext-consumer-live-position-gate.md
+API/store changes: no public API or format change. ALPHA_CAPABILITIES.md v6 adds
+  the installed strict probe capability and narrows the crash-recovery row.
+Known limits: no baseline allowlist entry removed — WP6 stays the exact aXbYcZ
+  known failure (S02/S03) and durable pins stay unsupported (S05/G01/G06/G08).
+  The no-GC row is containment evidence, not certified reclamation. The
+  two-process replay is codec/token evidence, not L08 crash recovery. CTPT/1 is
+  experimental and unpublished. Remote CI pending branch publication.
+Next ready tasks: E07a, S02
+```
+
+The strict set is WP1–WP5/WP7 plus the WP8 no-GC containment smoke: 16 rows, and
+a strict row that is not a pass fails the gate rather than being reclassified.
+The complete 18-row matrix and both baseline exceptions stay in the results, so
+the pending work is visible instead of absent.
+
+WP5 gained what the probe actually asks for. One process mints a left boundary, a
+right boundary, a strict attachment and a list element and persists six records
+through the fixture's own length-prefixed file; a second process builds three new
+engines — two physically independent `CrdtEngine` instances and one
+`IdListEngine` — replays the recorded CTBO/CTLO operations, takes a remote edit,
+and resolves the *original* token bytes after every input frame has been
+overwritten. Observed `aXb` in both replicas at `[1,2,2]` and `list_index=0`.
+Nothing is reminted after reopen.
+
+The Markdown consumer is deliberately a second, independent composition: it owns
+the Markdown bytes, a sibling block map and an optional transport, and shares no
+adapter, support header or expectation table with the Wave-shaped fixture. It
+round-trips 51 exact bytes including a non-ASCII scalar, assembles a peer purely
+from routed opaque frames, routes exactly one frame per edit while leaving an
+unattached document's edits off the wire, and shows a collapsed caret at offset 5
+beside a strict attachment that is `Stale`/`detached` with no offset.
+
+Worth recording: the exact-comparison runner caught a real bug in this task's own
+new worker — the Markdown `exact_bytes` case emitted an unclosed JSON array. It
+read as plausible output when eyeballed and was only caught because the
+expectation lives outside the worker. That is the whole argument for keeping
+expectations hand-written.
+
+CTest passing is not treated as the assertion. After CTest, `--gate live`
+re-reads both retained result files and refuses the run unless the wave result is
+genuinely `gate: live`, covers exactly WP1–WP5/WP7, has every strict row at
+`pass`, agrees with its own recorded counts, and the Markdown gate passed every
+case strictly.
+
+**Next: E07a/E07b alpha preparation, and S02 for ordering repair.**

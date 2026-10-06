@@ -240,7 +240,7 @@ Run installed baseline mode in Debug and Release and compare case coverage; deli
 
 ## W03 — Certify live position probes through an installed consumer adapter
 
-**Status:** see TASKS.json (initially not started)\
+**Status:** complete; see TASKS.json and [live-gate report](../../reports/vnext-consumer-live-position-gate.md)\
 **Depends on:** W02, S04b\
 **Coverage:** F7, R2, R4, R13\
 

@@ -25,6 +25,10 @@ ROUTES = [
     # W01 specifies consumer-probe cases; its fixtures and validator are data and
     # Python, checked by the validator's own --self-test rather than by CTest.
     ('tools/validate-consumer-fixtures.py', ''),
+    # The branch workflow invokes the installed producer/consumer gate, so a change
+    # to it is a packaging change. Left unrouted it fails the whole diff, which is
+    # the correct default: an unknown path must never turn into a docs-only pass.
+    ('.github/workflows/*', PACKAGING),
     ('libs/collabtext/CMakeLists.txt', PACKAGING), ('CMakeLists.txt', PACKAGING),
     ('cmake/*', PACKAGING), ('tests/consumer-smoke/*', PACKAGING),
     ('libs/collabtext/include/*', PACKAGING),
@@ -48,7 +52,7 @@ ROUTES = [
 ]
 PACKAGE_PATHS = ('CMakeLists.txt', 'libs/collabtext/CMakeLists.txt', 'cmake/*',
                  'tests/consumer-smoke/*', 'libs/collabtext/include/*',
-                 'tools/verify-consumer-package.sh')
+                 '.github/workflows/*', 'tools/verify-consumer-package.sh')
 
 
 def route(paths):

@@ -130,3 +130,23 @@ if(CONSUMER_PROBE_GATE STREQUAL "baseline" OR CONSUMER_PROBE_GATE STREQUAL "live
         --output ${CMAKE_CURRENT_BINARY_DIR}/wave-probe-results)
     set_tests_properties(consumer_wave_contract PROPERTIES TIMEOUT 120)
 endif()
+
+# W03's second consumer, live gate only: it is a different composition reaching
+# the same installed library -- Markdown bytes, a sibling block map and an
+# optional transport -- and it shares no adapter, support header or expectation
+# table with the Wave-shaped fixture above. It has no allowlist: every case is a
+# strict pass or the gate fails. Leaving it out of the baseline gate keeps W02's
+# recorded evidence exactly as W02 defined it.
+if(CONSUMER_PROBE_GATE STREQUAL "live")
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_executable(consumer_markdown_probes markdown-contract/markdown.cpp)
+    target_link_libraries(consumer_markdown_probes PRIVATE CollabText::Core)
+    add_test(NAME consumer_markdown_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/markdown-contract/run.py
+        --worker $<TARGET_FILE:consumer_markdown_probes>
+        --cases ${CMAKE_CURRENT_SOURCE_DIR}/markdown-contract/cases.json
+        --revision ${CONSUMER_PRODUCER_REVISION}
+        --mode ${CONSUMER_BUILD_MODE}
+        --output ${CMAKE_CURRENT_BINARY_DIR}/markdown-probe-results)
+    set_tests_properties(consumer_markdown_contract PROPERTIES TIMEOUT 120)
+endif()

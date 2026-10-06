@@ -22,8 +22,8 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 technical acceptance: check the referenced artifacts as well. Packaging
 A01/A02a/A06a, P06a, S01/W01 and S04a are complete. The S04a contract/model
 settles affinity, scope, collapse, strict referent restoration and codec rules.
-P06b codecs and S04b native live positions are complete; continue W02 → W03
-installed probe gates. W02/S02 are
+P06b codecs, S04b native live positions, W02 baseline probes and the W03 strict
+live gate are complete. Continue E07a/E07b preparation and S02/S03; S02 is
 independently ready. A model/fixture pass is not a production capability pass.
 Read [current handoff](../../handoff/2026-10-05-state-at-handoff.md),
 [boundary contract](../../specs/vnext-boundary-semantics.md) and
@@ -148,7 +148,7 @@ cmake --build build-roadmap-consumer -j 2
 ctest --test-dir build-roadmap-consumer --output-on-failure
 ```
 
-A06 extends final certification rather than first creating installation. `tools/verify-consumer-package.sh` is the installed producer/consumer entry point; W02/W03 will add executable baseline/strict probes. Read its implemented --help for exact syntax. The task registry names intended new tests; each creating task must register its executable so verification does not pass with “No tests were found.” The script must fail if a selected regex matches zero tests.
+A06 extends final certification rather than first creating installation. `tools/verify-consumer-package.sh` is the installed producer/consumer entry point; W02's baseline gate and W03's strict live gate are implemented. Read its implemented --help for exact syntax. The task registry names intended new tests; each creating task must register its executable so verification does not pass with “No tests were found.” The script must fail if a selected regex matches zero tests.
 
 ## Randomized test contract (V04)
 
@@ -200,7 +200,7 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir build-roadmap-debug \
   --output-on-failure -E 'tst_benchmark|tst_realistic'
 ```
 
-Early package/probe gates run only implemented capability sets and explicitly record unsupported/known-failure cases. W03 requires strict WP1–WP5/WP7; E05 requires all promised final cases. No unsupported or skipped case is passing feature evidence. The full acceptance run at E05 includes all correctness executables, bounded model/fuzz tests, sanitizer corpus, installed-consumer checks, and selected corrected benchmarks. Expensive benchmark campaigns are not mandatory for every small code change; targeted performance work uses the frozen trace matrix.
+Early package/probe gates run only implemented capability sets and explicitly record unsupported/known-failure cases. W03's strict WP1–WP5/WP7 set is enforced by `--gate live`, which re-reads its own retained results after CTest and refuses a baseline run relabelled live; E05 requires all promised final cases. No unsupported or skipped case is passing feature evidence. The full acceptance run at E05 includes all correctness executables, bounded model/fuzz tests, sanitizer corpus, installed-consumer checks, and selected corrected benchmarks. Expensive benchmark campaigns are not mandatory for every small code change; targeted performance work uses the frozen trace matrix.
 
 ## Invariants that must remain visible
 

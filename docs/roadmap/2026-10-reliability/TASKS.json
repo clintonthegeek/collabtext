@@ -1749,11 +1749,29 @@
     "R13"
    ],
    "gate": null,
-   "status": "not_started",
+   "status": "complete",
+   "baseline_revision": "ad0ae59",
+   "progress": "Strict installed live gate delivered. WP1-WP5/WP7 plus the WP8 no-GC containment smoke are 16 strict rows passing in Debug, Release and installed Core ASan; the complete 18-row matrix and both baseline exceptions are retained. WP5 gained a genuine two-process replay of originally minted tokens resolved in two physically independent text engines and one list engine. A second, independent Markdown consumer (4/4) preserves exact Markdown bytes, demonstrates optional transport routing, and shows caret collapse apart from strict attachment loss.",
    "consumer_requirements": [
     "W1",
     "W2",
     "W6"
+   ],
+   "verification_results": {
+    "debug_core": "--gate live passes 3/3 CTest: consumer_main, the 18-row wave matrix at 16/16 strict, and the Markdown fixture at 4/4, against capability manifest v6. Evidence build-consumer-verify/debug-live-20261006T015403Z-347884.",
+    "release_core": "Same 16/16 strict and 4/4 Markdown observation from a relocated Release install. Evidence build-consumer-verify/release-live-20261006T015432Z-348930.",
+    "asan_core": "Installed Core sanitizer configuration passes the same live gate with leak checking enabled and no suppression. Evidence build-consumer-verify/asan-live-20261006T015505Z-349802.",
+    "retained_evidence_assertion": "CTest passing is not the assertion: after CTest the script re-reads both result files and refuses a baseline run relabelled live, a strict probe missing from the set, a strict row that is not a pass, a count that disagrees with its own rows, or a missing Markdown result.",
+    "negatives": "A wrong strict expectation fails the wave contract and the gate exits 3 (/tmp/opencode/w03-live-negative.log); the retained-evidence checker fed a baseline result refuses it; a wrong Markdown expectation and an injected SIGABRT each exit 1 with signal 6 recorded. The runner also caught a real defect in this task's own new worker (an unclosed JSON array) that had looked plausible when eyeballed.",
+    "workflow": ".github/workflows/consumer-alpha.yml runs baseline then the strict live gate for Debug/Release Core, and the live gate with Core+Qt when Qt >= 6.8 is discoverable. Local YAML parse and shell syntax checks pass; remote execution stays pending until the branch is pushed.",
+    "limits": "No baseline allowlist entry was removed: WP6 stays the exact aXbYcZ known failure under S02/S03 and durable pins stay unsupported under S05/G01/G06/G08. The no-GC row is containment evidence, not certified reclamation. Fresh-process replay is codec/token evidence, not L08 crash recovery. CTPT/1 remains experimental and unpublished. No benchmarks ran."
+   },
+   "artifacts": [
+    "docs/reports/vnext-consumer-live-position-gate.md",
+    "build-consumer-verify/debug-live-20261006T015403Z-347884",
+    "build-consumer-verify/release-live-20261006T015432Z-348930",
+    "build-consumer-verify/asan-live-20261006T015505Z-349802",
+    "/tmp/opencode/w03-live-negative.log"
    ]
   },
   {

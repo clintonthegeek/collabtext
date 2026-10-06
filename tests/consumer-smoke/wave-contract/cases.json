@@ -325,6 +325,41 @@
       }
     },
     {
+      "id": "fresh_process_original_token_replay",
+      "worker": "mint_replay",
+      "phases": [
+        "mint_replay",
+        "replay"
+      ],
+      "probe": "WP5",
+      "fixture": "wp5-token-codec",
+      "capability": "position_codec",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "text": "aXb",
+        "peer_text": "aXb",
+        "replicas": [
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        "list_index": 0,
+        "operations_replayed": 2,
+        "original_bytes": true
+      }
+    },
+    {
       "id": "concurrent_paste_passages_contiguous",
       "worker": "split_paste",
       "probe": "WP6",

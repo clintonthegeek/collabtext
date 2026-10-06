@@ -2,7 +2,9 @@
 #include <csignal>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <sstream>
+#include <vector>
 using namespace Consumer;
 namespace {
 std::string quote(std::string_view value) {
@@ -27,6 +29,82 @@ uint32_t usable_offset(const Resolution& p) {
 std::string token(Block& block, uint32_t offset, Affinity affinity=Affinity::left, bool strict=false) {
     if(strict) return checked(encode_position(checked(block.engine->attachment_at(offset,affinity,ReferentSide::following))));
     return checked(encode_position(checked(block.engine->boundary_at(offset,affinity))));
+}
+// Consumer-owned persistence for WP5's reopen step: length-prefixed records
+// under a magic header. Nothing here is engine API and nothing is a store --
+// the only claim is that bytes written by one process are readable by another.
+constexpr std::string_view kBundleMagic = "MKB1";
+void write_bundle(const std::string& path, const std::vector<std::string>& records) {
+    std::ofstream file(path,std::ios::binary);
+    file.write(kBundleMagic.data(),static_cast<std::streamsize>(kBundleMagic.size()));
+    for(const auto& record : records) {
+        const auto size=static_cast<uint32_t>(record.size());
+        for(int n=3;n>=0;--n) file.put(static_cast<char>(size>>(n*8)));
+        file.write(record.data(),static_cast<std::streamsize>(record.size()));
+    }
+    file.flush();
+    require(static_cast<bool>(file),"bundle write failed");
+}
+std::vector<std::string> read_bundle(const std::string& path) {
+    std::ifstream file(path,std::ios::binary);
+    const std::string bytes((std::istreambuf_iterator<char>(file)),{});
+    require(std::string_view(bytes).starts_with(kBundleMagic),"bundle magic missing");
+    std::vector<std::string> out; size_t at=kBundleMagic.size();
+    while(at<bytes.size()) {
+        require(bytes.size()-at>=4 && out.size()<16,"truncated bundle record header");
+        uint32_t size=0; for(int n=0;n<4;++n) size=(size<<8)|static_cast<unsigned char>(bytes[at++]);
+        require(size<=(8u<<20) && size<=bytes.size()-at,"truncated bundle record");
+        out.emplace_back(bytes.substr(at,size)); at+=size;
+    }
+    return out;
+}
+// Phase one. Mints in this process and persists only bytes; nothing about the
+// live engines crosses into the replay process but the file.
+std::string mint_replay(const std::string& path) {
+    Document d("doc",1); auto& b=d.add("body");
+    b.engine->insert(0,"ab");
+    require(b.emitted.size()==1,"expected exactly one seeded text operation");
+    auto a=list(); auto inserted=checked(a->try_insert_after(Crdt::Anchor::min(),UINT64_MAX));
+    const std::vector<std::string> records{
+        b.emitted[0],
+        token(b,1), token(b,1,Affinity::right), token(b,1,Affinity::right,true),
+        checked(Crdt::encode_idlist_operation(inserted)),
+        checked(encode_position(checked(a->element_of(UINT64_MAX))))};
+    write_bundle(path,records);
+    return "{\"records\":"+std::to_string(records.size())+",\"tokens\":3}";
+}
+// Phase two, in a fresh process. Builds its own engines, replays the recorded
+// operations, takes a remote edit, and resolves the *original* token bytes in
+// two physically independent text engines plus one list engine.
+std::string replay(const std::string& path) {
+    auto records=read_bundle(path);
+    require(records.size()==6,"unexpected bundle record count");
+    auto replica=checked(CrdtEngine::create(std::make_shared<Counter>(9),{"doc","body",Primitive::text,1}));
+    auto peer=checked(CrdtEngine::create(std::make_shared<Counter>(2),{"doc","body",Primitive::text,1}));
+    auto base=checked(Crdt::decode_operation(records[0]));
+    require(replica->applyRemoteOp(base),"seed operation refused by replica");
+    require(peer->applyRemoteOp(base),"seed operation refused by peer");
+    Crdt::Operation edit; peer->setOnLocalOp([&](const auto& op){edit=op;});
+    peer->insert(1,"X");
+    const auto wire=checked(Crdt::encode_operation(edit));
+    require(replica->applyRemoteOp(checked(Crdt::decode_operation(wire))),"remote edit refused");
+    auto elements=checked(IdListEngine::create(std::make_shared<Counter>(9),{"doc","structure",Primitive::list,1}));
+    require(elements->apply_ops({checked(Crdt::decode_idlist_operation(records[4]))})[0].kind()==ApplyOutcomeKind::applied,"list operation refused");
+    const auto left=checked(decode_position_as<TextBoundary>(records[1]));
+    const auto right=checked(decode_position_as<TextBoundary>(records[2]));
+    const auto strict=checked(decode_position_as<TextAttachment>(records[3]));
+    const auto element=checked(decode_position_as<ListElement>(records[5]));
+    // Every input frame is destroyed before the first resolve: decoded values
+    // own their data, so a token that still worked cannot have been borrowed.
+    for(auto& bytes : records) bytes.assign(bytes.size(),'!');
+    const auto a=checked(replica->resolve(left)),b=checked(replica->resolve(right)),c=checked(replica->resolve(strict));
+    const auto p=checked(peer->resolve(left)),q=checked(peer->resolve(right)),r=checked(peer->resolve(strict));
+    const auto index=checked(elements->resolve(element));
+    return std::string("{\"text\":")+quote(replica->text())+",\"peer_text\":"+quote(peer->text())+
+        ",\"replicas\":[["+std::to_string(a.byte_offset)+","+std::to_string(b.byte_offset)+","+std::to_string(c.byte_offset)+"],["+
+        std::to_string(p.byte_offset)+","+std::to_string(q.byte_offset)+","+std::to_string(r.byte_offset)+"]]"+
+        ",\"list_index\":"+std::to_string(index.element_index)+
+        ",\"operations_replayed\":2,\"original_bytes\":true}";
 }
 std::string run(const std::string& name) {
     Document d("doc",1); auto& b=d.add("body"); auto& e=*b.engine;
@@ -154,10 +232,15 @@ std::string run(const std::string& name) {
 }
 }
 int main(int argc,char** argv) {
-    if(argc!=2) return 1;
-    if(std::string(argv[1])=="abnormal") { std::raise(SIGABRT);return 99; }
+    if(argc<2 || argc>3) return 1;
+    const std::string name=argv[1];
+    const bool phased=name=="mint_replay" || name=="replay";
+    if(phased && argc!=3) { std::cerr<<"a bundle path is required for "<<name<<'\n';return 1; }
+    if(!phased && argc!=2) { std::cerr<<name<<" takes no bundle path\n";return 1; }
+    if(name=="abnormal") { std::raise(SIGABRT);return 99; }
     try {
-        std::cout<<"{\"schema\":\"collabtext-installed-worker/1\",\"case\":"<<quote(argv[1])<<",\"observed\":"<<run(argv[1])<<"}\n";
+        const std::string observed=phased ? (name=="mint_replay" ? mint_replay(argv[2]) : replay(argv[2])) : run(name);
+        std::cout<<"{\"schema\":\"collabtext-installed-worker/1\",\"case\":"<<quote(name)<<",\"observed\":"<<observed<<"}\n";
         return 0;
     } catch(const std::exception& error) { std::cerr<<error.what()<<'\n';return 2; }
 }

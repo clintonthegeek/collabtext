@@ -13,12 +13,12 @@ W1–W6 consumer cases.
 
 ## Where the work is, as of 2026-10-05
 
-**Done:** V01–V08, D01, P01–P06b, L01, S01, W01, S04a/S04b and packaging
+**Done:** V01–V08, D01, P01–P06b, L01, S01, W01–W03, S04a/S04b and packaging
 A01/A02a/A06a. Registry count: 72. S01/W01 are validated desired histories and
 probe fixtures, not production F7/F8 fixes. P06a's final operation-opacity step
 has passed affected Debug/Release/sanitizer and installed-consumer checks.
 
-**Continue W03**, installed strict live-position probes.
+**Continue E07a/E07b preparation and S02/S03.**
 P06b and S04b are complete: checked versioned operation/gap codecs and native
 scoped position/CTPT v1 APIs pass Debug/Release/leak-enabled sanitizer and
 installed-package checks. S04b has 1,050 text/550 list native/model resolutions
@@ -26,10 +26,12 @@ and original-token fresh-process replay. No old API/format compatibility require
 
 W02 is complete: the installed consumer baseline has 17 exact cases, 15 passes,
 one WP6 known failure and one WP8 unsupported capability in both Debug and
-Release. Finish W03 on the critical path, then E07a/E07b preparation and S02/S03.
-Token v1 is experimental and
-unpublished. Ordering, store recovery, persistent undo and durable pins remain
-pending; do not claim full F7/F8 repair. Follow actual registry dependencies.
+Release. W03 is complete: `--gate live` holds WP1-WP5/WP7 plus the no-GC
+containment smoke strictly in Debug, Release and installed ASan, adds a genuine
+two-process token replay, and runs a second independent Markdown consumer (4/4).
+Ordering, store recovery, persistent undo and durable pins remain pending; do not
+claim full F7/F8 repair. Token v1 is experimental and unpublished. Follow actual
+registry dependencies.
 
 ## Read this before trusting a green run
 

@@ -264,3 +264,21 @@ installed manifest agreeing that pins are unimplemented. Those results are not
 feature passes. Any other mismatch, abort, missing fixture or unknown worker
 case fails baseline. W03 adds the stricter installed live set and fresh-process
 replay; real storage recovery and durable retention remain later gates.
+
+### Installed strict live gate (W03)
+
+`--gate live` certifies WP1-WP5/WP7 plus the WP8 no-GC containment smoke as
+strict installed results through a consumer-owned block map, and runs a second,
+independent Markdown consumer that shares none of that fixture's composition.
+WP5 gained a genuine fresh-process case: one process mints and persists bytes, a
+second process builds three new engines, replays the recorded operations, takes a
+remote edit and resolves the *original* token bytes in two physically independent
+text engines and one list engine. Nothing is reminted after reopen, and the
+recorded frames are overwritten before the first resolve.
+
+The gate keeps the complete eight-probe matrix and both baseline exceptions
+intact. Strict WP1-WP5/WP7 excludes ordering repair (S02/S03) and durable
+pins/reclamation (S05/G-series); the no-GC row is a containment smoke and is
+never certified reclamation. Fresh-process replay is codec and token evidence,
+not L08 crash recovery. Details and evidence are in
+`docs/reports/vnext-consumer-live-position-gate.md`.

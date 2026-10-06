@@ -1,6 +1,6 @@
 # collabtext alpha capability manifest
 
-**Version:** 5
+**Version:** 6
 **Introduced by:** roadmap task A02a
 **Branch:** `roadmap/reliability-v2`
 **Status:** alpha. Not a supported release, and not published. E07a prepares a
@@ -37,6 +37,7 @@ documentation. A capability with no evidence is marked `not implemented`, not
 | Every advertised public header compiles as the first and only library include | **available** | `collabtext_public_headers_core`, `collabtext_public_headers_qt` |
 | The file-backed transport (`StreamSync`) | implemented, **not advertised** | `tst_stream_sync`, `tst_opstream_streamsync` — its header names zstd-reaching segment types, so it is not self-sufficient yet. A06a installed the implemented public surface and left this out rather than export a header that cannot compile alone; splitting those types out of the public header is what would let it ship. |
 | **The installed package.** Component targets, headers, capability manifest and config files, installable and consumable after relocation | **available** | `tools/verify-consumer-package.sh` — installs to prefix A, moves to prefix B, builds a separate consumer against B with Qt/zstd/OpenSSL discovery disabled |
+| **Installed strict position probes.** WP1-WP5/WP7 plus the no-GC containment smoke, through a consumer-owned block map, with a second independent Markdown consumer: exact Markdown bytes, optional transport routing, and caret collapse shown apart from strict attachment loss | **available** | `tools/verify-consumer-package.sh --gate live` — installed `consumer_wave_contract` (16/16 strict cases, 18 rows incl. the pending ones) and `consumer_markdown_contract` (4/4), in Debug, Release and ASan. See `docs/reports/vnext-consumer-live-position-gate.md`. |
 
 ## What is not available, and why
 
@@ -49,7 +50,7 @@ These are stated so a consumer designs around them rather than discovering them.
 | **Ordering repair (F8).** Two peers inserting at the same position interleave character-by-character. Convergent, and wrong for prose. | **not implemented** | S01 specifies, S02 designs, S03 applies. The core smoke asserts the character *multiset* for exactly this reason. |
 | **Typed outcome on the text facade.** `CrdtEngine::applyRemoteOp` returns a bool, so deferred and rejected are indistinguishable. | **partial** | A02 renames it to `apply_remote(...) -> ApplyOutcome`. A02a fixed the worse bug — it used to return true unconditionally, which would have told a retrying caller that a rejected operation succeeded. |
 | **Persistent undo/redo.** Undo is in-memory and does not survive a reopen. | **not implemented** | L06. Consumer requirement R5. |
-| **Crash recovery.** No replay-from-log session exists. A reopened `ReplicaState` knows the counter but not the document. | **not implemented** | L02–L08. |
+| **Crash recovery.** No replay-from-log session exists. A reopened `ReplicaState` knows the counter but not the document. | **not implemented** | L02–L08. The installed fresh-process replay re-reads bytes a consumer persisted itself; it is codec and token evidence, not a recovered store. |
 | **Durable identity for consumers.** A `ReplicaAllocator` exists in the source tree but is not exported or installed. | **partial** | Not part of the installed public surface. A consumer supplies its own `IdentityAllocator` and is responsible for durability. Making `ReplicaAllocator` public is a separate decision, because it means committing to its persistence format. |
 | **Epoch / document / stream on the operation.** An operation carries no epoch, so a receiver cannot check one. | **not implemented** | P07 owns the envelope; L04 owns its persistence. |
 | **GC, pins, checkpoints, reclamation.** | **not implemented, and inert** | G01–G08. `collect_garbage()` and `compact()` return zero and retain everything. **Do not call them expecting reclamation.** |
@@ -99,6 +100,9 @@ the full sweep once per arc — see the verification tiers in
 # The installed package: producer, install to A, move to B, separate consumer
 # against B with Qt/zstd/OpenSSL discovery disabled.
 ./tools/verify-consumer-package.sh --mode release --gate package --components core
+
+# The strict installed position probes and the independent Markdown consumer.
+./tools/verify-consumer-package.sh --mode release --gate live --components core
 
 # The alpha surface on public headers only, no Qt/zstd/hash discovery.
 cmake -S . -B build-alpha \

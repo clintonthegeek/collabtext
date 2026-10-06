@@ -114,9 +114,10 @@ offset. A valid selective undo restoring b makes the **same** token resolve at
 byte 1; redo detaches. This replaces the pending placement/restoration entries.
 The former a/c pair enclosed still-visible b and was not a caret gap.
 [vnext-boundary-semantics.md](vnext-boundary-semantics.md) specifies the rules;
-these choices are tagged roadmap_inference and model-checked, with production
-native implementation complete in S04b; installed certification is W03. WP8's strict token likewise now selects
-the actually deleted b, rather than the surviving a.
+these choices are tagged roadmap_inference and model-checked, with the native
+implementation complete in S04b and installed strict certification delivered by
+W03 (WP1-WP5/WP7 plus the no-GC containment smoke). WP8's strict token likewise
+now selects the actually deleted b, rather than the surviving a.
 
 ## 5. WP3 — Deleted containing block
 
@@ -264,7 +265,9 @@ ordering behaviour, and no evidence that any probe passes. In particular:
   model. Native behavior/token bytes are implemented by S04b; W03 certifies
   their installed adapter and fresh-process replay.
 - No fixture here is an executable regression against production code. W02
-  supplies the executable adapter and result matrix.
+  supplies the executable adapter and result matrix; W03 promotes WP1-WP5/WP7 to
+  a strict installed gate and adds the fresh-process replay and the independent
+  Markdown consumer.
 - Third-party observations are attributed historical measurements, reproduced
   from the consumer's report. They are not re-measured here, and the harnesses
   the report cites could not be located (§ provenance report).

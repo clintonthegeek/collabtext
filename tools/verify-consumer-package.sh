@@ -28,7 +28,11 @@ Usage: tools/verify-consumer-package.sh --mode <debug|release|asan> --gate <pack
                       runner's supported-compiler contract.
   --gate GATE         package  A06a: install, export and an independent consumer.
                       baseline W02:  the eight consumer probes, installed.
-                      live    W03:  the live-position probes, installed, strict.
+                      live    W03:  the strict live-position set (WP1-WP5/WP7
+                               plus the no-GC containment smoke) and the
+                               independent Markdown fixture, installed. Refuses a
+                               baseline run relabelled live, a missing result or
+                               a strict row that is not a pass.
                       final   A06/E05: the complete promised set.
   --components LIST   Comma-separated: core, file-transport, qt. `core` is always
                       included; each other component is added on top.
@@ -163,8 +167,9 @@ finish() {
     python3 - "$output_dir/results.json" "$steps_file" <<PY
 import json, pathlib, sys
 steps = [l for l in pathlib.Path(sys.argv[2]).read_text().splitlines() if l.strip()]
-probe_path = pathlib.Path("$output_dir/consumer-build/wave-probe-results/results.json")
-probes = json.loads(probe_path.read_text()) if probe_path.exists() else None
+def probe(name):
+    path = pathlib.Path("$output_dir/consumer-build") / name / "results.json"
+    return json.loads(path.read_text()) if path.exists() else None
 json.dump({
     "schema": "collabtext-consumer-package-results/1",
     "tool": "tools/verify-consumer-package.sh",
@@ -178,7 +183,8 @@ json.dump({
     "output_dir": "$output_dir",
     "capability_manifest_version": "${manifest_version:-}",
     "steps": steps,
-    "probes": probes,
+    "probes": probe("wave-probe-results"),
+    "markdown_probes": probe("markdown-probe-results"),
     # rc, not step_status: they disagree on the paths that fail before any
     # run_step, and the recorded value has to be the one the caller saw.
     "exit_status": $rc,
@@ -196,14 +202,7 @@ printf 'Root:      %s\nMode:      %s\nGate:      %s (%s)\nComponents: %s\nRevisi
 # Gate dispatch
 # ---------------------------------------------------------------------------
 case "$gate" in
-    package)
-        ;;
-    baseline)
-        ;;
-    live)
-        step_status=4
-        echo "!! --gate live is owned by W03 (strict installed live-position probes) and is not implemented yet." >&2
-        exit 4
+    package|baseline|live)
         ;;
     final)
         step_status=4
@@ -419,6 +418,54 @@ note_step "consumer-links-prefix-b: ok"
 
 run_step consumer-test ctest --test-dir "$consumer_build" --output-on-failure --no-tests=error \
     || { trap - EXIT; finish 3; }
+
+# ---------------------------------------------------------------------------
+# Live gate: CTest is not the whole assertion
+# ---------------------------------------------------------------------------
+# `--gate live` passes its own CTest, so a green run here is only evidence if
+# the retained probe results really are a strict run of the exact set. This
+# re-reads them and refuses anything weaker: a missing result file, a baseline
+# run relabelled live, a strict row that is not a pass, or an absent probe.
+if [[ "$gate" == "live" ]]; then
+    printf '\n=== live: retained probe results must be a strict run of the exact set\n'
+    wave_results="$consumer_build/wave-probe-results/results.json"
+    markdown_results="$consumer_build/markdown-probe-results/results.json"
+    if ! python3 - "$wave_results" "$markdown_results" <<'PY'
+import json, pathlib, sys
+wave_path, markdown_path = map(pathlib.Path, sys.argv[1:3])
+if not wave_path.exists():
+    sys.exit(f"live gate: {wave_path} was not written")
+wave = json.loads(wave_path.read_text())
+if wave.get('gate') != 'live':
+    sys.exit(f"live gate: the retained wave result is gate={wave.get('gate')!r}, not 'live'")
+required = {'WP1', 'WP2', 'WP3', 'WP4', 'WP5', 'WP7'}
+strict = [row for row in wave['cases'] if row['required_strict']]
+probes = {row['probe'] for row in strict}
+if probes - {'WP8'} != required:
+    sys.exit(f"live gate: strict probes are {sorted(probes)}, expected {sorted(required)}")
+weak = [row['case_id'] for row in strict if row['outcome'] != 'pass']
+if weak:
+    sys.exit(f"live gate: strict cases not passing: {weak}")
+if wave['strict_pass_count'] != len(strict) or wave['case_count'] < len(strict):
+    sys.exit('live gate: recorded strict pass count disagrees with its own case rows')
+if wave.get('exit_status') != 0:
+    sys.exit('live gate: the wave probe result is itself nonzero')
+if not markdown_path.exists():
+    sys.exit(f"live gate: {markdown_path} was not written")
+markdown = json.loads(markdown_path.read_text())
+if markdown.get('exit_status') != 0 or markdown['strict_pass_count'] != markdown['case_count']:
+    sys.exit('live gate: the Markdown fixture gate did not pass every case strictly')
+print(f"live gate: wave {wave['strict_pass_count']}/{len(strict)} strict cases "
+      f"({wave['case_count']} rows, manifest v{wave['capability_manifest_version']}); "
+      f"markdown {markdown['strict_pass_count']}/{markdown['case_count']}")
+for row in wave.get('unfinished', []):
+    print(f"live gate: still unfinished {row['probe']} {row['case_id']} -> {row['outcome']} ({row.get('owner')})")
+PY
+    then
+        trap - EXIT; finish 3
+    fi
+    note_step "live-strict-probe-evidence: ok"
+fi
 
 # ---------------------------------------------------------------------------
 # Negative check: an unknown component must be refused

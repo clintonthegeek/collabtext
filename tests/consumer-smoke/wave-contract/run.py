@@ -53,25 +53,38 @@ def main():
         if args.inject_bad_expectation and index == 0:
             expected = {'deliberately_wrong': True}
         worker_case = 'abnormal' if args.inject_abnormal_worker and index == 0 else row['worker']
-        command = [args.worker, worker_case]
+        # A case is one worker invocation, or several. The last phase's stdout is
+        # the observation; earlier phases must also succeed, so "the mint worked"
+        # can never be separated from "the replay worked". An injected abnormal
+        # worker replaces the phases outright rather than prepending to them.
+        phases = ['abnormal'] if worker_case == 'abnormal' else (row.get('phases') or [worker_case])
+        bundle = output / (row['id'] + '.bundle')
+        commands = [[args.worker, phase, str(bundle)] if len(phases) > 1 else [args.worker, phase]
+                    for phase in phases]
         result = dict(case_id=row['id'], probe=row['probe'], capability=row['capability'],
                       formats=row['formats'], seed=specification['seed'], fixture_sha256=digest(fixture),
                       fixture_id=source['id'], expected=expected, observed=None, outcome='error',
-                      producer_revision=args.revision, exit_status=None, signal=None, command=command)
+                      producer_revision=args.revision, phases=[], exit_status=None, signal=None)
         try:
-            child = subprocess.run(command, capture_output=True, text=True, timeout=20, preexec_fn=no_core)
-            result['exit_status'] = child.returncode if child.returncode >= 0 else None
-            result['signal'] = -child.returncode if child.returncode < 0 else None
-            (output / (row['id'] + '.stdout.log')).write_text(child.stdout)
-            (output / (row['id'] + '.stderr.log')).write_text(child.stderr)
-            result['stdout_log'] = row['id'] + '.stdout.log'
-            result['stderr_log'] = row['id'] + '.stderr.log'
-            if child.returncode != 0:
-                result['diagnostic'] = 'worker failed or signalled'
-            else:
+            for phase_index, command in enumerate(commands):
+                child = subprocess.run(command, capture_output=True, text=True, timeout=20, preexec_fn=no_core)
+                phase = dict(name=phases[phase_index], command=command,
+                             exit_status=child.returncode if child.returncode >= 0 else None,
+                             signal=-child.returncode if child.returncode < 0 else None)
+                (output / f"{row['id']}.{phase_index}.stdout.log").write_text(child.stdout)
+                (output / f"{row['id']}.{phase_index}.stderr.log").write_text(child.stderr)
+                result['phases'].append(phase)
+                result['exit_status'] = phase['exit_status']
+                result['signal'] = phase['signal']
+                if phase['exit_status'] != 0:
+                    result['diagnostic'] = f"worker failed or signalled in phase {phase['name']}"
+                    break
                 data = json.loads(child.stdout)
-                if set(data) != {'schema', 'case', 'observed'} or data['schema'] != 'collabtext-installed-worker/1' or data['case'] != worker_case:
-                    raise ValueError('invalid worker result/schema/case')
+                if set(data) != {'schema', 'case', 'observed'} or data['schema'] != 'collabtext-installed-worker/1' \
+                        or data['case'] != phases[phase_index]:
+                    raise ValueError('invalid worker result/schema/phase')
+                if phase_index + 1 < len(commands):
+                    continue
                 observed = data['observed']; result['observed'] = observed
                 if observed == expected:
                     result['outcome'] = 'pass'
@@ -90,6 +103,9 @@ def main():
                         result['diagnostic'] = 'unexpected assertion mismatch'
         except (OSError, ValueError, subprocess.TimeoutExpired) as error:
             result['diagnostic'] = str(error)
+        result['command'] = commands[-1]
+        result['stdout_log'] = f"{row['id']}.{len(commands) - 1}.stdout.log"
+        result['stderr_log'] = f"{row['id']}.{len(commands) - 1}.stderr.log"
         result['required_strict'] = args.gate == 'live' and (row['probe'] in LIVE_PROBES or row['capability'] == 'gc_disabled')
         result['accepted'] = result['outcome'] == 'pass' or (not result['required_strict'] and result['outcome'] in {'known_failure', 'unsupported'})
         # Even live mode retains the complete eight-probe matrix; its pending
@@ -98,13 +114,22 @@ def main():
         print(f"{row['probe']} {row['id']}: {result['outcome']}")
     passed = all(row['accepted'] for row in results)
     strict = [row for row in results if row['required_strict']]
-    if args.gate == 'live' and ({row['probe'] for row in strict} - {'WP8'} != LIVE_PROBES or not strict):
+    # Live mode is a strict gate over an exact probe set: WP1-WP5/WP7 plus the
+    # no-GC containment smoke, nothing substituted, nothing newly skipped. A
+    # missing row fails the gate rather than shrinking the set.
+    if args.gate == 'live' and ({row['probe'] for row in strict} - {'WP8'} != LIVE_PROBES
+                                or not strict
+                                or any(row['outcome'] != 'pass' for row in strict)):
         passed = False
     report = dict(schema='collabtext-installed-probe-results/1', producer_revision=args.revision,
                   mode=args.mode, gate=args.gate, seed=specification['seed'], capability_manifest_version=version,
                   capability_manifest_sha256=digest(args.manifest), case_spec_sha256=digest(args.cases),
                   formats={'position': 'CTPT/1 experimental unpublished', 'text': 'CTBO/1', 'list': 'CTLO/1'},
-                  cases=results, case_count=len(results), strict_pass_count=sum(row['outcome']=='pass' for row in strict),
+                  strict_probes=sorted(LIVE_PROBES), cases=results, case_count=len(results),
+                  strict_case_count=len(strict),
+                  strict_pass_count=sum(row['outcome']=='pass' for row in strict),
+                  unfinished=[{'case_id': row['case_id'], 'probe': row['probe'], 'outcome': row['outcome'],
+                               'owner': row.get('exception_owner')} for row in results if row['outcome'] != 'pass'],
                   exit_status=0 if passed else 1)
     (output / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
     return report['exit_status']
