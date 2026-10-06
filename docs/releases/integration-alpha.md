@@ -25,7 +25,7 @@ Neither tag exists on any remote. Neither release has been published.
 | | |
 |---|---|
 | Package version | `0.2.0-alpha.2` (SemVer prerelease) |
-| **Candidate SHA (position alpha)** | _filled in by the preparation commit; see `docs/reports/vnext-task-log.md` (E07b) and the generated `alpha-candidate.json`_ |
+| **Candidate SHA (position alpha)** | recorded in the generated `build-alpha/*/alpha-candidate.json` for the clean commit verified below |
 | **Candidate SHA (package alpha, superseded)** | `bdbae5c3d310f2388b1d445a254b4ac35474d215` — tag `v0.2.0-alpha.1` proposed and **not created** |
 | Branch | `feat/fuguemax-placement` |
 | Proposed tag | `v0.2.0-alpha.2` — **not created** |
@@ -69,7 +69,26 @@ headers only. It prints `text=aXb byte_offset=1 token_bytes=104`.
 
 ### How the position candidate was verified
 
-_filled in by the preparation commit from the retained run results._
+The final candidate was checked with `tools/verify-consumer-package.sh` in strict
+live mode for Debug, Release, and ASan/UBSan. Each run built and installed Core,
+relocated the install from prefix A to prefix B, compiled a separate consumer
+using only prefix B, and passed all three consumer tests. The live assertions
+passed 16/16 strict Wave cases (18 total result rows, manifest v9) and 4/4
+Markdown cases. WP8 durable pin registration remains explicitly `unsupported`
+and is owned by S05/G01/G06/G08.
+
+The ASan/UBSan run used `LSAN_OPTIONS=detect_leaks=0` because this execution
+environment makes LeakSanitizer report that it cannot run under ptrace. Address
+and undefined-behavior instrumentation remained enabled; this run is not
+evidence of leak checking. Debug and Release were run without that override.
+Retained `results.json` files and complete logs are in
+`build-consumer-verify/e07b-{debug,release,asan}-live[-lsanoff]/`; the generated
+`build-alpha` candidate record names the exact candidate SHA and evidence paths.
+
+`tools/prepare-integration-alpha.sh --gate live` accepted all three retained
+mode results at the same clean candidate revision, checked the CTPT/1 supported
+reader fixture, and staged the install, checksums, and unexecuted publication
+checklist. No tag was created and nothing was published.
 
 ### Why `0.2.0-alpha.2` and not `2.0.0`
 

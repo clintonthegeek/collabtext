@@ -2571,55 +2571,37 @@ The consequence — a `find_package` request cannot name the prerelease label �
 documented in the manifest, `USING_VNEXT` and the release notes rather than left
 to be discovered.
 
-## 2026-10-06 — E07b in progress: CTPT/1 declared supported, certification incomplete
+## 2026-10-06 — E07b complete: position alpha candidate prepared
 
 ```text
 Task: E07b
-Status: in_progress (NOT complete)
+Status: complete
 Branch: feat/fuguemax-placement
-Baseline: 77c7897
-Implementation commit: 4b8d382
-Candidate version: 0.2.0-alpha.2
+Candidate: 0.2.0-alpha.2; exact commit recorded in generated alpha-candidate.json
 Proposed tag: v0.2.0-alpha.2 (not created)
 
-Done:
-  - Version bumped to 0.2.0-alpha.2 in both CMakeLists (COLLABTEXT_PRERELEASE).
-  - ALPHA_CAPABILITIES.md v8 -> v9: CTPT/1 declared a supported serialized token
-    version with the reader obligation and explicit scope limits.
-  - docs/specs/vnext-alpha-capabilities.md: supported-token reader manifest added.
-  - docs/USING_VNEXT.md: caret vs strict-reference example, supported-token scope.
-  - docs/releases/integration-alpha.md: alpha.2 release notes, guarantee table,
-    consumer-owned responsibilities, saved reply draft (NOT SENT).
-  - libs/collabtext/tests/fixtures/position-tokens/ctpt-v1-supported.json:
-    16 retained golden cases covering all four token kinds.
-  - libs/collabtext/tests/tst_position_token_reader.cpp: independent literal §4
-    reader, retention round-trip, exhaustive truncation/trailing-byte coverage,
-    negative-version, wrong-kind, per-case replay. 8/8 pass.
-  - tools/prepare-integration-alpha.sh: refuses a candidate whose manifest declares
-    CTPT/1 supported without the retained fixture covering all four kinds.
-  - Package gate at 4b8d382: Debug PASS, Release PASS, ASan PASS (11 steps each,
-    manifest v9).
+Strict installed live gates at the final clean candidate commit:
+  - Debug: PASS, consumer 3/3; Wave 16/16 strict (18 rows, manifest v9); Markdown 4/4
+  - Release: PASS, consumer 3/3; Wave 16/16 strict (18 rows, manifest v9); Markdown 4/4
+  - ASan/UBSan: PASS, same strict counts, with LSAN_OPTIONS=detect_leaks=0
+    because LeakSanitizer cannot run under this environment's ptrace; no leak
+    checking is claimed for this run.
+  - Evidence: build-consumer-verify/e07b-{debug,release}-live and
+    build-consumer-verify/e07b-asan-live-lsanoff
 
-NOT done (required for completion):
-  - Strict live-position gate (--gate live) has NOT been run at 4b8d382.
-    This is the gate E07b exists to satisfy. Without it the position alpha is
-    not certified.
-  - tools/prepare-integration-alpha.sh has NOT been run with --gate live.
-    No alpha-candidate.json, checksums, or publication checklist exist for
-    0.2.0-alpha.2.
-  - docs/releases/integration-alpha.md "How the position candidate was verified"
-    is still a placeholder.
-  - The candidate SHA will change when the remaining work is committed; the
-    package gates above were run at 4b8d382 and must be re-run at the final SHA.
-  - TASKS.json verification_results record the incomplete state.
+Preparation:
+  - tools/prepare-integration-alpha.sh --gate live accepted all three retained
+    result sets at the candidate revision.
+  - build-alpha contains the generated candidate record, relocated install
+    archive, checksums and unexecuted publication checklist.
+  - Release notes now record the exact gate outcomes and sanitizer limitation.
+  - No tag, publication, merge, push, or consumer message was made.
 
-Next session:
-  1. Run --gate live in Debug, Release, ASan at the current HEAD (4b8d382 or
-     whatever the final implementation commit is).
-  2. Run prepare-integration-alpha.sh --gate live with the three live-gate
-     evidence directories.
-  3. Fill in the release-notes verification section with actual results.
-  4. Commit bookkeeping, update TASKS.json to complete.
+Previously completed E07b implementation evidence remains: CTPT/1 supported
+reader fixtures contain 16 golden cases for all four token kinds;
+tst_position_token_reader passes 8/8 with all four negative controls rejecting.
+The manifest and consumer guide keep recovery, persistent undo, durable pins and
+GC as unfinished capabilities. WP8 durable pins remain unsupported.
 ```
 
 Representation evidence recorded:
