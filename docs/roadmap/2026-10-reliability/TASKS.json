@@ -1912,19 +1912,36 @@
     "F8"
    ],
    "gate": null,
-   "status": "in_progress",
+   "status": "complete",
    "baseline_revision": "d436f9a",
-   "progress": "PARTIAL, deliberately. The paste half is applied and verified; the typing half is blocked on the position representation and is not worked around. normalize_fragments no longer atomizes a same-locator run, so whole operations stay contiguous: concurrent pastes give exact abcXYZ. Concurrent typing still interleaves because each keystroke takes its own strictly increasing locator, so A/3 sorts above B/1 regardless of tie-break -- verified directly (A/1==B/1 is 1, A/3<B/1 is 0). S02's transformation-map claim that Locator::between already expresses R1 is retracted in its \u00a73 table and the counterexample recorded in a new \u00a75a. The F8 marker is split: the paste case passes exactly, the typing case stays expected-fail tagged blocked: typing locator minting. S01's typing oracle is NOT weakened. A time-boxed spike on locator reuse is the next step, pending a user decision on landing it, minimal-scope, or tree positions.",
+   "progress": "Complete at 0984d93. Production Buffer and IdList place by FugueMax tree links (docs/specs/vnext-sequence-algorithm.md \u00a70); Locator and normalize_fragments are gone. CTBO and CTLO are version 0002. The installed probe labels match that version, and WP6 no longer accepts aXbYcZ as a baseline exception. The flat-locator paste-only partial and the locator-reuse spike a5ca463 are superseded history. WP8 durable pins stay unsupported (S05/G01/G06/G08). Placement stays O(n). Tombstones are not reclaimed.",
    "verification_results": {
-    "paste": "tst_sequence_semantics::concurrentWholePassagesStayContiguous passes for two-pastes, unequal-lengths and three-pastes, asserting exact content AND per-run contiguity. tst_evaluation_regressions::f8_concurrent_pastes_remain_contiguous asserts exact abcXYZ with no marker.",
-    "typing": "tst_sequence_semantics::concurrentTypingStaysGrouped fails in both directions with aaabbbccc, and tst_evaluation_regressions::f8_concurrent_typing_remains_grouped stays XFAIL. Both are intentional.",
-    "root_cause": "Measured without CRDT reasoning: two actors typing into their own empty views both receive locators [m],[m+1],[m+2], so A/1==B/1 but A/3<B/1 is false. The interleave is forced by the flat locator chain, not by same-locator tie ordering. No comparator rule can change it.",
-    "retraction": "S02 \u00a73 asserted Buffer::locator_between already yields the 'immediately before' relation R1 needs. That is false and is retracted in the same commit as the fix; a new \u00a75a records the counterexample and scopes the transformation map to the paste case.",
-    "not_done": "No oracle narrowed, no assertion removed to obtain green, no DECISIONS.md scope change, no benchmark. WP6's installed allowlist entry is unchanged and cannot be removed until S04 re-runs the installed probes."
+    "algorithm": "FugueMax (Weidner and Kleppmann, arXiv 2305.00583, Algorithm 1 plus \u00a75.3). Spec \u00a70 is the production algorithm; S02 R1/R2 is retained as history. Commits on feat/fuguemax-placement after 76842de: 44cd0d6, a1f9218, 6ce7956, 337179d, e21ff06, cc7d8cc.",
+    "asan": "18/18 passed, exit 0, revision cc7d8cc94976d5ccf1e63f3d5054cf848d0a9417. Evidence: build-roadmap-asan/verification/20261006T063331Z-599681. Regex: tst_sequence_semantics|tst_convergence|tst_idlist_convergence|tst_evaluation_regressions|tst_sequence_differential|tst_fuguemax_model|tst_fuzz|tst_idlist_fuzz|tst_operation_validation|tst_serialization.*|tst_buffer|tst_idlist. Leak-enabled ASan/UBSan.",
+    "release": "30/30 passed, exit 0, same revision. Evidence: build-roadmap-release/verification/20261006T063935Z-606072. CTest real time 1.32s on a warm tree. Regex adds tst_sequence_model, tst_realistic, tst_boundary_model, tst_positions, and tst_opstream.* to the ASan set.",
+    "debug": "The interrupted session reported a 78/78 Debug pass (exit 0) immediately before the ASan run. No retained evidence directory for that run was found under build-roadmap-debug/verification, so it is not acceptance evidence.",
+    "live_gate": "verify-consumer-package.sh --mode debug --gate live PASS, exit 0. Evidence: build-consumer-verify/debug-live-20261006T063910Z-605372. Wave 16/16 strict cases (18 rows, manifest v7); markdown 4/4. WP6 concurrent_paste_passages_contiguous outcome pass, observed text abcXYZ, contiguous and converged, formats CTPT/1 CTBO/2 CTLO/2, producer revision cc7d8cc. WP8 durable_pin_registration remains unsupported (S05/G01/G06/G08).",
+    "baseline_gate": "verify-consumer-package.sh --mode debug --gate baseline PASS, exit 0. Evidence: build-consumer-verify/debug-baseline-20261006T063828Z-604623. WP6 outcome pass with observed abcXYZ. That run still recorded formats CTBO/1 and CTLO/1 because it finished before the uncommitted label edit.",
+    "fixture_validator": "python3 tools/validate-consumer-fixtures.py --self-test: 37 corruption kinds applied 362 times across 14 fixtures, all rejected. Corpus clean: 14 consumer-probe fixtures, 32 operations, 28 tokens, 57 typed expectations, WP1-WP8 covered. The validator checks fixtures, not engine behavior.",
+    "closed": "Fixture labels and the removed WP6 aXbYcZ baseline exception are commit 0984d93. The Debug live and baseline gates cited above ran against the pre-commit working tree at producer revision cc7d8cc and observed WP6 abcXYZ; they were not re-run after 0984d93. The pass path does not read the removed exception. No benchmark. No fresh full-suite acceptance sweep. Release and ASan evidence are targeted regexes. Remote CI was not run."
    },
    "artifacts": [
+    "docs/specs/vnext-sequence-algorithm.md",
+    "libs/collabtext/src/crdt/SequenceOrder.cpp",
+    "libs/collabtext/src/crdt/Placement.h",
     "libs/collabtext/tests/tst_sequence_semantics.cpp",
-    "docs/specs/vnext-sequence-algorithm.md"
+    "libs/collabtext/tests/tst_sequence_differential.cpp",
+    "libs/collabtext/tests/reference/FugueMaxModel.h",
+    "tests/consumer-smoke/wave-contract/cases.json"
+   ],
+   "implementation_commits": [
+    "44cd0d6",
+    "a1f9218",
+    "6ce7956",
+    "337179d",
+    "e21ff06",
+    "cc7d8cc",
+    "0984d93"
    ]
   },
   {

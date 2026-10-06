@@ -2440,3 +2440,43 @@ passages, the installed WP6 probe is still an exact known failure, and the
 capability manifest still records F8 as `not implemented`.
 
 **Next: S03 applies the algorithm; E07a prepares the alpha candidate.**
+
+The paragraph above is the state at the end of S02. The 2026-10-06 entry below
+is what happened next.
+
+## 2026-10-06 — S03 complete: FugueMax placement, registry closed after the interrupted session
+
+```text
+Task: S03
+Status: complete
+Branch: feat/fuguemax-placement
+Recorded revision: 0984d93
+Implementation commits: 44cd0d6, a1f9218, 6ce7956, 337179d, e21ff06, cc7d8cc, 0984d93
+Scope: FugueMax placement in Buffer and IdList; Locator removed; CTBO/CTLO
+  advanced to 0002. Spec section 0 of vnext-sequence-algorithm.md.
+Verification retained on disk:
+  ASan 18/18 exit 0
+    build-roadmap-asan/verification/20261006T063331Z-599681
+  Release 30/30 exit 0 (CTest real time 1.32s, warm tree)
+    build-roadmap-release/verification/20261006T063935Z-606072
+  Debug installed live gate PASS (wave 16/16 strict, markdown 4/4, manifest v7,
+    WP6 observed abcXYZ at CTBO/2 and CTLO/2)
+    build-consumer-verify/debug-live-20261006T063910Z-605372
+  Debug installed baseline gate PASS (WP6 observed abcXYZ; that result still
+    labels CTBO/1 and CTLO/1)
+    build-consumer-verify/debug-baseline-20261006T063828Z-604623
+  Fixture validator self-test: 37 corruption kinds, 362 applications, all
+    rejected. Corpus: 14 fixtures, 32 operations, 28 tokens, 57 expectations.
+Not retained: a session-reported Debug 78/78 pass. No evidence directory.
+Closeout commit 0984d93: probe labels CTBO/2 and CTLO/2, newer-version probe
+  CTBO0003, WP6 baseline exception for aXbYcZ removed. The live and baseline
+  gates above ran before that commit and were not re-run.
+Known limits: WP8 durable pins unsupported. Placement is O(n). Tombstones are
+  not reclaimed. No benchmark. No fresh full-suite sweep. No remote CI.
+Next: E07a, then E07b.
+```
+
+The session that finished the Release gate stopped before writing `TASKS.json`
+or this log. `0984d93` then committed the fixture labels and removed the WP6
+exception, and this entry marks S03 complete. Details are in
+`docs/handoff/2026-10-06-s03-progress.md`.

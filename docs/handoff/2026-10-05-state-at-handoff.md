@@ -1,5 +1,11 @@
 # State at handoff — 2026-10-05, corrected after independent review
 
+**Superseded for current status by
+[2026-10-06-s03-progress.md](2026-10-06-s03-progress.md).** S03 is complete at
+`0984d93` on `feat/fuguemax-placement`. The 2026-10-05 text below is the record
+of that day. Where it says the engine still interleaves, or that no production
+ordering code has changed, that statement is historical.
+
 Execute only in `.worktrees/reliability-v2`, branch `roadmap/reliability-v2`.
 `TASKS.json` is authoritative. The earlier version of this handoff mistakenly
 called W01/S01 complete and S04a ready. The correction below uses actual artifacts

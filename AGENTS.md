@@ -1,7 +1,9 @@
 # Reliability workstream orientation
 
-This worktree is the isolated breaking-change branch `roadmap/reliability-v2`.
-The evaluated source checkout is `/home/clinton/dev/collabtext`, branch `master`.
+This worktree is the isolated breaking-change line. As of 2026-10-06 the
+checked-out branch is `feat/fuguemax-placement`, which contains
+`roadmap/reliability-v2`. The evaluated source checkout is
+`/home/clinton/dev/collabtext`, branch `master`.
 
 Read `docs/roadmap/2026-10-reliability/README.md`, `DECISIONS.md`, and
 `EXECUTION.md` before implementing a roadmap task. `TASKS.json` is the
@@ -11,33 +13,34 @@ serial recovery-first route. Read `docs/handoff/2026-10-04-reliability-review.md
 for current evidence and `docs/specs/vnext-external-position-contract.md` for
 W1–W6 consumer cases.
 
-## Where the work is, as of 2026-10-05
+## Where the work is, as of 2026-10-06
 
 **Done:** V01–V08, D01, P01–P06b, L01, S01, S02, W01–W03, S04a/S04b and
 packaging A01/A02a/A06a. Registry count: 72. S01/W01 are validated desired histories and
 probe fixtures, not production F7/F8 fixes. P06a's final operation-opacity step
 has passed affected Debug/Release/sanitizer and installed-consumer checks.
 
-**Continue S03 and E07a/E07b preparation.** S02 is complete: the ordering repair
-is specified in `docs/specs/vnext-sequence-algorithm.md` and modelled by an
-independent interpreter that passes all 17 S01 fixtures, 29 arrival orders and 22
-named token positions. The defect is `Buffer::normalize_fragments` atomizing a
-same-`Locator` run and ordering it per scalar; the repair keeps whole operations
-contiguous and orders same-position operations by first inserted item. **No
-production code changed — the engine still interleaves.**
+**S03 is complete** at `0984d93`. Read
+`docs/handoff/2026-10-06-s03-progress.md` before editing placement. Checked-out
+branch is `feat/fuguemax-placement` (it contains `roadmap/reliability-v2`).
+Production placement is FugueMax (`docs/specs/vnext-sequence-algorithm.md` §0).
+`Locator` is gone. `CTBO`/`CTLO` are version 0002. ASan 18/18 and Release 30/30
+targeted sweeps passed at `cc7d8cc`. The Debug installed live gate passed with
+WP6 observing `abcXYZ`. WP6's baseline exception for `aXbYcZ` is removed.
+WP8 durable pins stay unsupported.
+
+**Next: E07a, then E07b.** Those prepare reviewable alpha candidates. They do
+not publish, merge, or edit Wave. Do not re-implement placement.
+
 P06b and S04b are complete: checked versioned operation/gap codecs and native
 scoped position/CTPT v1 APIs pass Debug/Release/leak-enabled sanitizer and
 installed-package checks. S04b has 1,050 text/550 list native/model resolutions
 and original-token fresh-process replay. No old API/format compatibility required.
 
-W02 is complete: the installed consumer baseline has 17 exact cases, 15 passes,
-one WP6 known failure and one WP8 unsupported capability in both Debug and
-Release. W03 is complete: `--gate live` holds WP1-WP5/WP7 plus the no-GC
-containment smoke strictly in Debug, Release and installed ASan, adds a genuine
-two-process token replay, and runs a second independent Markdown consumer (4/4).
-Ordering, store recovery, persistent undo and durable pins remain pending; do not
-claim full F7/F8 repair. Token v1 is experimental and unpublished. Follow actual
-registry dependencies.
+W02 and W03 were complete before S03. Their earlier "WP6 known failure" record
+is historical: the 2026-10-06 Debug baseline and live gates both observed WP6
+`abcXYZ`. Store recovery, persistent undo, and durable pins remain pending.
+Token bytes are experimental and unpublished. Follow actual registry dependencies.
 
 ## Read this before trusting a green run
 

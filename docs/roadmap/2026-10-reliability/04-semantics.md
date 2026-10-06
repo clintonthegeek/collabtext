@@ -75,7 +75,7 @@ Run the reference interpreter on all S01 fixtures and bounded enumerations; reta
 
 ## S03 — Apply the ordering repair to existing Buffer and IdList paths
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** complete at `0984d93` (2026-10-06). Progress note: `docs/handoff/2026-10-06-s03-progress.md`.  
 **Depends on:** S02, P06b, S04b\
 **Coverage:** F8  
 
