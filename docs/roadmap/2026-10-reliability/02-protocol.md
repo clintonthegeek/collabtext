@@ -6,7 +6,7 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 
 ## D01 — Specify the accepted native-engine and lifecycle constraints
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json (complete)
 **Depends on:** V08  
 **Coverage:** R11, R13  
 **Design/decision gate:** All product-policy questions resolved. Complete the written design constraints using V08; no additional user backend approval is needed.  
@@ -317,7 +317,7 @@ Compile the new interface sample and in-memory test double; run `tst_opstream_in
 
 ## P08 — Fuzz and bound the complete decoding pipeline
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json (complete)
 **Depends on:** P06b, P07, V04  
 **Coverage:** F10, R4  
 

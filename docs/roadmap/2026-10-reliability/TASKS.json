@@ -2132,8 +2132,23 @@
         "R4"
       ],
       "gate": null,
-      "status": "in_progress",
-      "baseline_revision": "15ae0f8"
+      "status": "complete",
+      "baseline_revision": "15ae0f8",
+      "implementation_commits": [
+        "4714067"
+      ],
+      "verification_results": {
+        "implementation_revision": "4714067",
+        "sanitizer_corpus_tests": "PASS: ASan/UBSan tst_decode_validation, tst_segment_format, tst_segment_writer, tst_segment_reader; 4/4; build-p08-asan",
+        "bounded_fuzz_campaign": "PASS: 55,831 runs in 11 seconds (max_total_time=10, timeout=2, max_len=1048576), no findings; Clang 22.1.8, Debug, -fsanitize=fuzzer,address,undefined; ASAN_OPTIONS=detect_leaks=0",
+        "seed_corpus": "51 tracked files from libs/collabtext/tests/fixtures; aggregate SHA-256 22b629e31ebdb14dd419862e313d060b46d87d711103d5e374262faf47dc3f71",
+        "plan_validation": "PASS: 72 tasks, acyclic graph, consumer coverage and sequencing validated",
+        "no_external_action": "no merge, tag, publication, push, or consumer message"
+      },
+      "known_limits": [
+        "The fuzz campaign is opt-in and bounded. LeakSanitizer was disabled because it terminates in this container with a ptrace-related runtime error; ASan and UBSan remained enabled for all compiled targets.",
+        "The fuzz boundary caps an individual decoder input at 1 MiB, zstd output at 64 MiB, segment record count at 100,000, and ack JSON at 1 MiB."
+      ]
     },
     {
       "id": "L02",

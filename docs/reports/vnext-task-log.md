@@ -2669,3 +2669,46 @@ No production transport capability is claimed by the test double. Legacy
 StreamSync remains unadvertised until its durable receiver transaction lands.
 No merge, push, tag, publication or consumer message was made.
 ```
+
+## 2026-10-06 — P08 complete: bounded decoding and fuzz coverage
+
+```text
+Task: P08
+Status: complete
+Branch: feat/fuguemax-placement
+Baseline: 15ae0f8
+Implementation: 4714067
+
+Delivered:
+  - Bounded zstd input/output, rejected truncated or concatenated frames, and
+    added no-progress protection. Segment headers now reject unsupported kinds,
+    flags and excessive record counts; payload/checksum/size validation remains
+    all-or-nothing.
+  - Base64 decoding now requires canonical terminal padding and rejects
+    non-zero unused bits. Segment payload encoding/decoding has explicit byte
+    and record budgets.
+  - Extracted exact-size cursor and bounded legacy ack decoders; persisted ack
+    reads now reject oversized files and overflowing counters.
+  - Added the opt-in Clang libFuzzer target fuzz_decode. It exercises operation,
+    id-list, stream envelope, sidecar manifest, global, counter-gap, legacy ack,
+    segment header/cursor/records, base64 and zstd decoders. Successful
+    operation decodes pass through semantic validation before any consumer
+    could apply them.
+
+Verification:
+  - Clang 22.1.8 Debug build with COLLABTEXT_ENABLE_SANITIZERS=ON and target
+    flags -fsanitize=fuzzer,address,undefined.
+  - ASan/UBSan: tst_decode_validation, tst_segment_format, tst_segment_writer,
+    tst_segment_reader passed 4/4.
+  - Bounded campaign: 55,831 runs in 11 seconds, max_total_time=10,
+    timeout=2, max_len=1 MiB; no sanitizer findings. LeakSanitizer was disabled
+    because it terminates in this container with a ptrace-related runtime error.
+  - Seed corpus: 51 tracked fixtures under libs/collabtext/tests/fixtures;
+    aggregate SHA-256 22b629e31ebdb14dd419862e313d060b46d87d711103d5e374262faf47dc3f71.
+  - validate-plan.py: 72-task dependency graph and consumer sequencing valid.
+
+The opt-in campaign is bounded and not part of routine CI. Decoder budgets are
+1 MiB per fuzz input, 64 MiB decompressed output, 100,000 segment records, and
+1 MiB for legacy ack JSON. No merge, push, tag, publication or consumer message
+was made.
+```
