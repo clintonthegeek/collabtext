@@ -118,7 +118,15 @@ producer_revision=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || echo unkno
 if [[ -z "$output_dir" ]]; then
     output_dir="$repo_root/build-consumer-verify/$mode-$gate-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 fi
-mkdir -p "$output_dir"
+mkdir -p "$output_dir" || { echo "!! cannot create --output-dir '$output_dir'" >&2; exit 3; }
+# Make it absolute before anything uses it. A relative --output-dir resolves
+# against the invoking shell for the install, but against something else again
+# inside the consumer's configure, so CMAKE_PREFIX_PATH silently stopped
+# pointing at the tree that had just been installed. The symptom was
+# "Could not find a package configuration file provided by collabtext" several
+# steps after a successful install -- a message that reads like a packaging bug
+# and is really a path bug.
+output_dir=$(cd "$output_dir" && pwd -P)
 run_log="$output_dir/run.log"
 : > "$run_log"
 
