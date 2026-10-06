@@ -2,6 +2,7 @@
 #include <QTemporaryDir>
 
 #include "crdt/SegmentReader.h"
+#include "transport/StreamSync.h"
 #include "crdt/SegmentWriter.h"
 #include "crdt/SegmentFormat.h"
 #include "crdt/ZstdUtil.h"
@@ -26,6 +27,24 @@ WriterConfig fast_test_config() {
 class TestSegmentReader : public QObject {
     Q_OBJECT
 private slots:
+    void cursor_decoder_requires_exact_wire_size() {
+        std::string bytes(24, '\0');
+        QVERIFY(decode_segment_cursor(bytes));
+        QVERIFY(!decode_segment_cursor(std::string_view(bytes).substr(0, 23)));
+        bytes.push_back('\0');
+        QVERIFY(!decode_segment_cursor(bytes));
+    }
+
+    void ack_decoder_rejects_overflow_and_bounds_input() {
+        const auto valid = decode_legacy_peer_ack(
+            R"({"acks":{"1":{"max_lamport_observed":42}}})", 1);
+        QVERIFY(valid.has_value());
+        QCOMPARE(*valid, uint64_t(42));
+        QVERIFY(!decode_legacy_peer_ack(
+            R"({"acks":{"1":{"max_lamport_observed":18446744073709551616}}})", 1));
+        QVERIFY(!decode_legacy_peer_ack(std::string(1024 * 1024 + 1, 'x'), 1));
+    }
+
     void no_data_yields_nothing() {
         QTemporaryDir tmp;
         fs::path stream = fs::path(tmp.path().toStdString()) / "stream";

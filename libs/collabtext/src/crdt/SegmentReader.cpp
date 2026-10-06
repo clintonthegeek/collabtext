@@ -36,6 +36,12 @@ void write_u64_le(std::string& s, uint64_t v) {
 
 } // namespace
 
+std::optional<SegmentCursor> decode_segment_cursor(std::string_view bytes) {
+    if (bytes.size() != kCursorBytes) return std::nullopt;
+    return SegmentCursor{read_u64_le(bytes.data()), read_u64_le(bytes.data() + 8),
+                         read_u64_le(bytes.data() + 16)};
+}
+
 SegmentReader::SegmentReader(fs::path peer_stream_dir, fs::path cursor_path)
     : m_dir(std::move(peer_stream_dir))
     , m_cursor_path(std::move(cursor_path)) {}
@@ -48,9 +54,13 @@ void SegmentReader::load_cursor_() {
     char buf[kCursorBytes];
     f.read(buf, kCursorBytes);
     if (f.gcount() != std::streamsize(kCursorBytes)) return;
-    m_last_sealed = read_u64_le(buf);
-    m_open_id     = read_u64_le(buf + 8);
-    m_open_bytes  = read_u64_le(buf + 16);
+    char trailing = 0;
+    if (f.read(&trailing, 1)) return;
+    const auto decoded = decode_segment_cursor(std::string_view(buf, kCursorBytes));
+    if (!decoded) return;
+    m_last_sealed = decoded->last_sealed;
+    m_open_id = decoded->open_id;
+    m_open_bytes = decoded->open_bytes;
 }
 
 void SegmentReader::save_cursor_() const {

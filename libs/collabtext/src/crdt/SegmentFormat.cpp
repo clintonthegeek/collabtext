@@ -73,11 +73,16 @@ std::optional<SegmentHeader> decode_segment_header(std::string_view bytes) {
     SegmentHeader h;
     h.format_version = uint8_t(bytes[4]);
     if (h.format_version != 1) return std::nullopt;
-    h.kind = SegmentKind(uint8_t(bytes[5]));
+    const uint8_t kind = uint8_t(bytes[5]);
+    if (kind != uint8_t(SegmentKind::Ops) && kind != uint8_t(SegmentKind::Stream))
+        return std::nullopt;
+    h.kind = SegmentKind(kind);
     h.flags = read_u16_le(bytes.data() + 6);
+    if (h.flags != 0) return std::nullopt;
     h.first_lamport = read_u64_le(bytes.data() + 8);
     h.last_lamport = read_u64_le(bytes.data() + 16);
     h.record_count = read_u32_le(bytes.data() + 24);
+    if (h.record_count > kMaxSegmentRecords) return std::nullopt;
     std::memcpy(h.sha256.data(), bytes.data() + 28, 32);
     return h;
 }
@@ -85,9 +90,13 @@ std::optional<SegmentHeader> decode_segment_header(std::string_view bytes) {
 std::string encode_sealed_segment(const SegmentHeader& header_skeleton,
                                   const std::vector<std::string>& records,
                                   int zstd_level) {
+    if (records.size() > kMaxSegmentRecords) return {};
     std::string payload;
     for (const auto& r : records) {
-        payload += base64_encode(r);
+        if (r.size() > kMaxEncodedBytes) return {};
+        const auto encoded = base64_encode(r);
+        if (encoded.size() > kMaxEncodedBytes - payload.size() - 1) return {};
+        payload += encoded;
         payload += '\n';
     }
     SegmentHeader h = header_skeleton;
@@ -99,11 +108,12 @@ std::string encode_sealed_segment(const SegmentHeader& header_skeleton,
 }
 
 std::optional<SealedSegment> decode_sealed_segment(std::string_view sealed_bytes) {
-    auto blob = zstd_decompress(sealed_bytes);
+    auto blob = zstd_decompress(sealed_bytes, kMaxDecompressedBytes);
     if (!blob) return std::nullopt;
     if (blob->size() < kSegmentHeaderBytes) return std::nullopt;
     auto h = decode_segment_header(*blob);
     if (!h) return std::nullopt;
+    if (h->record_count > kMaxSegmentRecords) return std::nullopt;
     std::string_view payload(blob->data() + kSegmentHeaderBytes,
                              blob->size() - kSegmentHeaderBytes);
     if (sha256_bytes(payload) != h->sha256) return std::nullopt;

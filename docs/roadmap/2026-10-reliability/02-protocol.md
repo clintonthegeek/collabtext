@@ -325,8 +325,17 @@ Compile the new interface sample and in-memory test double; run `tst_opstream_in
 
 - `libs/collabtext/tests/fuzz_decode.cpp`
 - `libs/collabtext/tests/tst_decode_validation.cpp`
+- `libs/collabtext/tests/tst_segment_format.cpp`
+- `libs/collabtext/tests/tst_segment_reader.cpp`
 - `libs/collabtext/src/crdt/ZstdUtil.cpp`
+- `libs/collabtext/src/crdt/ZstdUtil.h`
 - `libs/collabtext/src/crdt/SegmentFormat.cpp`
+- `libs/collabtext/src/crdt/SegmentFormat.h`
+- `libs/collabtext/src/crdt/SegmentReader.cpp`
+- `libs/collabtext/src/crdt/SegmentReader.h`
+- `libs/collabtext/src/crdt/StreamSync.cpp`
+- `libs/collabtext/src/transport/StreamSync.h`
+- `libs/collabtext/CMakeLists.txt`
 
 **Steps:**
 

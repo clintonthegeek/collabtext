@@ -2,10 +2,21 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace CollabText::Crdt {
+
+struct SegmentCursor {
+    uint64_t last_sealed = 0;
+    uint64_t open_id = 0;
+    uint64_t open_bytes = 0;
+};
+
+/// Decode the fixed 24-byte persisted cursor. Trailing and truncated bytes fail.
+std::optional<SegmentCursor> decode_segment_cursor(std::string_view bytes);
 
 class SegmentReader {
 public:

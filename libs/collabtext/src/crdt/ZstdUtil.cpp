@@ -2,6 +2,7 @@
 
 #include <zstd.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -18,7 +19,9 @@ std::string zstd_compress(std::string_view input, int level) {
     return out;
 }
 
-std::optional<std::string> zstd_decompress(std::string_view input) {
+std::optional<std::string> zstd_decompress(std::string_view input, size_t max_output_bytes) {
+    if (input.empty() || input.size() > kMaxEncodedBytes || max_output_bytes == 0)
+        return std::nullopt;
     ZSTD_DCtx* dctx = ZSTD_createDCtx();
     if (!dctx) return std::nullopt;
 
@@ -27,21 +30,35 @@ std::optional<std::string> zstd_decompress(std::string_view input) {
     std::vector<char> buf(CHUNK);
 
     ZSTD_inBuffer in{input.data(), input.size(), 0};
-    while (in.pos < in.size) {
-        ZSTD_outBuffer ob{buf.data(), buf.size(), 0};
+    size_t remaining = 1;
+    bool drain = false;
+    while (in.pos < in.size || drain) {
+        const size_t capacity = std::min(buf.size(), max_output_bytes - out.size());
+        if (capacity == 0) {
+            ZSTD_freeDCtx(dctx);
+            return std::nullopt;
+        }
+        ZSTD_outBuffer ob{buf.data(), capacity, 0};
+        const size_t old_in_pos = in.pos;
         size_t rc = ZSTD_decompressStream(dctx, &ob, &in);
         if (ZSTD_isError(rc)) {
             ZSTD_freeDCtx(dctx);
             return std::nullopt;
         }
         out.append(buf.data(), ob.pos);
+        if (in.pos == old_in_pos && ob.pos == 0) {
+            ZSTD_freeDCtx(dctx);
+            return std::nullopt;
+        }
+        remaining = rc;
+        drain = rc != 0 && ob.pos == capacity;
         if (rc == 0 && in.pos < in.size) {
             ZSTD_freeDCtx(dctx);
             return std::nullopt;
         }
-        if (rc == 0) break;
     }
     ZSTD_freeDCtx(dctx);
+    if (remaining != 0) return std::nullopt; // incomplete frame
     return out;
 }
 
@@ -90,7 +107,7 @@ std::string base64_encode(std::string_view input) {
 }
 
 std::optional<std::string> base64_decode(std::string_view input) {
-    if (input.size() % 4 != 0) return std::nullopt;
+    if (input.size() % 4 != 0 || input.size() > kMaxEncodedBytes) return std::nullopt;
     std::string out;
     out.reserve((input.size() / 4) * 3);
     for (size_t i = 0; i < input.size(); i += 4) {
@@ -99,7 +116,18 @@ std::optional<std::string> base64_decode(std::string_view input) {
         int8_t c = B64_DECODE[(unsigned char)input[i + 2]];
         int8_t d = B64_DECODE[(unsigned char)input[i + 3]];
         if (a < 0 || b < 0) return std::nullopt;
-        if (c == -1 || d == -1) return std::nullopt;
+        const bool last = i + 4 == input.size();
+        if (c == -2) {
+            if (!last || d != -2 || (b & 0x0f) != 0) return std::nullopt;
+        } else if (c < 0) {
+            return std::nullopt;
+        }
+        if (d == -2) {
+            if (!last || (c == -2 ? false : c < 0 || (c & 0x03) != 0))
+                return std::nullopt;
+        } else if (d < 0) {
+            return std::nullopt;
+        }
         uint32_t n = (uint32_t(a) << 18) | (uint32_t(b) << 12);
         out += char((n >> 16) & 0xFF);
         if (c >= 0) {

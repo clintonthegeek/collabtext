@@ -25,6 +25,7 @@ struct SegmentHeader {
 };
 
 constexpr size_t kSegmentHeaderBytes = 4 + 1 + 1 + 2 + 8 + 8 + 4 + 32; // = 60
+constexpr uint32_t kMaxSegmentRecords = 100000;
 
 std::string encode_segment_header(const SegmentHeader& h);
 std::optional<SegmentHeader> decode_segment_header(std::string_view bytes);

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <ctime>
 #include <fstream>
+#include <limits>
 
 namespace fs = std::filesystem;
 
@@ -260,9 +261,14 @@ void StreamSync::write_acks_() {
 
     // Read existing acks.json and enforce monotonicity
     if (fs::exists(acks_path)) {
-        std::ifstream f(acks_path);
-        std::string content((std::istreambuf_iterator<char>(f)),
-                             std::istreambuf_iterator<char>());
+        std::ifstream f(acks_path, std::ios::binary | std::ios::ate);
+        if (!f) return;
+        const auto file_size = f.tellg();
+        if (file_size < 0 || file_size > 1024 * 1024) return;
+        std::string content(static_cast<size_t>(file_size), '\0');
+        f.seekg(0);
+        f.read(content.data(), static_cast<std::streamsize>(content.size()));
+        if (!f && !content.empty()) return;
         // Simple scan for "\"<id>\": { ... "max_lamport_observed": <N> ..." patterns
         // We look for each peer key and extract max_lamport_observed + last_observed_at
         size_t search_pos = 0;
@@ -305,8 +311,17 @@ void StreamSync::write_acks_() {
                 ++num_end;
             if (num_end == num_start) continue;
             uint64_t stored_lc = 0;
+            bool counter_overflow = false;
             for (size_t i = num_start; i < num_end; ++i)
-                stored_lc = stored_lc * 10 + (content[i] - '0');
+            {
+                const uint64_t digit = static_cast<uint64_t>(content[i] - '0');
+                if (stored_lc > (std::numeric_limits<uint64_t>::max() - digit) / 10) {
+                    counter_overflow = true;
+                    break;
+                }
+                stored_lc = stored_lc * 10 + digit;
+            }
+            if (counter_overflow) continue;
 
             // Also grab last_observed_at if stored_lc >= fresh (we preserve existing timestamp)
             std::string stored_ts;
@@ -370,43 +385,50 @@ void StreamSync::set_on_ack_update(std::function<void(uint64_t)> cb) {
     m_ack_update_cb = std::move(cb);
 }
 
+std::optional<uint64_t> decode_legacy_peer_ack(std::string_view content,
+                                               uint16_t replica_id) {
+    constexpr size_t kMaxAckBytes = 1u * 1024u * 1024u;
+    if (content.size() > kMaxAckBytes) return std::nullopt;
+    const std::string our_key = "\"" + std::to_string(replica_id) + "\"";
+    const auto key_pos = content.find(our_key);
+    if (key_pos == std::string_view::npos) return std::nullopt;
+    const auto ml_tag = content.find("\"max_lamport_observed\"", key_pos + our_key.size());
+    const auto object_end = content.find('}', key_pos + our_key.size());
+    if (ml_tag == std::string_view::npos || object_end == std::string_view::npos
+        || ml_tag > object_end) return std::nullopt;
+    const auto colon = content.find(':', ml_tag + 22);
+    if (colon == std::string_view::npos) return std::nullopt;
+    size_t pos = colon + 1;
+    while (pos < content.size() && (content[pos] == ' ' || content[pos] == '\t'
+                                    || content[pos] == '\n' || content[pos] == '\r')) ++pos;
+    const size_t start = pos;
+    uint64_t value = 0;
+    while (pos < content.size() && content[pos] >= '0' && content[pos] <= '9') {
+        const uint64_t digit = static_cast<uint64_t>(content[pos] - '0');
+        if (value > (std::numeric_limits<uint64_t>::max() - digit) / 10)
+            return std::nullopt;
+        value = value * 10 + digit;
+        ++pos;
+    }
+    if (pos == start) return std::nullopt;
+    if (pos < content.size() && content[pos] != ',' && content[pos] != '}'
+        && content[pos] != ' ' && content[pos] != '\t' && content[pos] != '\n'
+        && content[pos] != '\r') return std::nullopt;
+    return value;
+}
+
 uint64_t StreamSync::read_peer_ack_(const fs::path& acks_path) const {
     if (!fs::exists(acks_path)) return UINT64_MAX;
 
-    std::ifstream f(acks_path);
+    std::ifstream f(acks_path, std::ios::binary | std::ios::ate);
     if (!f) return UINT64_MAX;
-    std::string content((std::istreambuf_iterator<char>(f)),
-                         std::istreambuf_iterator<char>());
-
-    // Look for our replica_id key inside the "acks" object and extract
-    // max_lamport_observed. We need to find:
-    //   "<our_id>": { "max_lamport_observed": <N>, ... }
-    std::string our_key = "\"" + std::to_string(m_replica_id) + "\"";
-    auto key_pos = content.find(our_key);
-    if (key_pos == std::string::npos) return UINT64_MAX;
-
-    // Find max_lamport_observed after our key position
-    auto ml_tag = content.find("\"max_lamport_observed\"", key_pos);
-    if (ml_tag == std::string::npos) return UINT64_MAX;
-
-    // write_acks_() always emits max_lamport_observed immediately inside each peer
-    // object, so a simple scan for the tag is sufficient; no cross-key guard needed.
-    auto colon = content.find(':', ml_tag + 22);
-    if (colon == std::string::npos) return UINT64_MAX;
-
-    size_t num_start = content.find_first_not_of(" \t\n\r", colon + 1);
-    if (num_start == std::string::npos) return UINT64_MAX;
-
-    size_t num_end = num_start;
-    while (num_end < content.size() && content[num_end] >= '0' && content[num_end] <= '9')
-        ++num_end;
-    if (num_end == num_start) return UINT64_MAX;
-
-    uint64_t value = 0;
-    for (size_t i = num_start; i < num_end; ++i)
-        value = value * 10 + (content[i] - '0');
-
-    return value;
+    const auto file_size = f.tellg();
+    if (file_size < 0 || file_size > 1024 * 1024) return UINT64_MAX;
+    std::string content(static_cast<size_t>(file_size), '\0');
+    f.seekg(0);
+    f.read(content.data(), static_cast<std::streamsize>(content.size()));
+    if (!f && !content.empty()) return UINT64_MAX;
+    return decode_legacy_peer_ack(content, m_replica_id).value_or(UINT64_MAX);
 }
 
 void StreamSync::recompute_fence_() {

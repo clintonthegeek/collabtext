@@ -24,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -37,6 +38,11 @@ struct StreamEntry {
     std::string payload;
     bool tombstone = false;
 };
+
+/// Decode the legacy ack JSON observation for one peer. Input is bounded and
+/// malformed or overflowing decimal values are rejected.
+std::optional<uint64_t> decode_legacy_peer_ack(std::string_view json,
+                                               uint16_t replica_id);
 
 // Legacy file-backed synchronization implementation. P07's OpStream contract
 // requires a durable receiver recovery-point transaction; this implementation
