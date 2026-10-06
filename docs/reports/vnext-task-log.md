@@ -2712,3 +2712,32 @@ The opt-in campaign is bounded and not part of routine CI. Decoder budgets are
 1 MiB for legacy ack JSON. No merge, push, tag, publication or consumer message
 was made.
 ```
+
+```text
+Task: L02
+Status: complete
+Branch: feat/fuguemax-placement
+Baseline: da1abb8
+Implementation: f8aa728cca7fb52d4998b452b0ce8043cfc2e392
+
+Delivered:
+  - SegmentWriter now reports checked lifecycle and append results, durably
+    commits encoded open-tail records, counts successful sync calls, bounds
+    pending/tail bytes, and applies backpressure without discarding queued data.
+  - Seal publishes a durably written temporary segment atomically before
+    removing the covered tail. Recovery validates interrupted seals and open
+    records, restores header counter ranges, and preserves ambiguous/corrupt
+    data for explicit repair.
+  - FileSync and StreamSync propagate writer failures; explicit close reports
+    seal errors. Added subprocess crashes after temp sync and after publish.
+
+Verification:
+  - Debug: tst_segment_writer and tst_durable_file passed 2/2; crash cases
+    included.
+  - Release: tst_segment_writer and tst_durable_file passed 2/2; crash cases
+    included.
+  - Debug affected callers: tst_filesync, tst_segment_reader,
+    tst_evaluation_regressions and tst_opstream_streamsync passed 4/4.
+  - validate-plan.py passed for all 72 tasks.
+  - No merge, push, or publication performed.
+```

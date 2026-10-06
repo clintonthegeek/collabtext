@@ -2162,7 +2162,15 @@
       "files": [
         "libs/collabtext/src/crdt/SegmentWriter.h",
         "libs/collabtext/src/crdt/SegmentWriter.cpp",
-        "libs/collabtext/tests/tst_segment_writer.cpp"
+        "libs/collabtext/tests/tst_segment_writer.cpp",
+        "libs/collabtext/CMakeLists.txt",
+        "libs/collabtext/src/crdt/FileSync.h",
+        "libs/collabtext/src/crdt/FileSync.cpp",
+        "libs/collabtext/src/crdt/StreamSync.cpp",
+        "libs/collabtext/tests/segment_writer_crash_worker.cpp",
+        "libs/collabtext/tests/tst_filesync.cpp",
+        "libs/collabtext/tests/tst_segment_reader.cpp",
+        "libs/collabtext/tests/tst_evaluation_regressions.cpp"
       ],
       "steps": [
         "Implement checked append/flush/durable-commit/seal results. fsync_count counts actual successful durable-sync calls only; pending records are cleared only after the chosen durability boundary succeeds.",
@@ -2180,7 +2188,22 @@
         "R10"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "da1abb8",
+      "implementation_commits": [
+        "f8aa728cca7fb52d4998b452b0ce8043cfc2e392"
+      ],
+      "verification_results": {
+        "debug_writer_and_durable_file": "2/2 passed, including temp-sync and post-publish subprocess crashes",
+        "release_writer_and_durable_file": "2/2 passed, including temp-sync and post-publish subprocess crashes",
+        "debug_affected_callers": "4/4 passed: tst_filesync, tst_segment_reader, tst_evaluation_regressions, tst_opstream_streamsync",
+        "plan_validation": "72-task graph valid; L02 dependency sequence and coverage checks passed"
+      },
+      "artifacts": [
+        "build-roadmap-debug/verification/20261006T204839Z-2/",
+        "build-roadmap-release/verification/20261006T204903Z-2/",
+        "build-roadmap-debug/verification/20261006T204942Z-2/"
+      ]
     },
     {
       "id": "L03",
