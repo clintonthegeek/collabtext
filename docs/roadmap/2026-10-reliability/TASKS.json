@@ -2286,11 +2286,11 @@
       "baseline_revision": "7b1704a",
       "progress": "Partial: StreamSync now holds a replica writer lease, recovers each legacy stream's next envelope sequence by scanning its durable log, retains reader coverage when callbacks are absent or throw, and skips unchanged ack-file replacements. F4's restart regression and the missing-callback/idle-poll regressions pass. L04 remains incomplete because StreamSync is still the legacy 16-bit replica/void-callback adapter; it does not yet implement the P07 OpStream DeliveryToken, epoch-scoped receipt, retry, and quarantine contract.",
       "verification_results": {
-        "debug_affected_and_multistream": "PASS: 11/11, including tst_transport_commit_contract, tst_opstream_replay, tst_opstream_idempotent, tst_evaluation_regressions, StreamSync convergence, FileSync, and SegmentReader; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T211526Z-12",
+        "debug_affected_and_multistream": "PASS: 11/11, including tst_transport_commit_contract, tst_opstream_replay, tst_opstream_idempotent, tst_evaluation_regressions, StreamSync convergence, FileSync, and SegmentReader; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T211710Z-2",
         "plan_validation": "PASS: all 72 tasks, DAG, ordering and consumer sequencing"
       },
       "artifacts": [
-        "build-roadmap-debug/verification/20261006T211526Z-12/"
+        "build-roadmap-debug/verification/20261006T211710Z-2/"
       ],
       "remaining_gap": "Implement production StreamSync support for P07's ActorId/epoch DeliveryToken, durability modes, per-stream/per-producer receipts, and explicit commit/retry/quarantine outcomes before L04 can complete or L05 can start."
     },

@@ -2786,7 +2786,9 @@ Regression: tst_opstream_replay now covers a sender restart while the receiver
 Verification: Debug 11/11 across transport contract, replay, idempotence,
   evaluation regressions, multi-stream convergence, FileSync and SegmentReader;
   validate-plan.py passed all 72 tasks.
-Artifacts: build-roadmap-debug/verification/20261006T211526Z-12/
+  Owned direct-entry pushes also reject gaps/regressions and sequence exhaustion
+  before append, while exact same-token retries are idempotent.
+Artifacts: build-roadmap-debug/verification/20261006T211710Z-2/
 Remaining: production StreamSync still exposes only the legacy 16-bit
   replica/void-callback transport. P07 ActorId/epoch DeliveryToken handling,
   explicit durability and commit/retry/quarantine outcomes, and per-stream

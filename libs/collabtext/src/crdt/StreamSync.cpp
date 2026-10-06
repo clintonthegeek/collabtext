@@ -108,17 +108,31 @@ void StreamSync::push(const std::string& stream, const StreamEntry& entry) {
     auto it = m_streams.find(stream);
     if (it == m_streams.end()) return;
     auto& s = ensure_started_(stream);
-    auto appended = s.writer->append(encode_stream_entry(entry), entry.seq);
-    if (!appended.ok()) {
-        m_last_error = appended.error();
-        return;
-    }
-    if (entry.replica_id == m_replica_id && entry.seq >= s.next_seq) {
+    if (entry.replica_id == m_replica_id) {
         if (entry.seq == std::numeric_limits<uint64_t>::max()) {
             m_last_error = Error(ErrorCode::counter_exhausted,
                                  "stream envelope sequence exhausted", stream);
             return;
         }
+        if (entry.seq != s.next_seq) {
+            auto duplicate = s.merged.find(entry.id);
+            if (entry.seq < s.next_seq && duplicate != s.merged.end()
+                && duplicate->second.replica_id == entry.replica_id
+                && duplicate->second.seq == entry.seq
+                && duplicate->second.payload == entry.payload)
+                return;
+            m_last_error = Error(entry.seq < s.next_seq ? ErrorCode::actor_conflict
+                                                        : ErrorCode::counter_regression,
+                "producer envelope sequence is not contiguous", stream);
+            return;
+        }
+    }
+    auto appended = s.writer->append(encode_stream_entry(entry), entry.seq);
+    if (!appended.ok()) {
+        m_last_error = appended.error();
+        return;
+    }
+    if (entry.replica_id == m_replica_id) {
         s.next_seq = entry.seq + 1;
     }
     if (it->second.type == StreamType::AppendOnly) {
@@ -344,7 +358,6 @@ void StreamSync::push(const std::string& stream_name, const std::string& payload
     entry.timestamp = current_iso_utc_();
     entry.payload = payload;
     push(stream_name, entry);
-    if (!m_last_error) s.next_seq = seq + 1;
 }
 
 void StreamSync::write_acks_() {
