@@ -1009,6 +1009,57 @@ bool Buffer::coalesce_last_undo() {
     return true;
 }
 
+LocalHistorySnapshot Buffer::local_history_snapshot() const {
+    LocalHistorySnapshot snapshot;
+    snapshot.cursor = m_undo_cursor;
+    snapshot.entries.reserve(m_undo_stack.size());
+    for (const auto &entry : m_undo_stack) {
+        LocalUndoEntrySnapshot saved;
+        saved.inserted_items.reserve(entry.inserted_keys.size());
+        for (const auto &key : entry.inserted_keys)
+            saved.inserted_items.push_back(key.position);
+        saved.deletion_operations = entry.deletion_ids;
+        snapshot.entries.push_back(std::move(saved));
+    }
+    return snapshot;
+}
+
+Result<void>
+Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
+    if (snapshot.cursor > snapshot.entries.size() ||
+        snapshot.entries.size() > m_max_undo_depth)
+        return Error(ErrorCode::malformed,
+                     "local history cursor or depth is outside configured bounds");
+
+    const auto &owner = actor_id();
+    std::vector<UndoEntry> restored;
+    restored.reserve(snapshot.entries.size());
+    auto valid_local_identity = [&](const Identity &id) {
+        return id.actor == owner && id.counter != 0 &&
+               id.counter <= m_version.get(owner);
+    };
+    for (const auto &saved : snapshot.entries) {
+        UndoEntry entry;
+        entry.inserted_keys.reserve(saved.inserted_items.size());
+        for (const auto &id : saved.inserted_items) {
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "local undo item is absent from replayed owner history");
+            entry.inserted_keys.emplace_back(id);
+        }
+        for (const auto &id : saved.deletion_operations) {
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "local undo deletion is absent from replayed owner history");
+            entry.deletion_ids.push_back(id);
+        }
+        restored.push_back(std::move(entry));
+    }
+    m_undo_stack = std::move(restored);
+    m_undo_cursor = snapshot.cursor;
+    return Result<void>::success();
+}
+
 std::optional<Operation> Buffer::undo() {
     if (m_undo_cursor == 0)
         return std::nullopt;

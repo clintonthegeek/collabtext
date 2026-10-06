@@ -2366,7 +2366,10 @@
         "libs/collabtext/src/crdt/Buffer.cpp",
         "libs/collabtext/src/crdt/IdList.cpp",
         "libs/collabtext/tests/tst_persistent_undo.cpp",
-        "docs/specs/vnext-external-position-contract.md"
+        "docs/specs/vnext-external-position-contract.md",
+        "libs/collabtext/src/crdt/Buffer.h",
+        "libs/collabtext/src/storage/LocalHistoryLog.h",
+        "libs/collabtext/CMakeLists.txt"
       ],
       "steps": [
         "Durably record local undo groups, coalescing boundaries, cursor metadata, redo truncation, and retirement/trim events with their operation context; replay into only the owning actor's local history.",
@@ -2386,10 +2389,18 @@
         "R10"
       ],
       "gate": "Q3 resolved: persistent actor-local undo AND redo, bounded by step and byte limits.",
-      "status": "not_started",
+      "status": "in_progress",
       "consumer_requirements": [
         "W5"
-      ]
+      ],
+      "progress": "Partial: added replay-validated Buffer undo/redo snapshots and an actor-scoped atomic checkpoint for the latest local history state. The low-level fixture replays an edit, restores the saved cursor, and exercises undo plus redo; it also checks that forged history outside replay coverage is rejected. This checkpoint is not yet wired into DocumentSession or paired transactionally with operation publication.",
+      "verification_results": {
+        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T214819Z-2"
+      },
+      "artifacts": [
+        "build-roadmap-debug/verification/20261006T214819Z-2/"
+      ],
+      "remaining_gap": "Integrate checkpoints with actor-local operation replay and durable local edit/undo/redo commits; add step and retained-byte budgeting with atomic retirement records; cover restart/crash failure points, coalescing, peer edits, and canonical event correlation. IdList history is also not yet persisted."
     },
     {
       "id": "L07",

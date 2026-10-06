@@ -39,6 +39,18 @@ struct TextEdit {
     std::string new_text;     ///< Replacement (empty for deletion)
 };
 
+/// Actor-local undo state that can be persisted alongside the operation log.
+/// It contains identities only; document content is reconstructed by replay.
+struct LocalUndoEntrySnapshot {
+    std::vector<Identity> inserted_items;
+    std::vector<Identity> deletion_operations;
+};
+
+struct LocalHistorySnapshot {
+    std::vector<LocalUndoEntrySnapshot> entries;
+    size_t cursor = 0;
+};
+
 class Buffer {
 public:
     /// Takes the allocator this engine mints identities from.
@@ -158,6 +170,12 @@ public:
     /// new local edit when they want that edit to be grouped with the
     /// previous one (e.g., consecutive keystrokes inside a word).
     bool coalesce_last_undo();
+
+    /// Copy the local undo/redo stack for persistence. Restore only after the
+    /// corresponding operation history has been replayed into this buffer.
+    [[nodiscard]] LocalHistorySnapshot local_history_snapshot() const;
+    [[nodiscard]] Result<void>
+    restore_local_history(const LocalHistorySnapshot &snapshot);
 
     /// Returns the full visible text of the document.
     std::string text() const;
