@@ -22,9 +22,16 @@
 
 #include <QtTest>
 #include <QtGlobal>
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <algorithm>
 #include <array>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -69,6 +76,7 @@ private slots:
     void concurrentTypingStaysGrouped_data();
     void concurrentTypingStaysGrouped();
     void insertionInsideTypedRunConverges();
+    void everyS01FixtureMatchesProductionInEveryArrivalOrder();
     void listTieIsDeterministic_data();
     void listTieIsDeterministic();
 };
@@ -203,6 +211,253 @@ void SequenceSemanticsTest::insertionInsideTypedRunConverges() {
     // split the run. A reused or fresh locator could not say that; the tree link can.
     QCOMPARE(alice.text(), bob.text());
     QCOMPARE(alice.text(), std::string("abcXYdefgh"));
+}
+
+// ---------------------------------------------------------------------------
+// S01 fixtures through the production engines
+// ---------------------------------------------------------------------------
+//
+// tst_sequence_model runs these histories through the reference interpreters and
+// tst_fuguemax_model through the literal FugueMax. This runs them through the
+// engine. The fixtures describe operations by *boundaries* ("between A/3 and
+// B/1"), so each operation is minted by a persistent per-actor replica that has
+// observed exactly its causal prerequisites, at the offset that boundary names;
+// the engine's own identity allocation must then reproduce the fixture's operation
+// identity (A/4, B/6, ...), which is checked rather than assumed. Every arrival
+// order is then replayed into a fresh replica and the visible order compared with
+// the fixture's exact oracle.
+
+namespace {
+
+using Json = QJsonObject;
+
+uint8_t actor_index_of(const Json& actors, const QString& alias) {
+    return uint8_t(actors.value(alias).toString().right(2).toUInt(nullptr, 16));
+}
+
+Identity fixture_identity(const Json& actors, const QString& text) {
+    const auto parts = text.split('/');
+    return Identity(actor(actor_index_of(actors, parts.at(0))), parts.at(1).toULongLong());
+}
+
+QString identity_name(const Json& actors, const Identity& id) {
+    for (auto it = actors.begin(); it != actors.end(); ++it)
+        if (actor(actor_index_of(actors, it.key())) == id.actor)
+            return it.key() + "/" + QString::number(id.counter);
+    return QStringLiteral("?/") + QString::number(id.counter);
+}
+
+/// Visible item identities of a Buffer in document order.
+std::vector<Identity> visible_items(const Buffer& buffer) {
+    std::vector<Identity> out;
+    for (const auto& f : buffer.fragments())
+        if (f.visible)
+            for (uint32_t i = 0; i < f.length; ++i) out.push_back(f.item_at(i));
+    return out;
+}
+
+/// Byte offset just after `item` in `buffer`'s visible text, or 0 for START. An
+/// item that is not visible contributes nothing, so a boundary naming a tombstone
+/// resolves to "after the last visible item before it".
+uint32_t offset_after(const Buffer& buffer, const QString& boundary, const Json& actors) {
+    if (boundary == "START") return 0;
+    const Identity target = fixture_identity(actors, boundary);
+    uint32_t offset = 0;
+    for (const auto& f : buffer.fragments()) {
+        uint32_t scalar_offset = 0;
+        for (uint32_t i = 0; i < f.length; ++i) {
+            const uint32_t width = [&] {
+                const auto lead = static_cast<unsigned char>(f.text[scalar_offset]);
+                return lead < 0x80 ? 1u : (lead & 0xE0) == 0xC0 ? 2u : (lead & 0xF0) == 0xE0 ? 3u : 4u;
+            }();
+            if (f.visible) offset += width;
+            scalar_offset += width;
+            if (f.item_at(i) == target) return offset;
+        }
+    }
+    return offset;
+}
+
+/// Byte range [start, end) of a visible `item` in `buffer`, if it is visible.
+std::optional<std::pair<uint32_t, uint32_t>> range_of(const Buffer& buffer, const Identity& item) {
+    uint32_t offset = 0;
+    for (const auto& f : buffer.fragments()) {
+        uint32_t scalar_offset = 0;
+        for (uint32_t i = 0; i < f.length; ++i) {
+            const auto lead = static_cast<unsigned char>(f.text[scalar_offset]);
+            const uint32_t width = lead < 0x80 ? 1u : (lead & 0xE0) == 0xC0 ? 2u : (lead & 0xF0) == 0xE0 ? 3u : 4u;
+            if (f.item_at(i) == item) {
+                if (!f.visible) return std::nullopt;
+                return std::make_pair(offset, offset + width);
+            }
+            if (f.visible) offset += width;
+            scalar_offset += width;
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+void SequenceSemanticsTest::everyS01FixtureMatchesProductionInEveryArrivalOrder() {
+    const QString root = QStringLiteral(COLLABTEXT_SEQUENCE_FIXTURE_DIR);
+    const auto files = QDir(root).entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    QVERIFY(files.size() >= 18);
+
+    for (const auto& file : files) {
+        QFile in(root + "/" + file);
+        QVERIFY(in.open(QIODevice::ReadOnly));
+        const Json doc = QJsonDocument::fromJson(in.readAll()).object();
+        const QString fixture = doc["id"].toString();
+        const Json actors = doc["actors"].toObject();
+        const bool list = doc["primitive"].toString() == "list";
+        const QString where = fixture + ": ";
+
+        // The seed: initial items are observed through one operation by the seed actor.
+        std::optional<Operation> seed_text;
+        std::optional<IdListOperation> seed_list;
+        const auto initial = doc["initial"].toArray();
+        if (!initial.isEmpty()) {
+            const QString seed_alias = initial[0].toObject()["id"].toString().section('/', 0, 0);
+            if (list) {
+                QSKIP("list fixtures in S01 carry no initial items");
+            } else {
+                Buffer seeder(test_counter(actor_index_of(actors, seed_alias)));
+                std::string run;
+                for (const auto& item : initial) run += item.toObject()["value"].toString().toStdString();
+                seed_text = seeder.apply_local_edit({{0, 0}}, {run});
+            }
+        }
+
+        // One persistent replica per actor, so undo/redo stacks are the author's.
+        std::map<QString, std::unique_ptr<Buffer>> text_replicas;
+        std::map<QString, std::unique_ptr<IdList>> list_replicas;
+        std::map<QString, std::set<QString>> delivered;
+        std::map<QString, Operation> text_ops;
+        std::map<QString, IdListOperation> list_ops;
+        std::map<QString, std::set<QString>> closure;
+        std::vector<QString> op_order;
+
+        auto replica_text = [&](const QString& alias) -> Buffer& {
+            auto& slot = text_replicas[alias];
+            if (!slot) {
+                slot = std::make_unique<Buffer>(test_counter(actor_index_of(actors, alias)));
+                if (seed_text) slot->apply_ops({*seed_text});
+            }
+            return *slot;
+        };
+        auto replica_list = [&](const QString& alias) -> IdList& {
+            auto& slot = list_replicas[alias];
+            if (!slot) slot = std::make_unique<IdList>(test_counter(actor_index_of(actors, alias)));
+            return *slot;
+        };
+
+        for (const auto& value : doc["operations"].toArray()) {
+            const Json op = value.toObject();
+            const QString id = op["id"].toString();
+            const QString alias = id.section('/', 0, 0);
+            const QString kind = op["kind"].toString();
+
+            std::set<QString> deps;
+            for (const auto& a : op["after"].toArray()) {
+                const QString dep = a.toString();
+                deps.insert(dep);
+                deps.insert(closure[dep].begin(), closure[dep].end());
+            }
+            closure[id] = deps;
+
+            // Deliver exactly the causal prerequisites this actor has not yet seen.
+            for (const auto& prior : op_order) {
+                if (!deps.count(prior) || delivered[alias].count(prior)) continue;
+                if (list) {
+                    QVERIFY2(replica_list(alias).apply_ops({list_ops.at(prior)})[0].kind() == ApplyOutcomeKind::applied,
+                             qPrintable(where + "prerequisite " + prior + " not applied"));
+                } else {
+                    QVERIFY2(replica_text(alias).apply_ops({text_ops.at(prior)})[0].kind() == ApplyOutcomeKind::applied,
+                             qPrintable(where + "prerequisite " + prior + " not applied"));
+                }
+                delivered[alias].insert(prior);
+            }
+
+            Identity produced_id;
+            if (list) {
+                IdList& rep = replica_list(alias);
+                std::optional<IdListOperation> made;
+                if (kind == "insert") {
+                    const QString left = op["between"].toArray()[0].toString();
+                    const auto item = op["items"].toArray()[0].toObject();
+                    const Anchor anchor = left == "START" ? Anchor::min()
+                                                          : Anchor(fixture_identity(actors, left), Bias::Left);
+                    auto r = rep.try_insert_after(anchor, uint64_t(item["value"].toInteger()));
+                    QVERIFY2(r.ok(), qPrintable(where + "insert refused"));
+                    made = r.value();
+                } else if (kind == "undo") {
+                    made = rep.undo();
+                } else if (kind == "redo") {
+                    made = rep.redo();
+                }
+                QVERIFY2(made.has_value(), qPrintable(where + id + " produced no operation"));
+                produced_id = idlist_op_identity(*made);
+                list_ops[id] = *made;
+            } else {
+                Buffer& rep = replica_text(alias);
+                std::optional<Operation> made;
+                if (kind == "insert") {
+                    const QString left = op["between"].toArray()[0].toString();
+                    std::string content;
+                    for (const auto& item : op["items"].toArray())
+                        content += item.toObject()["value"].toString().toStdString();
+                    const uint32_t at = offset_after(rep, left, actors);
+                    made = rep.apply_local_edit({{at, at}}, {content});
+                } else if (kind == "delete") {
+                    std::vector<std::pair<uint32_t, uint32_t>> ranges;
+                    for (const auto& t : op["targets"].toArray()) {
+                        if (const auto r = range_of(rep, fixture_identity(actors, t.toString()))) {
+                            if (!ranges.empty() && ranges.back().second == r->first) ranges.back().second = r->second;
+                            else ranges.push_back(*r);
+                        }
+                    }
+                    std::sort(ranges.begin(), ranges.end());
+                    std::vector<std::string> blanks(ranges.size());
+                    made = rep.try_apply_local_edit(ranges, blanks).value();
+                } else if (kind == "undo") {
+                    made = rep.undo();
+                } else if (kind == "redo") {
+                    made = rep.redo();
+                }
+                QVERIFY2(made.has_value(), qPrintable(where + id + " produced no operation"));
+                produced_id = op_identity(*made);
+                text_ops[id] = *made;
+            }
+            QCOMPARE(identity_name(actors, produced_id), id);   // the engine reproduced the fixture's identity
+            delivered[alias].insert(id);
+            op_order.push_back(id);
+        }
+
+        // Every arrival order, replayed into a fresh replica.
+        QStringList want;
+        for (const auto& e : doc["expected"].toObject()["order"].toArray()) want << e.toString();
+        std::set<QString> hidden;
+        for (const auto& e : doc["expected"].toObject()["hidden"].toArray()) hidden.insert(e.toString());
+
+        for (const auto& arrival : doc["arrival_orders"].toArray()) {
+            QStringList got;
+            if (list) {
+                IdList fresh(test_counter(99));
+                for (const auto& v : arrival.toArray()) fresh.apply_ops({list_ops.at(v.toString())});
+                QCOMPARE(fresh.apply_ops({}).size(), size_t(0));
+                for (const auto& e : fresh.entries())
+                    if (e.visible) got << identity_name(actors, e.origin);
+            } else {
+                Buffer fresh(test_counter(99));
+                if (seed_text) fresh.apply_ops({*seed_text});
+                for (const auto& v : arrival.toArray()) fresh.apply_ops({text_ops.at(v.toString())});
+                QCOMPARE(fresh.deferred_count(), size_t(0));
+                for (const auto& id : visible_items(fresh)) got << identity_name(actors, id);
+            }
+            QVERIFY2(got == want, qPrintable(where + "visible order " + got.join(' ') + ", oracle " + want.join(' ')));
+        }
+    }
 }
 
 /// IdList's equal-boundary tie must be deterministic across replicas. This is the
