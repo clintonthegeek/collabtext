@@ -2396,14 +2396,14 @@
       "consumer_requirements": [
         "W5"
       ],
-      "progress": "Partial: added replay-validated Buffer undo/redo snapshots and an actor-scoped atomic checkpoint for local history. DocumentSession now restores the checkpoint after full operation replay, publishes undo/redo as ordinary durable operations, and checkpoints after local edit/undo/redo. Reopen fixtures cover undo then redo and verify that owner undo preserves a peer edit. Checkpoint publication and operation publication are still separate writes.",
+      "progress": "Partial: added replay-validated Buffer undo/redo snapshots and an actor-scoped atomic checkpoint for local history. DocumentSession restores the checkpoint after full operation replay and publishes edit/undo/redo operations through a durable intent protocol: persist the operation token, payload, and resulting history snapshot; push idempotently; checkpoint; then clear the intent. Reopen tests cover pending-intent retry, undo\u2192close\u2192reopen\u2192redo, and owner undo preserving a peer edit. Byte/step retirement policy and IdList persistence remain open.",
       "verification_results": {
-        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, including session undo\u2192close\u2192reopen\u2192redo and peer-edit preservation; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T215156Z-2"
+        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, including pending-intent recovery, session undo\u2192close\u2192reopen\u2192redo, and peer-edit preservation; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T215349Z-2"
       },
       "artifacts": [
-        "build-roadmap-debug/verification/20261006T215156Z-2/"
+        "build-roadmap-debug/verification/20261006T215349Z-2/"
       ],
-      "remaining_gap": "Make operation publication and history checkpoint recover as one transaction, including uncertain publication; add step and retained-byte budgeting with atomic retirement records; cover crash injection, coalescing, and canonical event correlation. IdList history is not yet persisted."
+      "remaining_gap": "Add step and retained-byte budgeting with atomic retirement records; cover crash injection at every intent/push/checkpoint/clear boundary, coalescing, and canonical event correlation. IdList history is not yet persisted. Buffer undo/redo refusal currently maps allocator failure to not_found because the primitive API returns optional."
     },
     {
       "id": "L07",

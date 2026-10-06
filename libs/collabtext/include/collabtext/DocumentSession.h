@@ -57,7 +57,9 @@ public:
   [[nodiscard]] Result<Crdt::Operation>
   apply_local(const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
               const std::vector<std::string> &replacements);
+  /// Publish a compensating local operation and persist the updated undo cursor.
   [[nodiscard]] Result<Crdt::Operation> undo();
+  /// Publish a compensating local operation and persist the updated redo cursor.
   [[nodiscard]] Result<Crdt::Operation> redo();
   [[nodiscard]] Result<PollReport> poll(PollBudget budget = {});
   [[nodiscard]] Result<void> save();

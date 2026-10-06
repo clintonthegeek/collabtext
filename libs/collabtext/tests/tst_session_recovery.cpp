@@ -2,11 +2,14 @@
 #include <QTest>
 
 #include "crdt/Buffer.h"
+#include "core/Sha256.h"
 #include "identity/ReplicaAllocator.h"
 #include "storage/DurableFile.h"
+#include "storage/LocalHistoryLog.h"
 #include "transport/StreamSync.h"
 #include <collabtext/DocumentSession.h>
 #include <collabtext/Serialization.h>
+#include "VolatileCounter.h"
 
 #include <fstream>
 
@@ -177,6 +180,53 @@ private slots:
     QCOMPARE(session->text(), std::string("local"));
     QVERIFY(!session->redo().ok());
     QVERIFY(session->close().ok());
+  }
+
+  void session_reconciles_pending_local_commit_before_replay() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const DocumentSessionConfig config{root / "shared", root / "device",
+                                       "doc-pending", "text-pending", 1};
+    ActorId owner;
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      owner = session->actor();
+      QVERIFY(session->close().ok());
+    }
+    auto test_state = ReplicaState::open(config.private_state);
+    QVERIFY(test_state.ok());
+    QVERIFY(test_state.value().close().ok());
+
+    auto allocator = std::make_shared<Test::VolatileCounter>(owner);
+    Crdt::Buffer source(allocator);
+    auto local = source.try_apply_local_edit({{0, 0}}, {"recovered"});
+    QVERIFY(local.ok());
+    auto wire = encode_operation(local.value());
+    QVERIFY(wire.ok());
+    const std::string history_key = config.document + std::string(1, '\0') +
+                                    config.stream + std::string(1, '\0') +
+                                    std::to_string(config.epoch);
+    const auto history_path = config.private_state /
+        ("local-history-" + sha256_hex(history_key) + ".snapshot");
+    auto history_open = Storage::LocalHistoryLog::open(history_path, owner);
+    QVERIFY(history_open.ok());
+    auto history = std::move(history_open).value();
+    QVERIFY(history.store_pending({1, wire.value(), source.local_history_snapshot()})
+                .ok());
+
+    // Simulates death after the intent is fsynced and before the operation is
+    // published. Opening retries the same producer/sequence and then restores
+    // its saved undo stack.
+    auto reopened = DocumentSession::open(config);
+    QVERIFY(reopened.ok());
+    auto recovered = std::move(reopened).value();
+    QCOMPARE(recovered->text(), std::string("recovered"));
+    QVERIFY(recovered->undo().ok());
+    QCOMPARE(recovered->text(), std::string{});
+    QVERIFY(recovered->close().ok());
   }
 
   void reopened_local_undo_preserves_a_peers_edit() {

@@ -41,6 +41,14 @@ struct DocumentSession::Impl {
       return encoded.error().with_context(
           "local operation exists in memory but could not be encoded");
     }
+    const auto snapshot = buffer->local_history_snapshot();
+    auto intent = local_history->store_pending(
+        Storage::PendingLocalHistoryCommit{next_envelope, encoded.value(), snapshot});
+    if (!intent.ok()) {
+      poisoned = true;
+      return intent.error().with_context(
+          "local operation applied but recovery intent could not be stored");
+    }
     OutboundDelivery delivery{
         DeliveryToken{config.stream, config.epoch, replica->actor(), next_envelope},
         std::move(encoded).value()};
@@ -55,11 +63,17 @@ struct DocumentSession::Impl {
     }
     replayed_tokens.insert(token_key(delivery.token));
     ++next_envelope;
-    auto checkpoint = local_history->store_snapshot(buffer->local_history_snapshot());
+    auto checkpoint = local_history->store_snapshot(snapshot);
     if (!checkpoint.ok()) {
       poisoned = true;
       return checkpoint.error().with_context(
           "operation published but local undo checkpoint failed");
+    }
+    auto cleared = local_history->clear_pending();
+    if (!cleared.ok()) {
+      poisoned = true;
+      return cleared.error().with_context(
+          "operation and local history committed but recovery intent remains");
     }
     return op;
   }
@@ -104,6 +118,33 @@ struct DocumentSession::Impl {
                       std::string(1, '\0') + std::to_string(config.epoch);
     return config.private_state /
            ("local-history-" + sha256_hex(key) + ".snapshot");
+  }
+
+  Result<void> reconcile_pending_history() {
+    auto pending = local_history->recover_pending();
+    if (!pending.ok()) return pending.error();
+    if (!pending.value()) return {};
+    const auto &commit = *pending.value();
+    if (commit.sequence == UINT64_MAX)
+      return Error(ErrorCode::counter_exhausted,
+                   "pending local delivery sequence is exhausted");
+    auto decoded = decode_operation(commit.operation);
+    if (!decoded.ok())
+      return decoded.error().with_context("pending local operation record");
+    if (op_identity(decoded.value()).actor != replica->actor())
+      return Error(ErrorCode::actor_conflict,
+                   "pending local operation belongs to another actor");
+    OutboundDelivery delivery{
+        DeliveryToken{config.stream, config.epoch, replica->actor(),
+                      commit.sequence},
+        commit.operation};
+    auto pushed = transport->push(delivery, PushDurability::durable);
+    if (!pushed.ok()) return pushed.error().with_context(
+        "reconciling pending local operation publication");
+    auto checkpoint = local_history->store_snapshot(commit.snapshot);
+    if (!checkpoint.ok()) return checkpoint.error().with_context(
+        "reconciling pending local history checkpoint");
+    return local_history->clear_pending();
   }
 
   void update_completeness() {
@@ -197,6 +238,9 @@ DocumentSession::open(DocumentSessionConfig config) {
     if (auto registered = impl->transport->register_stream(scope);
         !registered.ok())
       return registered.error();
+    if (auto reconciled = impl->reconcile_pending_history();
+        !reconciled.ok())
+      return reconciled.error();
 
     auto replayed = impl->transport->replay_all(
         scope, [&](const InboundDelivery &delivery) {
@@ -279,6 +323,9 @@ Result<SessionRecoveryReport> DocumentSession::recover() {
     return Error(ErrorCode::writer_conflict, "session is closed");
   try {
     const auto scope = StreamScope{m_impl->config.stream, m_impl->config.epoch};
+    if (auto reconciled = m_impl->reconcile_pending_history();
+        !reconciled.ok())
+      return reconciled.error();
     auto replayed = m_impl->transport->replay_all(
         scope, [&](const InboundDelivery &delivery) {
           return m_impl->replay_delivery(delivery);

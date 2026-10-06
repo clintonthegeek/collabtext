@@ -76,6 +76,29 @@ private slots:
     QCOMPARE(recovered.value()->entries[0].inserted_items[0], Test::id(9, 1));
     QVERIFY(log.close().ok());
   }
+
+  void pending_commit_survives_until_explicit_reconciliation() {
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto path = std::filesystem::path(temp.path().toStdString()) / "undo.log";
+    auto opened = Storage::LocalHistoryLog::open(path, Test::actor(9));
+    QVERIFY(opened.ok());
+    auto log = std::move(opened).value();
+    Crdt::LocalHistorySnapshot snapshot;
+    snapshot.cursor = 0;
+    Storage::PendingLocalHistoryCommit pending{7, "encoded-operation", snapshot};
+    QVERIFY(log.store_pending(pending).ok());
+    auto recovered = log.recover_pending();
+    QVERIFY(recovered.ok());
+    QVERIFY(recovered.value().has_value());
+    QCOMPARE(recovered.value()->sequence, uint64_t(7));
+    QCOMPARE(recovered.value()->operation, std::string("encoded-operation"));
+    QCOMPARE(recovered.value()->snapshot.cursor, size_t(0));
+    QVERIFY(log.clear_pending().ok());
+    auto cleared = log.recover_pending();
+    QVERIFY(cleared.ok());
+    QVERIFY(!cleared.value().has_value());
+  }
 };
 
 QTEST_GUILESS_MAIN(TestPersistentUndo)

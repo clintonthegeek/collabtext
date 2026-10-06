@@ -103,6 +103,47 @@ std::string encode(const Crdt::LocalHistorySnapshot &snapshot,
   out << '\n';
   return out.str();
 }
+
+std::string hex(std::string_view bytes) {
+  static constexpr char digits[] = "0123456789abcdef";
+  std::string out;
+  out.reserve(bytes.size() * 2);
+  for (unsigned char byte : bytes) {
+    out.push_back(digits[byte >> 4]);
+    out.push_back(digits[byte & 15]);
+  }
+  return out;
+}
+
+Result<std::string> unhex(std::string_view text) {
+  if (text.size() % 2)
+    return Error(ErrorCode::corrupt_record, "pending operation hex is truncated");
+  auto nibble = [](char c) -> int {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    return -1;
+  };
+  std::string bytes;
+  bytes.reserve(text.size() / 2);
+  for (size_t i = 0; i < text.size(); i += 2) {
+    int hi = nibble(text[i]), lo = nibble(text[i + 1]);
+    if (hi < 0 || lo < 0)
+      return Error(ErrorCode::corrupt_record, "pending operation hex is invalid");
+    bytes.push_back(static_cast<char>((hi << 4) | lo));
+  }
+  return bytes;
+}
+
+bool belongs_to(const Crdt::LocalHistorySnapshot &snapshot,
+                const ActorId &owner) {
+  for (const auto &entry : snapshot.entries) {
+    for (const auto &id : entry.inserted_items)
+      if (id.actor != owner || id.counter == 0) return false;
+    for (const auto &id : entry.deletion_operations)
+      if (id.actor != owner || id.counter == 0) return false;
+  }
+  return true;
+}
 } // namespace
 
 Result<LocalHistoryLog> LocalHistoryLog::open(std::filesystem::path path,
@@ -134,24 +175,89 @@ LocalHistoryLog::recover() const {
   return std::optional<Crdt::LocalHistorySnapshot>(std::move(parsed).value());
 }
 
+Result<std::optional<PendingLocalHistoryCommit>>
+LocalHistoryLog::recover_pending() const {
+  auto path = m_path;
+  path += ".pending";
+  if (!std::filesystem::exists(path))
+    return std::optional<PendingLocalHistoryCommit>{};
+  std::ifstream file(path, std::ios::binary);
+  if (!file)
+    return Error(ErrorCode::io_error, "cannot read pending history commit",
+                 path.string());
+  std::string bytes((std::istreambuf_iterator<char>(file)), {});
+  if (bytes == "CLP0\n") return std::optional<PendingLocalHistoryCommit>{};
+  const size_t first_end = bytes.find('\n');
+  const size_t second_end = first_end == std::string::npos
+                                ? std::string::npos
+                                : bytes.find('\n', first_end + 1);
+  if (first_end == std::string::npos || second_end != bytes.size() - 1 ||
+      bytes.size() > kMaxSnapshotBytes)
+    return Error(ErrorCode::corrupt_record,
+                 "pending history commit is incomplete", path.string());
+  std::istringstream header(bytes.substr(0, first_end));
+  std::string magic, payload_hex;
+  if (!(header >> magic) || magic != "CLP1")
+    return Error(ErrorCode::corrupt_record,
+                 "pending history commit format is invalid", path.string());
+  auto sequence = number(header, "delivery sequence");
+  if (!sequence.ok() || sequence.value() == 0)
+    return Error(ErrorCode::corrupt_record,
+                 "pending history delivery sequence is invalid");
+  if (!(header >> payload_hex))
+    return Error(ErrorCode::corrupt_record,
+                 "pending history operation is missing");
+  std::string extra;
+  if (header >> extra)
+    return Error(ErrorCode::corrupt_record,
+                 "pending history commit has trailing header fields");
+  auto payload = unhex(payload_hex);
+  if (!payload.ok()) return payload.error();
+  auto snapshot = decode(
+      std::string_view(bytes).substr(first_end + 1, second_end - first_end - 1),
+      m_owner);
+  if (!snapshot.ok()) return snapshot.error();
+  return std::optional<PendingLocalHistoryCommit>(PendingLocalHistoryCommit{
+      sequence.value(), std::move(payload).value(),
+      std::move(snapshot).value()});
+}
+
 Result<void>
 LocalHistoryLog::store_snapshot(const Crdt::LocalHistorySnapshot &snapshot) {
   if (snapshot.entries.size() > kMaxHistoryEntries ||
       snapshot.cursor > snapshot.entries.size())
     return Error(ErrorCode::limit_exceeded, "local history snapshot exceeds bounds");
-  for (const auto &entry : snapshot.entries) {
-    for (const auto &id : entry.inserted_items)
-      if (id.actor != m_owner || id.counter == 0)
-        return Error(ErrorCode::history_unavailable,
-                     "cannot persist a non-owner undo item");
-    for (const auto &id : entry.deletion_operations)
-      if (id.actor != m_owner || id.counter == 0)
-        return Error(ErrorCode::history_unavailable,
-                     "cannot persist a non-owner deletion operation");
-  }
+  if (!belongs_to(snapshot, m_owner))
+    return Error(ErrorCode::history_unavailable,
+                 "cannot persist history identities for another actor");
   auto record = encode(snapshot, m_owner);
   if (record.size() > kMaxSnapshotBytes)
     return Error(ErrorCode::limit_exceeded, "local history snapshot exceeds byte limit");
   return replace_atomically(m_path, record);
+}
+
+Result<void> LocalHistoryLog::store_pending(
+    const PendingLocalHistoryCommit &pending) {
+  if (pending.sequence == 0 || pending.operation.empty() ||
+      pending.snapshot.entries.size() > kMaxHistoryEntries ||
+      pending.snapshot.cursor > pending.snapshot.entries.size() ||
+      !belongs_to(pending.snapshot, m_owner))
+    return Error(ErrorCode::history_unavailable,
+                 "pending local commit is invalid or outside configured bounds");
+  auto snapshot = encode(pending.snapshot, m_owner);
+  std::string bytes = "CLP1 " + std::to_string(pending.sequence) + " " +
+                      hex(pending.operation) + "\n" + snapshot;
+  if (bytes.size() > kMaxSnapshotBytes)
+    return Error(ErrorCode::limit_exceeded,
+                 "pending local history commit exceeds byte limit");
+  auto path = m_path;
+  path += ".pending";
+  return replace_atomically(path, bytes);
+}
+
+Result<void> LocalHistoryLog::clear_pending() {
+  auto path = m_path;
+  path += ".pending";
+  return replace_atomically(path, "CLP0\n");
 }
 } // namespace CollabText::Storage
