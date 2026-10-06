@@ -2,6 +2,7 @@
 #include "TestSeed.h"
 #include "TraceHarness.h"
 #include "crdt/Buffer.h"
+#include "crdt/SequenceOrder.h"
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -18,13 +19,6 @@ using namespace CollabText::Test;
 // ============================================================================
 // Invariant checkers — these verify structural properties after every operation
 // ============================================================================
-
-// Same-locator ties are ordered replica-major (actor, then counter): the
-// sequence contract keeps one actor's consecutive items adjacent.
-static bool groupBefore(const CollabText::Crdt::Identity& a, const CollabText::Crdt::Identity& b) {
-    if (const int by_actor = a.actor.compare(b.actor); by_actor != 0) return by_actor < 0;
-    return a.counter < b.counter;
-}
 
 static void check_invariants(const Buffer& buf, const char* context) {
     auto frags = buf.fragments();
@@ -52,24 +46,11 @@ static void check_invariants(const Buffer& buf, const char* context) {
 
     // INV-3: (subsumed by INV-1 + INV-2 + INV-8 — visible text consistency)
 
-    // INV-4: fragment ordering — (locator, origin) strictly non-decreasing
-    for (size_t i = 1; i < frags.size(); ++i) {
-        auto cmp = frags[i].locator <=> frags[i-1].locator;
-        if (cmp < 0) {
-            QFAIL(qPrintable(QString("INV-4 violated at %1: frag[%2].locator < frag[%3].locator")
-                .arg(context).arg(i).arg(i-1)));
-        }
-        if (cmp == 0) {
-            if (groupBefore(frags[i].origin, frags[i-1].origin)) {
-                QFAIL(qPrintable(QString("INV-4 violated at %1: same locator but frag[%2].origin < frag[%3].origin")
-                    .arg(context).arg(i).arg(i-1)));
-            }
-            // Same locator, same origin would mean duplicate fragments
-            if (frags[i].origin == frags[i-1].origin) {
-                QFAIL(qPrintable(QString("INV-4 violated at %1: duplicate fragment at index %2")
-                    .arg(context).arg(i)));
-            }
-        }
+    // INV-4: placement is structurally consistent: every link names a present
+    // element, a right child follows its parent, a left child precedes it.
+    if (const auto bad = CollabText::Crdt::SequenceOrder::check_consistency(frags)) {
+        QFAIL(qPrintable(QString("INV-4 violated at %1: %2")
+            .arg(context).arg(QString::fromStdString(*bad))));
     }
 
     // INV-5: every fragment has non-zero byte_length and length > 0
@@ -630,8 +611,8 @@ private slots:
                               << "  fragments:\n";
                     auto frags = buf.fragments();
                     for (size_t fi = 0; fi < frags.size(); ++fi) {
-                        std::cerr << "    [" << fi << "] loc_depth="
-                                  << frags[fi].locator.depth()
+                        std::cerr << "    [" << fi << "] side="
+                                  << (frags[fi].link.side == Side::Left ? "L" : "R")
                                   << " origin=(" << frags[fi].origin.actor
                                   << "," << frags[fi].origin.counter
                                   << ") len=" << frags[fi].length

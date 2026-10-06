@@ -28,7 +28,12 @@ Error parse_error(const Codec::JsonError& e) {
     return Error(unicode ? ErrorCode::invalid_unicode : ErrorCode::malformed,
                  Codec::to_string(e.kind), "byte " + std::to_string(e.offset) + ": " + e.context);
 }
-Result<JsonValue> read_frame(std::string_view bytes, std::string_view magic) {
+// The operation families carry their own version: the frontier families (CTGV,
+// CTGP) did not change when S03 moved placement from fractional locators to tree
+// links, so they stay at 0001 and a v1 operation is refused as an unsupported
+// version rather than misread as a malformed v2 one.
+Result<JsonValue> read_frame(std::string_view bytes, std::string_view magic,
+                             std::string_view version = "0001") {
     if (bytes.size() > frame_limit) return malformed("frame exceeds 8 MiB");
     if (bytes.size() < 4) {
         if (!bytes.empty() && magic.substr(0, bytes.size()) == bytes)
@@ -41,7 +46,7 @@ Result<JsonValue> read_frame(std::string_view bytes, std::string_view magic) {
     for (char c : bytes.substr(4, 4))
         if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
             return malformed("version must be four lowercase hex digits");
-    if (bytes.substr(4, 4) != "0001") return Error(ErrorCode::unsupported_version, "unsupported operation codec version");
+    if (bytes.substr(4, 4) != version) return Error(ErrorCode::unsupported_version, "unsupported operation codec version");
     JsonValue root;
     Codec::JsonError error;
     Codec::JsonReader reader;
@@ -105,14 +110,15 @@ public:
         }
         raw("}");
     }
-    void locator(const Locator& loc) {
-        if (error) return;
-        if (!(loc > Locator::min() && loc < Locator::max()) || loc.depth() > 100000) {
-            error = malformed("invalid locator"); return;
-        }
-        raw("[");
-        for(size_t i=0;i<loc.depth();++i) { if(i) raw(","); number(loc.digits()[i]); }
-        raw("]");
+    // An absent identity is an empty array; a present one is the usual [actor,counter].
+    void optional_identity(const std::optional<Identity>& id) {
+        if (!id) { raw("[]"); return; }
+        identity(*id);
+    }
+    void link(const Link& l) {
+        raw("{\"p\":"); optional_identity(l.parent);
+        raw(",\"s\":"); number(l.side == Side::Left ? 0 : 1);
+        raw(",\"r\":"); optional_identity(l.right_origin); raw("}");
     }
     void counts(const std::vector<std::pair<Identity,uint32_t>>& values) {
         raw("[");
@@ -121,9 +127,9 @@ public:
         }
         raw("]");
     }
-    Result<std::string> finish(std::string_view magic) {
+    Result<std::string> finish(std::string_view magic, std::string_view version = "0001") {
         if(error) return error;
-        auto parsed = read_frame(bytes, magic);
+        auto parsed = read_frame(bytes, magic, version);
         if(!parsed) return parsed.error();
         return std::move(bytes);
     }
@@ -202,12 +208,19 @@ public:
         }
         return g;
     }
-    Locator locator(const JsonValue& v) {
-        std::vector<uint64_t> digits;
-        for(const auto& digit:array(v)) { digits.push_back(number(digit)); if(error) break; }
-        Locator loc(std::move(digits));
-        if(!(loc>Locator::min() && loc<Locator::max())) fail("locator is an ordering sentinel");
-        return loc;
+    std::optional<Identity> optional_identity(const JsonValue& v) {
+        if(v.is_array() && v.elements().empty()) return std::nullopt;
+        return identity(v);
+    }
+    Link link(const JsonValue& v) {
+        Link out;
+        if(!schema(v,{"p","s","r"})) return out;
+        out.parent=optional_identity(field(v,"p"));
+        const auto side=number(field(v,"s"));
+        if(side>1) { fail("link side must be 0 or 1"); return out; }
+        out.side = side==0 ? Side::Left : Side::Right;
+        out.right_origin=optional_identity(field(v,"r"));
+        return out;
     }
     std::vector<std::pair<Identity,uint32_t>> counts(const JsonValue& v, Identity timestamp) {
         std::vector<std::pair<Identity,uint32_t>> out;
@@ -309,7 +322,7 @@ Result<CounterGap> decode_counter_gap(std::string_view bytes) {
 }
 Result<std::string> encode_operation(const Operation& op) {
     if (!usable(op_identity(op))) return invalid_identity("invalid or empty text operation");
-    Writer w; w.raw("CTBO0001:");
+    Writer w; w.raw("CTBO0002:");
     return visit_operation([&](const auto& value)->Result<std::string> {
         using T=std::decay_t<decltype(value)>;
         if constexpr(std::is_same_v<T,EditOperation>) {
@@ -325,18 +338,12 @@ Result<std::string> encode_operation(const Operation& op) {
             w.raw("],\"if\":[");
             for(size_t i=0;i<value.inserted_fragments.size();++i) {
                 const auto& f=value.inserted_fragments[i]; if(i) w.raw(",");
-                w.raw("{\"o\":"); w.identity(f.origin); w.raw(",\"l\":"); w.locator(f.locator);
+                w.raw("{\"o\":"); w.identity(f.origin); w.raw(",\"k\":"); w.link(f.link);
                 w.raw(",\"c\":"); w.string(f.content); w.raw(",\"n\":"); w.number(f.length); w.raw("}");
             }
             w.raw("],\"dr\":[");
             for(size_t i=0;i<value.deletion_runs.size();++i) {
                 const auto& d=value.deletion_runs[i]; if(i) w.raw(","); w.raw("["); w.identity(d.first); w.raw(","); w.number(d.count); w.raw("]");
-            }
-            w.raw("],\"sr\":[");
-            for(size_t i=0;i<value.split_relocations.size();++i) {
-                const auto& s=value.split_relocations[i]; if(i) w.raw(",");
-                w.raw("{\"o\":"); w.identity(s.fragment_origin); w.raw(",\"s\":"); w.number(s.split_offset);
-                w.raw(",\"n\":"); w.number(s.fragment_length); w.raw(",\"l\":"); w.locator(s.new_locator); w.raw("}");
             }
             w.raw("]}");
         } else {
@@ -344,11 +351,11 @@ Result<std::string> encode_operation(const Operation& op) {
             w.raw("{\"t\":\"u\""); write_allocation(w,value.timestamp,value.version,1);
             w.raw(",\"c\":"); w.counts(value.counts); w.raw("}");
         }
-        return w.finish("CTBO");
+        return w.finish("CTBO","0002");
     },op);
 }
 Result<Operation> decode_operation(std::string_view bytes) {
-    auto parsed=read_frame(bytes,"CTBO"); if(!parsed) return parsed.error();
+    auto parsed=read_frame(bytes,"CTBO","0002"); if(!parsed) return parsed.error();
     Reader r; const auto& root=parsed.value(); const auto tag=r.string(r.field(root,"t"));
     if(r.error) return r.error;
     if(tag!="e" && tag!="u") return Error(ErrorCode::unsupported_operation,"unknown text operation tag");
@@ -358,7 +365,7 @@ Result<Operation> decode_operation(std::string_view bytes) {
         op.counts=r.counts(r.field(root,"c"),op.timestamp); r.allocation(r.field(root,"a"),op.timestamp,op.version,1);
         if(r.error) return r.error; return Operation(std::move(op));
     }
-    if(!r.schema(root,{"t","ts","v","a","did","r","nt","if","dr","sr"})) return r.error;
+    if(!r.schema(root,{"t","ts","v","a","did","r","nt","if","dr"})) return r.error;
     EditOperation op; op.timestamp=r.identity(r.field(root,"ts")); op.version=r.global(r.field(root,"v"));
     op.deletion_id=r.identity(r.field(root,"did"));
     for(const auto& item:r.array(r.field(root,"r"))) {
@@ -368,9 +375,9 @@ Result<Operation> decode_operation(std::string_view bytes) {
     }
     for(const auto& item:r.array(r.field(root,"nt"))) op.new_text.push_back(r.string(item));
     for(const auto& item:r.array(r.field(root,"if"))) {
-        if(!r.schema(item,{"o","l","c","n"})) break;
+        if(!r.schema(item,{"o","k","c","n"})) break;
         EditOperation::InsertedFragment f;
-        f.origin=r.identity(r.field(item,"o")); f.locator=r.locator(r.field(item,"l"));
+        f.origin=r.identity(r.field(item,"o")); f.link=r.link(r.field(item,"k"));
         f.content=r.string(r.field(item,"c")); f.length=r.narrow(r.field(item,"n"));
         op.inserted_fragments.push_back(std::move(f));
     }
@@ -378,13 +385,6 @@ Result<Operation> decode_operation(std::string_view bytes) {
         if(!r.array(item,2)) break;
         const auto first=r.identity(item.elements()[0]); const auto count=r.narrow(item.elements()[1]);
         op.deletion_runs.push_back({first,count});
-    }
-    for(const auto& item:r.array(r.field(root,"sr"))) {
-        if(!r.schema(item,{"o","s","n","l"})) break;
-        EditOperation::SplitRelocation s;
-        s.fragment_origin=r.identity(r.field(item,"o")); s.split_offset=r.narrow(r.field(item,"s"));
-        s.fragment_length=r.narrow(r.field(item,"n")); s.new_locator=r.locator(r.field(item,"l"));
-        op.split_relocations.push_back(std::move(s));
     }
     if(r.error) return r.error;
     auto count=edit_allocation(op); if(!count) return count.error();
@@ -394,12 +394,12 @@ Result<Operation> decode_operation(std::string_view bytes) {
 }
 Result<std::string> encode_idlist_operation(const IdListOperation& op) {
     if (!usable(idlist_op_identity(op))) return invalid_identity("invalid or empty list operation");
-    Writer w; w.raw("CTLO0001:");
+    Writer w; w.raw("CTLO0002:");
     return visit_operation([&](const auto& value)->Result<std::string> {
         using T=std::decay_t<decltype(value)>;
         if constexpr(std::is_same_v<T,IdListInsertOp>) {
             w.raw("{\"t\":\"il-i\""); write_allocation(w,value.timestamp,value.version,1);
-            w.raw(",\"id\":"); w.number(value.id); w.raw(",\"loc\":"); w.locator(value.locator);
+            w.raw(",\"id\":"); w.number(value.id); w.raw(",\"k\":"); w.link(value.link);
         } else if constexpr(std::is_same_v<T,IdListRemoveOp>) {
             w.raw("{\"t\":\"il-r\""); write_allocation(w,value.timestamp,value.version,1);
             w.raw(",\"to\":"); w.identity(value.target_origin);
@@ -408,18 +408,18 @@ Result<std::string> encode_idlist_operation(const IdListOperation& op) {
             w.raw("{\"t\":\"il-u\""); write_allocation(w,value.timestamp,value.version,1);
             w.raw(",\"c\":"); w.counts(value.counts);
         }
-        w.raw("}"); return w.finish("CTLO");
+        w.raw("}"); return w.finish("CTLO","0002");
     },op);
 }
 Result<IdListOperation> decode_idlist_operation(std::string_view bytes) {
-    auto parsed=read_frame(bytes,"CTLO"); if(!parsed) return parsed.error();
+    auto parsed=read_frame(bytes,"CTLO","0002"); if(!parsed) return parsed.error();
     Reader r; const auto& root=parsed.value(); const auto tag=r.string(r.field(root,"t"));
     if(r.error) return r.error;
     if(tag!="il-i" && tag!="il-r" && tag!="il-u") return Error(ErrorCode::unsupported_operation,"unknown list operation tag");
     if(tag=="il-i") {
-        if(!r.schema(root,{"t","ts","v","a","id","loc"})) return r.error;
+        if(!r.schema(root,{"t","ts","v","a","id","k"})) return r.error;
         IdListInsertOp op; op.timestamp=r.identity(r.field(root,"ts")); op.version=r.global(r.field(root,"v"));
-        op.id=r.number(r.field(root,"id")); op.locator=r.locator(r.field(root,"loc"));
+        op.id=r.number(r.field(root,"id")); op.link=r.link(r.field(root,"k"));
         r.allocation(r.field(root,"a"),op.timestamp,op.version,1);
         if(r.error) return r.error; return IdListOperation(std::move(op));
     }

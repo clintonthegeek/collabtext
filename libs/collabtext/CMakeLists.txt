@@ -51,6 +51,7 @@ add_library(collabtext_core STATIC
     src/crdt/ChatMessage.cpp
     src/crdt/Comment.cpp
     src/crdt/SeedOp.cpp
+    src/crdt/SequenceOrder.cpp
     src/identity/Identity.cpp
     src/identity/IdentityStore.cpp
     src/identity/IdentityProjector.cpp
@@ -312,6 +313,8 @@ add_crdt_test(tst_opqueue)
 add_crdt_test(tst_utf8)
 add_crdt_test(tst_rope)
 add_crdt_test(tst_fuzz)
+# S03: production Buffer/IdList against the literal FugueMax reference, link by link.
+add_crdt_test(tst_sequence_differential)
 add_crdt_test(tst_trace_reduction)
 add_crdt_test(tst_network_sim)
 add_crdt_test(tst_store_fault_harness)

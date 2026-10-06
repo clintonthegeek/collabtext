@@ -5,8 +5,7 @@
 #include "crdt/Clock.h"
 #include "crdt/Fragment.h"
 #include "crdt/IdentityAllocator.h"
-#include "crdt/InsertionIndex.h"
-#include "crdt/Locator.h"
+#include "crdt/Placement.h"
 #include "crdt/OperationQueue.h"
 #include "crdt/OperationValidation.h"
 #include "crdt/Operations.h"
@@ -229,9 +228,6 @@ private:
     /// Rebuild the fragment tree from a vector of fragments (preserves order).
     void set_fragments(std::vector<Fragment>&& frags);
 
-    /// Insert a fragment in sorted position in the fragment list.
-    void insert_fragment(std::vector<Fragment>& frags, Fragment frag) const;
-
     /// Find the fragment index and byte offset within that fragment for a
     /// given visible byte offset. Returns (fragment_index, offset_within_fragment).
     std::pair<size_t, uint32_t> resolve_visible_offset(
@@ -242,22 +238,23 @@ private:
     size_t split_fragment_at(std::vector<Fragment>& frags,
                              size_t frag_idx, uint32_t offset_in_frag) const;
 
-    /// Find a locator for a new fragment between frags[ins_frag-1] and
-    /// the next distinct greater locator.
-    Locator locator_between(const std::vector<Fragment>& frags,
-                            size_t ins_frag) const;
+    /// What happened when an operation was offered to the engine.
+    ///
+    /// `not_ready` means a causal prerequisite has not arrived and the operation is
+    /// still owed; `malformed` means it can never apply (for example, its placement
+    /// names an element no replica could have had), the reason is in
+    /// `m_apply_error`, and parking it in the deferral queue would wait forever.
+    enum class ApplyStep { applied, not_ready, malformed };
 
     /// Apply a single remote EditOperation.
-    bool apply_remote_edit(const EditOperation &op);
-
-    /// Fast path for apply_remote_edit: insertion-only single-char edits.
-    bool apply_remote_edit_fast(const EditOperation &op);
+    ApplyStep apply_remote_edit(const EditOperation &op);
 
     /// Apply a single remote UndoOperation.
-    bool apply_remote_undo(const UndoOperation &op);
+    ApplyStep apply_remote_undo(const UndoOperation &op);
 
-    /// Try to apply a single operation; returns true if applied, false if deferred.
-    bool try_apply(const Operation& op);
+    /// Try to apply a single operation.
+    ApplyStep try_apply(const Operation& op);
+    std::optional<Error> m_apply_error;
 
     /// Validate one operation against the current state and report what
     /// happened, queueing it or refusing it as the verdict requires.
@@ -307,9 +304,6 @@ private:
     /// Insert an entry into the deferred queue in timestamp order.
     void enqueue_deferred(OperationEntry entry);
 
-    /// Atomize multi-character fragments at shared locators.
-    void normalize_fragments(std::vector<Fragment>& frags) const;
-
     /// Apply deletion runs: batch-delete characters identified by runs of
     /// consecutive item identities, splitting fragments as needed.
     void apply_deletion_runs(
@@ -321,20 +315,10 @@ private:
     Global m_version;
     UndoMap m_undo_map;
 
+    /// The document, in document order, tombstones included. The order of this
+    /// tree IS the list order: placement is decided by SequenceOrder::integrate,
+    /// not by a key stored on each fragment.
     FragmentTree m_fragment_tree;
-    InsertionIndex m_insertion_index;
-
-    /// Per-actor origin index: maps (actor -> sorted map of origin counter ->
-    /// Locator). Used by the fast path to find a fragment's locator in O(log n).
-    /// The outer map needs an order-insensitive hash: ActorId is opaque bytes,
-    /// so std::hash<ActorId> is specialised from the byte array.
-    std::unordered_map<ActorId, std::map<uint64_t, Locator>, ActorIdHash> m_origin_index;
-    void rebuild_origin_index();
-    std::optional<Locator> origin_index_lookup(const ActorId &actor,
-                                               uint64_t origin_counter) const;
-
-    /// Rebuild the insertion index from the current fragment list.
-    void rebuild_insertion_index(const std::vector<Fragment>& frags);
 
     /// Trim the undo stack to m_max_undo_depth entries.
     void trim_undo_stack();

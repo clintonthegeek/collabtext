@@ -245,10 +245,29 @@ private:
     }
 
     NodeMsg mint(size_t index, const std::string& value, const Id& id) {
+        const NodeMsg msg = plan_at(index, value, id);
+        deliver(msg);
+        return msg;
+    }
+
+public:
+    /// The message for inserting `value` at visible index `index`, WITHOUT applying
+    /// it. A multi-range edit mints every insertion against the same old state, so
+    /// the harness needs to plan first and deliver afterwards.
+    NodeMsg plan_at(size_t index, const std::string& value, const Id& id) const {
         // leftOrigin: the (index-1)th VISIBLE element, or the root.
-        bool left_is_root = (index == 0);
+        const bool left_is_root = (index == 0);
         Id left;
         if (!left_is_root) left = *visible_at(index - 1);
+        return plan_after(left_is_root, left, value, id);
+    }
+
+    /// The message for an element that must sit immediately after `left` (the
+    /// document start when `left_is_root`), which may be a tombstone. The list
+    /// primitive anchors this way; the text primitive anchors on the visible
+    /// predecessor, which is the same thing once that element is chosen.
+    NodeMsg plan_after(bool left_is_root, const Id& left, const std::string& value,
+                       const Id& id) const {
         // rightOrigin: the next node after leftOrigin, tombstones included.
         const auto right = next_after(left_is_root, left);
 
@@ -274,7 +293,6 @@ private:
             msg.parent = *right;
             msg.side = Side::Left;
         }
-        deliver(msg);
         return msg;
     }
 };

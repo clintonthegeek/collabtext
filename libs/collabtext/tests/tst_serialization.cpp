@@ -33,7 +33,7 @@ private slots:
         edit.deletion_id = edit.timestamp;
         edit.ranges = {{0, 0}};
         edit.new_text = {std::string(n, 'a')};
-        edit.inserted_fragments = {{{actor(1), 1}, Locator(500), edit.new_text[0], n}};
+        edit.inserted_fragments = {{{actor(1), 1}, Link{}, edit.new_text[0], n}};
         Operation value(edit);
         auto encoded = encode_operation(value);
         QVERIFY(!encoded.ok());
@@ -50,7 +50,7 @@ private slots:
 
         EditOperation::InsertedFragment frag;
         frag.origin = Identity(actor(1), 37);
-        frag.locator = Locator({1152921504606846976ULL});
+        frag.link = Link{Identity(actor(1), 36), Side::Right, std::nullopt};
         frag.content = "hello";
         frag.length = 5;
         op.inserted_fragments.push_back(frag);
@@ -75,7 +75,8 @@ private slots:
         verify_roundtrip(Operation(op));
     }
 
-    void edit_replace_with_split_relocation() {
+    // A left child: its parent is its right origin, and it carries both.
+    void edit_insert_as_left_child() {
         EditOperation op;
         op.timestamp = Identity(actor(1), 50);
         op.deletion_id = op.timestamp;
@@ -85,18 +86,27 @@ private slots:
 
         EditOperation::InsertedFragment frag;
         frag.origin = Identity(actor(1), 49);
-        frag.locator = Locator({500, 65535});
+        frag.link = Link{Identity(actor(1), 4), Side::Left, Identity(actor(1), 4)};
         frag.content = "X";
         frag.length = 1;
         op.inserted_fragments.push_back(frag);
 
-        EditOperation::SplitRelocation sr;
-        sr.fragment_origin = Identity(actor(1), 4);
-        sr.split_offset = 0;
-        sr.fragment_length = 3;
-        sr.new_locator = Locator({500, 131070});
-        op.split_relocations.push_back(sr);
+        verify_roundtrip(Operation(op));
+    }
 
+    // The document start is the root: no parent. The end is no right origin.
+    void edit_insert_at_document_start() {
+        EditOperation op;
+        op.timestamp = Identity(actor(1), 3);
+        op.deletion_id = op.timestamp;
+        op.ranges = {{0, 0}};
+        op.new_text = {"hi"};
+        EditOperation::InsertedFragment frag;
+        frag.origin = Identity(actor(1), 1);
+        frag.link = Link{std::nullopt, Side::Right, std::nullopt};
+        frag.content = "hi";
+        frag.length = 2;
+        op.inserted_fragments.push_back(frag);
         verify_roundtrip(Operation(op));
     }
 
@@ -115,14 +125,14 @@ private slots:
 
         EditOperation::InsertedFragment f1;
         f1.origin = Identity(actor(3), 194);
-        f1.locator = Locator({100});
+        f1.link = Link{Identity(actor(3), 192), Side::Right, std::nullopt};
         f1.content = "AAA";
         f1.length = 3;
         op.inserted_fragments.push_back(f1);
 
         EditOperation::InsertedFragment f2;
         f2.origin = Identity(actor(3), 197);
-        f2.locator = Locator({200});
+        f2.link = Link{Identity(actor(3), 192), Side::Right, Identity(actor(3), 192)};
         f2.content = "BBB";
         f2.length = 3;
         op.inserted_fragments.push_back(f2);
@@ -158,7 +168,7 @@ private slots:
 
         EditOperation::InsertedFragment frag;
         frag.origin = Identity(actor(1), 1);
-        frag.locator = Locator({500});
+        frag.link = Link{};
         frag.content = "line1\nline2\ttab\"quote\\backslash";
         frag.length = 31;
         op.inserted_fragments.push_back(frag);
@@ -177,7 +187,7 @@ private slots:
 
         EditOperation::InsertedFragment frag;
         frag.origin = Identity(actor(1), 1);
-        frag.locator = Locator({500});
+        frag.link = Link{};
         frag.content = text;
         frag.length = 5;
         op.inserted_fragments.push_back(frag);
@@ -193,7 +203,7 @@ private slots:
         verify_roundtrip(Operation(op));
     }
 
-    void deep_locator() {
+    void link_to_a_distant_parent_and_origin() {
         EditOperation op;
         op.timestamp = Identity(actor(1), 2);
         op.deletion_id = op.timestamp;
@@ -202,7 +212,9 @@ private slots:
 
         EditOperation::InsertedFragment frag;
         frag.origin = Identity(actor(1), 1);
-        frag.locator = Locator({100, 200, 300, 400, 500});
+        op.version.observe(Identity(actor(2), 0xFFFFFFFFFFFFFFF0ULL));
+        op.version.observe(Identity(actor(3), 12345));
+        frag.link = Link{Identity(actor(2), 0xFFFFFFFFFFFFFFF0ULL), Side::Right, Identity(actor(3), 12345)};
         frag.content = "x";
         frag.length = 1;
         op.inserted_fragments.push_back(frag);

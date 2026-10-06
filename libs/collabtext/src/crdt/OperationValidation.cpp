@@ -88,14 +88,6 @@ bool interval_fits(uint64_t start, uint32_t count) {
     return std::nullopt;
 }
 
-/// A locator is a real position only if it lies strictly inside the ordering
-/// space. `Locator::min()` and `Locator::max()` are the sentinels an insertion
-/// *between* two positions is computed from; storing one as an insertion
-/// position would put a character at the boundary of the space rather than in
-/// it, and every later insertion would have to order against it.
-[[nodiscard]] bool is_usable_locator(const Locator& locator) {
-    return locator > Locator::min() && locator < Locator::max();
-}
 
 // ---------------------------------------------------------------------------
 // Range / text checks
@@ -205,6 +197,33 @@ ValidationResult validate_idlist_operation_identity(const IdListOperation& op) {
         op);
 }
 
+/// An inserted run's placement names other elements, and has to name only ones its
+/// author could have held: a parent or right origin outside the operation's own
+/// frontier is not a causal wait (the frontier is what the receiver already
+/// waits on) but a record no honest replica produces.
+///
+/// A left child is attached to its right origin by definition, so the two must be
+/// the same element; carrying both lets a receiver check rather than trust.
+ValidationResult check_link(const Link& link, const Global& frontier,
+                            const std::string& where) {
+    for (const auto* named : {&link.parent, &link.right_origin}) {
+        if (!named->has_value()) continue;
+        if (auto r = check_counter(**named, where.c_str());
+            r.verdict != ValidationVerdict::valid) {
+            return r;
+        }
+        if (!frontier.observed(**named)) {
+            return malformed(where + " attaches to " + describe(**named) +
+                             ", which its own frontier does not cover");
+        }
+    }
+    if (link.side == Side::Left &&
+        (!link.parent || !link.right_origin || !(*link.parent == *link.right_origin))) {
+        return malformed(where + " is a left child whose parent is not its right origin");
+    }
+    return ValidationResult::valid();
+}
+
 ValidationResult validate_edit_operation(const EditOperation& op,
                                          const Global& current) {
     const Limits& limits = default_validation_limits();
@@ -212,8 +231,7 @@ ValidationResult validate_edit_operation(const EditOperation& op,
     // ---- Declared sizes -------------------------------------------------
     if (op.ranges.size() > limits.max_ranges ||
         op.inserted_fragments.size() > limits.max_inserted_fragments ||
-        op.deletion_runs.size() > limits.max_deletion_runs ||
-        op.split_relocations.size() > limits.max_split_relocations) {
+        op.deletion_runs.size() > limits.max_deletion_runs) {
         return malformed("operation declares more elements than the format "
                          "permits");
     }
@@ -294,11 +312,7 @@ ValidationResult validate_edit_operation(const EditOperation& op,
                                      "), which leaves the counter width");
         }
 
-        if (!is_usable_locator(fragment.locator)) {
-            return malformed(where +
-                             " carries an ordering sentinel rather than a "
-                             "position inside the document");
-        }
+        if (auto r = check_link(fragment.link, op.version, where); !r.ok()) return r;
     }
 
     // ---- Deletion runs ---------------------------------------------------
@@ -321,40 +335,6 @@ ValidationResult validate_edit_operation(const EditOperation& op,
                                      std::to_string(run.first.counter +
                                                     run.count) +
                                      "), which leaves the counter width");
-        }
-    }
-
-    // ---- Split relocations ------------------------------------------------
-    for (size_t i = 0; i < op.split_relocations.size(); ++i) {
-        const auto& reloc = op.split_relocations[i];
-        const std::string where = "split relocation " + std::to_string(i) +
-                                  " of " + describe(op.timestamp);
-
-        if (auto r = check_counter(reloc.fragment_origin, where.c_str());
-            r.verdict != ValidationVerdict::valid) {
-            return r;
-        }
-        if (reloc.split_offset > reloc.fragment_length) {
-            return malformed(where + " splits at " +
-                             std::to_string(reloc.split_offset) +
-                             " inside a fragment of " +
-                             std::to_string(reloc.fragment_length) +
-                             " characters");
-        }
-        if (!interval_fits(reloc.fragment_origin.counter,
-                          reloc.fragment_length)) {
-            return counter_exhausted(where + " covers counters [" +
-                                     std::to_string(reloc.fragment_origin.counter) +
-                                     "," +
-                                     std::to_string(
-                                         reloc.fragment_origin.counter +
-                                         reloc.fragment_length) +
-                                     "), which leaves the counter width");
-        }
-        if (!is_usable_locator(reloc.new_locator)) {
-            return malformed(where +
-                             " relocates to an ordering sentinel rather than a "
-                             "position inside the document");
         }
     }
 
@@ -476,10 +456,10 @@ ValidationResult validate_idlist_operation(const IdListOperation& op,
                     return r;
                 }
                 if constexpr (std::is_same_v<T, IdListInsertOp>) {
-                    if (!is_usable_locator(concrete.locator)) {
-                        return malformed("insert operation carries an ordering "
-                                         "sentinel rather than a position "
-                                         "inside the list");
+                    if (auto r = check_link(concrete.link, concrete.version,
+                                            "list insert " + describe(concrete.timestamp));
+                        !r.ok()) {
+                        return r;
                     }
                 } else {
                     if (auto r = check_counter(concrete.target_origin,
@@ -570,9 +550,6 @@ size_t identity_bytes(Identity id) {
     return sizeof(Identity) + (id.counter ? 1 : 0);
 }
 
-size_t locator_bytes(const Locator& locator) {
-    return sizeof(Locator) + locator.depth() * sizeof(uint64_t);
-}
 
 }  // namespace
 
@@ -586,14 +563,10 @@ size_t estimate_operation_bytes(const Operation& op) {
                 total += concrete.ranges.size() * sizeof(std::pair<uint32_t, uint32_t>);
                 for (const auto& text : concrete.new_text) total += text.size();
                 for (const auto& fragment : concrete.inserted_fragments) {
-                    total += sizeof(Identity) + locator_bytes(fragment.locator) +
+                    total += sizeof(Identity) + sizeof(Link) +
                              fragment.content.size() + sizeof(uint32_t);
                 }
                 total += concrete.deletion_runs.size() * sizeof(uint32_t) * 2;
-                for (const auto& reloc : concrete.split_relocations) {
-                    total += sizeof(Identity) * 2 + locator_bytes(reloc.new_locator) +
-                             sizeof(uint32_t) * 2;
-                }
                 total += concrete.version.pair_count() * sizeof(uint64_t);
             } else {
                 for (const auto& count : concrete.counts) {
@@ -614,7 +587,7 @@ size_t estimate_operation_bytes(const IdListOperation& op) {
             size_t inner = total;
             using T = std::decay_t<decltype(concrete)>;
             if constexpr (std::is_same_v<T, IdListInsertOp>) {
-                inner += sizeof(uint64_t) + locator_bytes(concrete.locator);
+                inner += sizeof(uint64_t) + sizeof(Link);
             } else if constexpr (std::is_same_v<T, IdListRemoveOp>) {
                 inner += sizeof(Identity);
             } else {

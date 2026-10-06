@@ -156,11 +156,6 @@ void SequenceSemanticsTest::concurrentTypingStaysGrouped() {
 
     std::string oracle;
     for (int actor = 0; actor < 3; ++actor) oracle += word;
-    if (reverse)
-        SEQUENCE_EXPECT_FAIL("F8 / S03 open: reverse (prepend) typing -- a reused locator would need "
-                             "one actor's items in descending counter order, which a replica-major "
-                             "ascending tie rule cannot express; needs a position representation "
-                             "decision");
     // One assertion for every replica: a marker covers a single failure, and two
     // failing QCOMPAREs in one row would report the second as a real defect.
     std::string observed;
@@ -203,22 +198,10 @@ void SequenceSemanticsTest::insertionInsideTypedRunConverges() {
     for (const auto& op : {alice1, alice2})
         QVERIFY(bob.apply_ops({op})[0].kind() != ApplyOutcomeKind::rejected);
 
-    // Hard requirements: replicas agree, and nothing from the original run is
-    // reordered or stranded by the insert.
+    // Replicas agree, and the concurrent continuation follows the run it continued:
+    // `gh` was typed after `f`, so it lands after `def` however the peer's `XY`
+    // split the run. A reused or fresh locator could not say that; the tree link can.
     QCOMPARE(alice.text(), bob.text());
-    QVERIFY(alice.text().find("abc") == 0);
-    QVERIFY(alice.text().find("XY") != std::string::npos);
-    QVERIFY(alice.text().find("def") != std::string::npos);
-
-    // Placement is the open part. Alice's `gh` carries only the reused locator, so
-    // when Bob's relocation moves the tail `def` (the part Bob had observed) the
-    // concurrent continuation stays behind and lands in the middle: `abcghXYdef`.
-    // Intent is `abcXYdefgh`. Fixing it needs the receiver to place a continuation
-    // by its predecessor's *current* locator, and the relocation to carry
-    // continuations along, deterministically in either delivery order.
-    if (alice.text() != "abcXYdefgh")
-        SEQUENCE_EXPECT_FAIL("F8 / S03 open: concurrent end-of-run typing is displaced into the "
-                             "middle when a peer splits the run");
     QCOMPARE(alice.text(), std::string("abcXYdefgh"));
 }
 

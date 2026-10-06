@@ -1,4 +1,5 @@
 #include "crdt/IdList.h"
+#include "crdt/SequenceOrder.h"
 #include <cassert>
 
 namespace CollabText::Crdt {
@@ -59,28 +60,19 @@ Result<IdListOperation> IdList::insert_after_resolved(const Anchor& after, uint6
     // a. Get entries vector
     auto entries = get_entries();
 
-    // b. Find predecessor and successor locators
-    Locator predecessor;
-    Locator successor;
-
-    if (after.is_min()) {
-        predecessor = Locator::min();
-        if (entries.empty()) {
-            successor = Locator::max();
-        } else {
-            successor = entries.front().locator;
-        }
-    } else {
-        const size_t found = find_origin(entries, after);
-        assert(found != static_cast<size_t>(-1) &&
+    // b. The new element goes immediately after the anchored entry (the head of
+    // the list for the minimum anchor). The anchor may name a tombstone: the entry
+    // is placed right after it in the full list, as the list has always done.
+    std::optional<Identity> left;
+    if (!after.is_min()) {
+        assert(find_origin(entries, after) != static_cast<size_t>(-1) &&
                "insert_after_resolved: anchor must be resolved first");
-        predecessor = entries[found].locator;
-        successor = (found + 1 < entries.size()) ? entries[found + 1].locator
-                                                 : Locator::max();
+        left = after.position;
     }
 
-    // c. Allocate new locator between predecessor and successor
-    Locator new_loc = Locator::between(predecessor, successor);
+    // c. Mint its tree link from the current list. The same SequenceOrder code that
+    // places a remote element then places this one, so a peer cannot put it elsewhere.
+    const Link new_link = SequenceOrder::mint_link(entries, left);
 
     // d. Reserve this operation's identity. An insert creates one item, so the
     // interval is `n + 1 == 1` values and the item identity *is* the operation
@@ -99,10 +91,12 @@ Result<IdListOperation> IdList::insert_after_resolved(const Anchor& after, uint6
     m_version.observe(origin);
 
     // h. Create and insert the entry
-    IdListEntry e(origin, new_loc, id);
+    IdListEntry e(origin, new_link, id);
 
-    // i. Insert into sorted entries vector
-    insert_entry(entries, std::move(e));
+    // i. Place it
+    const bool placed = SequenceOrder::integrate(entries, std::move(e));
+    assert(placed && "a link minted from this very list names a present element");
+    (void)placed;
 
     // j. Rebuild the tree from entries
     set_entries(std::move(entries));
@@ -117,7 +111,7 @@ Result<IdListOperation> IdList::insert_after_resolved(const Anchor& after, uint6
     if (m_on_change) m_on_change();
 
     // m. Build and emit the operation
-    IdListOperation op = IdListInsertOp{ origin, version_before, id, new_loc };
+    IdListOperation op = IdListInsertOp{ origin, version_before, id, new_link };
     emit_local_op(op);
 
     return Result<IdListOperation>(std::move(op));
@@ -443,16 +437,6 @@ void IdList::local_clear() noexcept {
     // Intentionally not fired: m_on_change, m_on_local_op.
 }
 
-void IdList::insert_entry(std::vector<IdListEntry>& entries, IdListEntry entry) const {
-    auto it = std::lower_bound(entries.begin(), entries.end(), entry,
-        [](const IdListEntry& a, const IdListEntry& b) {
-            auto cmp = a.locator <=> b.locator;
-            if (cmp != 0) return cmp < 0;
-            return a.origin < b.origin;
-        });
-    entries.insert(it, std::move(entry));
-}
-
 ApplyOutcome IdList::defer_or_quarantine(const IdListOperation& op,
                                          Identity awaiting) {
     const size_t bytes = estimate_operation_bytes(op);
@@ -509,7 +493,11 @@ ApplyOutcome IdList::apply_one(const IdListOperation& op) {
         break;
     }
 
+    m_apply_error.reset();
     if (!try_apply(op)) {
+        // An element attached to something this list does not hold is not a causal
+        // wait: say so now instead of parking it behind a prerequisite that cannot help.
+        if (m_apply_error) return ApplyOutcome::rejected(*m_apply_error);
         return defer_or_quarantine(op, ts);
     }
     return ApplyOutcome::applied();
@@ -537,8 +525,18 @@ void IdList::retry_deferred() {
                 progress = true;
                 return;
             }
+            m_apply_error.reset();
             if (try_apply(entry.op)) {
                 progress = true;
+            } else if (m_apply_error) {
+                // It waited for its prerequisites and then proved unappliable.
+                progress = true;
+                const size_t bytes = estimate_operation_bytes(entry.op);
+                if (!deferred_budget_exhausted(m_quarantine_budget, m_quarantined.size(),
+                                               m_quarantined_bytes, bytes)) {
+                    m_quarantined.push_back(QuarantinedIdListOp{entry.op, *m_apply_error});
+                    m_quarantined_bytes += bytes;
+                }
             } else {
                 remaining.push_item(entry);
                 ++remaining_count;
@@ -557,8 +555,14 @@ void IdList::enqueue_deferred(IdListOpEntry entry) {
 
 bool IdList::apply_concrete(const IdListInsertOp& op) {
     auto entries = get_entries();
-    IdListEntry e(op.timestamp, op.locator, op.id);
-    insert_entry(entries, std::move(e));
+    IdListEntry e(op.timestamp, op.link, op.id);
+    if (!SequenceOrder::integrate(entries, std::move(e))) {
+        m_apply_error = Error(ErrorCode::malformed,
+                              "inserted element attaches to an element that is not in the list",
+                              "element " + op.timestamp.actor.to_string() + "/" +
+                                  std::to_string(op.timestamp.counter));
+        return false;
+    }
     observe_remote(op.timestamp);
     m_version.observe(op.timestamp);
     m_version.join(op.version);

@@ -4,7 +4,7 @@
 #include "crdt/Anchor.h"
 #include "crdt/IdentityAllocator.h"
 #include "crdt/Clock.h"
-#include "crdt/Locator.h"
+#include "crdt/Placement.h"
 #include "crdt/OperationValidation.h"
 #include "crdt/SumTree.h"
 #include "crdt/UndoMap.h"
@@ -12,6 +12,7 @@
 
 #include <collabtext/ApplyOutcome.h>
 
+#include <cassert>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -26,19 +27,12 @@ static constexpr std::size_t IDLIST_TREE_B = 6;
 struct IdListSummary {
     uint32_t visible_count = 0;
     uint32_t deleted_count = 0;
-    Locator max_locator;
-    Identity max_origin = Identity::min();
 
     static IdListSummary zero() { return {}; }
 
     void add_summary(const IdListSummary& other) {
         visible_count += other.visible_count;
         deleted_count += other.deleted_count;
-        if (other.max_locator > max_locator ||
-            (other.max_locator == max_locator && other.max_origin > max_origin)) {
-            max_locator = other.max_locator;
-            max_origin = other.max_origin;
-        }
     }
 };
 
@@ -54,14 +48,21 @@ struct IdListEntry {
     using Summary = IdListSummary;
 
     Identity origin;
-    Locator locator;
+    Link link;              ///< Where this element attaches in the FugueMax tree
     uint64_t id = 0;
     std::vector<Identity> deletions;
     bool visible = true;
 
     IdListEntry() = default;
-    IdListEntry(Identity orig, Locator loc, uint64_t i)
-        : origin(std::move(orig)), locator(std::move(loc)), id(i) {}
+    IdListEntry(Identity orig, Link l, uint64_t i)
+        : origin(std::move(orig)), link(std::move(l)), id(i) {}
+
+    // The run interface SequenceOrder is written against: an entry is a run of
+    // exactly one item, so there is nothing to derive and nothing to split.
+    static constexpr uint32_t length = 1;
+    Identity item_at(uint32_t) const { return origin; }
+    Link link_at(uint32_t) const { return link; }
+    IdListEntry split_off(uint32_t) { assert(false && "a list entry is one item"); return *this; }
 
     bool was_visible() const { return deletions.empty(); }
 
@@ -87,8 +88,6 @@ struct IdListEntry {
     IdListSummary summary() const {
         IdListSummary s;
         if (visible) s.visible_count = 1; else s.deleted_count = 1;
-        s.max_locator = locator;
-        s.max_origin = origin;
         return s;
     }
 };
@@ -240,8 +239,10 @@ private:
 
     std::vector<IdListEntry> get_entries() const;
     void set_entries(std::vector<IdListEntry>&& entries);
-    void insert_entry(std::vector<IdListEntry>& entries, IdListEntry entry) const;
     bool try_apply(const IdListOperation& op);
+    /// Why the last try_apply refused an operation that can never apply, as
+    /// opposed to one that is merely waiting on a prerequisite.
+    std::optional<Error> m_apply_error;
 
     /// Validate one operation and report what happened, queueing or refusing
     /// it as the verdict requires.

@@ -30,7 +30,7 @@ private slots:
         receiver.start();
         SegmentWriter writer(shared / "replicas" / "sender" / "log" / "ops", SegmentKind::Ops);
         writer.start();
-        const std::string unsupported = "CTBO0002:{}";
+        const std::string unsupported = "CTBO0003:{}";
         auto first = source.apply_local_edit({{0, 0}}, {"a"});
         writer.append(checked_codec(encode_operation(first)), op_identity(first).counter);
         writer.append(unsupported, 3);

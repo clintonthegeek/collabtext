@@ -1,5 +1,6 @@
 #include "crdt/Buffer.h"
 #include "crdt/OperationQueue.h"
+#include "crdt/SequenceOrder.h"
 #include "codec/Utf.h"
 #include <algorithm>
 #include <cassert>
@@ -65,48 +66,9 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
         f.visible = f.compute_visible(m_undo_map);
         assert(f.byte_length == f.text.size());
     }
-    rebuild_insertion_index(frags);
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
     m_fragment_tree = std::move(tree);
-    rebuild_origin_index();
-}
-
-void Buffer::rebuild_origin_index() {
-    m_origin_index.clear();
-    m_fragment_tree.for_each([this](const Fragment& f) {
-        m_origin_index[f.origin.actor][f.origin.counter] = f.locator;
-    });
-}
-
-std::optional<Locator> Buffer::origin_index_lookup(
-    const ActorId &actor, uint64_t origin_counter) const
-{
-    auto actor_it = m_origin_index.find(actor);
-    if (actor_it == m_origin_index.end()) return std::nullopt;
-    auto& counter_map = actor_it->second;
-    if (counter_map.empty()) return std::nullopt;
-    auto it = counter_map.upper_bound(origin_counter);
-    if (it == counter_map.begin()) return std::nullopt;
-    --it;
-    return it->second;
-}
-
-void Buffer::rebuild_insertion_index(const std::vector<Fragment>& frags) {
-    InsertionIndex index;
-    for (auto& f : frags) {
-        // Each fragment maps from (origin timestamp, byte offset within insertion)
-        // to its locator. The split_offset is the character offset from the
-        // original insertion's start (origin.value - origin.value = 0 for the
-        // first fragment, or the offset for split fragments).
-        index.push_item(InsertionFragment(
-            f.origin,
-            0,  // split_offset: 0 for the first/only fragment of an insertion
-            f.locator,
-            f.byte_length
-        ));
-    }
-    m_insertion_index = std::move(index);
 }
 
 std::vector<Fragment> Buffer::fragments() const {
@@ -414,26 +376,6 @@ static uint32_t char_to_byte_offset(const std::string &s, uint32_t char_offset) 
     return b;
 }
 
-/// The single ordering rule for same-locator ties, replica-major: origin actor
-/// bytes ascending, then counter. Value-major (counter, then actor) is what
-/// interleaved concurrent typing; replica-major keeps each replica's own
-/// consecutive items adjacent, which is the group-atomic property the sequence
-/// contract asks for. Every ordering site goes through here.
-static bool group_precedes(const Identity& a, const Identity& b) {
-    if (const int by_actor = a.actor.compare(b.actor); by_actor != 0) return by_actor < 0;
-    return a.counter < b.counter;
-}
-
-static bool fragment_precedes(const Fragment& a, const Fragment& b) {
-    if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
-    return group_precedes(a.origin, b.origin);
-}
-
-void Buffer::insert_fragment(std::vector<Fragment>& frags, Fragment frag) const {
-    const auto it = std::lower_bound(frags.begin(), frags.end(), frag, fragment_precedes);
-    frags.insert(it, std::move(frag));
-}
-
 std::pair<size_t, uint32_t> Buffer::resolve_visible_offset(
     const std::vector<Fragment>& frags, uint32_t byte_offset) const
 {
@@ -457,81 +399,45 @@ size_t Buffer::split_fragment_at(std::vector<Fragment>& frags,
     assert(offset_in_frag > 0);
     assert(offset_in_frag < frags[frag_idx].byte_length);
 
-    Fragment &orig = frags[frag_idx];
-    uint32_t char_count = count_utf8_chars(orig.text, offset_in_frag);
-
-    Fragment second;
-    second.origin = orig.item_at(char_count);
-    second.locator = orig.locator;
-    second.text = orig.text.substr(offset_in_frag);
-    second.byte_length = static_cast<uint32_t>(second.text.size());
-    second.length = orig.length - char_count;
-    second.deletions = orig.deletions;
-    second.visible = orig.visible;
-
-    orig.text.resize(offset_in_frag);
-    orig.byte_length = offset_in_frag;
-    orig.length = char_count;
-
-    Identity second_origin = second.origin;
-    Locator saved_locator = orig.locator;
-    insert_fragment(frags, std::move(second));
-
-    for (size_t i = frag_idx + 1; i < frags.size(); ++i) {
-        if (frags[i].origin == second_origin && frags[i].locator == saved_locator)
-            return i;
-    }
-    assert(false && "split_fragment_at: could not find second half after insert");
+    // A split does not change any tree relation: the tail's first item is the
+    // fragment's own `link_at(k)`. It stays adjacent, so the tail goes right after.
+    const uint32_t chars = count_utf8_chars(frags[frag_idx].text, offset_in_frag);
+    Fragment tail = frags[frag_idx].split_off(chars);
+    frags.insert(frags.begin() + static_cast<ptrdiff_t>(frag_idx) + 1, std::move(tail));
     return frag_idx + 1;
 }
 
-Locator Buffer::locator_between(const std::vector<Fragment>& frags,
-                                 size_t ins_frag) const
-{
-    Locator lo = Locator::min();
-    if (ins_frag > 0) {
-        lo = frags[ins_frag - 1].locator;
-    }
-
-    Locator hi = Locator::max();
-    for (size_t i = ins_frag; i < frags.size(); ++i) {
-        if (frags[i].locator > lo) {
-            hi = frags[i].locator;
-            break;
+/// The element a new insertion at visible byte offset `start` goes immediately
+/// after: the visible scalar that ends exactly at `start`, or nothing at the
+/// document start. `start` is a validated scalar boundary within the text.
+static std::optional<Identity> visible_element_before(const std::vector<Fragment>& frags,
+                                                      uint32_t start) {
+    if (start == 0) return std::nullopt;
+    uint32_t seen = 0;
+    for (const auto& f : frags) {
+        if (!f.visible) continue;
+        if (seen + f.byte_length >= start) {
+            const uint32_t scalars = count_utf8_chars(f.text, start - seen);
+            return f.item_at(scalars - 1);
         }
+        seen += f.byte_length;
     }
-
-    assert(lo < hi);
-    return Locator::between(lo, hi);
+    return std::nullopt;
 }
 
-/// Order the fragments of one shared-locator run, keeping every fragment whole.
-///
-/// A run is a set of whole operations competing for one position, ordered by
-/// `fragment_precedes` (origin actor bytes, then counter) and never split.
-///
-/// This used to atomize the run into single scalars and sort those, which
-/// interleaved two concurrent pastes into `aXbYcZ`. Concurrent typing needed the
-/// other half of the repair: a keystroke that continues the author's own
-/// contiguous run reuses that run's locator (see the insert phase of
-/// `try_apply_validated_local_edit`), so a typed run is one same-locator group
-/// here exactly as a paste is. Reverse (prepend) typing is not covered; see
-/// docs/specs/vnext-sequence-algorithm.md §5a.
-void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
-    size_t i = 0;
-    while (i < frags.size()) {
-        const size_t run_start = i;
-        const Locator loc = frags[i].locator;
-        size_t run_end = i + 1;
-        while (run_end < frags.size() && frags[run_end].locator == loc)
-            ++run_end;
-
-        if (run_end - run_start > 1) {
-            std::stable_sort(frags.begin() + static_cast<ptrdiff_t>(run_start),
-                             frags.begin() + static_cast<ptrdiff_t>(run_end),
-                             fragment_precedes);
+/// Split the visible fragment that straddles visible byte offset `off`, if any, so
+/// that `off` falls on a fragment boundary.
+static void split_at_visible_offset(std::vector<Fragment>& frags, uint32_t off) {
+    uint32_t seen = 0;
+    for (size_t i = 0; i < frags.size(); ++i) {
+        if (!frags[i].visible) continue;
+        const uint32_t length = frags[i].byte_length;
+        if (off > seen && off < seen + length) {
+            Fragment tail = frags[i].split_off(count_utf8_chars(frags[i].text, off - seen));
+            frags.insert(frags.begin() + static_cast<ptrdiff_t>(i) + 1, std::move(tail));
+            return;
         }
-        i = run_end;
+        seen += length;
     }
 }
 
@@ -628,324 +534,88 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     // Track actually-deleted character timestamps for building deletion_runs.
     std::vector<Identity> deleted_timestamps;
 
-    // Sort ranges ascending (left-to-right) — offsets are in the OLD tree's
-    // visible space and never change during processing.
+    // Ascending, left to right. Every offset is in the OLD visible text.
     std::vector<size_t> order(ranges.size());
     std::iota(order.begin(), order.end(), 0);
     std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         return ranges[a].first < ranges[b].first;
     });
 
-    auto cursor = m_fragment_tree.cursor<VisibleOffset>();
-    // Note: do NOT seek({0}) here — that would skip past invisible prefix
+    // The edit is applied to a flat copy of the document. Placement is the slow,
+    // whole-vector path on purpose (S03): one code path, SequenceOrder::integrate,
+    // decides where an element goes for the originator and for every peer.
+    auto frags = get_fragments();
 
-    // Deferred relocations: applied during the final sort phase.
-    // Each entry: {old_locator, min_origin, new_locator}
-    // All fragments with locator == old_locator and origin >= min_origin
-    // will have their locator changed to new_locator.
-    struct DeferredReloc {
-        Locator old_loc;
-        Identity min_origin;
-        Locator new_loc;
-    };
-    std::vector<DeferredReloc> deferred_relocs;
-    // fragments. The slice() method handles the !m_did_seek case by starting
-    // from the leftmost item.
-    FragmentTree new_tree;
-
-    // Pending: the remaining half of a fragment split at a range boundary.
-    // Carried across ranges when a single old-tree fragment spans multiple ranges.
-    std::optional<Fragment> pending;
-
-    // Helper: mark a fragment as deleted and record timestamps for op/undo.
-    auto mark_deleted = [&](Fragment& f) {
-        f.deletions.push_back(op_identity);
-        f.visible = false;
-        had_deletions = true;
-        for (uint32_t c = 0; c < f.length; ++c) {
-            deleted_timestamps.push_back(f.item_at(c));
-        }
-    };
-
-    // Helper: split a fragment at a byte offset, returning {first_half, second_half}.
-    auto split_frag = [](const Fragment& f, uint32_t byte_off)
-        -> std::pair<Fragment, Fragment>
-    {
-        uint32_t char_count = count_utf8_chars(f.text, byte_off);
-        Fragment first;
-        first.origin = f.origin;
-        first.locator = f.locator;
-        first.text = f.text.substr(0, byte_off);
-        first.byte_length = byte_off;
-        first.length = char_count;
-        first.deletions = f.deletions;
-        first.visible = f.visible;
-
-        Fragment second;
-        second.origin = f.item_at(char_count);
-        second.locator = f.locator;
-        second.text = f.text.substr(byte_off);
-        second.byte_length = f.byte_length - byte_off;
-        second.length = f.length - char_count;
-        second.deletions = f.deletions;
-        second.visible = f.visible;
-        return {std::move(first), std::move(second)};
-    };
-
-    // Helper: consume visible bytes from pending/cursor, pushing unchanged
-    // fragments to new_tree. Used for inter-range gaps.
-    auto consume_unchanged = [&](uint32_t vis_bytes) {
-        // Consume from pending first
-        while (pending && vis_bytes > 0) {
-            if (pending->visible) {
-                uint32_t pv = pending->byte_length;
-                if (pv <= vis_bytes) {
-                    new_tree.push_item(std::move(*pending));
-                    vis_bytes -= pv;
-                    pending.reset();
-                } else {
-                    auto [first, second] = split_frag(*pending, vis_bytes);
-                    new_tree.push_item(std::move(first));
-                    pending = std::move(second);
-                    vis_bytes = 0;
-                }
-            } else {
-                // Invisible — push, no visible bytes consumed
-                new_tree.push_item(std::move(*pending));
-                pending.reset();
-            }
-        }
-        // Consume from cursor
-        while (vis_bytes > 0 && cursor.item()) {
-            if (!cursor.item()->visible) {
-                Fragment frag = *cursor.item();
-                new_tree.push_item(std::move(frag));
-                cursor.next();
-                continue;
-            }
-            Fragment frag = *cursor.item();
-            uint32_t fv = frag.byte_length;
-            if (fv <= vis_bytes) {
-                new_tree.push_item(std::move(frag));
-                vis_bytes -= fv;
-                cursor.next();
-            } else {
-                auto [first, second] = split_frag(frag, vis_bytes);
-                new_tree.push_item(std::move(first));
-                pending = std::move(second);
-                cursor.next();
-                vis_bytes = 0;
-            }
-        }
-    };
-
-    // Helper: consume and delete visible bytes from pending/cursor.
-    auto consume_deleted = [&](uint32_t vis_bytes) {
-        // From pending
-        while (pending && vis_bytes > 0) {
-            if (pending->visible) {
-                uint32_t pv = pending->byte_length;
-                if (pv <= vis_bytes) {
-                    mark_deleted(*pending);
-                    new_tree.push_item(std::move(*pending));
-                    vis_bytes -= pv;
-                    pending.reset();
-                } else {
-                    auto [first, second] = split_frag(*pending, vis_bytes);
-                    mark_deleted(first);
-                    new_tree.push_item(std::move(first));
-                    pending = std::move(second);
-                    vis_bytes = 0;
-                }
-            } else {
-                new_tree.push_item(std::move(*pending));
-                pending.reset();
-            }
-        }
-        // From cursor
-        while (vis_bytes > 0 && cursor.item()) {
-            if (!cursor.item()->visible) {
-                Fragment frag = *cursor.item();
-                new_tree.push_item(std::move(frag));
-                cursor.next();
-                continue;
-            }
-            Fragment frag = *cursor.item();
-            uint32_t fv = frag.byte_length;
-            if (fv <= vis_bytes) {
-                mark_deleted(frag);
-                new_tree.push_item(std::move(frag));
-                vis_bytes -= fv;
-                cursor.next();
-            } else {
-                auto [first, second] = split_frag(frag, vis_bytes);
-                mark_deleted(first);
-                new_tree.push_item(std::move(first));
-                pending = std::move(second);
-                cursor.next();
-                vis_bytes = 0;
-            }
-        }
-    };
-
-    // ---- Phase 0: Prefix copy (up to first range) ----
-    if (!order.empty()) {
-        uint32_t first_start = ranges[order[0]].first;
-        // Use cursor.slice for O(log n) bulk copy
-        new_tree.push_tree(cursor.slice({first_start}));
-        // Handle straddling fragment (cursor.position < first_start means
-        // a visible fragment spans the boundary)
-        if (cursor.item() && cursor.position().value < first_start) {
-            uint32_t split_byte = first_start - cursor.position().value;
-            auto [first, second] = split_frag(*cursor.item(), split_byte);
-            new_tree.push_item(std::move(first));
-            pending = std::move(second);
-            cursor.next();
-        }
-    }
-
-    // ---- Process each range ----
-    uint32_t prev_end = order.empty() ? 0 : ranges[order[0]].first;
-
-    for (size_t oi = 0; oi < order.size(); ++oi) {
-        size_t idx = order[oi];
-        uint32_t start = ranges[idx].first;
-        uint32_t end = ranges[idx].second;
+    // ---- Mint every insertion against the OLD state ----
+    //
+    // An insertion is "immediately after the visible element before `start`".
+    // Minting every range against the same old state keeps one range's items from
+    // depending on another's, so the operation's fragments can be integrated in any
+    // order by a receiver. The paper's definition is the same: the left origin is
+    // the (i-1)th VISIBLE element, and the new element sits right after it, ahead
+    // of any tombstones that follow.
+    std::vector<Fragment> inserts;
+    for (const size_t idx : order) {
         const std::string &replacement = new_text[idx];
+        if (replacement.empty()) continue;
 
-        // Inter-range gap: copy unchanged content between previous end and this start
-        if (start > prev_end) {
-            consume_unchanged(start - prev_end);
+        const std::optional<Identity> left = visible_element_before(frags, ranges[idx].first);
+        const Link link = SequenceOrder::mint_link(frags, left);
+
+        // The scalar count was computed before the reservation, so the item
+        // identities are consecutive positions of the one interval this
+        // operation owns — run by run, in document order.
+        const uint32_t char_count = scalar_counts[idx];
+        const Identity frag_origin(m_allocator->actor(), next_item);
+        next_item += char_count;
+
+        Fragment frag(frag_origin, link, static_cast<uint32_t>(replacement.size()),
+                      char_count, replacement);
+        frag.visible = true;
+        inserts.push_back(std::move(frag));
+
+        EditOperation::InsertedFragment ins_rec;
+        ins_rec.origin = frag_origin;
+        ins_rec.link = link;
+        ins_rec.content = replacement;
+        ins_rec.length = char_count;
+        op.inserted_fragments.push_back(std::move(ins_rec));
+
+        for (uint32_t c = 0; c < char_count; ++c) {
+            undo_entry.inserted_keys.push_back(
+                UndoMapKey(Identity(frag_origin.actor, frag_origin.counter + c)));
         }
-
-        // ---- Delete phase ----
-        if (end > start) {
-            consume_deleted(end - start);
-        }
-
-        // ---- Insert phase ----
-        if (!replacement.empty()) {
-            // Determine lo/hi locators for the new fragment.
-            Locator lo = new_tree.empty() ? Locator::min() : new_tree.last().locator;
-
-            // Check the immediate next fragment's locator.
-            Locator imm_loc;
-            bool has_imm = false;
-            if (pending) {
-                imm_loc = pending->locator;
-                has_imm = true;
-            } else if (cursor.item()) {
-                imm_loc = cursor.item()->locator;
-                has_imm = true;
-            }
-
-            Locator hi = Locator::max();
-            bool needs_relocation = false;
-            if (has_imm && imm_loc > lo) {
-                hi = imm_loc;
-            } else if (has_imm) {
-                // Same-locator group — need relocation to create space.
-                needs_relocation = true;
-                // Find the next locator strictly > lo in the original tree.
-                {
-                    auto loc_cursor = m_fragment_tree.cursor<FragmentOrderDim>();
-                    auto _prefix = loc_cursor.slice(
-                        FragmentOrderDim::past_origin(lo));
-                    if (loc_cursor.item() && loc_cursor.item()->locator > lo) {
-                        hi = loc_cursor.item()->locator;
-                    }
-                }
-            }
-
-            // When inserting between same-locator fragments, relocate them
-            // to create ordering space. We relocate the pending fragment now,
-            // and record a deferred relocation for remaining same-locator
-            // cursor fragments — they'll be relocated during the final sort.
-            if (needs_relocation) {
-                Locator new_next_loc = Locator::between(lo, hi);
-
-                Identity reloc_origin;
-                uint32_t reloc_length = 0;
-
-                if (pending) {
-                    reloc_origin = pending->origin;
-                    reloc_length = pending->length;
-                    pending->locator = new_next_loc;
-                } else if (cursor.item()) {
-                    Fragment f = *cursor.item();
-                    reloc_origin = f.origin;
-                    reloc_length = f.length;
-                    f.locator = new_next_loc;
-                    pending = std::move(f);
-                    cursor.next();
-                }
-
-                // Record deferred relocation: all fragments at old locator
-                // with origin >= reloc_origin will be relocated during sort.
-                deferred_relocs.push_back({lo, reloc_origin, new_next_loc});
-
-                // Record SplitRelocation for remote replicas
-                EditOperation::SplitRelocation reloc;
-                reloc.fragment_origin = reloc_origin;
-                reloc.split_offset = 0;
-                reloc.fragment_length = reloc_length;
-                reloc.new_locator = new_next_loc;
-                op.split_relocations.push_back(std::move(reloc));
-
-                hi = new_next_loc;
-            }
-
-            // When this insert continues the author's own contiguous preceding
-            // fragment, reuse that fragment's locator instead of taking a fresh
-            // one. A fresh locator per keystroke is a flat, strictly increasing
-            // chain, which forces concurrent typing to interleave per scalar;
-            // reuse keeps the whole typed run in one same-locator group, which
-            // fragment_precedes then keeps adjacent. `next_item` is the identity
-            // this operation's items start at; the +1 is the operation identity
-            // sitting above its own items, so reuse items are NOT counter-
-            // contiguous -- relocation must select by group order, not by counter.
-            Locator new_loc = lo;
-            const bool continues_own_run =
-                !new_tree.empty() &&
-                new_tree.last().origin.actor == m_allocator->actor() &&
-                next_item == new_tree.last().origin.counter + new_tree.last().length + 1;
-            if (!continues_own_run) new_loc = Locator::between(lo, hi);
-
-            // The scalar count was computed before the reservation, so the item
-            // identities are consecutive positions of the one interval this
-            // operation owns — run by run, in document order.
-            const uint32_t char_count = scalar_counts[idx];
-            const Identity frag_origin(m_allocator->actor(), next_item);
-            next_item += char_count;
-
-            Fragment frag(frag_origin, new_loc,
-                          static_cast<uint32_t>(replacement.size()), char_count,
-                          replacement);
-            frag.visible = true;
-            new_tree.push_item(std::move(frag));
-
-            EditOperation::InsertedFragment ins_rec;
-            ins_rec.origin = frag_origin;
-            ins_rec.locator = new_loc;
-            ins_rec.content = replacement;
-            ins_rec.length = char_count;
-            op.inserted_fragments.push_back(std::move(ins_rec));
-
-            for (uint32_t c = 0; c < char_count; ++c) {
-                undo_entry.inserted_keys.push_back(
-                    UndoMapKey(Identity(frag_origin.actor, frag_origin.counter + c)));
-            }
-        }
-
-        prev_end = end;
     }
 
-    // ---- Suffix ----
-    if (pending) {
-        new_tree.push_item(std::move(*pending));
-        pending.reset();
+    // ---- Deletions ----
+    // Right to left, so the old-text offsets of the ranges still to be processed
+    // stay valid while earlier ones are tombstoned.
+    for (auto at = order.rbegin(); at != order.rend(); ++at) {
+        const auto [start, end] = ranges[*at];
+        if (end <= start) continue;
+        split_at_visible_offset(frags, start);
+        split_at_visible_offset(frags, end);
+        uint32_t seen = 0;
+        for (auto &f : frags) {
+            if (!f.visible) continue;
+            const uint32_t from = seen;
+            seen += f.byte_length;
+            if (from < start || seen > end) continue;
+            f.deletions.push_back(op_identity);
+            f.visible = false;
+            had_deletions = true;
+            for (uint32_t c = 0; c < f.length; ++c)
+                deleted_timestamps.push_back(f.item_at(c));
+        }
     }
-    new_tree.push_tree(cursor.suffix());
+
+    // ---- Placement, then commit ----
+    for (auto &frag : inserts) {
+        const bool placed = SequenceOrder::integrate(frags, std::move(frag));
+        assert(placed && "a link minted from this very state names a present element");
+        (void)placed;
+    }
+    set_fragments(std::move(frags));
 
     // ---- Identity ----
     // The operation's identity is the last value of the interval reserved above,
@@ -971,76 +641,6 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     m_undo_stack.push_back(std::move(undo_entry));
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
-
-    // ---- Commit tree: fast path, in-place relocation, or full rebuild ----
-    // Check ordering of the cursor-built tree (O(n) walk, tiny constant).
-    bool ordering_ok = true;
-    {
-        Locator prev_loc;
-        Identity prev_origin;
-        bool first = true;
-        new_tree.for_each([&](const Fragment& f) {
-            if (!ordering_ok) return;
-            if (!first) {
-                if (f.locator < prev_loc ||
-                    (f.locator == prev_loc && f.origin < prev_origin)) {
-                    ordering_ok = false;
-                }
-            }
-            prev_loc = f.locator;
-            prev_origin = f.origin;
-            first = false;
-        });
-    }
-
-    bool used_fast_path = false;
-    if (ordering_ok && deferred_relocs.empty()) {
-        // Tree is ordered, no relocations needed. Commit directly.
-        // Visibility is already correct from the cursor walk:
-        // - Unchanged fragments: copied with original visibility (undo_map unchanged)
-        // - Deleted fragments: mark_deleted set visible=false
-        // - Inserted fragments: set visible=true
-        m_fragment_tree = std::move(new_tree);
-
-        // Incremental origin index update for inserted fragments
-        for (auto& ins : op.inserted_fragments) {
-            m_origin_index[ins.origin.actor][ins.origin.counter] = ins.locator;
-        }
-        used_fast_path = true;
-    }
-
-    if (!used_fast_path) {
-        // Full path: extract, relocate, sort, normalize, rebuild.
-        // Only reached when the cursor-built tree has ordering violations
-        // (~2.3% of edits in adversarial patterns).
-        auto frags = new_tree.items();
-
-        for (auto& dr : deferred_relocs) {
-            // The relocated set is every fragment still at the old locator that
-            // follows the split point in the group order (fragment_precedes).
-            // It is not a contiguous counter interval: a reused-locator run has
-            // one counter between consecutive operations (the operation's own
-            // identity), so walking `counter == next_expected` stops after the
-            // first fragment and strands the rest of the run behind the insert.
-            uint32_t total_chars = 0;
-            for (auto& f : frags) {
-                if (f.locator != dr.old_loc) continue;
-                if (group_precedes(f.origin, dr.min_origin)) continue;
-                f.locator = dr.new_loc;
-                total_chars += f.length;
-            }
-            for (auto& sr : op.split_relocations) {
-                if (sr.fragment_origin == dr.min_origin && sr.new_locator == dr.new_loc) {
-                    sr.fragment_length = total_chars;
-                    break;
-                }
-            }
-        }
-
-        std::stable_sort(frags.begin(), frags.end(), fragment_precedes);
-        normalize_fragments(frags);
-        set_fragments(std::move(frags));
-    }
 
     // Build run-length encoded deletion descriptors from the deleted identities.
     // Sort by (actor, counter) then group consecutive runs.
@@ -1126,246 +726,36 @@ void Buffer::apply_deletion_runs(
     }
 }
 
-bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
-    if (!op.split_relocations.empty()) return false;
-    for (auto &ins : op.inserted_fragments) {
-        if (ins.length != 1) return false;
-    }
-
-    // Locator-collision check: if any incoming insert lands on a locator that
-    // already has a fragment in the tree, fall back to the slow path so
-    // normalize_fragments can atomize multi-character fragments at the shared
-    // locator.  Without this, an existing multi-char fragment from one replica
-    // would coexist with the incoming single-char fragment from another
-    // replica, producing a tree that reads in the wrong order versus replicas
-    // that received the multi-char insert via the slow path.
-    for (auto &ins : op.inserted_fragments) {
-        auto check_cursor = m_fragment_tree.cursor<FragmentOrderDim>();
-        check_cursor.seek(
-            FragmentOrderDim{ins.locator, Identity::min()}, Bias::Right);
-        if (check_cursor.item() && check_cursor.item()->locator == ins.locator)
-            return false;
-    }
-
-    // Apply deletion runs via origin index + in-place tree mutations.
-    // Handles partial deletions by splitting fragments in place.
-    for (auto& run : op.deletion_runs) {
-        uint32_t remaining = run.count;
-        uint64_t next_counter = run.first.counter;
-
-        while (remaining > 0) {
-            auto loc_opt = origin_index_lookup(run.first.actor, next_counter);
-            if (!loc_opt) return false;  // Can't find fragment, fall back
-
-            FragmentOrderDim target{*loc_opt, run.first};
-
-            // Capture fragment info for potential splitting
-            struct SplitInfo {
-                bool found = false;
-                bool needs_split_before = false;  // split at char_off > 0
-                bool needs_split_after = false;   // split after to_del < length
-                uint32_t char_off = 0;
-                uint32_t to_del = 0;
-                // Info for building the split-off fragments
-                Fragment before_frag;  // chars [0, char_off)
-                Fragment after_frag;   // chars [char_off + to_del, length)
-            };
-            SplitInfo info;
-
-            bool found = m_fragment_tree.edit_item<FragmentOrderDim>(
-                target,
-                [&](Fragment& f) {
-                    if (f.origin.actor != run.first.actor) return;
-                    if (next_counter < f.origin.counter ||
-                        next_counter >= f.origin.counter + f.length) return;
-
-                    info.found = true;
-                    info.char_off =
-                        static_cast<uint32_t>(next_counter - f.origin.counter);
-                    uint32_t avail = f.length - info.char_off;
-                    info.to_del = std::min(remaining, avail);
-
-                    if (info.char_off == 0 && info.to_del == f.length) {
-                        // Whole-fragment deletion — simple case
-                        f.deletions.push_back(op.deletion_id);
-                    } else {
-                        // Partial deletion — need to split.
-                        // Build the split-off fragments BEFORE modifying f.
-                        uint32_t byte_off_start = (info.char_off > 0)
-                            ? char_to_byte_offset(f.text, info.char_off) : 0;
-                        uint32_t byte_off_end = char_to_byte_offset(
-                            f.text, info.char_off + info.to_del);
-
-                        if (info.char_off > 0) {
-                            // "before" fragment: chars [0, char_off)
-                            info.needs_split_before = true;
-                            info.before_frag.origin = f.origin;
-                            info.before_frag.locator = f.locator;
-                            info.before_frag.text = f.text.substr(0, byte_off_start);
-                            info.before_frag.byte_length = byte_off_start;
-                            info.before_frag.length = info.char_off;
-                            info.before_frag.deletions = f.deletions;
-                            info.before_frag.visible = f.visible;
-                        }
-
-                        if (info.char_off + info.to_del < f.length) {
-                            // "after" fragment: chars [char_off + to_del, length)
-                            info.needs_split_after = true;
-                            uint32_t after_char_start = info.char_off + info.to_del;
-                            info.after_frag.origin = f.item_at(after_char_start);
-                            info.after_frag.locator = f.locator;
-                            info.after_frag.text = f.text.substr(byte_off_end);
-                            info.after_frag.byte_length = static_cast<uint32_t>(
-                                info.after_frag.text.size());
-                            info.after_frag.length = f.length - after_char_start;
-                            info.after_frag.deletions = f.deletions;
-                            info.after_frag.visible = f.visible;
-                        }
-
-                        // Mutate f in place to become the deleted middle part
-                        f.origin = f.item_at(info.char_off);
-                        f.text = f.text.substr(byte_off_start,
-                                               byte_off_end - byte_off_start);
-                        f.byte_length = static_cast<uint32_t>(f.text.size());
-                        f.length = info.to_del;
-                        f.deletions.push_back(op.deletion_id);
-                    }
-
-                    next_counter += info.to_del;
-                    remaining -= info.to_del;
-                });
-
-            if (!found || !info.found) return false;
-
-            // Insert split-off fragments outside of edit_item
-            if (info.needs_split_before) {
-                FragmentOrderDim before_target{
-                    info.before_frag.locator, info.before_frag.origin};
-                m_fragment_tree.insert_item<FragmentOrderDim>(
-                    before_target, std::move(info.before_frag));
-                m_origin_index[info.before_frag.origin.actor]
-                              [info.before_frag.origin.counter] =
-                    info.before_frag.locator;
-            }
-            if (info.needs_split_after) {
-                FragmentOrderDim after_target{
-                    info.after_frag.locator, info.after_frag.origin};
-                m_fragment_tree.insert_item<FragmentOrderDim>(
-                    after_target, std::move(info.after_frag));
-                m_origin_index[info.after_frag.origin.actor]
-                              [info.after_frag.origin.counter] =
-                    info.after_frag.locator;
-            }
-        }
-    }
-
-    // Apply insertions
-    for (auto &ins : op.inserted_fragments) {
-        Fragment frag(ins.origin, ins.locator,
-                      static_cast<uint32_t>(ins.content.size()), ins.length,
-                      ins.content);
-        frag.visible = true;
-        FragmentOrderDim target{ins.locator, ins.origin};
-        m_fragment_tree.insert_item<FragmentOrderDim>(target, std::move(frag));
-        m_origin_index[ins.origin.actor][ins.origin.counter] = ins.locator;
-    }
-
-    // The raise is derived state, not durable allocation (§3.4): applying a
-    // remote operation lifts the local counter above everything that operation
-    // used, so a later local identity sorts after it. Under §3.2 the operation
-    // identity is the highest value in its interval, so observing it covers the
-    // whole run; the per-run observations below are retained because they are
-    // what makes this correct for an operation minted by a peer that has not
-    // adopted interval allocation.
-    observe_remote(op.timestamp);
-    m_version.observe(op.timestamp);
-    m_version.observe(op.deletion_id);
-    for (auto &ins : op.inserted_fragments) {
-        Identity last_ts(ins.origin.actor, ins.origin.counter + ins.length - 1);
-        observe_remote(last_ts);
-        m_version.observe(last_ts);
-    }
-    m_version.join(op.version);
-    return true;
-}
-
-bool Buffer::apply_remote_edit(const EditOperation &op) {
+Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
     if (m_version.observed(op.timestamp))
-        return true;
+        return ApplyStep::applied;
 
     if (!m_version.observed_all(op.version))
-        return false;
+        return ApplyStep::not_ready;
 
-    // Try fast path
-    if (apply_remote_edit_fast(op))
-        return true;
-
-    // Full path (existing code)
+    // Every remote edit takes this one path: copy the document, apply the
+    // deletions, integrate each inserted run by its tree relation, rebuild. It is
+    // O(n) per operation by design (S03 disabled the locator fast paths rather than
+    // adapt them); the only thing it must be is the same rule the originator ran.
     auto frags = get_fragments();
 
-    // Apply deletion runs
     apply_deletion_runs(frags, op.deletion_runs, op.deletion_id);
 
-    // Apply split relocations.
-    for (auto &reloc : op.split_relocations) {
-        Identity target_ts(reloc.fragment_origin.actor,
-                           reloc.fragment_origin.counter + reloc.split_offset);
-
-        for (size_t fi = 0; fi < frags.size(); ++fi) {
-            auto &f = frags[fi];
-            if (f.origin.actor != target_ts.actor) continue;
-            if (target_ts.counter < f.origin.counter ||
-                target_ts.counter >= f.origin.counter + f.length) continue;
-
-            uint32_t char_off =
-                static_cast<uint32_t>(target_ts.counter - f.origin.counter);
-            if (char_off > 0) {
-                uint32_t byte_off = char_to_byte_offset(f.text, char_off);
-                fi = split_fragment_at(frags, fi, byte_off);
-            }
-
-            // Same selection as the originating replica: every fragment at the
-            // target's locator that follows it in group order, limited to what
-            // the originator had observed. Items a concurrent peer added to the
-            // group since are not the originator's to move.
-            const Locator old_loc = frags[fi].locator;
-            const Identity target_id = frags[fi].origin;
-            struct RelocEntry { size_t idx; Locator effective; };
-            std::vector<RelocEntry> to_relocate;
-            for (size_t si = 0; si < frags.size(); ++si) {
-                auto &sf = frags[si];
-                if (sf.locator != old_loc) continue;
-                if (group_precedes(sf.origin, target_id)) continue;
-                if (sf.length &&
-                    !op.version.observed(Identity(sf.origin.actor,
-                                                  sf.origin.counter + sf.length - 1)))
-                    continue;
-                Locator eff = (reloc.new_locator > sf.locator)
-                              ? reloc.new_locator : sf.locator;
-                if (eff != sf.locator) {
-                    to_relocate.push_back({si, eff});
-                }
-            }
-
-            for (auto it = to_relocate.rbegin(); it != to_relocate.rend(); ++it) {
-                Fragment moved = std::move(frags[it->idx]);
-                frags.erase(frags.begin() + static_cast<ptrdiff_t>(it->idx));
-                moved.locator = it->effective;
-                insert_fragment(frags, std::move(moved));
-            }
-            break;
+    for (auto &ins : op.inserted_fragments) {
+        Fragment frag(ins.origin, ins.link, static_cast<uint32_t>(ins.content.size()),
+                      ins.length, ins.content);
+        if (!SequenceOrder::integrate(frags, std::move(frag))) {
+            // The run hangs off an element this replica does not hold even though the
+            // operation's frontier says it was observed: no honest replica produces
+            // that, and waiting will not make it true. Nothing has been committed.
+            m_apply_error = Error(ErrorCode::malformed,
+                                  "inserted run attaches to an element that is not in the document",
+                                  "run origin " + ins.origin.actor.to_string() + "/" +
+                                      std::to_string(ins.origin.counter));
+            return ApplyStep::malformed;
         }
     }
 
-    // Apply insertions
-    for (auto &ins : op.inserted_fragments) {
-        Fragment frag(ins.origin, ins.locator,
-                      static_cast<uint32_t>(ins.content.size()), ins.length,
-                      ins.content);
-        insert_fragment(frags, std::move(frag));
-    }
-
-    // Update clock and version
     // The raise is derived state, not durable allocation (§3.4): applying a
     // remote operation lifts the local counter above everything that operation
     // used, so a later local identity sorts after it. Under §3.2 the operation
@@ -1385,21 +775,20 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
 
     m_version.join(op.version);
 
-    normalize_fragments(frags);
     set_fragments(std::move(frags));
-    return true;
+    return ApplyStep::applied;
 }
 
 // ---------------------------------------------------------------------------
 // Remote undo application
 // ---------------------------------------------------------------------------
 
-bool Buffer::apply_remote_undo(const UndoOperation &op) {
+Buffer::ApplyStep Buffer::apply_remote_undo(const UndoOperation &op) {
     if (m_version.observed(op.timestamp))
-        return true;
+        return ApplyStep::applied;
 
     if (!m_version.observed_all(op.version))
-        return false;
+        return ApplyStep::not_ready;
 
     for (auto &[edit_id, count] : op.counts) {
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
@@ -1412,15 +801,16 @@ bool Buffer::apply_remote_undo(const UndoOperation &op) {
     m_fragment_tree.for_each_mut([this](Fragment& f) {
         f.visible = f.compute_visible(m_undo_map);
     });
-    return true;
+    return ApplyStep::applied;
 }
 
 // ---------------------------------------------------------------------------
 // apply_ops
 // ---------------------------------------------------------------------------
 
-bool Buffer::try_apply(const Operation& op) {
-    return visit_operation([this](const auto &o) -> bool {
+Buffer::ApplyStep Buffer::try_apply(const Operation& op) {
+    m_apply_error.reset();
+    return visit_operation([this](const auto &o) -> ApplyStep {
         using T = std::decay_t<decltype(o)>;
         if constexpr (std::is_same_v<T, EditOperation>) {
             return apply_remote_edit(o);
@@ -1506,7 +896,14 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
         return defer_or_quarantine(op, awaiting);
     }
 
-    if (!try_apply(op)) {
+    switch (try_apply(op)) {
+    case ApplyStep::applied:
+        break;
+    case ApplyStep::malformed:
+        // Not a causal wait: this operation can never apply. Say so now instead of
+        // parking it behind a dependency that will not make it valid.
+        return ApplyOutcome::rejected(*m_apply_error);
+    case ApplyStep::not_ready:
         // Validation said this was applicable, so a refusal here means the
         // engine's own causal gate disagrees. Treat it as a deferral rather
         // than pretending it applied: the operation is still owed.
@@ -1544,8 +941,19 @@ void Buffer::retry_deferred() {
                 remaining_bytes += estimate_operation_bytes(entry.op);
                 return;
             }
-            bool applied = try_apply(entry.op);
-            if (applied) {
+            const ApplyStep step = try_apply(entry.op);
+            if (step == ApplyStep::malformed) {
+                // It waited for its prerequisites and then turned out to be
+                // unappliable. Quarantine it with the reason rather than let it
+                // block its actor's queue forever.
+                progress = true;
+                const size_t bytes = estimate_operation_bytes(entry.op);
+                if (!deferred_budget_exhausted(m_quarantine_budget, m_quarantined.size(),
+                                               m_quarantined_bytes, bytes)) {
+                    m_quarantined.push_back(QuarantinedBufferOp{entry.op, *m_apply_error});
+                    m_quarantined_bytes += bytes;
+                }
+            } else if (step == ApplyStep::applied) {
                 progress = true;
                 if (m_on_change) m_on_change();
             } else {

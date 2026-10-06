@@ -1,18 +1,12 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include "crdt/SequenceOrder.h"
 #include <random>
 #include "TestActor.h"
 
 using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
-
-// Same-locator ties are ordered replica-major (actor, then counter): the
-// sequence contract keeps one actor's consecutive items adjacent.
-static bool groupBefore(const CollabText::Crdt::Identity& a, const CollabText::Crdt::Identity& b) {
-    if (const int by_actor = a.actor.compare(b.actor); by_actor != 0) return by_actor < 0;
-    return a.counter < b.counter;
-}
 
 static void check_invariants(const Buffer& buf, const char* context) {
     auto frags = buf.fragments();
@@ -26,12 +20,8 @@ static void check_invariants(const Buffer& buf, const char* context) {
     }
     if (vis_sum != buf.visible_length())
         QFAIL(qPrintable(QString("INV-2 at %1").arg(context)));
-    for (size_t i = 1; i < frags.size(); ++i) {
-        auto cmp = frags[i].locator <=> frags[i-1].locator;
-        if (cmp < 0) QFAIL(qPrintable(QString("INV-4 at %1").arg(context)));
-        if (cmp == 0 && !groupBefore(frags[i-1].origin, frags[i].origin))
-            QFAIL(qPrintable(QString("INV-4 at %1").arg(context)));
-    }
+    if (const auto bad = CollabText::Crdt::SequenceOrder::check_consistency(frags))
+        QFAIL(qPrintable(QString("INV-4 at %1: %2").arg(context).arg(QString::fromStdString(*bad))));
     for (size_t i = 0; i < frags.size(); ++i) {
         if (frags[i].byte_length == 0 || frags[i].length == 0)
             QFAIL(qPrintable(QString("INV-5 at %1").arg(context)));
@@ -231,7 +221,7 @@ private slots:
         bufB.apply_ops({op1});
         QCOMPARE(bufA.text(), bufB.text());
 
-        // After normalization, fragments are atomized at shared locators
+        // Two concurrent runs at the same position: each stays whole
         size_t before = bufA.fragment_count();
 
         // No certificate exists; the request must leave the layout untouched.
@@ -263,10 +253,10 @@ private slots:
         Buffer buf(CollabText::Test::test_counter(1));
         buf.set_max_undo_depth(0);
         buf.apply_local_edit({{0, 0}}, {"abc"});
-        buf.apply_local_edit({{3, 3}}, {"def"});  // separate insertion → different locator
+        buf.apply_local_edit({{3, 3}}, {"def"});  // separate insertion
         size_t before_gc = buf.fragment_count();
         buf.collect_garbage();
-        // These are separate insertions with different locators — no coalescing
+        // These are separate insertions — no coalescing
         QCOMPARE(buf.fragment_count(), before_gc);
         QCOMPARE(buf.text(), std::string("abcdef"));
     }

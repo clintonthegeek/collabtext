@@ -1,4 +1,6 @@
 #include "crdt/NetworkSim.h"
+#include "crdt/SequenceOrder.h"
+#include "crdt/IdList.h"
 #include "crdt/DerivedActor.h"
 #include <QTest>
 #include <algorithm>
@@ -225,16 +227,11 @@ void NetworkSim::check_all_invariants(const char* context) const {
         if (del != buf.deleted_rope_len())
             QFAIL(qPrintable(QString("INV-8 del at %1 r%2").arg(context).arg(r)));
 
-        // INV-4: fragment ordering; same-locator ties are replica-major.
-        for (size_t i = 1; i < frags.size(); ++i) {
-            auto cmp = frags[i].locator <=> frags[i-1].locator;
-            if (cmp < 0)
-                QFAIL(qPrintable(QString("INV-4 at %1 r%2").arg(context).arg(r)));
-            if (cmp == 0 && !(frags[i-1].origin.actor.compare(frags[i].origin.actor) < 0 ||
-                              (frags[i-1].origin.actor == frags[i].origin.actor &&
-                               frags[i-1].origin.counter < frags[i].origin.counter)))
-                QFAIL(qPrintable(QString("INV-4 at %1 r%2").arg(context).arg(r)));
-        }
+        // INV-4: placement is structurally consistent (links resolve, a right
+        // child follows its parent, a left child precedes it).
+        if (const auto bad = SequenceOrder::check_consistency(frags))
+            QFAIL(qPrintable(QString("INV-4 at %1 r%2: %3")
+                                 .arg(context).arg(r).arg(QString::fromStdString(*bad))));
 
         // INV-5: non-empty fragments
         for (size_t i = 0; i < frags.size(); ++i) {

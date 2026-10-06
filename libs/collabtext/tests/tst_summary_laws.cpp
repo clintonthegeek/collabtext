@@ -200,35 +200,28 @@ private slots:
         // Identity, associativity, and commutativity of the cached aggregate.
         const FragmentSummary empty = FragmentSummary::zero();
 
-        auto summary_for = [](uint32_t visible, uint32_t deleted, uint32_t locator,
-                              uint32_t origin) {
+        auto summary_for = [](uint32_t visible, uint32_t deleted) {
             FragmentSummary s;
             s.visible_bytes = visible;
             s.deleted_bytes = deleted;
-            s.max_locator = Locator{std::vector<uint64_t>{locator}};
-            s.max_origin = Identity(actor(1), origin);
             return s;
         };
 
-        const FragmentSummary a = summary_for(10, 1, 5, 100);
-        const FragmentSummary b = summary_for(20, 2, 3, 200);
-        const FragmentSummary c = summary_for(30, 3, 9, 50);
+        const FragmentSummary a = summary_for(10, 1);
+        const FragmentSummary b = summary_for(20, 2);
+        const FragmentSummary c = summary_for(30, 3);
 
         // Identity
         FragmentSummary with_empty = a;
         with_empty.add_summary(empty);
         QCOMPARE(with_empty.visible_bytes, a.visible_bytes);
         QCOMPARE(with_empty.deleted_bytes, a.deleted_bytes);
-        QCOMPARE(with_empty.max_locator, a.max_locator);
-        QCOMPARE(with_empty.max_origin, a.max_origin);
 
         // Commutative
         FragmentSummary ab = a; ab.add_summary(b);
         FragmentSummary ba = b; ba.add_summary(a);
         QCOMPARE(ab.visible_bytes, ba.visible_bytes);
         QCOMPARE(ab.deleted_bytes, ba.deleted_bytes);
-        QCOMPARE(ab.max_locator, ba.max_locator);
-        QCOMPARE(ab.max_origin, ba.max_origin);
 
         // Associative
         FragmentSummary left = ab; left.add_summary(c);
@@ -237,8 +230,6 @@ private slots:
         right.add_summary(c);
         QCOMPARE(left.visible_bytes, right.visible_bytes);
         QCOMPARE(left.deleted_bytes, right.deleted_bytes);
-        QCOMPARE(left.max_locator, right.max_locator);
-        QCOMPARE(left.max_origin, right.max_origin);
     }
 
     void idlist_summary_is_a_monoid() {
@@ -248,9 +239,9 @@ private slots:
         QCOMPARE(with_empty.visible_count, 0u);
         QCOMPARE(with_empty.deleted_count, 0u);
 
-        IdListEntry first(Identity(actor(1), 5), Locator{std::vector<uint64_t>{1}}, 11);
-        IdListEntry second(Identity(actor(2), 3), Locator{std::vector<uint64_t>{2}}, 22);
-        IdListEntry third(Identity(actor(3), 9), Locator{std::vector<uint64_t>{3}}, 33);
+        IdListEntry first(Identity(actor(1), 5), Link{}, 11);
+        IdListEntry second(Identity(actor(2), 3), Link{}, 22);
+        IdListEntry third(Identity(actor(3), 9), Link{}, 33);
 
         IdListSummary sum;
         sum.add_summary(first.summary());
@@ -258,8 +249,6 @@ private slots:
         sum.add_summary(third.summary());
         QCOMPARE(sum.visible_count, 3u);
         QCOMPARE(sum.deleted_count, 0u);
-        QCOMPARE(sum.max_locator, Locator{std::vector<uint64_t>{3}});
-        QCOMPARE(sum.max_origin, Identity(actor(3), 9));
     }
 
     // ---- the property that actually matters to a user ----

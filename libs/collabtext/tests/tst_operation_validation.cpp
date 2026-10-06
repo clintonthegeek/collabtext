@@ -80,8 +80,7 @@ EditOperation valid_edit_payload(uint16_t replica = 7, uint32_t counter = 3) {
     op.timestamp = Identity(actor(replica), counter);
     op.inserted_fragments.push_back(
         EditOperation::InsertedFragment{Identity(actor(replica), counter),
-                                        Locator(static_cast<uint64_t>(counter)),
-                                        "hi", 2});
+                                        Link{}, "hi", 2});
     op.deletion_id = Identity(actor(replica), counter);
     return op;
 }
@@ -246,17 +245,6 @@ private slots:
         QCOMPARE(result.error.code(), ErrorCode::counter_exhausted);
     }
 
-    void split_relocation_interval_overflow_is_rejected() {
-        auto op = valid_edit_payload();
-        op.inserted_fragments.clear();
-        op.split_relocations.push_back(EditOperation::SplitRelocation{
-            Identity(actor(4), std::numeric_limits<uint64_t>::max() - 1), 0, 8,
-            Locator(static_cast<uint64_t>(1))});
-        const auto result = validate_edit_operation(op, Global{});
-        QCOMPARE(int(result.verdict), int(ValidationVerdict::rejected));
-        QCOMPARE(result.error.code(), ErrorCode::counter_exhausted);
-    }
-
     // =======================================================================
     // B. Insertion text self-consistency (length versus Unicode scalars)
     // =======================================================================
@@ -339,28 +327,59 @@ private slots:
     }
 
     // =======================================================================
-    // C. Locator and boundary constraints
+    // C. Placement links
     // =======================================================================
 
-    void sentinel_locator_is_not_a_valid_insertion_position() {
+    void a_link_to_an_element_outside_the_frontier_is_malformed() {
+        // The parent's counter is not covered by the operation's own frontier, so
+        // its author could not have attached to it.
         auto op = valid_edit_payload();
-        op.inserted_fragments[0].locator = Locator::min();
+        op.inserted_fragments[0].link =
+            Link{Identity(actor(5), 9), Side::Right, std::nullopt};
         QCOMPARE(int(validate_edit_operation(op, Global{}).verdict),
                  int(ValidationVerdict::rejected));
+        op.version.observe(Identity(actor(5), 9));
+        Global have;
+        have.observe(Identity(actor(5), 9));
+        QCOMPARE(int(validate_edit_operation(op, have).verdict),
+                 int(ValidationVerdict::valid));
+    }
 
-        EditOperation at_max = valid_edit_payload();
-        at_max.inserted_fragments[0].locator = Locator::max();
-        QCOMPARE(int(validate_edit_operation(at_max, Global{}).verdict),
+    void a_left_child_must_have_its_right_origin_as_parent() {
+        auto op = valid_edit_payload();
+        op.version.observe(Identity(actor(5), 9));
+        op.version.observe(Identity(actor(5), 10));
+        op.inserted_fragments[0].link =
+            Link{Identity(actor(5), 9), Side::Left, Identity(actor(5), 10)};
+        QCOMPARE(int(validate_edit_operation(op, Global{}).verdict),
+                 int(ValidationVerdict::rejected));
+        op.inserted_fragments[0].link =
+            Link{Identity(actor(5), 9), Side::Left, Identity(actor(5), 9)};
+        Global have;
+        have.observe(Identity(actor(5), 10));
+        QCOMPARE(int(validate_edit_operation(op, have).verdict),
+                 int(ValidationVerdict::valid));
+        // A left child of the document root cannot exist: the root has no left side.
+        op.inserted_fragments[0].link = Link{std::nullopt, Side::Left, std::nullopt};
+        QCOMPARE(int(validate_edit_operation(op, Global{}).verdict),
                  int(ValidationVerdict::rejected));
     }
 
-    void ordinary_locator_is_accepted() {
+    void a_link_naming_a_zero_counter_is_refused() {
+        auto op = valid_edit_payload();
+        op.inserted_fragments[0].link =
+            Link{Identity(actor(5), 0), Side::Right, std::nullopt};
+        QCOMPARE(int(validate_edit_operation(op, Global{}).verdict),
+                 int(ValidationVerdict::rejected));
+    }
+
+    void ordinary_link_is_accepted() {
         const auto op = valid_edit_payload();
-        QVERIFY(op.inserted_fragments[0].locator > Locator::min());
-        QVERIFY(op.inserted_fragments[0].locator < Locator::max());
         QCOMPARE(int(validate_edit_operation(op, Global{}).verdict),
                  int(ValidationVerdict::valid));
     }
+
+    // =======================================================================
 
     // =======================================================================
     // D. Edit range / text cardinality and ordering
@@ -528,8 +547,9 @@ private slots:
             {"length_mismatch", [](EditOperation& op) {
                  op.inserted_fragments[0].length += 3;
              }},
-            {"sentinel_locator", [](EditOperation& op) {
-                 op.inserted_fragments[0].locator = Locator::max();
+            {"link_outside_frontier", [](EditOperation& op) {
+                 op.inserted_fragments[0].link =
+                     Link{Identity(actor(8), 77), Side::Right, std::nullopt};
              }},
             {"cardinality", [](EditOperation& op) {
                  op.ranges.push_back({0, 0});
@@ -753,7 +773,6 @@ private slots:
             EditOperation op = as_edit(src.apply_local_edit({{0, 0}}, {"z"}));
             op.timestamp = Identity(actor(1), static_cast<uint32_t>(100 + i));
             op.inserted_fragments[0].origin = op.timestamp;
-            op.inserted_fragments[0].locator = Locator(static_cast<uint64_t>(200 + i));
             op.version.observe(Identity(actor(9), 9));  // unresolvable
             blocked.push_back(Operation{op});
         }
@@ -855,11 +874,11 @@ private slots:
         QCOMPARE(changes, 0);
     }
 
-    void idlist_sentinel_locator_is_rejected() {
+    void idlist_link_outside_the_frontier_is_rejected() {
         IdListInsertOp op;
         op.timestamp = Identity(actor(2), 3);
         op.id = 5;
-        op.locator = Locator::min();
+        op.link = Link{Identity(actor(9), 40), Side::Right, std::nullopt};
         const auto result = validate_idlist_operation(IdListOperation{op}, Global{});
         QCOMPARE(int(result.verdict), int(ValidationVerdict::rejected));
     }
@@ -868,7 +887,7 @@ private slots:
         IdListInsertOp op;
         op.timestamp = Identity(actor(2), 3);
         op.id = 5;
-        op.locator = Locator(static_cast<uint64_t>(3));
+        op.link = Link{};
         QCOMPARE(int(validate_idlist_operation(IdListOperation{op}, Global{}).verdict),
                  int(ValidationVerdict::valid));
     }

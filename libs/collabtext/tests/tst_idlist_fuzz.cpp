@@ -4,6 +4,7 @@
 #include "TestSeed.h"
 #include "TraceHarness.h"
 #include "crdt/IdList.h"
+#include "crdt/SequenceOrder.h"
 #include "TestActor.h"
 
 using CollabText::Test::actor;
@@ -30,16 +31,11 @@ static void check_invariants(const IdList& list, const char* context) {
             .arg(context).arg(entries.size()).arg(list.entry_count())));
     }
 
-    // INV-3: entries sorted strictly by (locator, origin)
-    for (size_t i = 1; i < entries.size(); ++i) {
-        const auto& a = entries[i-1];
-        const auto& b = entries[i];
-        bool ordered = (a.locator < b.locator) ||
-                       (a.locator == b.locator && a.origin < b.origin);
-        if (!ordered) {
-            QFAIL(qPrintable(QString("INV-3 violated at %1: entries[%2] >= entries[%3]")
-                .arg(context).arg(i-1).arg(i)));
-        }
+    // INV-3: placement is structurally consistent (links resolve, a right child
+    // follows its parent, a left child precedes it).
+    if (const auto bad = CollabText::Crdt::SequenceOrder::check_consistency(entries)) {
+        QFAIL(qPrintable(QString("INV-3 violated at %1: %2")
+            .arg(context).arg(QString::fromStdString(*bad))));
     }
 
     // INV-4: no two visible entries share origin (replica_id, char_value)

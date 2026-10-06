@@ -98,6 +98,7 @@
 #include "TestSeed.h"
 
 #include "crdt/Buffer.h"
+#include "crdt/SequenceOrder.h"
 #include "crdt/IdList.h"
 #include "crdt/NetworkSim.h"
 
@@ -528,12 +529,7 @@ inline std::string buffer_invariant_error(const Crdt::Buffer& buf) {
         return "visible fragment byte sum != visible_rope_len";
     if (deleted_sum != buf.deleted_rope_len())
         return "deleted fragment byte sum != deleted_rope_len";
-    for (size_t i = 1; i < fragments.size(); ++i) {
-        const auto cmp = fragments[i].locator <=> fragments[i - 1].locator;
-        if (cmp < 0) return "fragment locator ordering violated";
-        if (cmp == 0 && !(fragments[i].origin > fragments[i - 1].origin))
-            return "fragment origin ordering violated at a shared locator";
-    }
+    if (const auto bad = Crdt::SequenceOrder::check_consistency(fragments)) return *bad;
     return {};
 }
 
@@ -544,12 +540,7 @@ inline std::string idlist_invariant_error(const Crdt::IdList& list) {
     if (list.size() != visible) return "size() != visible entry count";
     if (entries.size() != list.entry_count())
         return "entries().size() != entry_count()";
-    for (size_t i = 1; i < entries.size(); ++i) {
-        const auto& a = entries[i - 1];
-        const auto& b = entries[i];
-        if (!(a.locator < b.locator) && !(a.locator == b.locator && a.origin < b.origin))
-            return "entries not strictly ordered by (locator, origin)";
-    }
+    if (const auto bad = Crdt::SequenceOrder::check_consistency(entries)) return *bad;
     const auto& version = list.version();
     for (const auto& e : entries)
         if (!version.observed(e.origin))

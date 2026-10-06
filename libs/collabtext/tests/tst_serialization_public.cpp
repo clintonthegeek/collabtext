@@ -129,15 +129,15 @@ private slots:
             if (!decode(bytes + " \n\t\r").ok()) return false;
             return has_error_code(decode("{}"), E::unknown_format)
                 && has_error_code(decode("ZZZZ0001:{}"), E::unknown_format)
-                && has_error_code(decode(bytes.substr(0, 4) + "0002:{}"), E::unsupported_version)
+                && has_error_code(decode(bytes.substr(0, 4) + "0003:{}"), E::unsupported_version)
                 && has_error_code(decode(bytes.substr(0, 4) + "0001!{}"), E::malformed);
         };
         QVERIFY(check_family(golden("text-edit"), decode_operation));
         QVERIFY(check_family(golden("list-insert"), decode_idlist_operation));
         QVERIFY(check_family(golden("global"), decode_global));
         QVERIFY(check_family(golden("gap"), decode_counter_gap));
-        QVERIFY(has_error_code(decode_operation("CTBO0001:{\"t\":\"future\"}"), E::unsupported_operation));
-        QVERIFY(has_error_code(decode_idlist_operation("CTLO0001:{\"t\":\"future\"}"), E::unsupported_operation));
+        QVERIFY(has_error_code(decode_operation("CTBO0002:{\"t\":\"future\"}"), E::unsupported_operation));
+        QVERIFY(has_error_code(decode_idlist_operation("CTLO0002:{\"t\":\"future\"}"), E::unsupported_operation));
         QVERIFY(has_error_code(decode_operation(golden("list-insert")), E::unknown_format));
         QVERIFY(has_error_code(decode_idlist_operation(golden("text-edit")), E::unknown_format));
     }
@@ -157,8 +157,14 @@ private slots:
             replace("\"r\":[[\"0000000000000000\",\"0000000000000000\"]]", "\"r\":[[\"0000000100000000\",\"0000000000000000\"]]"),
             replace("\"nt\":[\"a\"]", "\"nt\":[]"),
             replace("\"n\":\"0000000000000001\"", "\"n\":\"0000000000000002\""),
-            replace(",\"sr\":[]", ""),
-            replace(",\"sr\":[]", ",\"sr\":[],\"future\":true"),
+            replace(",\"dr\":[]", ""),
+            replace(",\"dr\":[]", ",\"dr\":[],\"future\":true"),
+            // The placement link is exact too: side is 0 or 1, and no field may be
+            // missing, added or reshaped.
+            replace("\"s\":\"0000000000000001\"", "\"s\":\"0000000000000002\""),
+            replace("\"k\":{\"p\":[],", "\"k\":{"),
+            replace("\"k\":{\"p\":[],", "\"k\":{\"x\":[],\"p\":[],"),
+            replace("\"p\":[]", "\"p\":[\"0000000000000001\"]"),
             replace("\"v\":{}", "\"v\":{\"00000000000000000000000000000001\":\"0000000000000001\"}"),
             replace("\"n\":\"0000000000000001\"", "\"n\":1")
         }) QVERIFY(has_error_code(decode_operation(bytes), E::malformed));
@@ -215,8 +221,18 @@ private slots:
         QVERIFY(has_error_code(decode_operation(oversized_string), E::malformed));
     }
     void unsupported_version_has_a_typed_verdict() {
-        QVERIFY(has_error_code(decode_operation("CTBO0002:{}"),
+        // Newer than anything this build reads.
+        QVERIFY(has_error_code(decode_operation("CTBO0003:{}"),
                                CollabText::ErrorCode::unsupported_version));
+        // Version 1 carried fractional locators and split relocations; S03 replaced
+        // them, and no migration is provided, so the old frames are refused by name
+        // rather than misread as malformed version 2.
+        QVERIFY(has_error_code(decode_operation("CTBO0001:{}"),
+                               CollabText::ErrorCode::unsupported_version));
+        QVERIFY(has_error_code(decode_idlist_operation("CTLO0001:{}"),
+                               CollabText::ErrorCode::unsupported_version));
+        // The frontier families did not change.
+        QVERIFY(decode_global("CTGV0001:{}").ok());
     }
     void identity_carries_an_actor_and_a_counter() {
         Identity id(actor(3), 42);

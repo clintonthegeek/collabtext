@@ -3,6 +3,7 @@
 // Private payload builders and read-only access. Never installed/exported.
 #include <collabtext/Operations.h>
 #include <collabtext/IdListOperations.h>
+#include "crdt/Placement.h"
 #include <string>
 #include <variant>
 #include <vector>
@@ -19,7 +20,10 @@ struct EditOperation {
 
     struct InsertedFragment {
         Identity origin;        ///< Item identity of this fragment's first item.
-        Locator locator;      ///< Evolution-reserved.
+        /// Where the run attaches in the FugueMax tree: parent, side and right
+        /// origin of its FIRST item. Later items of the run are right children of
+        /// the one before and are derived, not stored. Evolution-reserved.
+        Link link;
         std::string content;
         uint32_t length;
     };
@@ -36,14 +40,6 @@ struct EditOperation {
     std::vector<DeletionRun> deletion_runs;              ///< Evolution-reserved.
 
     Identity deletion_id;     ///< Operation identity that deleted. Evolution-reserved.
-
-    struct SplitRelocation {
-        Identity fragment_origin;
-        uint32_t split_offset;
-        uint32_t fragment_length;
-        Locator new_locator;  ///< Evolution-reserved.
-    };
-    std::vector<SplitRelocation> split_relocations;      ///< Evolution-reserved.
 };
 
 /// An undo/redo operation produced by Buffer.
@@ -64,7 +60,7 @@ struct IdListInsertOp {
     Identity timestamp;    ///< Origin of the new element (== this operation's identity).
     Global version;        ///< Causal dependencies. Evolution-reserved.
     uint64_t id = 0;       ///< Opaque application-owned element value. Evolution-reserved.
-    Locator locator;       ///< Pre-computed fractional position. Evolution-reserved.
+    Link link;             ///< Where the element attaches in the FugueMax tree. Evolution-reserved.
 };
 
 /// Remove the element identified by target_origin.

@@ -73,7 +73,6 @@ struct ValidationLimits {
     uint32_t max_ranges = 1u << 16;
     uint32_t max_inserted_fragments = 1u << 16;
     uint32_t max_deletion_runs = 1u << 16;
-    uint32_t max_split_relocations = 1u << 16;
     uint32_t max_undo_targets = 1u << 16;
 };
 
