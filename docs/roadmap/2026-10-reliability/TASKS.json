@@ -1772,6 +1772,9 @@
     "build-consumer-verify/release-live-20261006T015432Z-348930",
     "build-consumer-verify/asan-live-20261006T015505Z-349802",
     "/tmp/opencode/w03-live-negative.log"
+   ],
+   "implementation_commits": [
+    "6cf0455"
    ]
   },
   {
