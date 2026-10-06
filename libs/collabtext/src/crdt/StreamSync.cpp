@@ -23,13 +23,18 @@ StreamSync::StreamSync(const fs::path& shared_folder,
     , m_writer_cfg(cfg) {}
 
 void StreamSync::start() {
+    if (m_started) return;
     auto base = m_shared_folder / "replicas" / m_replica_name / "log" / "streams";
     fs::create_directories(base);
-    fs::create_directories(m_shared_folder / "local" / m_replica_name
-                           / "read-cursors" / "streams");
+    auto local = m_shared_folder / "local" / m_replica_name;
+    fs::create_directories(local / "read-cursors" / "streams");
+    auto lease = Storage::ProcessLease::acquire(local / "writer.lock",
+                                                 m_writer_cfg.file_ops);
+    if (!lease.ok()) { m_last_error = lease.error(); return; }
+    m_writer_lease.emplace(std::move(lease.value()));
     for (auto& [name, state] : m_streams) {
-        (void)state;
         ensure_started_(name);
+        if (m_last_error) return;
     }
     m_started = true;
 }
@@ -42,10 +47,51 @@ StreamSync::StreamState& StreamSync::ensure_started_(const std::string& name) {
     fs::create_directories(stream_dir);
     s.writer = std::make_unique<SegmentWriter>(stream_dir, SegmentKind::Stream, m_writer_cfg);
     auto started = s.writer->start();
-    if (!started.ok()) m_last_error = started.error();
+    if (!started.ok()) { m_last_error = started.error(); return s; }
     fs::create_directories(m_shared_folder / "local" / m_replica_name
                            / "read-cursors" / "streams" / name);
+    if (!recover_next_sequence_(name, s)) {
+        s.writer.reset();
+        return s;
+    }
     return s;
+}
+
+bool StreamSync::recover_next_sequence_(const std::string& stream, StreamState& state) {
+    const auto peer_dir = m_shared_folder / "replicas" / m_replica_name
+                          / "log" / "streams" / stream;
+    const auto cursor = m_shared_folder / "local" / m_replica_name
+                        / "read-cursors" / "streams" / (stream + ".sequence-scan");
+    SegmentReader reader(peer_dir, cursor);
+    reader.start();
+    uint64_t highest = 0;
+    for (;;) {
+        auto batch = reader.read_new();
+        if (batch.gap) {
+            m_last_error = batch.gap->with_context("recovering producer sequence for " + stream);
+            return false;
+        }
+        for (const auto& raw : batch.records) {
+            auto entry = decode_stream_entry(raw);
+            if (!entry) {
+                m_last_error = Error(ErrorCode::corrupt_record,
+                    "invalid producer record while recovering envelope sequence", stream);
+                return false;
+            }
+            highest = std::max(highest, entry->seq);
+        }
+        if (batch.records.empty()) break;
+        auto accepted = reader.commit(batch.token);
+        if (!accepted.ok()) { m_last_error = accepted.error(); return false; }
+    }
+    if (highest == std::numeric_limits<uint64_t>::max()) {
+        m_last_error = Error(ErrorCode::counter_exhausted,
+                             "stream envelope sequence exhausted", stream);
+        return false;
+    }
+    state.next_seq = highest + 1;
+    state.sequence_recovered = true;
+    return true;
 }
 
 void StreamSync::register_stream(const std::string& name, StreamType type) {
@@ -55,6 +101,10 @@ void StreamSync::register_stream(const std::string& name, StreamType type) {
 }
 
 void StreamSync::push(const std::string& stream, const StreamEntry& entry) {
+    if (!m_started || !m_writer_lease) {
+        m_last_error = Error(ErrorCode::io_error, "StreamSync is not started");
+        return;
+    }
     auto it = m_streams.find(stream);
     if (it == m_streams.end()) return;
     auto& s = ensure_started_(stream);
@@ -62,6 +112,14 @@ void StreamSync::push(const std::string& stream, const StreamEntry& entry) {
     if (!appended.ok()) {
         m_last_error = appended.error();
         return;
+    }
+    if (entry.replica_id == m_replica_id && entry.seq >= s.next_seq) {
+        if (entry.seq == std::numeric_limits<uint64_t>::max()) {
+            m_last_error = Error(ErrorCode::counter_exhausted,
+                                 "stream envelope sequence exhausted", stream);
+            return;
+        }
+        s.next_seq = entry.seq + 1;
     }
     if (it->second.type == StreamType::AppendOnly) {
         s.merged.try_emplace(entry.id, entry);
@@ -161,51 +219,57 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
             }
         }
         if (s.blocked.contains(peer)) continue;
+        const bool callback_missing = !m_on_inbound;
+        if (callback_missing)
+            m_last_error = Error(ErrorCode::writer_conflict,
+                                 "inbound callback is not registered; records remain uncommitted", name);
+        bool callback_failed = false;
         for (auto& r : records) {
             auto e = decode_stream_entry(r);
             if (!e) continue;
-            if (s.type == StreamType::AppendOnly) {
-                if (s.merged.try_emplace(e->id, *e).second) {
-                    ++count;
-                    if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
-                    if (auto op = decode_operation(e->payload)) {
-                        uint64_t lc = op_identity(op.value()).counter;
-                        auto& ack = m_ack_state[e->replica_id];
-                        if (lc > ack.max_lamport) {
-                            ack.max_lamport = lc;
-                            ack.last_observed_at = current_iso_utc_();
-                        }
-                    }
-                }
-            } else {
-                auto existing = s.merged.find(e->id);
-                if (existing == s.merged.end()) {
-                    s.merged[e->id] = *e;
-                    ++count;
-                    if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
-                    if (auto op = decode_operation(e->payload)) {
-                        uint64_t lc = op_identity(op.value()).counter;
-                        auto& ack = m_ack_state[e->replica_id];
-                        if (lc > ack.max_lamport) {
-                            ack.max_lamport = lc;
-                            ack.last_observed_at = current_iso_utc_();
-                        }
-                    }
-                } else if (e->timestamp > existing->second.timestamp) {
-                    existing->second = *e;
-                    ++count;
-                    if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
-                    if (auto op = decode_operation(e->payload)) {
-                        uint64_t lc = op_identity(op.value()).counter;
-                        auto& ack = m_ack_state[e->replica_id];
-                        if (lc > ack.max_lamport) {
-                            ack.max_lamport = lc;
-                            ack.last_observed_at = current_iso_utc_();
-                        }
+            auto existing = s.merged.find(e->id);
+            const bool newer_anchor = s.type == StreamType::AnchorKeyed
+                && (existing == s.merged.end() || e->timestamp > existing->second.timestamp);
+            const bool needs_apply = callback_missing
+                || !s.callback_completed.contains(e->id) || newer_anchor;
+            if (needs_apply) {
+                if (!callback_missing) {
+                    try {
+                        m_on_inbound(name, e->replica_id, e->payload);
+                        s.callback_completed.insert(e->id);
+                    } catch (...) {
+                        m_last_error = Error(ErrorCode::io_error,
+                                             "inbound callback threw; record retained", name);
+                        callback_failed = true;
+                        break;
                     }
                 }
             }
+            if (!callback_missing && !callback_failed) {
+                if (auto op = decode_operation(e->payload)) {
+                    const uint64_t lc = op_identity(op.value()).counter;
+                    auto& ack = m_ack_state[e->replica_id];
+                    if (lc > ack.max_lamport) {
+                        ack.max_lamport = lc;
+                        ack.last_observed_at = current_iso_utc_();
+                    }
+                }
+            }
+            if (s.type == StreamType::AppendOnly) {
+                if (s.merged.try_emplace(e->id, *e).second) {
+                    ++count;
+                }
+            } else {
+                if (existing == s.merged.end()) {
+                    s.merged[e->id] = *e;
+                    ++count;
+                } else if (e->timestamp > existing->second.timestamp) {
+                    existing->second = *e;
+                    ++count;
+                }
+            }
         }
+        if (callback_failed || callback_missing) continue;
         auto committed = reader.commit(batch.token);
         if (!committed.ok()) {
             m_last_error = committed.error().with_context("StreamSync " + name + " peer " + peer);
@@ -265,7 +329,13 @@ std::string StreamSync::current_iso_utc_() const {
 void StreamSync::push(const std::string& stream_name, const std::string& payload) {
     if (!m_streams.count(stream_name)) return;
     auto& s = ensure_started_(stream_name);
-    uint64_t seq = s.next_seq++;
+    if (m_last_error || !s.sequence_recovered) return;
+    if (s.next_seq == 0 || s.next_seq == std::numeric_limits<uint64_t>::max()) {
+        m_last_error = Error(ErrorCode::counter_exhausted,
+                             "stream envelope sequence exhausted", stream_name);
+        return;
+    }
+    uint64_t seq = s.next_seq;
     StreamEntry entry;
     entry.replica_id = m_replica_id;
     entry.seq = seq;
@@ -274,6 +344,7 @@ void StreamSync::push(const std::string& stream_name, const std::string& payload
     entry.timestamp = current_iso_utc_();
     entry.payload = payload;
     push(stream_name, entry);
+    if (!m_last_error) s.next_seq = seq + 1;
 }
 
 void StreamSync::write_acks_() {
@@ -288,7 +359,6 @@ void StreamSync::write_acks_() {
     if (merged.empty()) return;
 
     auto acks_path = m_shared_folder / "replicas" / m_replica_name / "acks.json";
-    auto tmp_path  = m_shared_folder / "replicas" / m_replica_name / "acks.json.tmp";
 
     // Read existing acks.json and enforce monotonicity
     if (fs::exists(acks_path)) {
@@ -400,12 +470,22 @@ void StreamSync::write_acks_() {
     }
     json += "\n  }\n}\n";
 
-    // Atomic write via tmp-file rename
-    {
-        std::ofstream f(tmp_path, std::ios::out | std::ios::trunc);
-        f << json;
+    if (fs::exists(acks_path)) {
+        std::ifstream existing(acks_path, std::ios::binary | std::ios::ate);
+        if (existing) {
+            const auto size = existing.tellg();
+            if (size >= 0 && static_cast<uint64_t>(size) == json.size()) {
+                std::string old(static_cast<size_t>(size), '\0');
+                existing.seekg(0);
+                existing.read(old.data(), static_cast<std::streamsize>(old.size()));
+                if (existing && old == json) return;
+            }
+        }
     }
-    fs::rename(tmp_path, acks_path);
+    Storage::FileOpCounts counts;
+    auto written = Storage::replace_atomically(acks_path, json,
+        m_writer_cfg.step_hook, m_writer_cfg.file_ops, &counts);
+    if (!written.ok()) m_last_error = written.error();
 }
 
 uint64_t StreamSync::lowest_peer_acked_lamport() const {

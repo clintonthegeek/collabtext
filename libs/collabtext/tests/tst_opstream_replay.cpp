@@ -23,6 +23,8 @@
 #include <collabtext/OpStream.h>
 
 #include <filesystem>
+#include <fstream>
+#include <stdexcept>
 #include <string>
 #include "TestActor.h"
 
@@ -35,6 +37,124 @@ class TestOpStreamReplay : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void sender_restart_keeps_envelope_identity_for_live_receiver() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const std::filesystem::path shared = tmp.path().toStdString();
+        StreamSync receiver(shared, "receiver", 2);
+        receiver.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
+        receiver.start();
+        std::vector<std::string> received;
+        receiver.set_on_inbound([&](const std::string&, uint16_t,
+                                    const std::string& payload) {
+            received.push_back(payload);
+        });
+
+        {
+            StreamSync sender(shared, "sender", 1);
+            sender.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
+            sender.start();
+            sender.push("buf:doc", "a");
+            sender.flush();
+            QCOMPARE(receiver.poll(), size_t(1));
+        }
+        {
+            StreamSync sender(shared, "sender", 1);
+            sender.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
+            sender.start();
+            sender.push("buf:doc", "b");
+            sender.flush();
+        }
+        QCOMPARE(receiver.poll(), size_t(1));
+        QCOMPARE(received, (std::vector<std::string>{"a", "b"}));
+        QCOMPARE(receiver.entries("buf:doc").size(), size_t(2));
+    }
+
+    void missing_callback_retains_records_until_handler_is_installed() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const std::filesystem::path shared = tmp.path().toStdString();
+        StreamSync sender(shared, "sender", 1);
+        sender.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
+        sender.start();
+        sender.push("buf:doc", "payload");
+        sender.flush();
+        QVERIFY(!sender.last_error());
+
+        StreamSync receiver(shared, "receiver", 2);
+        receiver.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
+        receiver.start();
+        QCOMPARE(receiver.poll(), size_t(1));
+        QCOMPARE(receiver.entries("buf:doc").size(), size_t(1));
+        std::vector<std::string> received;
+        receiver.set_on_inbound([&](const std::string&, uint16_t,
+                                    const std::string& payload) {
+            received.push_back(payload);
+        });
+        QCOMPARE(receiver.poll(), size_t(0));
+        QCOMPARE(received, (std::vector<std::string>{"payload"}));
+    }
+
+    void missing_callback_does_not_publish_acks_and_idle_poll_does_not_rewrite_them() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const std::filesystem::path shared = tmp.path().toStdString();
+        StreamSync sender(shared, "sender", 1);
+        sender.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
+        sender.start();
+        CrdtEngine engine(CollabText::Test::test_counter(1));
+        std::string wire;
+        engine.setOnLocalOp([&](const Operation& op) {
+            wire = checked_codec(encode_operation(op));
+        });
+        engine.insert(0, "x");
+        QVERIFY(!wire.empty());
+        sender.push("buf:doc", wire);
+        sender.flush();
+
+        StreamSync receiver(shared, "receiver", 2);
+        receiver.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
+        receiver.start();
+        QCOMPARE(receiver.poll(), size_t(1));
+        const auto ack_path = shared / "replicas" / "receiver" / "acks.json";
+        QVERIFY(!std::filesystem::exists(ack_path));
+
+        receiver.set_on_inbound([](const std::string&, uint16_t, const std::string&) {});
+        QCOMPARE(receiver.poll(), size_t(0));
+        QVERIFY(std::filesystem::exists(ack_path));
+        const auto before = std::filesystem::last_write_time(ack_path);
+        QCOMPARE(receiver.poll(), size_t(0));
+        QVERIFY(std::filesystem::last_write_time(ack_path) == before);
+    }
+
+    void throwing_callback_leaves_delivery_available_for_retry() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const std::filesystem::path shared = tmp.path().toStdString();
+        StreamSync sender(shared, "sender", 1);
+        sender.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
+        sender.start();
+        sender.push("buf:doc", "payload");
+        sender.flush();
+
+        StreamSync receiver(shared, "receiver", 2);
+        receiver.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
+        receiver.start();
+        receiver.set_on_inbound([](const std::string&, uint16_t, const std::string&) {
+            throw std::runtime_error("temporary application failure");
+        });
+        QCOMPARE(receiver.poll(), size_t(0));
+        QVERIFY(receiver.last_error().has_value());
+
+        std::vector<std::string> received;
+        receiver.set_on_inbound([&](const std::string&, uint16_t,
+                                    const std::string& payload) {
+            received.push_back(payload);
+        });
+        QCOMPARE(receiver.poll(), size_t(1));
+        QCOMPARE(received, (std::vector<std::string>{"payload"}));
+    }
 
     // ── catch-up replay on first attach ──────────────────────────────────────
     //

@@ -17,6 +17,7 @@
 #include <collabtext/ActorId.h>
 #include <crdt/SegmentReader.h>
 #include <crdt/SegmentWriter.h>
+#include <storage/DurableFile.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -26,6 +27,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace CollabText::Crdt {
@@ -97,8 +99,10 @@ private:
         std::unique_ptr<SegmentWriter> writer;
         std::unordered_map<std::string, std::unique_ptr<SegmentReader>> readers;
         std::unordered_map<std::string, StreamEntry> merged;
+        std::unordered_set<std::string> callback_completed;
         std::unordered_map<std::string, std::vector<std::string>> blocked;
         uint64_t next_seq = 1;
+        bool sequence_recovered = false;
     };
 
     struct AckState {
@@ -109,6 +113,7 @@ private:
     StreamState& ensure_started_(const std::string& name);
     SegmentReader& reader_for_(StreamState& s, const std::string& stream,
                                const std::string& peer);
+    bool recover_next_sequence_(const std::string& stream, StreamState& s);
     size_t read_remote_stream_(const std::string& name, StreamState& s);
     void write_acks_();
     void recompute_fence_();
@@ -119,6 +124,7 @@ private:
     std::string m_replica_name;
     uint16_t m_replica_id = 0;
     WriterConfig m_writer_cfg;
+    std::optional<Storage::ProcessLease> m_writer_lease;
     std::unordered_map<std::string, StreamState> m_streams;
     NewEntriesCallback m_on_new_entries;
     InboundCallback m_on_inbound;

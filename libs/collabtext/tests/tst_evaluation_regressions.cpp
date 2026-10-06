@@ -216,7 +216,6 @@ private slots:
         }
         QVERIFY(decoded);
         QCOMPARE(a.text(), std::string("ab"));
-        EVALUATION_EXPECT_FAIL("", "F4 / P02,L04: restarted sender reuses an envelope ID and suppresses a fresh operation");
         QCOMPARE(b.text(), a.text());
     }
 
