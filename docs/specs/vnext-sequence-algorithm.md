@@ -242,6 +242,44 @@ output. The requirement stands, the F8 typing marker stays expected-fail in
 `tst_evaluation_regressions.cpp`, and the capability manifest records the paste
 case as repaired and the typing case as blocked.
 
+### 5a-resolution. Forward typing is repaired by locator reuse, not by tree positions
+
+The spike's question was whether the flatness of the locator is what blocks
+typing. It is not: the engine already has same-locator runs (a fragment is one
+locator plus its items), so the forced interleave came from two choices, not
+from the representation:
+
+1. **Minting.** Every keystroke took a fresh `between()` locator. A local insert
+   that continues the author's own contiguous preceding fragment now reuses that
+   fragment's locator, so a typed run is one same-locator group, the same shape a
+   paste has always had. No locator format, codec field or `schema_version`
+   change.
+2. **Tie order.** Same-locator ties were ordered by `Identity` (counter first),
+   which alternates `A/1, B/1, A/2, B/2` within a group. They are now ordered
+   **replica-major**: origin actor bytes, then counter (`fragment_precedes`,
+   `Buffer.cpp`). This **amends R2** for operations whose first items have
+   different counters; the S01 fixtures do not distinguish the two, and
+   `tst_sequence_model` is unaffected. Any other site that orders same-position
+   items must follow: `IdList` still orders `(locator, origin)` counter-first and
+   is deliberately untouched here, so text and list can order the same
+   concurrent tie differently until it is brought across.
+
+Reuse also exposed a latent assumption in split relocation: the relocated set
+was found by walking `counter == next_expected`, but a typed run is not
+counter-contiguous (each operation's own identity takes a counter). It is now
+"every fragment at the old locator that follows the split point in group order",
+and on the remote path additionally limited to what the originating operation's
+version had observed, so a peer's concurrent additions to the group are not
+moved by an operation that never saw them. `SplitRelocation.fragment_length` is
+still written but no longer read.
+
+**Still open: reverse (prepend) typing.** Reusing a locator for prepends would
+need one actor's items in *descending* counter order inside a group, which an
+ascending tie rule cannot express, and distinct locators reproduce the
+per-scalar interleave (`aaabbbccc`). That case, and only that case, needs a
+position-representation decision. It remains an expected failure in
+`tst_sequence_semantics` (`reverse` row).
+
 ## 6. Limits, and what S03 must not inherit as settled
 
 - **No maximal non-interleaving is claimed.** R1/R2 order whole operations. They
@@ -261,10 +299,10 @@ case as repaired and the typing case as blocked.
 - **List equality-position ordering is specified but only lightly exercised.**
   Two list fixtures cover it. `IdList::compare_anchors` needs the same treatment
   as the text path and has proportionally less evidence.
-- **The paste half is applied; the typing half is not.**
+- **Paste and forward typing are applied; reverse typing is not.**
   `normalize_fragments` no longer atomizes, so concurrent pastes keep their
-  passages intact (`abcXYZ`, exact). Concurrent typing still interleaves, for the
-  reason in §5a. `docs/specs/vnext-consumer-probes.md`'s WP6 exercises
+  passages intact (`abcXYZ`, exact), and locator reuse keeps forward typing
+  grouped (§5a-resolution). Concurrent reverse typing still interleaves. `docs/specs/vnext-consumer-probes.md`'s WP6 exercises
   whole-paste concurrency, so S04 must re-run the installed probes before its
   allowlist entry can be removed — this document does not authorise that.
 - **GC and pins are untouched.** R1/R2 reorder nothing; retained items keep

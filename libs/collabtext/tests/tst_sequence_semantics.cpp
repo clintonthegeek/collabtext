@@ -68,6 +68,7 @@ private slots:
     void concurrentWholePassagesStayContiguous();
     void concurrentTypingStaysGrouped_data();
     void concurrentTypingStaysGrouped();
+    void insertionInsideTypedRunConverges();
     void listTieIsDeterministic_data();
     void listTieIsDeterministic();
 };
@@ -155,8 +156,11 @@ void SequenceSemanticsTest::concurrentTypingStaysGrouped() {
 
     std::string oracle;
     for (int actor = 0; actor < 3; ++actor) oracle += word;
-    SEQUENCE_EXPECT_FAIL("F8 / S03 blocked: typing locator minting -- every keystroke takes its own "
-                         "locator, so per-scalar interleave survives");
+    if (reverse)
+        SEQUENCE_EXPECT_FAIL("F8 / S03 open: reverse (prepend) typing -- a reused locator would need "
+                             "one actor's items in descending counter order, which a replica-major "
+                             "ascending tie rule cannot express; needs a position representation "
+                             "decision");
     // One assertion for every replica: a marker covers a single failure, and two
     // failing QCOMPAREs in one row would report the second as a real defect.
     std::string observed;
@@ -170,6 +174,52 @@ void SequenceSemanticsTest::concurrentTypingStaysGrouped() {
              qPrintable(QStringLiteral("%1 typing produced \"%2\", oracle \"%3\"")
                             .arg(reverse ? QStringLiteral("reverse") : QStringLiteral("forward"),
                                  QString::fromStdString(observed), QString::fromStdString(repeated))));
+}
+
+/// A peer inserting inside a reused-locator typed run must relocate the WHOLE tail
+/// of the run, not just its first fragment. Typed runs are not counter-contiguous
+/// (each operation's own identity takes a counter), which once stranded the tail
+/// of the run behind the insertion. Covers the local path, the remote path, and a
+/// concurrent continuation by the run's author.
+void SequenceSemanticsTest::insertionInsideTypedRunConverges() {
+    Buffer alice(test_counter(1)), bob(test_counter(2));
+    std::vector<Operation> shared;
+    const std::string word = "abcdef";
+    for (size_t n = 0; n < word.size(); ++n) {
+        auto op = paste(alice, uint32_t(n), std::string(1, word[n]));
+        QVERIFY(bob.apply_ops({op})[0].kind() != ApplyOutcomeKind::rejected);
+    }
+    QCOMPARE(bob.text(), word);
+
+    // Bob types inside the run while Alice, concurrently, keeps typing at its end.
+    const auto bob1 = paste(bob, 3, "X");
+    const auto bob2 = paste(bob, 4, "Y");
+    QCOMPARE(bob.text(), std::string("abcXYdef"));
+    const auto alice1 = paste(alice, 6, "g");
+    const auto alice2 = paste(alice, 7, "h");
+
+    for (const auto& op : {bob1, bob2})
+        QVERIFY(alice.apply_ops({op})[0].kind() != ApplyOutcomeKind::rejected);
+    for (const auto& op : {alice1, alice2})
+        QVERIFY(bob.apply_ops({op})[0].kind() != ApplyOutcomeKind::rejected);
+
+    // Hard requirements: replicas agree, and nothing from the original run is
+    // reordered or stranded by the insert.
+    QCOMPARE(alice.text(), bob.text());
+    QVERIFY(alice.text().find("abc") == 0);
+    QVERIFY(alice.text().find("XY") != std::string::npos);
+    QVERIFY(alice.text().find("def") != std::string::npos);
+
+    // Placement is the open part. Alice's `gh` carries only the reused locator, so
+    // when Bob's relocation moves the tail `def` (the part Bob had observed) the
+    // concurrent continuation stays behind and lands in the middle: `abcghXYdef`.
+    // Intent is `abcXYdefgh`. Fixing it needs the receiver to place a continuation
+    // by its predecessor's *current* locator, and the relocation to carry
+    // continuations along, deterministically in either delivery order.
+    if (alice.text() != "abcXYdefgh")
+        SEQUENCE_EXPECT_FAIL("F8 / S03 open: concurrent end-of-run typing is displaced into the "
+                             "middle when a peer splits the run");
+    QCOMPARE(alice.text(), std::string("abcXYdefgh"));
 }
 
 /// IdList's equal-boundary tie must be deterministic across replicas. This is the

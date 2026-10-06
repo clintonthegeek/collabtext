@@ -414,13 +414,23 @@ static uint32_t char_to_byte_offset(const std::string &s, uint32_t char_offset) 
     return b;
 }
 
+/// The single ordering rule for same-locator ties, replica-major: origin actor
+/// bytes ascending, then counter. Value-major (counter, then actor) is what
+/// interleaved concurrent typing; replica-major keeps each replica's own
+/// consecutive items adjacent, which is the group-atomic property the sequence
+/// contract asks for. Every ordering site goes through here.
+static bool group_precedes(const Identity& a, const Identity& b) {
+    if (const int by_actor = a.actor.compare(b.actor); by_actor != 0) return by_actor < 0;
+    return a.counter < b.counter;
+}
+
+static bool fragment_precedes(const Fragment& a, const Fragment& b) {
+    if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
+    return group_precedes(a.origin, b.origin);
+}
+
 void Buffer::insert_fragment(std::vector<Fragment>& frags, Fragment frag) const {
-    auto it = std::lower_bound(frags.begin(), frags.end(), frag,
-        [](const Fragment &a, const Fragment &b) {
-            auto cmp = a.locator <=> b.locator;
-            if (cmp != 0) return cmp < 0;
-            return a.origin < b.origin;
-        });
+    const auto it = std::lower_bound(frags.begin(), frags.end(), frag, fragment_precedes);
     frags.insert(it, std::move(frag));
 }
 
@@ -497,22 +507,16 @@ Locator Buffer::locator_between(const std::vector<Fragment>& frags,
 
 /// Order the fragments of one shared-locator run, keeping every fragment whole.
 ///
-/// A run is a set of whole operations competing for one position. Order them by
-/// `origin` -- each fragment's FIRST item identity, compared counter-first then
-/// actor bytes -- and do not split them.
+/// A run is a set of whole operations competing for one position, ordered by
+/// `fragment_precedes` (origin actor bytes, then counter) and never split.
 ///
-/// This used to atomize the run into single scalars and sort those. A fragment's
-/// items are `origin.counter + offset` and item counters are per-actor, so two
-/// three-character pastes own counters 1,2,3 each: ranking per-scalar identity
-/// interleaved them into `aXbYcZ`. Both replicas agreed, which is why the defect
-/// survived as "convergent". The comparator was never wrong -- `FragmentOrderDim`'s
-/// `<=>` is already (locator, origin) -- feeding it atomized scalars was.
-///
-/// WHAT THIS DOES NOT FIX: concurrent *typing*. Each keystroke is its own
-/// operation and takes its own strictly increasing locator, so actor A's third
-/// character sorts above actor B's first no matter how same-locator ties are
-/// broken. `tst_sequence_semantics` keeps that case failing on purpose; see
-/// docs/specs/vnext-sequence-algorithm.md §"What remains open".
+/// This used to atomize the run into single scalars and sort those, which
+/// interleaved two concurrent pastes into `aXbYcZ`. Concurrent typing needed the
+/// other half of the repair: a keystroke that continues the author's own
+/// contiguous run reuses that run's locator (see the insert phase of
+/// `try_apply_validated_local_edit`), so a typed run is one same-locator group
+/// here exactly as a paste is. Reverse (prepend) typing is not covered; see
+/// docs/specs/vnext-sequence-algorithm.md §5a.
 void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
     size_t i = 0;
     while (i < frags.size()) {
@@ -525,10 +529,7 @@ void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
         if (run_end - run_start > 1) {
             std::stable_sort(frags.begin() + static_cast<ptrdiff_t>(run_start),
                              frags.begin() + static_cast<ptrdiff_t>(run_end),
-                             [](const Fragment& a, const Fragment& b) {
-                                 if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
-                                 return a.origin < b.origin;
-                             });
+                             fragment_precedes);
         }
         i = run_end;
     }
@@ -894,7 +895,21 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
                 hi = new_next_loc;
             }
 
-            Locator new_loc = Locator::between(lo, hi);
+            // When this insert continues the author's own contiguous preceding
+            // fragment, reuse that fragment's locator instead of taking a fresh
+            // one. A fresh locator per keystroke is a flat, strictly increasing
+            // chain, which forces concurrent typing to interleave per scalar;
+            // reuse keeps the whole typed run in one same-locator group, which
+            // fragment_precedes then keeps adjacent. `next_item` is the identity
+            // this operation's items start at; the +1 is the operation identity
+            // sitting above its own items, so reuse items are NOT counter-
+            // contiguous -- relocation must select by group order, not by counter.
+            Locator new_loc = lo;
+            const bool continues_own_run =
+                !new_tree.empty() &&
+                new_tree.last().origin.actor == m_allocator->actor() &&
+                next_item == new_tree.last().origin.counter + new_tree.last().length + 1;
+            if (!continues_own_run) new_loc = Locator::between(lo, hi);
 
             // The scalar count was computed before the reservation, so the item
             // identities are consecutive positions of the one interval this
@@ -1001,17 +1016,18 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
         auto frags = new_tree.items();
 
         for (auto& dr : deferred_relocs) {
-            Identity next_expected = dr.min_origin;
+            // The relocated set is every fragment still at the old locator that
+            // follows the split point in the group order (fragment_precedes).
+            // It is not a contiguous counter interval: a reused-locator run has
+            // one counter between consecutive operations (the operation's own
+            // identity), so walking `counter == next_expected` stops after the
+            // first fragment and strands the rest of the run behind the insert.
             uint32_t total_chars = 0;
             for (auto& f : frags) {
-                if (f.origin.actor != dr.min_origin.actor) continue;
-                if (f.origin.counter != next_expected.counter) continue;
-                if (f.locator == dr.old_loc) {
-                    f.locator = dr.new_loc;
-                }
+                if (f.locator != dr.old_loc) continue;
+                if (group_precedes(f.origin, dr.min_origin)) continue;
+                f.locator = dr.new_loc;
                 total_chars += f.length;
-                next_expected = Identity(f.origin.actor,
-                                         f.origin.counter + f.length);
             }
             for (auto& sr : op.split_relocations) {
                 if (sr.fragment_origin == dr.min_origin && sr.new_locator == dr.new_loc) {
@@ -1021,10 +1037,7 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
             }
         }
 
-        std::sort(frags.begin(), frags.end(), [](const Fragment& a, const Fragment& b) {
-            if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
-            return a.origin < b.origin;
-        });
+        std::stable_sort(frags.begin(), frags.end(), fragment_precedes);
         normalize_fragments(frags);
         set_fragments(std::move(frags));
     }
@@ -1311,22 +1324,27 @@ bool Buffer::apply_remote_edit(const EditOperation &op) {
                 fi = split_fragment_at(frags, fi, byte_off);
             }
 
-            uint64_t end_counter =
-                reloc.fragment_origin.counter + reloc.fragment_length;
-            uint64_t next_expected = target_ts.counter;
+            // Same selection as the originating replica: every fragment at the
+            // target's locator that follows it in group order, limited to what
+            // the originator had observed. Items a concurrent peer added to the
+            // group since are not the originator's to move.
+            const Locator old_loc = frags[fi].locator;
+            const Identity target_id = frags[fi].origin;
             struct RelocEntry { size_t idx; Locator effective; };
             std::vector<RelocEntry> to_relocate;
             for (size_t si = 0; si < frags.size(); ++si) {
-                if (next_expected >= end_counter) break;
                 auto &sf = frags[si];
-                if (sf.origin.actor != target_ts.actor) continue;
-                if (sf.origin.counter != next_expected) continue;
+                if (sf.locator != old_loc) continue;
+                if (group_precedes(sf.origin, target_id)) continue;
+                if (sf.length &&
+                    !op.version.observed(Identity(sf.origin.actor,
+                                                  sf.origin.counter + sf.length - 1)))
+                    continue;
                 Locator eff = (reloc.new_locator > sf.locator)
                               ? reloc.new_locator : sf.locator;
                 if (eff != sf.locator) {
                     to_relocate.push_back({si, eff});
                 }
-                next_expected = sf.origin.counter + sf.length;
             }
 
             for (auto it = to_relocate.rbegin(); it != to_relocate.rend(); ++it) {

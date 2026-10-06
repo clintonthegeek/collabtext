@@ -293,18 +293,15 @@ private slots:
         QCOMPARE(a.resolve_anchor(left), 1u);
     }
 
-    /// F8 split in two by S03. The paste half is repaired; the typing half is not,
-    /// and the difference is representational rather than a leftover.
+    /// F8 split in two by S03; both halves are now repaired for forward input.
     ///
     /// A paste is one operation holding all its items, so keeping whole fragments
-    /// contiguous is enough and `normalize_fragments` now does it: `abcXYZ`
-    /// instead of `aXbYcZ`.
+    /// contiguous is enough: `abcXYZ` instead of `aXbYcZ`. Typing needed two more
+    /// things: a keystroke that continues the author's own contiguous run reuses
+    /// that run's locator, and same-locator ties are ordered replica-major so one
+    /// actor's consecutive items stay adjacent. Reverse (prepend) typing is the
+    /// remaining gap; see tst_sequence_semantics.
     ///
-    /// Typing is one operation per keystroke, each taking its own strictly
-    /// increasing locator, so actor A's third character sorts above actor B's
-    /// first whatever the tie-break. That needs locator reuse, not a comparator
-    /// change, and is tracked as blocked rather than closed. S01's typing oracle
-    /// is deliberately NOT weakened to `ababab` to make this pass.
     void f8_concurrent_pastes_remain_contiguous() {
         Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
         auto first = a.apply_local_edit({{0, 0}}, {"abc"});
@@ -331,10 +328,6 @@ private slots:
         for (const auto &op : {b1, b2, b3}) a.apply_ops({op});
         for (const auto &op : {a1, a2, a3}) b.apply_ops({op});
         QCOMPARE(a.text(), b.text());
-        EVALUATION_EXPECT_FAIL("",
-            "F8 / S03 blocked: typing locator minting -- each keystroke takes its own "
-            "locator, so per-scalar interleave survives; needs locator reuse, not a "
-            "comparator change");
         // S01's forward-typing oracle, unmodified.
         QVERIFY(a.text() == "abcXYZ");
     }

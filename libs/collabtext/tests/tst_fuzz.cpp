@@ -19,6 +19,13 @@ using namespace CollabText::Test;
 // Invariant checkers — these verify structural properties after every operation
 // ============================================================================
 
+// Same-locator ties are ordered replica-major (actor, then counter): the
+// sequence contract keeps one actor's consecutive items adjacent.
+static bool groupBefore(const CollabText::Crdt::Identity& a, const CollabText::Crdt::Identity& b) {
+    if (const int by_actor = a.actor.compare(b.actor); by_actor != 0) return by_actor < 0;
+    return a.counter < b.counter;
+}
+
 static void check_invariants(const Buffer& buf, const char* context) {
     auto frags = buf.fragments();
 
@@ -53,7 +60,7 @@ static void check_invariants(const Buffer& buf, const char* context) {
                 .arg(context).arg(i).arg(i-1)));
         }
         if (cmp == 0) {
-            if (frags[i].origin < frags[i-1].origin) {
+            if (groupBefore(frags[i].origin, frags[i-1].origin)) {
                 QFAIL(qPrintable(QString("INV-4 violated at %1: same locator but frag[%2].origin < frag[%3].origin")
                     .arg(context).arg(i).arg(i-1)));
             }

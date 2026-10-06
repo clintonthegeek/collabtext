@@ -7,6 +7,13 @@ using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
+// Same-locator ties are ordered replica-major (actor, then counter): the
+// sequence contract keeps one actor's consecutive items adjacent.
+static bool groupBefore(const CollabText::Crdt::Identity& a, const CollabText::Crdt::Identity& b) {
+    if (const int by_actor = a.actor.compare(b.actor); by_actor != 0) return by_actor < 0;
+    return a.counter < b.counter;
+}
+
 static void check_invariants(const Buffer& buf, const char* context) {
     auto frags = buf.fragments();
     std::string text = buf.text();
@@ -22,7 +29,7 @@ static void check_invariants(const Buffer& buf, const char* context) {
     for (size_t i = 1; i < frags.size(); ++i) {
         auto cmp = frags[i].locator <=> frags[i-1].locator;
         if (cmp < 0) QFAIL(qPrintable(QString("INV-4 at %1").arg(context)));
-        if (cmp == 0 && frags[i].origin <= frags[i-1].origin)
+        if (cmp == 0 && !groupBefore(frags[i-1].origin, frags[i].origin))
             QFAIL(qPrintable(QString("INV-4 at %1").arg(context)));
     }
     for (size_t i = 0; i < frags.size(); ++i) {
