@@ -1576,6 +1576,9 @@
     "build-roadmap-release/verification/20261005T234609Z-changed-ol6vuyw_",
     "/tmp/collabtext-codec-preflight-asan-build.log",
     "/tmp/collabtext-codec-preflight-asan.log"
+   ],
+   "implementation_commits": [
+    "3b19e2205b4fadcceb444066571ac8615a13dbe3"
    ]
   },
   {

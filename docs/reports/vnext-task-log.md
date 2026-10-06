@@ -2172,7 +2172,7 @@ No production F7/F8 marker or installed position capability was promoted.
 
 ## 2026-10-05 — P06b partial: repair actual public syntax/Unicode decoding
 
-Baseline fa3e11a. P06b remains in_progress: the versioned Result API and
+Baseline fa3e11a; partial implementation 3b19e22. P06b remains in_progress: the versioned Result API and
 allocation/gap codecs are still pending, with an exact implementation contract
 in vnext-operation-codec.md. This is a real native decoder repair, not a completed
 wire-format task or a store-recovery claim.

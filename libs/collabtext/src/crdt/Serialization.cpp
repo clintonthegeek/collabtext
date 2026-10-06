@@ -675,7 +675,7 @@ struct Parser {
 } // anonymous namespace
 
 // P06b's first repair: the public entry points must not bypass P04's bounded
-// grammar reader. The old payload builder below still owns interim field decode;
+// grammar reader. The old payload builder above still owns interim field decode;
 // typed versions/new schema follow in OperationCodec. No header interpretation:
 // this payload's v is a causal vector, not an envelope version number.
 static bool valid_payload_json(std::string_view json) {

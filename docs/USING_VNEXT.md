@@ -178,3 +178,13 @@ emitted operation. An empty or moved-from value is rejected before application.
 This changes the C++ surface, not wire schema 4, operation allocation or merge
 order. Document/stream/epoch envelopes and typed version-decode errors remain
 P07/P06b work. Keep unknown or rejected input for diagnostics/recovery.
+
+
+The interim public operation decoders now validate complete bounded JSON, reject
+duplicate keys/malformed Unicode/trailing garbage, and correctly decode escaped
+non-BMP scalars. Payloads still have no explicit wire version; optional errors
+cannot distinguish newer formats from corruption. Retain original failed records
+and block progress over them. [P06b's codec contract](specs/vnext-operation-codec.md)
+specifies the remaining Result API, versioned frames and interval/gap metadata.
+The stricter decoder does not certify legacy file-reader cursor transactions or
+recovery. Positions remain specified/model-checked, awaiting S04b implementation.

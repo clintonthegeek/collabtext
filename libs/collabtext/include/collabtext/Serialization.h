@@ -1,44 +1,22 @@
-/// Serialization.h — Public stable serialization API for collabtext consumers
+/// Interim public serialization API on roadmap/reliability-v2.
 ///
-/// This header is part of the stable public API surface introduced under the
-/// OpStream extraction (Task 1.1).  See also:
-///   docs/handoff/2026-05-08-d5-joint-design-outcomes.md  §1 "Form 2 contract"
+/// Current payloads are single-line JSON without an explicit payload-format
+/// version. P06b replaces them with independently versioned, checked codecs.
+/// Opaque operation values come from engine output or decoding; their fields
+/// and layout are private.
 ///
-/// ─── Stable contract (safe to depend on across schema_version bumps) ────────
+/// Decoding validates bounded complete JSON syntax, duplicate keys and Unicode,
+/// then maps the interim fields. Valid escaped surrogate pairs preserve scalar
+/// UTF-8. A successful decode does not establish semantic/causal applicability;
+/// the engine still validates before mutation.
 ///
-///   • encode_operation(const Operation& op) -> std::string
-///       Serialises a Buffer operation to a single-line JSON string (no
-///       trailing newline).  The exact JSON field names and schema are
-///       evolution-reserved; only the round-trip property is stable.
+/// The current optional result cannot classify unsupported versions or provide
+/// typed diagnostics. Keep original failed input and block any coverage/cursor
+/// advancement over its record. Never interpret failure as permission to skip.
+/// P06b's remaining Result API supplies format/version/error distinctions.
 ///
-///   • decode_operation(std::string_view json) -> std::optional<Operation>
-///       Deserialises JSON to an Operation.  Returns std::nullopt on parse
-///       failure or schema mismatch.  A failure must retain the original bytes and block any coverage/cursor
-///       advance over that record. The interim optional result cannot classify
-///       the failure; P06b adds typed version/format errors.
-///
-///   • encode_idlist_operation(const IdListOperation& op) -> std::string
-///       Serialises an IdList operation to single-line JSON.
-///
-///   • decode_idlist_operation(std::string_view json)
-///           -> std::optional<IdListOperation>
-///       Deserialises JSON to an IdListOperation.  Returns std::nullopt on
-///       failure.
-///
-///   • encode_global(const Global& g) -> std::string
-///   • decode_global(std::string_view json) -> std::optional<Global>
-///       Serialisation helpers for Global (version vector).  Transitively
-///       included; field layout of Global is evolution-reserved.
-///
-/// ─── Guarantees ──────────────────────────────────────────────────────────────
-///
-///   Round-trip: encode then decode (or decode then encode) produces identical
-///   output for the same logical value.
-///
-///   Schema mismatch: decode_* returns std::nullopt when the input was
-///   produced by an incompatible schema_version.  Retain failed records; do not silently skip them or advance coverage.
-///   Callers must not infer semantic/causal validity from syntactic decode.
-///
+/// Encode/decode of an accepted value preserves its logical data and canonical
+/// encoder output. Only library-owned bytes are wire data; C++ layouts are not.
 #pragma once
 
 #include <collabtext/Operations.h>
