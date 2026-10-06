@@ -323,6 +323,82 @@ private slots:
     QVERIFY(state.close().ok());
   }
 
+  void consumer_commit_pin_crash_matrix_rebuilds_projection_before_gc() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const DocumentSessionConfig seed_config{root / "seed-shared",
+                                             root / "seed-private", "doc-pin",
+                                             "stream-pin", 1};
+    std::string event_wire;
+    {
+      auto opened = DocumentSession::open(seed_config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      auto event = session->apply_local({{0, 0}}, {"reply"});
+      QVERIFY(event.ok());
+      auto encoded = encode_operation(event.value());
+      QVERIFY(encoded.ok());
+      event_wire = encoded.value();
+      QVERIFY(session->close().ok());
+    }
+
+    // Each row models a crash after the named durable consumer write. Recovery
+    // must preserve accepted history and rebuild the projection and its pin
+    // before the consumer enables collection.
+    for (int crash_stage = 0; crash_stage != 4; ++crash_stage) {
+      const auto case_dir = root / ("stage-" + std::to_string(crash_stage));
+      const auto outbox = case_dir / "outbox.log";
+      const auto canonical = case_dir / "canonical.log";
+      const auto projection = case_dir / "projection.log";
+      const auto pins = case_dir / "pins.log";
+      QVERIFY(append_durable_line(outbox, "pending:event-1:" + to_hex(event_wire))
+                  .ok());
+      if (crash_stage >= 1)
+        QVERIFY(append_durable_line(
+                    canonical, "accepted:event-1:" + to_hex(event_wire))
+                    .ok());
+      if (crash_stage >= 2)
+        QVERIFY(append_durable_line(projection, "projected:event-1").ok());
+      if (crash_stage >= 3)
+        QVERIFY(append_durable_line(pins, "pinned:event-1:frontier-1").ok());
+
+      bool gc_allowed = false;
+      std::string canonical_row;
+      std::ifstream canonical_in(canonical);
+      const bool has_canonical =
+          static_cast<bool>(std::getline(canonical_in, canonical_row));
+      if (has_canonical) {
+        std::string projection_row;
+        std::ifstream projection_in(projection);
+        if (!std::getline(projection_in, projection_row))
+          QVERIFY(append_durable_line(projection, "projected:event-1").ok());
+        std::string pin_row;
+        std::ifstream pins_in(pins);
+        if (!std::getline(pins_in, pin_row))
+          QVERIFY(append_durable_line(pins, "pinned:event-1:frontier-1").ok());
+        // The simulated collector gate opens only after recovered projection
+        // and pin records are durable.
+        std::ifstream recovered_pin(pins);
+        QVERIFY(static_cast<bool>(std::getline(recovered_pin, pin_row)));
+        gc_allowed = pin_row == "pinned:event-1:frontier-1";
+      }
+      QCOMPARE(gc_allowed, has_canonical);
+
+      // Rejection/reconciliation never removes an accepted canonical row or
+      // its pending outbox evidence.
+      std::ifstream canonical_after(canonical), outbox_after(outbox);
+      std::string retained_canonical, retained_outbox;
+      QCOMPARE(static_cast<bool>(std::getline(canonical_after, retained_canonical)),
+               has_canonical);
+      QVERIFY(static_cast<bool>(std::getline(outbox_after, retained_outbox)));
+      if (has_canonical)
+        QCOMPARE(retained_canonical,
+                 "accepted:event-1:" + to_hex(event_wire));
+      QCOMPARE(retained_outbox, "pending:event-1:" + to_hex(event_wire));
+    }
+  }
+
   void invalid_store_path_returns_typed_open_error() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
