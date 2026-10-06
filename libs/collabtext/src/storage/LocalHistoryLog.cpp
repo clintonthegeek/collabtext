@@ -40,7 +40,7 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
                                           const ActorId &owner) {
   std::istringstream in{std::string(line)};
   std::string magic, actor_text;
-  if (!(in >> magic >> actor_text) || magic != "CLH1")
+  if (!(in >> magic >> actor_text) || magic != "CLH2")
     return Error(ErrorCode::corrupt_record, "unknown local history record format");
   auto actor = ActorId::parse(actor_text);
   if (!actor.ok() || actor.value() != owner)
@@ -78,6 +78,12 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
       if (!id.ok()) return id.error();
       entry.deletion_operations.push_back(id.value());
     }
+    auto retained = number(in, "retained history bytes");
+    if (!retained.ok()) return retained.error();
+    if (retained.value() > kMaxSnapshotBytes)
+      return Error(ErrorCode::corrupt_record,
+                   "local history retained-byte count exceeds the limit");
+    entry.retained_bytes = static_cast<size_t>(retained.value());
     snapshot.entries.push_back(std::move(entry));
   }
   std::string trailing;
@@ -89,7 +95,7 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
 std::string encode(const Crdt::LocalHistorySnapshot &snapshot,
                    const ActorId &owner) {
   std::ostringstream out;
-  out << "CLH1 " << owner.to_string() << ' ' << snapshot.cursor << ' '
+  out << "CLH2 " << owner.to_string() << ' ' << snapshot.cursor << ' '
       << snapshot.entries.size();
   auto write_ids = [&](const std::vector<Crdt::Identity> &ids) {
     out << ' ' << ids.size();
@@ -99,6 +105,7 @@ std::string encode(const Crdt::LocalHistorySnapshot &snapshot,
   for (const auto &entry : snapshot.entries) {
     write_ids(entry.inserted_items);
     write_ids(entry.deletion_operations);
+    out << ' ' << entry.retained_bytes;
   }
   out << '\n';
   return out.str();

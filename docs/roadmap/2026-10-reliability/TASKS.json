@@ -2396,14 +2396,14 @@
       "consumer_requirements": [
         "W5"
       ],
-      "progress": "Partial: added replay-validated Buffer undo/redo snapshots and an actor-scoped atomic checkpoint for local history. DocumentSession restores the checkpoint after full operation replay and publishes edit/undo/redo operations through a durable intent protocol: persist the operation token, payload, and resulting history snapshot; push idempotently; checkpoint; then clear the intent. Reopen tests cover pending-intent retry, undo\u2192close\u2192reopen\u2192redo, and owner undo preserving a peer edit. Byte/step retirement policy and IdList persistence remain open.",
+      "progress": "Partial: added replay-validated Buffer undo/redo snapshots, a replay-scoped atomic history checkpoint, and a durable pending-commit intent containing the operation token, payload, and resulting snapshot. DocumentSession retries pending delivery idempotently on open, then restores local undo/redo. Buffer history is bounded by step and estimated retained-byte budgets, coalescing combines byte charges, and an oversized single edit is refused before identity reservation. Restart coverage includes pending-intent reconciliation, undo\u2192close\u2192reopen\u2192redo, and owner undo preserving a peer edit.",
       "verification_results": {
-        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, including pending-intent recovery, session undo\u2192close\u2192reopen\u2192redo, and peer-edit preservation; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T215349Z-2"
+        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, including byte-budget refusal/trim, pending-intent recovery, session undo\u2192close\u2192reopen\u2192redo, and peer-edit preservation; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T215554Z-2"
       },
       "artifacts": [
-        "build-roadmap-debug/verification/20261006T215349Z-2/"
+        "build-roadmap-debug/verification/20261006T215554Z-2/"
       ],
-      "remaining_gap": "Add step and retained-byte budgeting with atomic retirement records; cover crash injection at every intent/push/checkpoint/clear boundary, coalescing, and canonical event correlation. IdList history is not yet persisted. Buffer undo/redo refusal currently maps allocator failure to not_found because the primitive API returns optional."
+      "remaining_gap": "Add crash injection at every intent/push/checkpoint/clear boundary and persist coalescing/retirement metadata for consumers. IdList history is not yet persisted. Buffer undo/redo refusal currently maps allocator failure to not_found because the primitive API returns optional. The retained-byte charge is a bounded estimate and has no consumer-configured policy yet; accepted canonical event correlation remains consumer-owned."
     },
     {
       "id": "L07",

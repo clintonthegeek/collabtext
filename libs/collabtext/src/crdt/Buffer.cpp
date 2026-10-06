@@ -46,11 +46,13 @@ void Buffer::local_clear() noexcept {
     auto allocator = m_allocator;
     auto version = m_version;
     const auto undo_limit = max_undo_depth();
+    const auto undo_byte_limit = max_undo_bytes();
     auto changed = std::move(m_on_change);
     *this = Buffer(std::move(allocator));
     m_version = std::move(version);
     m_on_change = std::move(changed);
     set_max_undo_depth(undo_limit);
+    set_max_undo_bytes(undo_byte_limit);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,15 +125,31 @@ void Buffer::set_max_undo_depth(size_t depth) {
     trim_undo_stack();
 }
 
+void Buffer::set_max_undo_bytes(size_t bytes) {
+    m_max_undo_bytes = bytes;
+    trim_undo_stack();
+}
+
+void Buffer::recalculate_undo_bytes() {
+    m_undo_bytes = 0;
+    for (const auto &entry : m_undo_stack) {
+        if (entry.retained_bytes > SIZE_MAX - m_undo_bytes) {
+            m_undo_bytes = SIZE_MAX;
+            return;
+        }
+        m_undo_bytes += entry.retained_bytes;
+    }
+}
+
 void Buffer::trim_undo_stack() {
-    if (m_undo_stack.size() <= m_max_undo_depth) return;
-    size_t excess = m_undo_stack.size() - m_max_undo_depth;
-    m_undo_stack.erase(m_undo_stack.begin(),
-                       m_undo_stack.begin() + static_cast<ptrdiff_t>(excess));
-    if (excess > m_undo_cursor)
-        m_undo_cursor = 0;
-    else
-        m_undo_cursor -= excess;
+    recalculate_undo_bytes();
+    while (!m_undo_stack.empty() &&
+           (m_undo_stack.size() > m_max_undo_depth ||
+            m_undo_bytes > m_max_undo_bytes)) {
+        m_undo_stack.erase(m_undo_stack.begin());
+        if (m_undo_cursor != 0) --m_undo_cursor;
+        recalculate_undo_bytes();
+    }
 }
 
 size_t Buffer::collect_garbage() {
@@ -513,6 +531,29 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
         inserted_scalars += scalar_counts[i];
     }
 
+    size_t retained_bytes = 0;
+    auto add_retained = [&](size_t amount) {
+        if (amount > SIZE_MAX - retained_bytes) return false;
+        retained_bytes += amount;
+        return true;
+    };
+    for (size_t i = 0; i < ranges.size(); ++i) {
+        const auto [start, end] = ranges[i];
+        if (!add_retained(new_text[i].size()) || !add_retained(end - start))
+            return Error(ErrorCode::limit_exceeded,
+                         "local undo restoration size exceeds addressable memory");
+    }
+    if (inserted_scalars > SIZE_MAX / sizeof(UndoMapKey) ||
+        !add_retained(static_cast<size_t>(inserted_scalars) * sizeof(UndoMapKey)) ||
+        (std::any_of(ranges.begin(), ranges.end(), [](const auto &range) {
+             return range.second > range.first;
+         }) && !add_retained(sizeof(Identity))))
+        return Error(ErrorCode::limit_exceeded,
+                     "local undo identity metadata exceeds addressable memory");
+    if (retained_bytes > m_max_undo_bytes)
+        return Error(ErrorCode::limit_exceeded,
+                     "local edit exceeds configured undo byte limit");
+
     auto reserved = m_allocator->reserve_run(inserted_scalars + 1);
     if (!reserved.ok()) {
         // Exhaustion, or a durable write that failed. Either way nothing has
@@ -529,6 +570,7 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     op.new_text = new_text;
     op.version = m_version;
     UndoEntry undo_entry;
+    undo_entry.retained_bytes = retained_bytes;
     bool had_deletions = false;
 
     // Track actually-deleted character timestamps for building deletion_runs.
@@ -1002,10 +1044,14 @@ bool Buffer::coalesce_last_undo() {
     previous.deletion_ids.insert(previous.deletion_ids.end(),
                                  latest.deletion_ids.begin(),
                                  latest.deletion_ids.end());
+    previous.retained_bytes = latest.retained_bytes > SIZE_MAX - previous.retained_bytes
+                                  ? SIZE_MAX
+                                  : previous.retained_bytes + latest.retained_bytes;
 
     m_undo_stack.erase(m_undo_stack.begin()
                        + static_cast<ptrdiff_t>(m_undo_cursor - 1));
     m_undo_cursor--;
+    recalculate_undo_bytes();
     return true;
 }
 
@@ -1019,6 +1065,7 @@ LocalHistorySnapshot Buffer::local_history_snapshot() const {
         for (const auto &key : entry.inserted_keys)
             saved.inserted_items.push_back(key.position);
         saved.deletion_operations = entry.deletion_ids;
+        saved.retained_bytes = entry.retained_bytes;
         snapshot.entries.push_back(std::move(saved));
     }
     return snapshot;
@@ -1034,11 +1081,17 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
     const auto &owner = actor_id();
     std::vector<UndoEntry> restored;
     restored.reserve(snapshot.entries.size());
+    size_t restored_bytes = 0;
     auto valid_local_identity = [&](const Identity &id) {
         return id.actor == owner && id.counter != 0 &&
                id.counter <= m_version.get(owner);
     };
     for (const auto &saved : snapshot.entries) {
+        if (saved.retained_bytes > m_max_undo_bytes -
+                                       std::min(restored_bytes, m_max_undo_bytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "local history exceeds configured byte bound");
+        restored_bytes += saved.retained_bytes;
         UndoEntry entry;
         entry.inserted_keys.reserve(saved.inserted_items.size());
         for (const auto &id : saved.inserted_items) {
@@ -1053,10 +1106,12 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
                              "local undo deletion is absent from replayed owner history");
             entry.deletion_ids.push_back(id);
         }
+        entry.retained_bytes = saved.retained_bytes;
         restored.push_back(std::move(entry));
     }
     m_undo_stack = std::move(restored);
     m_undo_cursor = snapshot.cursor;
+    m_undo_bytes = restored_bytes;
     return Result<void>::success();
 }
 

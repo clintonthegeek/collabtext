@@ -44,6 +44,7 @@ struct TextEdit {
 struct LocalUndoEntrySnapshot {
     std::vector<Identity> inserted_items;
     std::vector<Identity> deletion_operations;
+    size_t retained_bytes = 0;
 };
 
 struct LocalHistorySnapshot {
@@ -225,6 +226,11 @@ public:
     /// Set the maximum undo stack depth.
     void set_max_undo_depth(size_t depth);
 
+    /// Upper bound on history's retained restoration bytes and identity keys.
+    size_t max_undo_bytes() const { return m_max_undo_bytes; }
+    void set_max_undo_bytes(size_t bytes);
+    size_t undo_history_bytes() const { return m_undo_bytes; }
+
     /// Temporarily retains all fragments, including restoration/anchor context.
     /// Returns zero until certified reclamation is implemented.
     size_t collect_garbage();
@@ -340,6 +346,7 @@ private:
 
     /// Trim the undo stack to m_max_undo_depth entries.
     void trim_undo_stack();
+    void recalculate_undo_bytes();
 
     /// Deferred operations awaiting causal dependencies.
     OperationQueue m_deferred_queue;
@@ -365,10 +372,13 @@ private:
     struct UndoEntry {
         std::vector<UndoMapKey> inserted_keys;
         std::vector<Identity> deletion_ids;
+        size_t retained_bytes = 0;
     };
     std::vector<UndoEntry> m_undo_stack;
     size_t m_undo_cursor = 0;  // Points past the last undoable entry
     size_t m_max_undo_depth = 1000;
+    size_t m_undo_bytes = 0;
+    size_t m_max_undo_bytes = 16 * 1024 * 1024;
 };
 
 } // namespace CollabText::Crdt

@@ -45,6 +45,28 @@ private slots:
     QCOMPARE(buffer.undo_depth(), size_t(0));
   }
 
+  void history_budget_trims_old_steps_and_refuses_one_oversized_edit() {
+    auto allocator = Test::test_counter(9);
+    Buffer buffer(allocator);
+    buffer.set_max_undo_bytes(80);
+    QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {"a"}).ok());
+    QVERIFY(buffer.try_apply_local_edit({{1, 1}}, {"b"}).ok());
+    QCOMPARE(buffer.undo_depth(), size_t(2));
+    buffer.set_max_undo_bytes(40);
+    QCOMPARE(buffer.undo_depth(), size_t(1));
+    QVERIFY(buffer.undo_history_bytes() <= buffer.max_undo_bytes());
+    auto undo = buffer.undo();
+    QVERIFY(undo.has_value());
+    QCOMPARE(buffer.text(), std::string("a"));
+
+    Buffer limited(Test::test_counter(10));
+    limited.set_max_undo_bytes(32);
+    auto refused = limited.try_apply_local_edit({{0, 0}}, {"too large"});
+    QVERIFY(!refused.ok());
+    QCOMPARE(refused.error().code(), ErrorCode::limit_exceeded);
+    QCOMPARE(limited.text(), std::string{});
+  }
+
   void durable_history_log_recovers_latest_complete_snapshot() {
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
