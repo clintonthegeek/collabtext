@@ -5,8 +5,8 @@
 On branch `feat/fuguemax-placement` in this worktree, read `AGENTS.md` and
 `docs/roadmap/2026-10-reliability/README.md` first. That roadmap supersedes the
 historical OpStream scope below for this branch. Current status is
-`docs/handoff/2026-10-06-s03-progress.md`: S03 is complete. Next is E07a.
-Continue from that note and the registry.
+`docs/roadmap/2026-10-reliability/DIRECTION.md`: S03 is complete. Next is
+E07a, then E07b. Continue from that file and the registry.
 W1–W6 external consumer requirements are in `docs/specs/vnext-external-position-contract.md`. All product-policy questions are resolved
 in its `DECISIONS.md`: improve the existing C++ engine incrementally. No Rust
 rewrite, Yrs adoption, or replacement-engine trial is in scope. No Superpowers

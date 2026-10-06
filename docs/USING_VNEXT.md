@@ -1,11 +1,12 @@
 # Using the collabtext alpha package
 
-This is the consumer-facing guide for the alpha on branch `roadmap/reliability-v2`.
+This is the consumer-facing guide for the alpha on branch `feat/fuguemax-placement`.
 It is an alpha: not a supported release, not published, and expected to change its
 API between candidates. What it can and cannot do is stated in
 `<collabtext/ALPHA_CAPABILITIES.md>`, which is installed beside the headers and
-versioned independently of this document. **Read that before designing against this**. Scoped live positions are implemented;
-store recovery, persistent undo and durable pins remain pending.
+versioned independently of this document. **Read that before designing against this**. Scoped live positions and FugueMax passage order are implemented.
+Store recovery, persistent undo and durable pins remain pending. `CTPT/1` is
+experimental. Operation bytes are `CTBO`/`CTLO` version 0002; version 1 is refused.
 
 ## What is installed
 
@@ -123,8 +124,10 @@ three build modes. Read its `--help`.
 - **You supply the allocator.** Engines retain a shared `Crdt::IdentityAllocator`;
   the interface itself does not persist anything. Persist the 128-bit actor and the 64-bit counter before you
   use an operation, or you will reissue identities after a restart.
-- **Persist library-owned position bytes, not `Anchor` or `Locator` fields.**
-  Those legacy layouts remain reserved for evolution.
+- **Persist the library-owned position token, not internal fields.** `Locator`
+  no longer exists. Do not persist a tree link (`parent`, `side`, `right_origin`)
+  as if it were the public token. `CTPT/1` is experimental until a later alpha
+  candidate says a token version is supported for storage.
 - **Do not call `collect_garbage()` or `compact()` expecting reclamation.** They
   return zero and retain everything.
 

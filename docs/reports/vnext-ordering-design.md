@@ -1,8 +1,11 @@
 # Ordering repair design record — S02
 
 **Task:** S02, specify the ordering repair. **Date:** 2026-10-06.
-**Baseline:** `b5de626`. **Status:** design and independent model complete; no
-production code changed.
+**Baseline:** `b5de626`. **Status:** historical. The model and the review below
+are the S02 record. Production did not ship this rule. S03 adopted FugueMax
+(`docs/specs/vnext-sequence-algorithm.md` §0) after this design's flat-locator
+map failed. Read `docs/roadmap/2026-10-reliability/DIRECTION.md` before treating
+any sentence below as current engine behavior.
 
 The specification is
 [docs/specs/vnext-sequence-algorithm.md](../specs/vnext-sequence-algorithm.md).

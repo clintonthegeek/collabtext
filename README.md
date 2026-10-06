@@ -4,7 +4,7 @@ A conflict-free plain text engine for offline-first collaborative editing.
 
 collabtext is a CRDT text engine designed for a world where collaborators aren't always online at the same time. Instead of requiring a server or real-time connection, it produces compact operations that can travel over any file transport — Syncthing, Dropbox, a shared drive, a USB stick. Edits merge automatically. Documents converge. No conflicts, no "conflicted copy" files, no manual resolution.
 
-On `roadmap/reliability-v2`, V01–V08, D01, P01–P05, L01, S01 and headless package exports A01/A02a/A06a have landed; P06a is in progress. See the [current handoff](docs/handoff/2026-10-05-state-at-handoff.md) and [development throughput review](docs/reports/2026-10-05-development-throughput-review.md). Stable external position tokens, repaired concurrent passage ordering and session durability remain dependency-gated work. Both primitives retain all state on GC/compaction requests until certified reclamation is implemented. The examples below describe the historical API; use [USING_VNEXT.md](docs/USING_VNEXT.md) for the installed branch API.
+On `feat/fuguemax-placement`, the reliability roadmap is in progress. Read [DIRECTION.md](docs/roadmap/2026-10-reliability/DIRECTION.md) before changing the engine. Concurrent passage order is FugueMax. Durable pins, crash recovery, and persistent undo are not implemented. `collect_garbage()` and `compact()` retain everything. The examples below describe the historical API; use [USING_VNEXT.md](docs/USING_VNEXT.md) for the installed branch API.
 
 ## The problem
 
@@ -206,11 +206,11 @@ artifact as the report.
 
 The engine is built on a few core data structures:
 
-- **SumTree** — A B+ tree with monoid summary aggregation. Supports O(log n) seeks by byte offset, fractional position (Locator), or version vector. Branching factor 6 (12 max children per node).
+- **SumTree** — A B+ tree with monoid summary aggregation. Branching factor 6 (12 max children per node). It stores runs. It is not the ordering rule.
 
-- **Locator** — Fractional position identifiers (variable-length sequences of uint64 digits). `Locator::between(lo, hi)` creates positions between any two existing positions without renumbering. Biased allocation gives ~65K sequential inserts per depth level for both append and prepend patterns.
+- **Placement** — FugueMax tree links (`docs/specs/vnext-sequence-algorithm.md` §0). `Locator` and fractional positions are gone. Do not put them back.
 
-- **Fragment** — A span of text with a Locator, Lamport origin, deletion list, and visibility flag. The fragment tree is ordered by (Locator, origin) for deterministic merge.
+- **Fragment** — A span of text with a Lamport origin, a tree link on its first element, a deletion list, and a visibility flag. Order is the in-order traversal of those links.
 
 - **UndoMap** — Tracks undo/redo parity per edit across all replicas using Lamport timestamps. A fragment is visible if its insertion is not undone and all its deletions are undone.
 

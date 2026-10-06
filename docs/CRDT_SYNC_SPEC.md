@@ -1,5 +1,9 @@
 # CollabText CRDT Synchronization Specification
 
+**Historical file-floor spec.** The vNext protocol contract is
+`docs/specs/vnext-protocol.md`. Operation bytes are `CTBO`/`CTLO` version 0002.
+Placement is not a locator. See `docs/roadmap/2026-10-reliability/DIRECTION.md`.
+
 A file-sync-first collaborative text editing protocol. Syncthing (or any
 file synchronization tool) serves as the reliable floor — always available,
 never depends on network configuration, NAT traversal, or peer availability.

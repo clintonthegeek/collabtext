@@ -75,7 +75,8 @@ Run the reference interpreter on all S01 fixtures and bounded enumerations; reta
 
 ## S03 — Apply the ordering repair to existing Buffer and IdList paths
 
-**Status:** complete at `0984d93` (2026-10-06). Progress note: `docs/handoff/2026-10-06-s03-progress.md`.  
+**Status:** complete at `0984d93` (2026-10-06).  
+**Outcome:** the steps below are the original procedure. They did not fit. A flat locator cannot express the S02 rule, and the locator-reuse spike broke typing-into-a-split-run. Production placement is FugueMax, specified in `docs/specs/vnext-sequence-algorithm.md` §0. Do not re-apply the S02 transformation map. Direction and contingencies: `DIRECTION.md`. Evidence: `docs/handoff/2026-10-06-s03-progress.md`.  
 **Depends on:** S02, P06b, S04b\
 **Coverage:** F8  
 

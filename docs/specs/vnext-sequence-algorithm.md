@@ -339,7 +339,11 @@ executes, not an argument.
 | Duplicate and deferred delivery | Duplicates counted not reapplied; `B/6` before its prerequisites defers, then drains to `a!bcXYZ` | pass |
 | The oracle can reject | `productionAtomizingRuleIsRejected` reproduces `aXbYcZ`, `aXbYcZ!`, `cZbYaX`, `aXbYcZ` for exactly the four comparable fixtures | pass |
 
-## 5a. What remains open: R1 is not expressible in a flat locator order
+## 5a. Historical: R1 is not expressible in a flat locator order
+
+**This section is the record of the failed attempt, not the current engine.**
+FugueMax landed in §0. The F8 typing expected-fail was removed. Do not restore
+it, and do not implement the locator-reuse spike described below.
 
 **S03 disproved part of this specification's transformation map, and the
 production test is what caught it.** `tst_sequence_semantics` drives real

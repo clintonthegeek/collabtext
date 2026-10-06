@@ -5,13 +5,14 @@ checked-out branch is `feat/fuguemax-placement`, which contains
 `roadmap/reliability-v2`. The evaluated source checkout is
 `/home/clinton/dev/collabtext`, branch `master`.
 
-Read `docs/roadmap/2026-10-reliability/README.md`, `DECISIONS.md`, and
-`EXECUTION.md` before implementing a roadmap task. `TASKS.json` is the
+Read `docs/roadmap/2026-10-reliability/DIRECTION.md` first. Then
+`README.md`, `DECISIONS.md`, and `EXECUTION.md`. `TASKS.json` is the
 authoritative dependency/status registry; the numbered Markdown files contain
-the human-readable tasks. Phase numbers group concerns; do not reinstate the old
-serial recovery-first route. Read `docs/handoff/2026-10-04-reliability-review.md`
-for current evidence and `docs/specs/vnext-external-position-contract.md` for
-W1–W6 consumer cases.
+the human-readable tasks, including steps that describe the original procedure
+of a finished task. Phase numbers group concerns; do not reinstate the old
+serial recovery-first route. `docs/specs/vnext-external-position-contract.md`
+is the W1–W6 consumer contract. Older handoffs and the pre-vNext engine specs
+are provenance.
 
 ## Where the work is, as of 2026-10-06
 
@@ -20,8 +21,9 @@ packaging A01/A02a/A06a. Registry count: 72. S01/W01 are validated desired histo
 probe fixtures, not production F7/F8 fixes. P06a's final operation-opacity step
 has passed affected Debug/Release/sanitizer and installed-consumer checks.
 
-**S03 is complete** at `0984d93`. Read
-`docs/handoff/2026-10-06-s03-progress.md` before editing placement. Checked-out
+**S03 is complete** at `0984d93`. Direction and contingencies are in
+`docs/roadmap/2026-10-reliability/DIRECTION.md`. The evidence snapshot is
+`docs/handoff/2026-10-06-s03-progress.md`. Checked-out
 branch is `feat/fuguemax-placement` (it contains `roadmap/reliability-v2`).
 Production placement is FugueMax (`docs/specs/vnext-sequence-algorithm.md` §0).
 `Locator` is gone. `CTBO`/`CTLO` are version 0002. ASan 18/18 and Release 30/30

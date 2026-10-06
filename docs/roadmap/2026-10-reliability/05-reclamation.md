@@ -2,6 +2,8 @@
 
 Goal: bound recoverable history only after proving that permitted future operations cannot require removed state. Durable receipt is necessary but insufficient. GC stays disabled until every certificate condition passes. Conservative blocking is preferable to guessed peer retirement.
 
+Placement is FugueMax (`docs/specs/vnext-sequence-algorithm.md` §0). A link's parent and right origin are element identities, and the right origin includes tombstones. Reclamation may drop deleted text only when no live pin, undo obligation, or remaining link needs that identity. Otherwise retain a boundary stub or a checked translation. A pin miss is an explicit error, never end-of-document. WP8 is unimplemented and still required; these tasks own it. `Buffer` anchors on the visible predecessor and `IdList` may anchor on a tombstone. Do not collapse that difference inside a GC task.
+
 Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starting. Task dependencies refer to the [master task registry](TASKS.json). New file paths below are intentional; do not assume they already exist.
 
 ## G01 — Specify membership epochs and reclamation certificates

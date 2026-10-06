@@ -258,11 +258,11 @@ fixtures and eight probe IDs. Worker results are exact observations; the Python
 runner compares them against reviewed expectations, logs child exits/signals and
 retains hashes. Original bytes survive unknown/deleted-block interpretation.
 
-Only `concurrent_paste_passages_contiguous` may reproduce the exact converged
-`aXbYcZ` defect; only `durable_pin_registration` may be unsupported, with the
-installed manifest agreeing that pins are unimplemented. Those results are not
-feature passes. Any other mismatch, abort, missing fixture or unknown worker
-case fails baseline. W03 adds the stricter installed live set and fresh-process
+`concurrent_paste_passages_contiguous` must converge to `abcXYZ`. The old
+permission to reproduce `aXbYcZ` ended with S03. Only `durable_pin_registration`
+may be unsupported, with the installed manifest agreeing that pins are
+unimplemented. That row is not a feature pass. Any other mismatch, abort,
+missing fixture or unknown worker case fails baseline. W03 adds the stricter installed live set and fresh-process
 replay; real storage recovery and durable retention remain later gates.
 
 ### Installed strict live gate (W03)
@@ -276,21 +276,26 @@ remote edit and resolves the *original* token bytes in two physically independen
 text engines and one list engine. Nothing is reminted after reopen, and the
 recorded frames are overwritten before the first resolve.
 
-The gate keeps the complete eight-probe matrix and both baseline exceptions
-intact. Strict WP1-WP5/WP7 excludes ordering repair (S02/S03) and durable
-pins/reclamation (S05/G-series); the no-GC row is a containment smoke and is
-never certified reclamation. Fresh-process replay is codec and token evidence,
+The gate keeps the complete eight-probe matrix. After S03 the only baseline
+exception is WP8 `unsupported`. Strict WP1-WP5/WP7 still does not certify
+durable pins or reclamation (S05/G-series); the no-GC row is a containment
+smoke and is never certified reclamation. Ordering repair is no longer excluded
+from the product: WP6 must observe `abcXYZ`. Fresh-process replay is codec and token evidence,
 not L08 crash recovery. Details and evidence are in
 `docs/reports/vnext-consumer-live-position-gate.md`.
 
-### Ordering basis for the installed surface (S02)
+### Ordering basis for the installed surface (S03)
 
-W2's token cases are now specified against an independent ordering
-interpreter. `tests/reference/SequenceModel.h` computes the item order and
-`tests/reference/BoundaryModel.h` resolves the fixtures' tokens against it; the
-token bytes, their version, and the W2 offsets are unchanged. This means the
-offsets W2 promises are stated against an ordering that production does not yet
-implement — WP6 remains an exact known failure until S03 applies
-[vnext-sequence-algorithm.md](vnext-sequence-algorithm.md) and S04 re-runs the
-installed probes. A consumer must not read the W2 token offsets as evidence that
-concurrent passages are ordered correctly.
+Production order is FugueMax, specified in
+[vnext-sequence-algorithm.md](vnext-sequence-algorithm.md) §0. Concurrent
+passages are `abcXYZ`. The installed WP6 baseline exception for `aXbYcZ` is
+gone. `SequenceModel.h` is the superseded S02 interpreter: it still agrees with
+production on the S01 fixtures, and it is not the oracle for a new history.
+
+W2 token offsets were written against that S02 interpreter, and the token
+version is still `CTPT/1`. S04 re-checks those offsets once recovery exists.
+Until E07b says a token version is supported for consumer storage, a consumer
+must not treat stored `CTPT/1` bytes as a durable promise. WP8 pins remain
+unimplemented (S05/G01/G06/G08). FugueMax does not remove that requirement:
+reclamation has to preserve or translate a link's parent and right origin
+while a pin is live.

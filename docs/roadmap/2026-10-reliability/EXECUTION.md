@@ -4,7 +4,7 @@ This document is intended to let a less-capable executor faithfully implement a 
 
 ## Workspace and authorization
 
-Execute breaking work only in `/home/clinton/dev/collabtext/.worktrees/reliability-v2`, branch `roadmap/reliability-v2`. Verify `pwd`, `git branch --show-current`, and `git status --short` before editing. Build directories and logs belong in this worktree or task-specific temporary directories. Do not accidentally build against the original checkout's generated files.
+Execute breaking work only in `/home/clinton/dev/collabtext/.worktrees/reliability-v2`. The checked-out branch is `feat/fuguemax-placement`; it contains `roadmap/reliability-v2`. Read [DIRECTION.md](DIRECTION.md) before choosing work. Verify `pwd`, `git branch --show-current`, and `git status --short` before editing. Build directories and logs belong in this worktree or task-specific temporary directories. Do not accidentally build against the original checkout's generated files.
 
 The original checkout and master are the evaluated source baseline. The user confirmed there are no production stores/history and authorized freely redesigned APIs/formats; do not add migration or compatibility work. Do not merge/rebase onto master, publish packages, send consumer messages, or edit external consumer repositories as part of a task. A new explicit user instruction is required for external publication or master integration. Routine code changes and local test runs within the selected task do not need repeated permission.
 
@@ -14,7 +14,7 @@ These plans supersede old CLAUDE.md restrictions about the completed OpStream ex
 
 1. Load TASKS.json. Only tasks whose prerequisites have `status=complete` are eligible. A deferred prerequisite is not equivalent to complete; if the user chooses an alternate route, explicitly revise the dependency graph.
 2. Check DECISIONS.md. All Q1–Q4 are resolved: clean API/formats, explicit offline-device retirement with advisory reminders, persistent undo/redo, and incremental improvement of the existing C++ engine. No backend question remains open. Do not ask resolved questions again or reintroduce Yrs adoption/Rust rewrites.
-3. Check the task's design gate. S03 cannot begin merely because someone wrote an S02 title: the complete specification/model/evidence must exist. The same applies to S04a/S04b and G01/G02/G06. An early alpha changes sequencing, not the requirement for a complete independent boundary model.
+3. Check the task's design gate. S03 is complete; do not reopen it to apply the S02 transformation map or to restore Locator. The same completeness rule applies to S04a/S04b and G01/G02/G06. An early alpha changes sequencing, not the requirement for a complete independent boundary model.
 4. Prefer registry order for a serial run. Work on one task at a time. If a task is too broad, split it into new well-defined subtask IDs with dependencies and acceptance criteria before coding; do not silently expand scope.
 5. Mark the task `in_progress`, record the baseline revision and relevant failures, and read every existing file the task will touch. Paths named as new files are not missing prerequisites.
 

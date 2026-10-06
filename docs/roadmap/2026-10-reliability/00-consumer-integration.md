@@ -86,9 +86,9 @@ the engine. Neither check can be replaced by an assertion or a convenient offset
 | WP3 | Delete the containing consumer block; return a typed gone/stale block result before engine lookup | W02 adapter baseline, W03 installed strict gate |
 | WP4 | Mint at 0/len/empty; reject len+1, non-scalar byte offsets, and wrong primitive units | S04a/S04b/W03; S04 after recovery |
 | WP5 | Canonical encode/decode, all trailing-byte suffixes/truncations, foreign/version failures, fresh process and second-replica replay | S04b/W03; S04 real store lifecycle; S05/G06/G08 original bytes through permitted GC/translation |
-| WP6 | Split concurrent paragraphs, reverse/nested typing, subsequent edits; exact intended whole-passage content | S01/S02/S03 and S06. W02/W03 report pending or known_failure until repaired; equality alone is insufficient. |
+| WP6 | Split concurrent paragraphs, reverse/nested typing, subsequent edits; exact intended whole-passage content | S03 complete: production order is FugueMax and the installed baseline must observe `abcXYZ`. The pre-S03 known_failure allowlist is removed. S06 still enumerates histories against the model. |
 | WP7 | Resolve against wrong document/stream/block/primitive/epoch; typed failure, no mutation/assert/abort | S04a/S04b/W03 and S04; process-isolated workers record abnormal exits as errors |
-| WP8 | GC disabled retains data; stored bytes alone are not a pin; explicit pin/register/release/recover/retire/translation | W02 no-GC baseline only; S05/G01/G06/G08 strict durable retention; E05 final installed run |
+| WP8 | GC disabled retains data; stored bytes alone are not a pin; explicit pin/register/release/recover/retire/translation | Unimplemented, not cancelled. Baseline accepts `unsupported`, owned by S05/G01/G06/G08. FugueMax links name parent and right origin, including tombstones; reclamation has to keep or translate those identities while a pin is live. |
 
 W01 defines fixtures; W02 runs every case with explicit capability states; W03
 requires the live set; E05 requires the complete promised set. Never turn
@@ -240,7 +240,7 @@ Run installed baseline mode in Debug and Release and compare case coverage; deli
 
 ## W03 — Certify live position probes through an installed consumer adapter
 
-**Status:** complete; see TASKS.json and [live-gate report](../../reports/vnext-consumer-live-position-gate.md)\
+**Status:** complete; see TASKS.json and [live-gate report](../../reports/vnext-consumer-live-position-gate.md). This task closed before S03. Step 3 below still says to keep WP6 pending. That pending state ended with S03; do not put the known_failure back.\
 **Depends on:** W02, S04b\
 **Coverage:** F7, R2, R4, R13\
 

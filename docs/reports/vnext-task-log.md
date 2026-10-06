@@ -2480,3 +2480,7 @@ The session that finished the Release gate stopped before writing `TASKS.json`
 or this log. `0984d93` then committed the fixture labels and removed the WP6
 exception, and this entry marks S03 complete. Details are in
 `docs/handoff/2026-10-06-s03-progress.md`.
+
+Entries above this one are dated records. Several say the engine still
+interleaves or that WP6 is a known failure. That was true on the day they were
+written. Current instructions are `docs/roadmap/2026-10-reliability/DIRECTION.md`.

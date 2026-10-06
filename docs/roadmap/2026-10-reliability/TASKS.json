@@ -1,8 +1,20 @@
 {
  "schema_version": 1,
  "base_revision": "046d375",
- "branch": "roadmap/reliability-v2",
+ "branch": "feat/fuguemax-placement",
+ "contains_branch": "roadmap/reliability-v2",
  "status": "in_progress",
+ "direction": {
+  "as_of": "2026-10-06",
+  "document": "docs/roadmap/2026-10-reliability/DIRECTION.md",
+  "placement": "FugueMax",
+  "spec": "docs/specs/vnext-sequence-algorithm.md#0",
+  "next": ["E07a", "E07b"],
+  "unblocked_not_next": ["P07"],
+  "operation_formats": {"CTBO": 2, "CTLO": 2, "CTPT": 1, "CTGV": 1, "CTGP": 1},
+  "wp6": "pass abcXYZ; baseline exception removed in 0984d93",
+  "wp8": "unimplemented, still required, owners S05/G01/G06/G08"
+ },
  "tasks": [
   {
    "id": "V01",
@@ -1327,6 +1339,8 @@
    "baseline_revision": "9c5c0e6c0ff3525e38be203120de79d0f6957c9a",
    "progress": "Installed-only Wave-shaped consumer adapter and exact WP1-WP8 case matrix are complete. The gate preserves consumer-owned block lifecycle and formatting boundaries, uses only relocated public headers, and never treats unsupported or known-failure rows as feature evidence.",
    "verification_results": {
+    "later_outcome": "Historical evidence for this task, recorded before S03. Current WP6 behavior is abcXYZ with no baseline exception (0984d93). See docs/roadmap/2026-10-reliability/DIRECTION.md.",
+    
     "debug_core": "Installed relocated Core baseline passes 2/2 CTest: consumer_main plus the complete 17-case WP1-WP8 matrix. 15 cases pass, WP6 is the exact known aXbYcZ ordering failure, and WP8 durable_pins is the exact unsupported capability. Evidence build-consumer-verify/debug-baseline-20261006T010146Z-2.",
     "release_core": "Installed relocated Release Core baseline has the same 17 exact observations and 15/1/1 pass/known_failure/unsupported classification. Evidence build-consumer-verify/release-baseline-20261006T010013Z-2.",
     "debug_qt": "Installed Debug baseline with Core+Qt passes 2/2, including all installed Qt header units; package export now loads FileTransport when QtAdapter references it. Evidence build-consumer-verify/debug-baseline-20261006T010107Z-2.",
@@ -1758,6 +1772,8 @@
     "W6"
    ],
    "verification_results": {
+    "later_outcome": "Historical evidence for this task, recorded before S03. Current WP6 behavior is abcXYZ with no baseline exception (0984d93). See docs/roadmap/2026-10-reliability/DIRECTION.md.",
+    
     "debug_core": "--gate live passes 3/3 CTest: consumer_main, the 18-row wave matrix at 16/16 strict, and the Markdown fixture at 4/4, against capability manifest v6. Evidence build-consumer-verify/debug-live-20261006T015403Z-347884.",
     "release_core": "Same 16/16 strict and 4/4 Markdown observation from a relocated Release install. Evidence build-consumer-verify/release-live-20261006T015432Z-348930.",
     "asan_core": "Installed Core sanitizer configuration passes the same live gate with leak checking enabled and no suppression. Evidence build-consumer-verify/asan-live-20261006T015505Z-349802.",
@@ -1861,6 +1877,8 @@
    "baseline_revision": "b5de626",
    "progress": "Complete: repair specified as pre-order of the insert-after tree with two sibling rules (precedence for groups inserted immediately before a sibling; counter-then-actor-bytes on the operation's first item otherwise), an independent interpreter passing all 17 S01 fixtures, and a transformation map confined to Buffer::normalize_fragments. No production integration code changed; no comparator-only claim, no replacement engine, no weakened oracle.",
    "verification_results": {
+    "later_outcome": "Historical. This task closed before FugueMax. Production no longer interleaves; WP6 observes abcXYZ. See DIRECTION.md.",
+    
     "root_cause": "Buffer::normalize_fragments (Buffer.cpp:498) atomizes any same-Locator multi-actor run into single scalars and sorts them by per-scalar identity. Item counters are per-actor, so two 3-scalar pastes rank A/1,B/1,A/2,B/2,A/3,B/3 and interleave into aXbYcZ. Reproduced on the installed build.",
     "model": "libs/collabtext/tests/reference/SequenceModel.h, linking no production ordering, Locator, identity, Buffer, IdList, Fragment, anchor or codec code. 8/8 tst_sequence_model cases in Debug, Release and leak-enabled ASan.",
     "fixtures": "17 fixtures exact on order, hidden set and text; all 29 supplied arrival orders converge to identical outcomes; duplicates counted not reapplied; a delivered-before-prerequisite case defers and drains to a!bcXYZ.",

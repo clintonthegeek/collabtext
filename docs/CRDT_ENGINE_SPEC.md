@@ -1,5 +1,10 @@
 # CollabText CRDT Engine Specification
 
+**Historical.** This spec describes the locator-ordered engine. Production
+placement on `feat/fuguemax-placement` is FugueMax. Read
+`docs/roadmap/2026-10-reliability/DIRECTION.md` and
+`docs/specs/vnext-sequence-algorithm.md` §0. Do not reintroduce `Locator`.
+
 The internal data structures and algorithms for a text CRDT that supports
 concurrent editing, undo/redo, and convergence across an arbitrary number
 of replicas. This document specifies the engine itself — the thing that

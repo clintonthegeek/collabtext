@@ -2,9 +2,9 @@
 
 **Created:** 2026-10-03  
 **Baseline:** `046d375`  
-**Execution branch:** `roadmap/reliability-v2`  
+**Execution branch:** `feat/fuguemax-placement` (contains `roadmap/reliability-v2`)  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status (2026-10-06):** V01–V08, D01, P01–P06b, L01, S01–S03, W01–W03, S04a/S04b and packaging A01/A02a/A06a are complete. P06a opacity is verified. S04a specifies/model-checks scoped boundaries and S04b implements the native live API/CTPT v1 codec. S03 is FugueMax placement, closed at `0984d93`. ASan 18/18 and Release 30/30 targeted sweeps passed; the Debug installed live gate passed with WP6 observing `abcXYZ`. **Next: E07a, then E07b.** See [S03 progress](../../handoff/2026-10-06-s03-progress.md) and TASKS.json. Benchmarks remain separate; engine optimization is deferred.
+**Status (2026-10-06):** V01–V08, D01, P01–P06b, L01, S01–S03, W01–W03, S04a/S04b and packaging A01/A02a/A06a are complete. P06a opacity is verified. S03 is FugueMax placement, closed at `0984d93`. **Next: E07a, then E07b.** P07 is unblocked and is not next. Read [DIRECTION.md](DIRECTION.md) before any task. The S03 evidence snapshot is [2026-10-06-s03-progress.md](../../handoff/2026-10-06-s03-progress.md). Benchmarks remain separate; engine optimization is deferred.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **72 active tasks across eight technical areas plus an early consumer integration lane**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
@@ -12,7 +12,7 @@ All breaking implementation work belongs in the worktree above. The user confirm
 
 ## Read first
 
-1. Read [DECISIONS.md](DECISIONS.md): all Q1–Q4 are resolved. Retain and improve the native engine; do not reinstate migration work or replacement-backend options.
+1. Read [DIRECTION.md](DIRECTION.md), then [DECISIONS.md](DECISIONS.md): all Q1–Q4 are resolved. Retain and improve the native engine; do not reinstate migration work, Locator placement, or replacement-backend options.
 2. Read [EXECUTION.md](EXECUTION.md), [DECISIONS.md](DECISIONS.md), the binding [design constraints](../../specs/vnext-design-constraints.md), and the [API guide](../../specs/vnext-public-api.md) and [protocol contract](../../specs/vnext-protocol.md). V01–V08, D01, P01–P05, and L01 are complete: the verification runner exists and the randomized suites are seeded, traced, and reducible (see "Randomized test contract" in EXECUTION.md). Later task artifacts remain planned until their creating tasks complete.
 3. Select the next task whose dependencies are complete. Use the registry order as a safe serial execution order; do not treat phase numbering as permission to skip unfinished prerequisites.
 4. Read the complete task in its phase file and its referenced specification before editing.
@@ -61,8 +61,10 @@ flowchart TD
 The diagram groups work and omits some edges; TASKS.json is authoritative. The
 preferred single-executor order is: P06b → S04b → W03 → S02 → S03 → E07b;
 W02 → E07a; S02 → S03; P07 → P08 → L02–L08; then S04–S07 and
-remaining G/A/X/E tasks in registry order. A01/A02a/A06a, W01/S01,
-P06a and S04a are complete. Follow actual dependencies; S04b now has both completed boundary and codec prerequisites.
+remaining G/A/X/E tasks in registry order. Everything through S03 on that
+route is complete, including A01/A02a/A06a, W01–W03, P06a, and S04a/S04b.
+**Next is E07a, then E07b.** P07 is unblocked and waits until E07b unless the
+user switches lanes. Follow [DIRECTION.md](DIRECTION.md).
 
 Baseline/alpha preparation does not complete recovery, persistent undo/redo,
 durable pins, or repaired ordering. Live positions are usable before those gates

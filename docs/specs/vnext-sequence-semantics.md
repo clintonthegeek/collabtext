@@ -126,5 +126,7 @@ tools/verify-changed.sh --target '^tst_sequence_fixtures$'
 build target. Its eleven parser tests reject wrong content, missing causal parents,
 reused identities, text operation/item aliasing, incomplete arrival permutations,
 unobserved neighbors, invalid scalars, non-scalar offsets, incorrect token comparisons and foreign mint scope.
-S02/S04a must add model/exact-content execution evidence; parser success cannot
-remove F8/F7 expected-failure markers.
+S02/S04a had to add model/exact-content execution evidence; parser success
+could not remove F8/F7 expected-failure markers. S03 later removed the F8
+ordering marker after the engines matched FugueMax. Do not put it back.
+F7 retention remains a later gate.
