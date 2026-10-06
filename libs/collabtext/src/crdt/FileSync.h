@@ -27,7 +27,7 @@ public:
              const std::string& replica_name,
              WriterConfig writer_cfg = WriterConfig{});
 
-    void start();
+    [[nodiscard]] Result<void> start();
     /// Codec admission only; legacy writer durability is not certified here.
     Result<void> push_local_op(const Operation& op);
     size_t poll();
@@ -38,7 +38,8 @@ public:
     const auto& blocked_records() const { return m_blocked_records; }
 
     /// Force-fsync the open tail. Used by save/shutdown paths.
-    void flush();
+    [[nodiscard]] Result<void> flush();
+    [[nodiscard]] Result<void> close();
 
     void set_on_remote_ops(RemoteOpsCallback cb);
 

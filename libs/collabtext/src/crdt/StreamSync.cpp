@@ -41,7 +41,8 @@ StreamSync::StreamState& StreamSync::ensure_started_(const std::string& name) {
                       / "log" / "streams" / name;
     fs::create_directories(stream_dir);
     s.writer = std::make_unique<SegmentWriter>(stream_dir, SegmentKind::Stream, m_writer_cfg);
-    s.writer->start();
+    auto started = s.writer->start();
+    if (!started.ok()) m_last_error = started.error();
     fs::create_directories(m_shared_folder / "local" / m_replica_name
                            / "read-cursors" / "streams" / name);
     return s;
@@ -57,7 +58,11 @@ void StreamSync::push(const std::string& stream, const StreamEntry& entry) {
     auto it = m_streams.find(stream);
     if (it == m_streams.end()) return;
     auto& s = ensure_started_(stream);
-    s.writer->append(encode_stream_entry(entry), entry.seq);
+    auto appended = s.writer->append(encode_stream_entry(entry), entry.seq);
+    if (!appended.ok()) {
+        m_last_error = appended.error();
+        return;
+    }
     if (it->second.type == StreamType::AppendOnly) {
         s.merged.try_emplace(entry.id, entry);
     } else {
@@ -70,7 +75,12 @@ void StreamSync::push(const std::string& stream, const StreamEntry& entry) {
 size_t StreamSync::poll() {
     if (!m_started) return 0;
     auto now = std::chrono::steady_clock::now();
-    for (auto& [name, s] : m_streams) if (s.writer) s.writer->tick(now);
+    for (auto& [name, s] : m_streams) {
+        (void)name;
+        if (!s.writer) continue;
+        auto ticked = s.writer->tick(now);
+        if (!ticked.ok()) { m_last_error = ticked.error(); return 0; }
+    }
     size_t total = 0;
     for (auto& [name, s] : m_streams) {
         size_t c = read_remote_stream_(name, s);
@@ -85,7 +95,12 @@ size_t StreamSync::poll() {
 }
 
 void StreamSync::flush() {
-    for (auto& [name, s] : m_streams) if (s.writer) s.writer->flush();
+    for (auto& [name, s] : m_streams) {
+        (void)name;
+        if (!s.writer) continue;
+        auto flushed = s.writer->flush();
+        if (!flushed.ok()) { m_last_error = flushed.error(); return; }
+    }
 }
 
 SegmentReader& StreamSync::reader_for_(StreamState& s, const std::string& stream,

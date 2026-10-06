@@ -42,6 +42,14 @@ Run `./tools/verify-roadmap.sh debug 'tst_durable_file|tst_store_fault_harness'`
 - `libs/collabtext/src/crdt/SegmentWriter.h`
 - `libs/collabtext/src/crdt/SegmentWriter.cpp`
 - `libs/collabtext/tests/tst_segment_writer.cpp`
+- `libs/collabtext/CMakeLists.txt`
+- `libs/collabtext/src/crdt/FileSync.h`
+- `libs/collabtext/src/crdt/FileSync.cpp`
+- `libs/collabtext/src/crdt/StreamSync.cpp`
+- `libs/collabtext/tests/segment_writer_crash_worker.cpp`
+- `libs/collabtext/tests/tst_filesync.cpp`
+- `libs/collabtext/tests/tst_segment_reader.cpp`
+- `libs/collabtext/tests/tst_evaluation_regressions.cpp`
 
 **Steps:**
 

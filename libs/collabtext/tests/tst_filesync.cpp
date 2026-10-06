@@ -27,14 +27,14 @@ private slots:
         fs::path shared = tmp.path().toStdString();
         Buffer source(CollabText::Test::test_counter(1)), target(CollabText::Test::test_counter(2));
         FileSync receiver(target, shared, "receiver");
-        receiver.start();
+        QVERIFY(receiver.start().ok());
         SegmentWriter writer(shared / "replicas" / "sender" / "log" / "ops", SegmentKind::Ops);
-        writer.start();
+        QVERIFY(writer.start().ok());
         const std::string unsupported = "CTBO0003:{}";
         auto first = source.apply_local_edit({{0, 0}}, {"a"});
-        writer.append(checked_codec(encode_operation(first)), op_identity(first).counter);
-        writer.append(unsupported, 3);
-        writer.flush();
+        QVERIFY(writer.append(checked_codec(encode_operation(first)), op_identity(first).counter).ok());
+        QVERIFY(writer.append(unsupported, 3).ok());
+        QVERIFY(writer.flush().ok());
         QCOMPARE(receiver.poll(), size_t(0));
         QVERIFY(target.text().empty());
         QVERIFY(receiver.last_error().has_value());
@@ -42,8 +42,8 @@ private slots:
         QCOMPARE(receiver.blocked_records().at("sender").size(), size_t(2));
         QCOMPARE(receiver.blocked_records().at("sender")[1], unsupported);
         auto later = source.apply_local_edit({{1, 1}}, {"b"});
-        writer.append(checked_codec(encode_operation(later)), op_identity(later).counter);
-        writer.flush();
+        QVERIFY(writer.append(checked_codec(encode_operation(later)), op_identity(later).counter).ok());
+        QVERIFY(writer.flush().ok());
         QCOMPARE(receiver.poll(), size_t(0));
         QVERIFY(target.text().empty());
         const auto cursor = shared / "local" / "receiver" / "read-cursors" / "ops" / "sender.bin";
@@ -53,7 +53,7 @@ private slots:
         QTemporaryDir tmp;
         Buffer target(CollabText::Test::test_counter(2));
         FileSync sync(target, tmp.path().toStdString(), "receiver");
-        sync.start();
+        QVERIFY(sync.start().ok());
         auto result = sync.push_local_op(Operation{});
         QVERIFY(!result.ok());
         QCOMPARE(result.error().code(), CollabText::ErrorCode::invalid_identity);
@@ -64,7 +64,7 @@ private slots:
         fs::path shared = tmp.path().toStdString();
         Buffer buf(CollabText::Test::test_counter(1));
         FileSync sync(buf, shared, "laptop-1");
-        sync.start();
+        QVERIFY(sync.start().ok());
         QVERIFY(fs::exists(shared / "replicas" / "laptop-1" / "log" / "ops"));
         QVERIFY(fs::exists(shared / "local" / "laptop-1"));
         QVERIFY(fs::exists(shared / ".stignore"));
@@ -75,11 +75,11 @@ private slots:
         fs::path shared = tmp.path().toStdString();
         Buffer buf(CollabText::Test::test_counter(1));
         FileSync sync(buf, shared, "r");
-        sync.start();
+        QVERIFY(sync.start().ok());
         auto op = buf.apply_local_edit({{0, 0}}, {"hello"});
         QVERIFY(sync.push_local_op(op).ok());
         sync.poll();
-        sync.flush();
+        QVERIFY(sync.flush().ok());
         QVERIFY(!fs::exists(shared / "replicas" / "r" / "sequences.json"));
         QVERIFY(!fs::exists(shared / "replicas" / "r" / "ops"));
     }
@@ -89,11 +89,11 @@ private slots:
         fs::path shared = tmp.path().toStdString();
         Buffer buf(CollabText::Test::test_counter(1));
         FileSync sync(buf, shared, "r");
-        sync.start();
+        QVERIFY(sync.start().ok());
         auto op = buf.apply_local_edit({{0, 0}}, {"hello"});
         QVERIFY(sync.push_local_op(op).ok());
         sync.poll();
-        sync.flush();
+        QVERIFY(sync.flush().ok());
         auto log_ops = shared / "replicas" / "r" / "log" / "ops";
         bool any_record = false;
         for (auto& e : fs::directory_iterator(log_ops)) {
@@ -111,10 +111,10 @@ private slots:
         Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         FileSync syncA(bufA, shared, "A");
         FileSync syncB(bufB, shared, "B");
-        syncA.start(); syncB.start();
+        QVERIFY(syncA.start().ok()); QVERIFY(syncB.start().ok());
         auto opA = bufA.apply_local_edit({{0, 0}}, {"hello"});
         QVERIFY(syncA.push_local_op(opA).ok());
-        syncA.poll(); syncA.flush();
+        syncA.poll(); QVERIFY(syncA.flush().ok());
         size_t applied = syncB.poll();
         QVERIFY(applied > 0);
         QCOMPARE(bufB.text(), std::string("hello"));
@@ -126,18 +126,18 @@ private slots:
         Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         FileSync syncA(bufA, shared, "A");
         FileSync syncB(bufB, shared, "B");
-        syncA.start(); syncB.start();
+        QVERIFY(syncA.start().ok()); QVERIFY(syncB.start().ok());
 
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         QVERIFY(syncA.push_local_op(op1).ok());
-        syncA.poll(); syncA.flush();
+        syncA.poll(); QVERIFY(syncA.flush().ok());
 
         syncB.poll();
         QCOMPARE(bufB.text(), std::string("hello"));
 
         auto op2 = bufB.apply_local_edit({{5, 5}}, {" world"});
         QVERIFY(syncB.push_local_op(op2).ok());
-        syncB.poll(); syncB.flush();
+        syncB.poll(); QVERIFY(syncB.flush().ok());
 
         syncA.poll();
         QCOMPARE(bufA.text(), std::string("hello world"));
@@ -148,14 +148,14 @@ private slots:
         fs::path shared = tmp.path().toStdString();
         Buffer buf(CollabText::Test::test_counter(1));
         FileSync sync(buf, shared, "r");
-        sync.start();
+        QVERIFY(sync.start().ok());
         std::string text = "the quick brown fox";
         for (size_t i = 0; i < text.size(); ++i) {
             auto op = buf.apply_local_edit({{i, i}}, {std::string(1, text[i])});
             QVERIFY(sync.push_local_op(op).ok());
             sync.poll();
         }
-        sync.flush();
+        QVERIFY(sync.flush().ok());
         size_t total_files = count_dir_entries(
             shared / "replicas" / "r" / "log" / "ops");
         QVERIFY2(total_files <= 2,

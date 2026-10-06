@@ -447,6 +447,13 @@ add_crdt_test(tst_sidecar_manifest)
 add_crdt_test(tst_zstd_util)
 add_crdt_test(tst_segment_format)
 add_crdt_test(tst_segment_writer)
+add_executable(segment_writer_crash_worker tests/segment_writer_crash_worker.cpp)
+target_link_libraries(segment_writer_crash_worker PRIVATE CollabText::Core collabtext_filetransport)
+target_include_directories(segment_writer_crash_worker PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+add_dependencies(tst_segment_writer segment_writer_crash_worker)
+target_compile_definitions(tst_segment_writer PRIVATE
+    COLLABTEXT_SEGMENT_WRITER_CRASH_WORKER="$<TARGET_FILE:segment_writer_crash_worker>")
 add_crdt_test(tst_segment_reader)
 
 # Public surface test — deliberately excludes the internal src/ include path

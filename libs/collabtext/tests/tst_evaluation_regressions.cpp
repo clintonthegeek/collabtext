@@ -259,11 +259,15 @@ private slots:
         const auto stream = root / "stream";
         {
             SegmentWriter writer(stream, SegmentKind::Ops);
-            writer.start(); writer.append("first", 1); writer.close();
+            QVERIFY(writer.start().ok());
+            QVERIFY(writer.append("first", 1).ok());
+            QVERIFY(writer.close().ok());
         }
         {
             SegmentWriter writer(stream, SegmentKind::Ops);
-            writer.start(); writer.append("second", 2); writer.close();
+            QVERIFY(writer.start().ok());
+            QVERIFY(writer.append("second", 2).ok());
+            QVERIFY(writer.close().ok());
         }
         const auto first = stream / "0000000001.seg.zst";
         QVERIFY(fs::exists(first));

@@ -30,12 +30,15 @@ void FileSync::ensure_directory_structure_() {
     }
 }
 
-void FileSync::start() {
+Result<void> FileSync::start() {
+    if (m_started) return Result<void>::success();
     ensure_directory_structure_();
     auto stream_dir = m_shared_folder / "replicas" / m_replica_name / "log" / "ops";
     m_writer = std::make_unique<SegmentWriter>(stream_dir, SegmentKind::Ops, m_writer_cfg);
-    m_writer->start();
+    auto started = m_writer->start();
+    if (!started.ok()) { m_last_error = started.error(); return started.error(); }
     m_started = true;
+    return Result<void>::success();
 }
 
 Result<void> FileSync::push_local_op(const Operation& op) {
@@ -45,12 +48,23 @@ Result<void> FileSync::push_local_op(const Operation& op) {
     else if (auto* u = operation_get_if<UndoOperation>(&op)) ts = u->timestamp;
     auto wire = encode_operation(op);
     if (!wire.ok()) { m_last_error = wire.error(); return wire.error(); }
-    m_writer->append(wire.value(), ts.counter);
-    return {};
+    auto appended = m_writer->append(wire.value(), ts.counter);
+    if (!appended.ok()) { m_last_error = appended.error(); return appended.error(); }
+    return Result<void>::success();
 }
 
-void FileSync::flush() {
-    if (m_writer) m_writer->flush();
+Result<void> FileSync::flush() {
+    if (!m_writer) return Error(ErrorCode::io_error, "FileSync is not started");
+    auto flushed = m_writer->flush();
+    if (!flushed.ok()) m_last_error = flushed.error();
+    return flushed;
+}
+
+Result<void> FileSync::close() {
+    if (!m_writer) return Result<void>::success();
+    auto closed = m_writer->close();
+    if (!closed.ok()) m_last_error = closed.error();
+    return closed;
 }
 
 SegmentReader& FileSync::reader_for_(const std::string& peer_name) {
@@ -69,7 +83,10 @@ SegmentReader& FileSync::reader_for_(const std::string& peer_name) {
 size_t FileSync::poll() {
     if (!m_started) return 0;
 
-    if (m_writer) m_writer->tick(std::chrono::steady_clock::now());
+    if (m_writer) {
+        auto ticked = m_writer->tick(std::chrono::steady_clock::now());
+        if (!ticked.ok()) { m_last_error = ticked.error(); return 0; }
+    }
 
     auto replicas_dir = m_shared_folder / "replicas";
     if (!fs::exists(replicas_dir)) return 0;

@@ -61,11 +61,11 @@ private slots:
         fs::path stream = fs::path(tmp.path().toStdString()) / "stream";
         fs::path cursor = fs::path(tmp.path().toStdString()) / "cur.bin";
         SegmentWriter w(stream, SegmentKind::Ops, fast_test_config());
-        w.start();
+        QVERIFY(w.start().ok());
         auto t0 = std::chrono::steady_clock::time_point{};
-        w.append("alpha", 1);
-        w.append("beta",  2);
-        w.tick(t0);
+        QVERIFY(w.append("alpha", 1).ok());
+        QVERIFY(w.append("beta",  2).ok());
+        QVERIFY(w.tick(t0).ok());
 
         SegmentReader r(stream, cursor);
         r.start();
@@ -81,12 +81,12 @@ private slots:
         fs::path stream = fs::path(tmp.path().toStdString()) / "stream";
         fs::path cursor = fs::path(tmp.path().toStdString()) / "cur.bin";
         SegmentWriter w(stream, SegmentKind::Ops, fast_test_config());
-        w.start();
+        QVERIFY(w.start().ok());
         auto t0 = std::chrono::steady_clock::time_point{};
-        for (int i = 0; i < 8; ++i) w.append("0123456789", uint64_t(i + 1));
-        w.tick(t0);
-        w.append("after-seal", 100);
-        w.tick(t0);
+        for (int i = 0; i < 8; ++i) QVERIFY(w.append("0123456789", uint64_t(i + 1)).ok());
+        QVERIFY(w.tick(t0).ok());
+        QVERIFY(w.append("after-seal", 100).ok());
+        QVERIFY(w.tick(t0).ok());
 
         SegmentReader r(stream, cursor);
         r.start();
@@ -100,10 +100,10 @@ private slots:
         fs::path stream = fs::path(tmp.path().toStdString()) / "stream";
         fs::path cursor = fs::path(tmp.path().toStdString()) / "cur.bin";
         SegmentWriter w(stream, SegmentKind::Ops, fast_test_config());
-        w.start();
+        QVERIFY(w.start().ok());
         auto t0 = std::chrono::steady_clock::time_point{};
-        w.append("first", 1);
-        w.tick(t0);
+        QVERIFY(w.append("first", 1).ok());
+        QVERIFY(w.tick(t0).ok());
 
         {
             SegmentReader r(stream, cursor);
@@ -125,10 +125,10 @@ private slots:
         fs::path stream = fs::path(tmp.path().toStdString()) / "stream";
         fs::path cursor = fs::path(tmp.path().toStdString()) / "cur.bin";
         SegmentWriter w(stream, SegmentKind::Ops, fast_test_config());
-        w.start();
+        QVERIFY(w.start().ok());
         auto t0 = std::chrono::steady_clock::time_point{};
-        w.append("one", 1);
-        w.tick(t0);
+        QVERIFY(w.append("one", 1).ok());
+        QVERIFY(w.tick(t0).ok());
 
         SegmentReader r(stream, cursor);
         r.start();
@@ -137,8 +137,8 @@ private slots:
         r.commit();
 
         // Fill the open segment past seal threshold so it gets sealed.
-        for (int i = 0; i < 8; ++i) w.append("0123456789", uint64_t(i + 2));
-        w.tick(t0);
+        for (int i = 0; i < 8; ++i) QVERIFY(w.append("0123456789", uint64_t(i + 2)).ok());
+        QVERIFY(w.tick(t0).ok());
         // The previously-open segment id is now sealed; reader's
         // open_segment_id is stale. The reader should pick up the
         // remaining records via the new sealed segment.
