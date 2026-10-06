@@ -66,6 +66,21 @@ std::optional<uint64_t> record_counter(SegmentKind kind, std::string_view raw) {
         if (!op) return std::nullopt;
         return op_identity(op.value()).counter;
     }
+    // P07 delivery envelopes use a binary CTDL frame; legacy streams retain
+    // their JSON StreamEntry representation. Segment recovery only needs the
+    // stable sequence field and validates the complete envelope at the layer
+    // that consumes it.
+    if (raw.size() >= 5 && raw.substr(0, 5) == std::string_view("CTDL\1", 5)) {
+        if (raw.size() < 5 + 8) return std::nullopt;
+        uint64_t stream_size = 0;
+        for (size_t i = 5; i < 13; ++i) stream_size = (stream_size << 8) | static_cast<uint8_t>(raw[i]);
+        if (stream_size == 0 || stream_size > 128) return std::nullopt;
+        const size_t offset = 13 + static_cast<size_t>(stream_size) + 8 + 16;
+        if (offset > raw.size() || raw.size() - offset < 8) return std::nullopt;
+        uint64_t sequence = 0;
+        for (size_t i = offset; i < offset + 8; ++i) sequence = (sequence << 8) | static_cast<uint8_t>(raw[i]);
+        return sequence == 0 ? std::nullopt : std::optional<uint64_t>(sequence);
+    }
     auto entry = decode_stream_entry(raw);
     if (!entry) return std::nullopt;
     return entry->seq;

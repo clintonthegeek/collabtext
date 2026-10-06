@@ -1,11 +1,23 @@
 # vNext transport receipt and commit contract
 
 **Status:** normative P07 contract. This file defines the new `OpStream` surface;
-`OpStream.h` and the installed API example must match it. It replaces the
-callback-only, scalar-fence interface. `StreamSync`'s current file-backed
-implementation remains a legacy/internal adapter until L03/L08 can give it the
-required durable receiver transaction; it must not claim this interface or
-publish its existing observed-operation counter as a durable receipt.
+`OpStream.h` and the installed API example must match it. The internal
+`FileOpStream` implementation supplies this contract for shared-folder storage.
+The legacy `StreamSync` interface remains a separate internal compatibility
+adapter and does not publish its scalar observed-operation counter as a receipt.
+
+`FileOpStream` stores producer records under actor, encoded stream name, and
+epoch directories. Each record is a `CTDL` version 1 frame: magic/version,
+length-prefixed ASCII stream name, epoch, 16 actor bytes, envelope sequence,
+payload length, and exact opaque payload bytes. Receiver frontiers are separate
+atomic `CTRC` version 1 files keyed by stream, epoch, and producer actor. A
+commit stores the supplied recovery point in that file before exposing the new
+frontier. Polling replays retained producer records and filters tokens covered
+by those frontiers; this intentionally favors a simple recovery baseline over
+incremental cursor acceleration. Sender receipt snapshots refresh during
+`poll(scope)` by observing peer receipt files. `receipts(scope)` itself does no
+I/O. This shared-folder adapter is internal and is not yet an installed public
+transport component.
 
 ## 1. Separate identities and claims
 

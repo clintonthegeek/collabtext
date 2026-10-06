@@ -2282,19 +2282,21 @@
         "R9"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "7b1704a",
-      "progress": "Partial: StreamSync now holds a replica writer lease, recovers each legacy stream's next envelope sequence by scanning its durable log, retains reader coverage when callbacks are absent or throw, and skips unchanged ack-file replacements. F4's restart regression and the missing-callback/idle-poll regressions pass. L04 remains incomplete because StreamSync is still the legacy 16-bit replica/void-callback adapter; it does not yet implement the P07 OpStream DeliveryToken, epoch-scoped receipt, retry, and quarantine contract.",
+      "progress": "Complete: added internal FileOpStream alongside legacy StreamSync. FileOpStream persists versioned actor/epoch/stream delivery envelopes, recovers contiguous producer sequence under a writer lease, enforces durable and queued pushes, returns explicit retry/quarantine/commit poll outcomes, and persists per-producer recovery-point receipts atomically. Sender receipt snapshots refresh during poll and remain I/O-free to query. Existing legacy restart and unchanged-ack coverage remains intact.",
       "verification_results": {
         "debug_affected_and_multistream": "PASS: 11/11, including tst_transport_commit_contract, tst_opstream_replay, tst_opstream_idempotent, tst_evaluation_regressions, StreamSync convergence, FileSync, and SegmentReader; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T211710Z-2",
         "debug_changed_path_sweep": "PASS: 79/79 correctness tests; benchmarks excluded; build-roadmap-debug/verification/20261006T211912Z-changed-b68u_063",
+        "file_opstream_targeted": "PASS: tst_transport_commit_contract, tst_opstream_replay, tst_opstream_idempotent, tst_evaluation_regressions; 4/4; GCC 16.2.1 Debug; includes sender and receiver restart, stream isolation, retry, quarantine, budgets, and receipt observer checks; build-roadmap-debug/verification/20261006T212740Z-12",
         "plan_validation": "PASS: all 72 tasks, DAG, ordering and consumer sequencing"
       },
       "artifacts": [
         "build-roadmap-debug/verification/20261006T211710Z-2/",
-        "build-roadmap-debug/verification/20261006T211912Z-changed-b68u_063/"
+        "build-roadmap-debug/verification/20261006T211912Z-changed-b68u_063/",
+        "build-roadmap-debug/verification/20261006T212740Z-12/"
       ],
-      "remaining_gap": "Implement production StreamSync support for P07's ActorId/epoch DeliveryToken, durability modes, per-stream/per-producer receipts, and explicit commit/retry/quarantine outcomes before L04 can complete or L05 can start."
+      "remaining_gap": "The file-backed adapter remains internal and replays logs from the beginning on each polling session; incremental cursor acceleration and installed public transport packaging remain future work. The legacy StreamSync API remains available separately."
     },
     {
       "id": "L05",

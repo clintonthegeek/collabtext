@@ -8,10 +8,284 @@
 #include <ctime>
 #include <fstream>
 #include <limits>
+#include <array>
+#include <cstring>
 
 namespace fs = std::filesystem;
 
 namespace CollabText::Crdt {
+
+namespace {
+std::string scope_key(const StreamScope& s) { return s.stream + "\n" + std::to_string(s.epoch); }
+bool valid_scope(const StreamScope& s) {
+    if (s.stream.empty() || s.stream == "." || s.stream == ".." || s.stream.size() > 128 || s.epoch == 0) return false;
+    for (unsigned char c : s.stream)
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+              || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == ':')) return false;
+    return true;
+}
+std::string stream_dir_name(std::string_view stream) {
+    static constexpr char hex[] = "0123456789abcdef";
+    std::string out; out.reserve(stream.size() * 2);
+    for (unsigned char c : stream) { out.push_back(hex[c >> 4]); out.push_back(hex[c & 15]); }
+    return out;
+}
+void put_u64(std::string& out, uint64_t v) {
+    for (int i = 7; i >= 0; --i) out.push_back(static_cast<char>(v >> (i * 8)));
+}
+bool take_u64(std::string_view& in, uint64_t& v) {
+    if (in.size() < 8) return false;
+    v = 0; for (int i = 0; i < 8; ++i) v = (v << 8) | static_cast<uint8_t>(in[i]);
+    in.remove_prefix(8); return true;
+}
+std::string encode_delivery(const OutboundDelivery& d) {
+    std::string out("CTDL\1", 5);
+    put_u64(out, d.token.stream.size()); out += d.token.stream;
+    put_u64(out, d.token.epoch);
+    const auto actor = d.token.producer.bytes();
+    out.append(reinterpret_cast<const char*>(actor.data()), actor.size());
+    put_u64(out, d.token.sequence); put_u64(out, d.payload.size()); out += d.payload;
+    return out;
+}
+std::optional<InboundDelivery> decode_delivery(std::string_view in) {
+    if (in.size() < 5 || in.substr(0, 5) != std::string_view("CTDL\1", 5)) return {};
+    in.remove_prefix(5); uint64_t n = 0;
+    if (!take_u64(in, n) || n == 0 || n > 128 || in.size() < n) return {};
+    InboundDelivery d; d.token.stream.assign(in.substr(0, n)); in.remove_prefix(n);
+    if (!take_u64(in, d.token.epoch) || in.size() < ActorId::kBytes) return {};
+    std::array<uint8_t, ActorId::kBytes> bytes{};
+    std::memcpy(bytes.data(), in.data(), bytes.size()); in.remove_prefix(bytes.size());
+    d.token.producer = ActorId::from_bytes(bytes);
+    uint64_t payload_size = 0;
+    if (!take_u64(in, d.token.sequence) || !take_u64(in, payload_size)
+        || payload_size != in.size() || d.token.epoch == 0 || d.token.sequence == 0
+        || !d.token.producer.valid()) return {};
+    d.payload.assign(in); return d;
+}
+std::string encode_receipt_value(uint64_t seq, const RecoveryPoint& point) {
+    std::string out("CTRC\1", 5); put_u64(out, seq);
+    out.push_back(point.kind() == RecoveryPoint::Kind::checkpoint ? 1 : 0);
+    put_u64(out, point.checkpoint_id().size()); out.append(point.checkpoint_id()); return out;
+}
+struct ReceiptValue { uint64_t sequence = 0; RecoveryPoint point = RecoveryPoint::replay_from_beginning(); };
+std::optional<ReceiptValue> decode_receipt_value(std::string_view in) {
+    if (in.size() < 5 || in.substr(0, 5) != std::string_view("CTRC\1", 5)) return {};
+    in.remove_prefix(5); ReceiptValue v; uint64_t n = 0;
+    if (!take_u64(in, v.sequence) || in.empty()) return {};
+    bool checkpoint = in.front() != 0; in.remove_prefix(1);
+    if (!take_u64(in, n) || n != in.size() || n > 1024 || (checkpoint && n == 0)) return {};
+    if (checkpoint) v.point = RecoveryPoint::checkpoint(std::string(in));
+    if (v.sequence == 0) return {}; return v;
+}
+std::optional<std::string> read_bytes(const fs::path& p) {
+    std::ifstream f(p, std::ios::binary); if (!f) return {};
+    return std::string(std::istreambuf_iterator<char>(f), {});
+}
+}
+
+struct FileOpStream::ScopeState {
+    StreamScope scope;
+    InboundHandler handler;
+    std::unordered_map<std::string, ReceiptValue> frontiers;
+    std::unordered_map<std::string, ReceiptValue> remote_receipts;
+};
+struct FileOpStream::WriterState {
+    StreamScope scope;
+    std::unique_ptr<SegmentWriter> writer;
+    uint64_t next = 1;
+    std::unordered_map<uint64_t, std::string> payloads;
+};
+
+FileOpStream::FileOpStream(fs::path folder, ActorId actor, WriterConfig cfg)
+    : m_shared_folder(std::move(folder)), m_local_actor(actor), m_writer_cfg(cfg) {}
+FileOpStream::~FileOpStream() = default;
+
+Result<void> FileOpStream::start() {
+    if (m_started) return {};
+    if (!m_local_actor.valid()) return Error(ErrorCode::invalid_identity, "file transport requires a valid actor");
+    auto local = m_shared_folder / "local" / m_local_actor.to_string();
+    fs::create_directories(local);
+    auto lease = Storage::ProcessLease::acquire(local / "writer.lock", m_writer_cfg.file_ops);
+    if (!lease.ok()) return lease.error();
+    m_lease.emplace(std::move(lease.value())); m_started = true;
+    return {};
+}
+
+Result<void> FileOpStream::register_stream(const StreamScope& scope) {
+    if (!valid_scope(scope)) return Error(ErrorCode::malformed, "invalid stream scope");
+    auto key = scope_key(scope); auto found = m_scopes.find(key);
+    if (found != m_scopes.end()) return {};
+    if (!m_started) { auto r = start(); if (!r.ok()) return r.error(); }
+    auto state = std::make_unique<ScopeState>(); state->scope = scope;
+    auto receipt_dir = m_shared_folder / "local" / m_local_actor.to_string() / "receipts"
+                    / stream_dir_name(scope.stream) / std::to_string(scope.epoch);
+    fs::create_directories(receipt_dir);
+    for (const auto& e : fs::directory_iterator(receipt_dir)) {
+        if (!e.is_regular_file()) continue;
+        auto actor = ActorId::parse(e.path().filename().string()); if (!actor.ok()) continue;
+        auto bytes = read_bytes(e.path()); if (!bytes) continue;
+        auto value = decode_receipt_value(*bytes); if (value) state->frontiers.emplace(actor.value().to_string(), *value);
+    }
+    m_scopes.emplace(key, std::move(state)); return {};
+}
+
+Result<void> FileOpStream::push(const OutboundDelivery& d, PushDurability durability) {
+    if (!m_started || !m_lease) return Error(ErrorCode::writer_conflict, "file transport is not started");
+    if (!d.token.producer.valid() || d.token.producer != m_local_actor || d.token.sequence == 0)
+        return Error(ErrorCode::invalid_identity, "outbound token producer or sequence is invalid");
+    if (d.token.sequence == UINT64_MAX) return Error(ErrorCode::counter_exhausted, "delivery sequence exhausted");
+    StreamScope scope{d.token.stream, d.token.epoch}; auto si = m_scopes.find(scope_key(scope));
+    if (si == m_scopes.end()) return Error(ErrorCode::unknown_stream, "stream scope is not registered", d.token.stream);
+    auto key = scope_key(scope); auto wi = m_writers.find(key);
+    if (wi == m_writers.end()) {
+        auto dir = m_shared_folder / "replicas" / m_local_actor.to_string() / "log" / "streams"
+                 / stream_dir_name(scope.stream) / std::to_string(scope.epoch);
+        fs::create_directories(dir);
+        auto ws = std::make_unique<WriterState>(); ws->scope = scope;
+        ws->writer = std::make_unique<SegmentWriter>(dir, SegmentKind::Stream, m_writer_cfg);
+        auto started = ws->writer->start(); if (!started.ok()) return started.error();
+        SegmentReader scan(dir, m_shared_folder / "local" / m_local_actor.to_string() / "read-cursors"
+                          / (stream_dir_name(scope.stream) + "-" + std::to_string(scope.epoch) + ".scan"));
+        scan.start();
+        uint64_t expected = 1;
+        for (;;) {
+            auto batch = scan.read_new(); if (batch.gap) return *batch.gap;
+            for (const auto& raw : batch.records) {
+                auto old = decode_delivery(raw); if (!old) return Error(ErrorCode::corrupt_record, "invalid delivery in producer log");
+                if (old->token.stream != scope.stream || old->token.epoch != scope.epoch || old->token.producer != m_local_actor)
+                    return Error(ErrorCode::corrupt_record, "producer log contains mismatched token");
+                if (old->token.sequence == UINT64_MAX)
+                    return Error(ErrorCode::counter_exhausted, "producer delivery sequence exhausted");
+                auto [at, inserted] = ws->payloads.emplace(old->token.sequence, old->payload);
+                if (!inserted && at->second != old->payload)
+                    return Error(ErrorCode::actor_conflict, "producer log reuses a delivery token");
+                if (old->token.sequence == expected) ++expected;
+                else if (old->token.sequence != expected - 1)
+                    return Error(old->token.sequence < expected ? ErrorCode::counter_regression : ErrorCode::counter_regression,
+                                 "producer log sequence is not contiguous");
+            }
+            if (batch.records.empty()) break;
+            auto committed = scan.commit(batch.token); if (!committed.ok()) return committed.error();
+        }
+        ws->next = expected;
+        wi = m_writers.emplace(key, std::move(ws)).first;
+    }
+    auto& w = *wi->second; const auto existing = w.payloads.find(d.token.sequence);
+    if (existing != w.payloads.end()) {
+        if (existing->second == d.payload) return {};
+        return Error(ErrorCode::actor_conflict, "delivery token was reused with different bytes");
+    }
+    if (d.token.sequence != w.next) return Error(d.token.sequence < w.next ? ErrorCode::counter_regression : ErrorCode::counter_regression,
+                                                   "delivery sequence must be contiguous");
+    auto a = w.writer->append(encode_delivery(d), d.token.sequence); if (!a.ok()) return a.error();
+    if (durability == PushDurability::durable) { auto f = w.writer->flush(); if (!f.ok()) return f.error(); }
+    w.payloads.emplace(d.token.sequence, d.payload);
+    ++w.next; return {};
+}
+
+Result<SubscriptionId> FileOpStream::subscribe(const StreamScope& scope, InboundHandler handler) {
+    auto r = register_stream(scope); if (!r.ok()) return r.error();
+    if (!handler) return Error(ErrorCode::malformed, "inbound handler is empty");
+    auto& state = *m_scopes.at(scope_key(scope)); if (state.handler) return Error(ErrorCode::writer_conflict, "scope already has an inbound handler");
+    auto id = m_next_subscription++; state.handler = std::move(handler); m_subscriptions.emplace(id, scope); return id;
+}
+Result<SubscriptionId> FileOpStream::subscribe_receipts(ReceiptHandler handler) {
+    if (!handler) return Error(ErrorCode::malformed, "receipt handler is empty");
+    auto id = m_next_subscription++; m_receipt_subscriptions.emplace(id, std::move(handler)); return id;
+}
+Result<void> FileOpStream::unsubscribe(SubscriptionId id) {
+    if (auto it = m_subscriptions.find(id); it != m_subscriptions.end()) {
+        m_scopes.at(scope_key(it->second))->handler = {}; m_subscriptions.erase(it);
+    }
+    m_receipt_subscriptions.erase(id); return {};
+}
+Result<std::vector<StreamReceipt>> FileOpStream::receipts(const StreamScope& scope) const {
+    auto si = m_scopes.find(scope_key(scope)); if (si == m_scopes.end()) return Error(ErrorCode::unknown_stream, "stream scope is not registered");
+    std::vector<StreamReceipt> out;
+    for (const auto& [actor_hex, v] : si->second->remote_receipts) {
+        auto actor = ActorId::parse(actor_hex); if (!actor.ok()) continue;
+        out.push_back({actor.value(), DeliveryToken{scope.stream, scope.epoch, m_local_actor, v.sequence}});
+    }
+    return out;
+}
+
+void FileOpStream::refresh_receipts_(ScopeState& state) {
+    const auto local_dir = m_shared_folder / "local";
+    if (!fs::exists(local_dir)) return;
+    const auto receipt_rel = fs::path("receipts") / stream_dir_name(state.scope.stream)
+                           / std::to_string(state.scope.epoch) / m_local_actor.to_string();
+    for (const auto& peer : fs::directory_iterator(local_dir)) {
+        if (!peer.is_directory() || peer.path().filename() == m_local_actor.to_string()) continue;
+        auto actor = ActorId::parse(peer.path().filename().string()); if (!actor.ok()) continue;
+        auto bytes = read_bytes(peer.path() / receipt_rel); if (!bytes) continue;
+        auto value = decode_receipt_value(*bytes); if (!value) continue;
+        auto key = actor.value().to_string(); auto existing = state.remote_receipts.find(key);
+        if (existing != state.remote_receipts.end() && existing->second.sequence >= value->sequence) continue;
+        state.remote_receipts[key] = *value;
+        StreamReceipt receipt{actor.value(), DeliveryToken{state.scope.stream, state.scope.epoch,
+                                                            m_local_actor, value->sequence}};
+        std::vector<ReceiptHandler> handlers;
+        handlers.reserve(m_receipt_subscriptions.size());
+        for (const auto& [id, cb] : m_receipt_subscriptions) { (void)id; handlers.push_back(cb); }
+        for (auto& cb : handlers) try { cb(receipt); } catch (...) { /* observation cannot roll back a remote receipt */ }
+    }
+}
+
+Result<PollReport> FileOpStream::poll(const StreamScope& scope, PollBudget budget) {
+    auto si = m_scopes.find(scope_key(scope)); if (si == m_scopes.end()) return Error(ErrorCode::unknown_stream, "stream scope is not registered");
+    auto& state = *si->second; refresh_receipts_(state);
+    PollReport report; if (!state.handler) return report;
+    const auto handler = state.handler;
+    auto replicas = m_shared_folder / "replicas"; if (!fs::exists(replicas)) return report;
+    bool stop = false;
+    for (const auto& peer : fs::directory_iterator(replicas)) {
+        if (!peer.is_directory() || peer.path().filename() == m_local_actor.to_string()) continue;
+        auto actor = ActorId::parse(peer.path().filename().string()); if (!actor.ok()) continue;
+        auto dir = peer.path() / "log" / "streams" / stream_dir_name(scope.stream) / std::to_string(scope.epoch);
+        if (!fs::exists(dir)) continue;
+        SegmentReader reader(dir, m_shared_folder / "local" / m_local_actor.to_string() / "read-cursors"
+                            / (stream_dir_name(scope.stream) + "-" + std::to_string(scope.epoch) + "-" + actor.value().to_string() + ".poll"));
+        reader.start();
+        for (;;) {
+            auto batch = reader.read_new();
+            if (batch.gap) return *batch.gap;
+            if (batch.records.empty()) break;
+            for (const auto& raw : batch.records) {
+                auto d = decode_delivery(raw); if (!d) return Error(ErrorCode::corrupt_record, "invalid delivery envelope");
+                if (d->token.stream != scope.stream || d->token.epoch != scope.epoch || d->token.producer != actor.value())
+                    return Error(ErrorCode::corrupt_record, "delivery token does not match its log scope");
+                const auto front = state.frontiers.find(actor.value().to_string());
+                const uint64_t accepted = front == state.frontiers.end() ? 0 : front->second.sequence;
+                if (d->token.sequence <= accepted) continue;
+                if (report.offered >= budget.max_records || d->payload.size() > budget.max_payload_bytes - std::min(budget.max_payload_bytes, report.payload_bytes)) {
+                    report.budget_limited = true; stop = true; break;
+                }
+                if (d->token.sequence != accepted + 1) return Error(ErrorCode::counter_regression, "delivery log has a sequence gap");
+                ++report.offered; report.payload_bytes += d->payload.size();
+                auto decision = [&] {
+                    try { return handler(*d); }
+                    catch (...) { return DeliveryDecision::retry(); }
+                }();
+                if (decision.kind() == DeliveryDecision::Kind::retry) { ++report.retried; stop = true; break; }
+                if (decision.kind() == DeliveryDecision::Kind::quarantine) { ++report.quarantined; stop = true; break; }
+                if (!decision.recovery_point() || !decision.recovery_point()->valid()
+                    || decision.recovery_point()->checkpoint_id().size() > 1024)
+                    return Error(ErrorCode::malformed, "commit decision has no valid recovery point");
+                auto receipt_dir = m_shared_folder / "local" / m_local_actor.to_string() / "receipts" / stream_dir_name(scope.stream) / std::to_string(scope.epoch);
+                fs::create_directories(receipt_dir);
+                auto encoded = encode_receipt_value(d->token.sequence, *decision.recovery_point());
+                auto persisted = Storage::replace_atomically(receipt_dir / actor.value().to_string(), encoded, m_writer_cfg.step_hook, m_writer_cfg.file_ops);
+                if (!persisted.ok()) return persisted.error();
+                state.frontiers[actor.value().to_string()] = {d->token.sequence, *decision.recovery_point()};
+                ++report.committed;
+            }
+            if (stop) break;
+            auto c = reader.commit(batch.token); if (!c.ok()) return c.error();
+        }
+        if (stop) break;
+    }
+    return report;
+}
 
 StreamSync::StreamSync(const fs::path& shared_folder,
                        const std::string& replica_name,

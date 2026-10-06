@@ -38,6 +38,130 @@ class TestOpStreamReplay : public QObject {
 
 private slots:
 
+    void file_opstream_scopes_retry_and_durable_receipt() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const std::filesystem::path shared = tmp.path().toStdString();
+        const auto sender_id = actor(41);
+        const auto receiver_id = actor(42);
+        const StreamScope buffer{"buffer:doc", 7};
+        const StreamScope list{"list:doc", 7};
+        FileOpStream sender(shared, sender_id), receiver(shared, receiver_id);
+        QVERIFY(sender.start().ok());
+        QVERIFY(receiver.start().ok());
+        QVERIFY(sender.register_stream(buffer).ok());
+        QVERIFY(sender.register_stream(list).ok());
+        QVERIFY(receiver.register_stream(buffer).ok());
+        QVERIFY(receiver.register_stream(list).ok());
+        QVERIFY(sender.push({{buffer.stream, buffer.epoch, sender_id, 1}, "b1"}, PushDurability::durable).ok());
+        QVERIFY(sender.push({{buffer.stream, buffer.epoch, sender_id, 2}, "b2"}, PushDurability::durable).ok());
+        QVERIFY(sender.push({{list.stream, list.epoch, sender_id, 1}, "l1"}, PushDurability::durable).ok());
+        auto idle = receiver.poll(buffer, PollBudget{});
+        QVERIFY(idle.ok()); QCOMPARE(idle.value().offered, size_t(0));
+
+        int buffer_calls = 0;
+        bool payload_ok = true;
+        int receipt_updates = 0;
+        auto receipt_subscription = sender.subscribe_receipts([&](const StreamReceipt& r) {
+            if (r.peer == receiver_id && r.through.producer == sender_id) ++receipt_updates;
+        });
+        QVERIFY(receipt_subscription.ok());
+        auto subscribed = receiver.subscribe(buffer, [&](const InboundDelivery& d) {
+            ++buffer_calls;
+            payload_ok = payload_ok && (d.payload == "b1" || d.payload == "b2");
+            return buffer_calls == 1 ? DeliveryDecision::retry()
+                                     : DeliveryDecision::commit(RecoveryPoint::replay_from_beginning());
+        });
+        QVERIFY(subscribed.ok());
+        PollBudget budget; budget.max_records = 1;
+        auto first = receiver.poll(buffer, budget);
+        QVERIFY(first.ok()); QCOMPARE(first.value().retried, size_t(1));
+        auto no_receipt = sender.receipts(buffer);
+        QVERIFY(no_receipt.ok()); QVERIFY(no_receipt.value().empty());
+        auto second = receiver.poll(buffer, budget);
+        QVERIFY(second.ok()); QCOMPARE(second.value().committed, size_t(1));
+        QVERIFY(second.value().budget_limited);
+        auto third = receiver.poll(buffer, budget);
+        QVERIFY(third.ok()); QCOMPARE(third.value().committed, size_t(1));
+        QVERIFY(payload_ok);
+        int list_calls = 0;
+        auto list_sub = receiver.subscribe(list, [&](const InboundDelivery&) {
+            ++list_calls;
+            if (list_calls == 1)
+                return DeliveryDecision::quarantine(Error(ErrorCode::malformed, "deferred list payload"));
+            return DeliveryDecision::commit(RecoveryPoint::checkpoint("list-recovered"));
+        });
+        QVERIFY(list_sub.ok());
+        auto quarantined = receiver.poll(list);
+        QVERIFY(quarantined.ok()); QCOMPARE(quarantined.value().quarantined, size_t(1));
+        QVERIFY(sender.poll(list).ok());
+        QVERIFY(sender.receipts(list).value().empty());
+        auto list_poll = receiver.poll(list);
+        QVERIFY(list_poll.ok()); QCOMPARE(list_poll.value().committed, size_t(1));
+        QCOMPARE(sender.poll(buffer).value().committed, size_t(0));
+        QCOMPARE(sender.poll(list).value().committed, size_t(0));
+        QCOMPARE(receipt_updates, 2);
+        QVERIFY(sender.receipts(buffer).value().size() == 1);
+        QCOMPARE(sender.receipts(buffer).value()[0].through.sequence, uint64_t(2));
+        QVERIFY(sender.receipts(list).value().size() == 1);
+        QCOMPARE(sender.receipts(buffer).value()[0].through.producer, sender_id);
+        QVERIFY(receiver.unsubscribe(subscribed.value()).ok());
+        QVERIFY(receiver.unsubscribe(list_sub.value()).ok());
+        QVERIFY(sender.unsubscribe(receipt_subscription.value()).ok());
+    }
+
+    void file_opstream_receipt_survives_receiver_restart() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const std::filesystem::path shared = tmp.path().toStdString();
+        const auto sender_id = actor(51), receiver_id = actor(52);
+        const StreamScope scope{"buffer:restart", 3};
+        FileOpStream sender(shared, sender_id);
+        QVERIFY(sender.start().ok()); QVERIFY(sender.register_stream(scope).ok());
+        QVERIFY(sender.push({{scope.stream, scope.epoch, sender_id, 1}, "payload"}, PushDurability::durable).ok());
+        {
+            FileOpStream receiver(shared, receiver_id);
+            QVERIFY(receiver.start().ok()); QVERIFY(receiver.register_stream(scope).ok());
+            int calls = 0;
+            QVERIFY(receiver.subscribe(scope, [&](const InboundDelivery&) {
+                ++calls; return DeliveryDecision::commit(RecoveryPoint::checkpoint("durable-app-state"));
+            }).ok());
+            auto p = receiver.poll(scope); QVERIFY(p.ok()); QCOMPARE(p.value().committed, size_t(1));
+            QCOMPARE(calls, 1);
+        }
+        FileOpStream restarted(shared, receiver_id);
+        QVERIFY(restarted.start().ok()); QVERIFY(restarted.register_stream(scope).ok());
+        int calls = 0;
+        QVERIFY(restarted.subscribe(scope, [&](const InboundDelivery&) {
+            ++calls; return DeliveryDecision::commit(RecoveryPoint::replay_from_beginning());
+        }).ok());
+        auto replay = restarted.poll(scope); QVERIFY(replay.ok());
+        QCOMPARE(replay.value().committed, size_t(0)); QCOMPARE(calls, 0);
+        QVERIFY(sender.poll(scope).ok());
+        auto frontier = sender.receipts(scope);
+        QVERIFY(frontier.ok()); QCOMPARE(frontier.value().size(), size_t(1));
+        QCOMPARE(frontier.value()[0].through.sequence, uint64_t(1));
+    }
+
+    void file_opstream_sender_restart_recovers_next_sequence() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const std::filesystem::path shared = tmp.path().toStdString();
+        const auto sender_id = actor(61);
+        const StreamScope scope{"buffer:sender-restart", 9};
+        {
+            FileOpStream sender(shared, sender_id);
+            QVERIFY(sender.start().ok()); QVERIFY(sender.register_stream(scope).ok());
+            QVERIFY(sender.push({{scope.stream, scope.epoch, sender_id, 1}, "first"}, PushDurability::durable).ok());
+        }
+        FileOpStream restarted(shared, sender_id);
+        QVERIFY(restarted.start().ok()); QVERIFY(restarted.register_stream(scope).ok());
+        auto second = restarted.push({{scope.stream, scope.epoch, sender_id, 2}, "second"}, PushDurability::durable);
+        QVERIFY2(second.ok(), second.ok() ? "" : std::string(second.error().message()).c_str());
+        auto conflict = restarted.push({{scope.stream, scope.epoch, sender_id, 1}, "different"}, PushDurability::durable);
+        QVERIFY(!conflict.ok()); QCOMPARE(conflict.error().code(), ErrorCode::actor_conflict);
+    }
+
     void sender_restart_keeps_envelope_identity_for_live_receiver() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());

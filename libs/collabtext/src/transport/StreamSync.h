@@ -15,6 +15,7 @@
 #pragma once
 
 #include <collabtext/ActorId.h>
+#include <collabtext/OpStream.h>
 #include <crdt/SegmentReader.h>
 #include <crdt/SegmentWriter.h>
 #include <storage/DurableFile.h>
@@ -133,6 +134,42 @@ private:
     uint64_t m_cached_fence = 0;
     bool m_started = false;
     std::optional<Error> m_last_error;
+};
+
+/// Durable file-backed implementation of the P07 contract. Kept separate
+/// from the legacy StreamSync API so callers must opt into ActorId/epoch
+/// scoped delivery explicitly.
+class FileOpStream final : public CollabText::OpStream {
+public:
+    FileOpStream(std::filesystem::path shared_folder, ActorId local_actor,
+                 WriterConfig writer_cfg = WriterConfig{});
+    ~FileOpStream() override;
+    FileOpStream(const FileOpStream&) = delete;
+    FileOpStream& operator=(const FileOpStream&) = delete;
+
+    [[nodiscard]] Result<void> start();
+    [[nodiscard]] Result<void> register_stream(const StreamScope&) override;
+    [[nodiscard]] Result<void> push(const OutboundDelivery&, PushDurability) override;
+    [[nodiscard]] Result<SubscriptionId> subscribe(const StreamScope&, InboundHandler) override;
+    [[nodiscard]] Result<SubscriptionId> subscribe_receipts(ReceiptHandler) override;
+    [[nodiscard]] Result<void> unsubscribe(SubscriptionId) override;
+    [[nodiscard]] Result<PollReport> poll(const StreamScope&, PollBudget = {}) override;
+    [[nodiscard]] Result<std::vector<StreamReceipt>> receipts(const StreamScope&) const override;
+
+private:
+    struct ScopeState;
+    struct WriterState;
+    std::filesystem::path m_shared_folder;
+    ActorId m_local_actor;
+    WriterConfig m_writer_cfg;
+    std::optional<Storage::ProcessLease> m_lease;
+    std::unordered_map<std::string, std::unique_ptr<ScopeState>> m_scopes;
+    std::unordered_map<std::string, std::unique_ptr<WriterState>> m_writers;
+    std::unordered_map<SubscriptionId, StreamScope> m_subscriptions;
+    std::unordered_map<SubscriptionId, ReceiptHandler> m_receipt_subscriptions;
+    void refresh_receipts_(ScopeState& state);
+    SubscriptionId m_next_subscription = 1;
+    bool m_started = false;
 };
 
 } // namespace CollabText::Crdt
