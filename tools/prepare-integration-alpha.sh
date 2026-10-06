@@ -161,9 +161,9 @@ candidate_sha_full=$(git -C "$repo_root" rev-parse "${candidate_sha}^{commit}")
 # installed config file.
 # ---------------------------------------------------------------------------
 super_version=$(sed -n 's/^project(collabtext VERSION \([^ )]*\).*/\1/p' "$repo_root/CMakeLists.txt" | head -1)
-super_prerelease=$(sed -n 's/^set(COLLABTEXT_PRERELEASE "\(.*\)"\)$/\1/p' "$repo_root/CMakeLists.txt" | head -1)
+super_prerelease=$(sed -n 's/^set(COLLABTEXT_PRERELEASE "\([^"]*\)").*$/\1/p' "$repo_root/CMakeLists.txt" | head -1)
 lib_version=$(sed -n 's/^project(collabtext-lib VERSION \([^ )]*\).*/\1/p' "$repo_root/libs/collabtext/CMakeLists.txt" | head -1)
-lib_prerelease=$(sed -n 's/^set(COLLABTEXT_PRERELEASE "\(.*\)"\)$/\1/p' "$repo_root/libs/collabtext/CMakeLists.txt" | head -1)
+lib_prerelease=$(sed -n 's/^set(COLLABTEXT_PRERELEASE "\([^"]*\)").*$/\1/p' "$repo_root/libs/collabtext/CMakeLists.txt" | head -1)
 if [[ -z "$super_version" || -z "$lib_version" || -z "$super_prerelease" || -z "$lib_prerelease" ]]; then
     echo "!! could not read the package version metadata." >&2
     echo "   superproject='${super_version:-}'+'${super_prerelease:-}' library='${lib_version:-}'+'${lib_prerelease:-}'" >&2
@@ -422,11 +422,11 @@ cmake_version=$(cmake --version | head -1)
 
 run_step install cmake --install "$build_dir" --prefix "$prefix" || { trap - EXIT; finish 3; }
 
-installed_version=$(sed -n 's/^set(COLLABTEXT_VERSION "\(.*\)"\)$/\1/p' \
+installed_version=$(sed -n 's/^set(COLLABTEXT_VERSION "\([^"]*\)").*$/\1/p' \
     "$prefix"/lib*/cmake/collabtext/collabtext-config.cmake | head -1)
-installed_prerelease=$(sed -n 's/^set(COLLABTEXT_PRERELEASE "\(.*\)"\)$/\1/p' \
+installed_prerelease=$(sed -n 's/^set(COLLABTEXT_PRERELEASE "\([^"]*\)").*$/\1/p' \
     "$prefix"/lib*/cmake/collabtext/collabtext-config.cmake | head -1)
-installed_version_string=$(sed -n 's/^set(COLLABTEXT_VERSION_STRING "\(.*\)"\)$/\1/p' \
+installed_version_string=$(sed -n 's/^set(COLLABTEXT_VERSION_STRING "\([^"]*\)").*$/\1/p' \
     "$prefix"/lib*/cmake/collabtext/collabtext-config.cmake | head -1)
 if [[ "$installed_version" != "$super_version" || "$installed_prerelease" != "$super_prerelease" ]]; then
     echo "!! the installed package reports ${installed_version:-unknown}+${installed_prerelease:-none}," >&2
@@ -455,7 +455,7 @@ if [[ "$manifest_package_version" != "$version" ]]; then
 fi
 printf 'capability manifest: version %s, package version %s\n' "$manifest_version" "$manifest_package_version"
 
-enabled_components=$(sed -n 's/^set(_collabtext_enabled_components "\(.*\)")/\1/p' \
+enabled_components=$(sed -n 's/^set(_collabtext_enabled_components "\([^"]*\)").*$/\1/p' \
     "$prefix"/lib*/cmake/collabtext/collabtext-config.cmake | head -1)
 printf 'exported components: %s\n' "${enabled_components:-<unknown>}"
 for comp in "${wanted_components[@]}"; do
