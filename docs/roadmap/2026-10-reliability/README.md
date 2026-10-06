@@ -4,7 +4,7 @@
 **Baseline:** `046d375`  
 **Execution branch:** `roadmap/reliability-v2`  
 **Worktree:** `/home/clinton/dev/collabtext/.worktrees/reliability-v2`  
-**Status (2026-10-05):** V01–V08, D01, P01–P06a, L01, S01, W01, S04a and packaging A01/A02a/A06a are complete. P06a opacity is verified. S04a specifies and model-checks scoped boundaries, exact collapse/strict restoration and a candidate token codec; it does not implement production positions. **Next: P06b, then S04b; W02 and S02 are independently ready.** See [takeover review](../../reports/2026-10-05-takeover-review.md), [boundary contract](../../specs/vnext-boundary-semantics.md) and TASKS.json. Benchmarks remain separate; engine optimization is deferred.
+**Status (2026-10-05):** V01–V08, D01, P01–P06b, L01, S01, W01, S04a and packaging A01/A02a/A06a are complete. P06a opacity is verified. S04a specifies and model-checks scoped boundaries, exact collapse/strict restoration and a candidate token codec; it does not implement production positions. **Next: S04b; P06b is complete. W02 and S02 are independently ready.** See [takeover review](../../reports/2026-10-05-takeover-review.md), [boundary contract](../../specs/vnext-boundary-semantics.md) and TASKS.json. Benchmarks remain separate; engine optimization is deferred.
 
 This roadmap implements the recommendations in the [evaluation](../../2026-10-03-library-evaluation.md) subject to the user's selected direction: improve the engine already implemented. It contains **72 active tasks across eight technical areas plus an early consumer integration lane**, with dependencies, file scope, ordered steps, acceptance criteria, and verification. [TASKS.json](TASKS.json) is the machine-readable task/status registry. [EXECUTION.md](EXECUTION.md) tells an executor how to run one task without guessing. [DECISIONS.md](DECISIONS.md) records all resolved policies. [RUST_ASSESSMENT.md](RUST_ASSESSMENT.md) is informational background; its former adoption recommendation is withdrawn.
 
@@ -62,8 +62,7 @@ The diagram groups work and omits some edges; TASKS.json is authoritative. The
 preferred single-executor order is: P06b → S04b → W03 → E07b;
 W02 → E07a; S02 → S03; P07 → P08 → L02–L08; then S04–S07 and
 remaining G/A/X/E tasks in registry order. A01/A02a/A06a, W01/S01,
-P06a and S04a are complete. Follow actual dependencies; S04b still requires
-P06b despite its now-complete boundary gate.
+P06a and S04a are complete. Follow actual dependencies; S04b now has both completed boundary and codec prerequisites.
 
 Baseline/alpha preparation does not complete recovery, persistent undo/redo,
 durable pins, or repaired ordering. Live positions are usable before those gates
@@ -141,7 +140,7 @@ No recommendation is considered complete merely because it appears in a plan. E0
 
 ## Implementation handoff
 
-- **Next:** P06b supplies checked versioned operation codecs, then S04b implements the reviewed live-position contract and token bytes. W02 and S02 are also ready. The S04a model passes its exact/bounded cases; no production F7/F8 marker was removed.
+- **Next:** P06b codecs are complete; S04b implements the reviewed live-position contract and token bytes. W02 and S02 are also ready. The S04a model passes its exact/bounded cases; no production F7/F8 marker was removed.
 - **Independent review:** the [review report](../../reports/2026-10-04-reliability-progress-review.md) records reproduced defects and fixes in P02/P04/P05/L01, executable evidence, and limitations. The old kickoff handoff is historical.
 - **Identity:** ReplicaState now has one move-only kernel-lease owner per private directory, nonzero counter reservations, strict state directives, and checked atomic persistence. The allocation contract is written and executable (vnext-identity.md §3.1–§3.8, with an independent model and a checked `reserve_run`), including the gap-record obligation a crash between reservation and log append creates. The engine now consumes ActorId and a supplied checked allocator; P06a step 6 has completed public operation opacity with immutable shared values.
 - **Validation:** the bounded reader rejects literal/escaped string overflow and duplicate keys; semantic validation also checks actor head-of-line queues. Deferred and diagnostic quarantine queues are separately bounded. The caller/store retains rejected input. Legacy operation serializers remain until P06b; P04/P05 did not complete all of F10.

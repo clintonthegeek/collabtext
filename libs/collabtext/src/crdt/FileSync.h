@@ -28,8 +28,14 @@ public:
              WriterConfig writer_cfg = WriterConfig{});
 
     void start();
-    void push_local_op(const Operation& op);
+    /// Codec admission only; legacy writer durability is not certified here.
+    Result<void> push_local_op(const Operation& op);
     size_t poll();
+
+    /// A failed codec blocks that peer until this transport is reconstructed.
+    /// Original batches stay owned here and in the segment; never committed.
+    const std::optional<Error>& last_error() const { return m_last_error; }
+    const auto& blocked_records() const { return m_blocked_records; }
 
     /// Force-fsync the open tail. Used by save/shutdown paths.
     void flush();
@@ -50,6 +56,8 @@ private:
 
     std::unique_ptr<SegmentWriter> m_writer;
     std::unordered_map<std::string, std::unique_ptr<SegmentReader>> m_readers;
+    std::unordered_map<std::string, std::vector<std::string>> m_blocked_records;
+    std::optional<Error> m_last_error;
 
     RemoteOpsCallback m_on_remote_ops;
     bool m_started = false;

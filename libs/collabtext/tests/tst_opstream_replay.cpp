@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 /// tst_opstream_replay.cpp — Catch-up replay on first attach
 ///
 /// Proves that a brand-new StreamSync instance replays all of a peer's history
@@ -54,7 +55,7 @@ private slots:
 
         CrdtEngine engine1(CollabText::Test::test_counter(1));
         engine1.setOnLocalOp([&](const Operation& op) {
-            sync1.push("buf:doc", encode_operation(op));
+            sync1.push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         // 10 single-character inserts
@@ -75,8 +76,8 @@ private slots:
                                  const std::string& payload) {
             if (replica_id == 2) return;  // skip own ops (none here)
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine2.applyRemoteOp(decoded.value());
         });
 
         // First poll — must replay all of replica A's history
@@ -105,7 +106,7 @@ private slots:
 
         CrdtEngine engine1(CollabText::Test::test_counter(1));
         engine1.setOnLocalOp([&](const Operation& op) {
-            sync1.push("buf:doc", encode_operation(op));
+            sync1.push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         // Initial 5 ops
@@ -125,8 +126,8 @@ private slots:
                                  const std::string& payload) {
             if (replica_id == 2) return;
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine2.applyRemoteOp(decoded.value());
             ++apply_count;
         });
 

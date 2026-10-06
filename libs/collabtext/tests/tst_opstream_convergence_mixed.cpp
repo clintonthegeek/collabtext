@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 /// tst_opstream_convergence_mixed.cpp — Mixed Buffer + IdList convergence over OpStream
 ///
 /// Models the "document with structure" scenario: one IdList for block ordering
@@ -70,18 +71,18 @@ private slots:
 
         // Wire IdList ops outbound
         list1.set_on_local_op([&](const IdListOperation& op) {
-            op1->push("idlist:structure", encode_idlist_operation(op));
+            op1->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
         list2.set_on_local_op([&](const IdListOperation& op) {
-            op2->push("idlist:structure", encode_idlist_operation(op));
+            op2->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
 
         // Wire CrdtEngine ops outbound
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buffer:block-1", encode_operation(op));
+            op1->push("buffer:block-1", checked_codec(encode_operation(op)));
         });
         engine2.setOnLocalOp([&](const Operation& op) {
-            op2->push("buffer:block-1", encode_operation(op));
+            op2->push("buffer:block-1", checked_codec(encode_operation(op)));
         });
 
         // Wire op1 inbound → list1 + engine1 (skip own-replica)
@@ -90,12 +91,12 @@ private slots:
             if (replica_id == 1) return;
             if (stream == "idlist:structure") {
                 auto op = decode_idlist_operation(payload);
-                QVERIFY(op.has_value());
-                list1.apply_remote_op(*op);
+                QVERIFY(op.ok());
+                list1.apply_remote_op(op.value());
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
-                QVERIFY(op.has_value());
-                engine1.applyRemoteOp(*op);
+                QVERIFY(op.ok());
+                engine1.applyRemoteOp(op.value());
             }
         });
 
@@ -105,12 +106,12 @@ private slots:
             if (replica_id == 2) return;
             if (stream == "idlist:structure") {
                 auto op = decode_idlist_operation(payload);
-                QVERIFY(op.has_value());
-                list2.apply_remote_op(*op);
+                QVERIFY(op.ok());
+                list2.apply_remote_op(op.value());
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
-                QVERIFY(op.has_value());
-                engine2.applyRemoteOp(*op);
+                QVERIFY(op.ok());
+                engine2.applyRemoteOp(op.value());
             }
         });
 
@@ -174,17 +175,17 @@ private slots:
         CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         list1.set_on_local_op([&](const IdListOperation& op) {
-            op1->push("idlist:structure", encode_idlist_operation(op));
+            op1->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
         list2.set_on_local_op([&](const IdListOperation& op) {
-            op2->push("idlist:structure", encode_idlist_operation(op));
+            op2->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
 
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buffer:block-1", encode_operation(op));
+            op1->push("buffer:block-1", checked_codec(encode_operation(op)));
         });
         engine2.setOnLocalOp([&](const Operation& op) {
-            op2->push("buffer:block-1", encode_operation(op));
+            op2->push("buffer:block-1", checked_codec(encode_operation(op)));
         });
 
         op1->set_on_inbound([&](const std::string& stream, uint16_t replica_id,
@@ -192,12 +193,12 @@ private slots:
             if (replica_id == 1) return;
             if (stream == "idlist:structure") {
                 auto op = decode_idlist_operation(payload);
-                QVERIFY(op.has_value());
-                list1.apply_remote_op(*op);
+                QVERIFY(op.ok());
+                list1.apply_remote_op(op.value());
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
-                QVERIFY(op.has_value());
-                engine1.applyRemoteOp(*op);
+                QVERIFY(op.ok());
+                engine1.applyRemoteOp(op.value());
             }
         });
 
@@ -206,12 +207,12 @@ private slots:
             if (replica_id == 2) return;
             if (stream == "idlist:structure") {
                 auto op = decode_idlist_operation(payload);
-                QVERIFY(op.has_value());
-                list2.apply_remote_op(*op);
+                QVERIFY(op.ok());
+                list2.apply_remote_op(op.value());
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
-                QVERIFY(op.has_value());
-                engine2.applyRemoteOp(*op);
+                QVERIFY(op.ok());
+                engine2.applyRemoteOp(op.value());
             }
         });
 

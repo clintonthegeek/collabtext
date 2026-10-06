@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 /// tst_crdtengine_op_api.cpp — Tests for CrdtEngine::setOnLocalOp / applyRemoteOp
 ///
 /// Proves that:
@@ -103,7 +104,7 @@ private slots:
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation &op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -111,8 +112,8 @@ private slots:
         QVERIFY(!wire_ops.empty());
         for (const auto &wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            bool ok = engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            bool ok = engine2.applyRemoteOp(decoded.value());
             QVERIFY(ok);
         }
 
@@ -132,12 +133,12 @@ private slots:
         engine.insert(0, "abc");
         QVERIFY(captured.has_value());
 
-        std::string wire = encode_operation(*captured);
+        std::string wire = checked_codec(encode_operation(*captured));
         auto decoded = decode_operation(wire);
-        QVERIFY(decoded.has_value());
+        QVERIFY(decoded.ok());
 
-        QCOMPARE(op_identity(*decoded).counter, op_identity(*captured).counter);
-        QCOMPARE(op_identity(*decoded).actor, op_identity(*captured).actor);
+        QCOMPARE(op_identity(decoded.value()).counter, op_identity(*captured).counter);
+        QCOMPARE(op_identity(decoded.value()).actor, op_identity(*captured).actor);
     }
 
     // ── undo round-trip: undo on engine 1 propagated to engine 2 ─────────────
@@ -149,7 +150,7 @@ private slots:
         // Collect all ops engine1 emits (insert + undo)
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation &op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -158,8 +159,8 @@ private slots:
         // Apply all ops to engine2 in order
         for (const auto &wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            bool ok = engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            bool ok = engine2.applyRemoteOp(decoded.value());
             QVERIFY(ok);
         }
 
@@ -182,10 +183,10 @@ private slots:
         std::vector<std::string> ops_from_2;
 
         engine1.setOnLocalOp([&](const Operation &op) {
-            ops_from_1.push_back(encode_operation(op));
+            ops_from_1.push_back(checked_codec(encode_operation(op)));
         });
         engine2.setOnLocalOp([&](const Operation &op) {
-            ops_from_2.push_back(encode_operation(op));
+            ops_from_2.push_back(checked_codec(encode_operation(op)));
         });
 
         // Engine 1 inserts "hello"
@@ -194,8 +195,8 @@ private slots:
         // Engine 2 receives engine 1's ops first (no concurrent conflict)
         for (const auto &wire : ops_from_1) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine2.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(engine2.applyRemoteOp(decoded.value()));
         }
         ops_from_1.clear();
 
@@ -205,8 +206,8 @@ private slots:
         // Engine 1 receives engine 2's ops
         for (const auto &wire : ops_from_2) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine1.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(engine1.applyRemoteOp(decoded.value()));
         }
 
         // Both should converge to the same text with both words as substrings
@@ -229,10 +230,10 @@ private slots:
         std::vector<std::string> ops_from_2;
 
         engine1.setOnLocalOp([&](const Operation &op) {
-            ops_from_1.push_back(encode_operation(op));
+            ops_from_1.push_back(checked_codec(encode_operation(op)));
         });
         engine2.setOnLocalOp([&](const Operation &op) {
-            ops_from_2.push_back(encode_operation(op));
+            ops_from_2.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -240,13 +241,13 @@ private slots:
 
         for (const auto &wire : ops_from_1) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine2.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(engine2.applyRemoteOp(decoded.value()));
         }
         for (const auto &wire : ops_from_2) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine1.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(engine1.applyRemoteOp(decoded.value()));
         }
 
         QCOMPARE(engine1.text(), engine2.text());
@@ -261,7 +262,7 @@ private slots:
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation &op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -270,8 +271,8 @@ private slots:
 
         for (const auto &wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine2.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(engine2.applyRemoteOp(decoded.value()));
         }
 
         QCOMPARE(engine1.text(), engine2.text());

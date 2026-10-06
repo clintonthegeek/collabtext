@@ -2195,3 +2195,38 @@ No benchmark, optimization campaign or long realistic simulation. Manifest v3
 records implemented syntax/Unicode and keeps typed/versioned codec and legacy
 file transactions explicitly unavailable. S04b remains dependency-blocked by
 unfinished P06b; W02 and S02 remain independently ready.
+
+## 2026-10-05 sprint — P06b complete: versioned native codecs
+
+Replaced interim optional/bare-JSON codecs directly with Result-returning version
+1 CTBO/CTLO/CTGV/CTGP frames; no legacy readers or compatibility wrappers. All
+integer fields use fixed-width exact hex strings, and text allocations partition
+one checked actor interval ending at the operation identity. CounterGap codecs
+own unused-interval metadata; publication and terminal integration remain P07/L02.
+One bounded JsonReader tree replaces the old duplicate parser. The writer applies
+the same byte/string/tree budgets, refusing invalid/default/moved-from values.
+
+A runtime red regression first demonstrated that optional decoding could not
+report an unsupported version. Seven independently assembled golden frames then
+matched actual engine output for every variant, sparse vectors and gaps. Cases
+cover every truncated prefix, wrong family/version/tag, strict fields, identity,
+interval arithmetic, Unicode, actor/string/frame limits and exact values above
+2^53 through UINT64_MAX-1 (UINT64_MAX application values). Historical synthetic
+fixtures were corrected to P06a's valid allocation domains; validation was not
+weakened. All codec callers use checked Results. Installed examples exercise
+both primitives, typed versions, vectors and gaps using public headers only.
+
+FileSync and StreamSync now retain a failed batch and freeze that reader before
+any application/callback/cursor commit; later records cannot pass it on the next
+poll. Typed errors and original bytes are inspectable. This is containment,
+not a certified recovered state/cursor transaction; generic stream payloads may
+remain opaque. Original operation ownership stays with a refused encoder's caller.
+
+Verification: Debug **72/72** bounded suites, **9.82 s** CTest; Release **14/14**,
+**0.38 s**; ASan/UBSan/LeakSanitizer **14/14**, **10.89 s**, leak checking active.
+Relocated installed Core package/header isolation/negative-component gates pass.
+The first new installed list case used an unsupported legacy end anchor; changed
+that codec case to a valid start insertion, with no engine semantic change.
+Logs: `/tmp/collabtext-sprint-codecs-{debug-full,package,release,asan}.log`;
+exact build/package artifacts are retained in TASKS.json. No benchmark or long
+realistic simulation ran. **Next is S04b's production positions.**

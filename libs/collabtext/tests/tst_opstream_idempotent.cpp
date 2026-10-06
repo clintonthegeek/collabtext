@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 /// tst_opstream_idempotent.cpp — Idempotent op re-delivery
 ///
 /// Proves that applying the same CRDT operation to a CrdtEngine twice leaves
@@ -54,7 +55,7 @@ private slots:
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation& op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -64,16 +65,16 @@ private slots:
         // Apply once
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine2.applyRemoteOp(decoded.value());
         }
         QCOMPARE(engine2.text(), std::string("hello"));
 
         // Apply the same ops a second time — must be a no-op
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine2.applyRemoteOp(decoded.value());
         }
         QCOMPARE(engine2.text(), std::string("hello"));
     }
@@ -89,7 +90,7 @@ private slots:
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation& op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -101,8 +102,8 @@ private slots:
         // Apply all ops in order to engine2
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine2.applyRemoteOp(decoded.value());
         }
         QCOMPARE(engine2.text(), std::string(""));
 
@@ -110,8 +111,8 @@ private slots:
         // The undo op is the last op in wire_ops
         const auto& undo_wire = wire_ops.back();
         auto decoded_undo = decode_operation(undo_wire);
-        QVERIFY(decoded_undo.has_value());
-        engine2.applyRemoteOp(*decoded_undo);
+        QVERIFY(decoded_undo.ok());
+        engine2.applyRemoteOp(decoded_undo.value());
         QCOMPARE(engine2.text(), std::string(""));
     }
 
@@ -128,7 +129,7 @@ private slots:
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation& op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -141,8 +142,8 @@ private slots:
         std::vector<Operation> decoded_ops;
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            decoded_ops.push_back(*decoded);
+            QVERIFY(decoded.ok());
+            decoded_ops.push_back(decoded.value());
         }
 
         // The insert op is at index 0, the undo op is the last one

@@ -7,7 +7,7 @@ and registry dependencies; a prose assertion does not complete a task.
 
 ## Completed work
 
-V01–V08, D01, P01–P06a, L01, S01, W01, S04a and packaging A01/A02a/A06a.
+V01–V08, D01, P01–P06b, L01, S01, W01, S04a and packaging A01/A02a/A06a.
 P06a includes the final public operation-opacity step (`01614af`, `d52dceb`),
 with immutable shared values and affected Debug/Release/leak-enabled sanitizers.
 S04a supplies a full scoped-boundary contract, implementation map, compile-checked
@@ -17,15 +17,14 @@ fixes, public token bytes, durable undo/pins and store recovery remain pending.
 
 ## Next implementation work
 
-1. **P06b:** versioned sparse operation codecs and typed failures. Today's public
-   Serialization.h still says warn-and-skip, and optional-only decoding cannot
-   distinguish unsupported versions. Reuse the bounded JsonReader; retain failed
-   input in the caller, with no advance of coverage. Review allocation/gap-record
-   obligations in vnext-identity.md §3.6 alongside the codec task.
-2. **S04b** after P06b: implement vnext-boundary-semantics.md and the checked facade
-   signatures, with the actual native fragment/entry storage. Golden bytes and
-   a fresh-process replay establish public codec evidence. Follow its expanded
-   file scope including facades/typed errors and clear-history invalidation.
+1. **P06b is complete:** checked CTBO/CTLO/CTGV/CTGP version 1 codecs, fixed-width
+   scalars, allocation/gap metadata and bounded readers/writers. Debug 72/72,
+   Release/sanitizers 14/14, installed package passes. Failures retain and block
+   decoder batches; full store recovery/gap integration remains P07/L02/L03/L08.
+2. **Continue S04b:** implement vnext-boundary-semantics.md and the checked facade
+   signatures using native fragment/entry storage. Golden bytes and a fresh-process
+   replay establish public token codec evidence. Include scoped typed failures and
+   clear-history invalidation. No backward API/format compatibility is needed.
 3. **W02/S02** are independently ready. W02 establishes installed baseline probes;
    S02 must generate S04a's supplied orders and prove stable relative order of
    already integrated retained items before S03 can change integration.

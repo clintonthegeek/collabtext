@@ -1,6 +1,6 @@
 # collabtext alpha capability manifest
 
-**Version:** 3
+**Version:** 4
 **Introduced by:** roadmap task A02a
 **Branch:** `roadmap/reliability-v2`
 **Status:** alpha. Not a supported release, and not published. E07a prepares a
@@ -25,7 +25,7 @@ documentation. A capability with no evidence is marked `not implemented`, not
 | Text: local insert/remove, read, undo/redo. Offsets are UTF-16 code units | **available** | `collabtext_alpha_consumer`, `tst_crdtengine_op_api` |
 | Structural list: insert after anchor, remove at anchor, read ids/size, undo/redo | **available** | `collabtext_alpha_consumer` |
 | Opaque immutable text/list operation values; read-only copies survive engine/callback lifetime | **available** | `tst_operation_values`, installed `consumer_main`, `tst_serialization_public` compile-time variant exclusion |
-| Interim JSON operation wire round trip (payload version not yet implemented) | **available** | `tst_serialization_public`, `tst_serialization` |
+| Checked version 1 text/list/global/counter-gap codecs: CTBO/CTLO/CTGV/CTGP frames, fixed-width hex integers, allocation interval validation | **available** | `tst_serialization_public` golden/width/shape/interval/version tests, `tst_serialization`, installed `consumer_main` |
 | Public JSON decoders reject trailing garbage, duplicate keys, invalid Unicode/escapes and bounded input overflow; valid escaped non-BMP text remains exact | **available** | `tst_serialization_public::public_decoders_reject_untrusted_json_syntax`, `escaped_non_bmp_text_preserves_the_actual_operation`, `tst_decode_validation` |
 | Per-operation outcome vocabulary (applied / duplicate / deferred / rejected) on the **list** facade | **available** | `collabtext_alpha_consumer`, `tst_operation_validation` |
 | Two peers converge over the wire codec | **available, with a known limit** | `tst_convergence`, `tst_opstream_convergence_*` — see "Ordering repair" below |
@@ -40,7 +40,7 @@ These are stated so a consumer designs around them rather than discovering them.
 
 | Capability | State | Why / who owns it |
 |---|---|---|
-| **Typed versioned operation codecs.** Interim optional decoding cannot classify unsupported versions; failures must retain original input. Legacy file-reader cursor/skip behavior remains uncertified and is not repaired merely by a stricter decoder. | **not implemented** | P06b format/typed errors and P07/L03 transactional transport/recovery remain work. |
+| **Terminal gap integration and transactional transport/recovery.** Gap codecs only validate metadata. Legacy FileSync/StreamSync retain and block a failed codec batch before cursor commit; this is containment, not recovery or durable coverage certification. | **not implemented** | P07/L02/L03/L08 own gap publication, terminal coverage, retries and recovered state/cursor transactions. |
 | **Affinity semantics.** An anchor's `Bias` is stored but **not read** by `resolve_anchor`. Left and right of the same character resolve identically. | **not implemented** | Named by the external consumer as its critical path. S04a specifies it, S04b implements it. A consumer needing it must treat every resolved offset as approximate. |
 | **Typed unresolvable anchors.** `resolve_anchor` falls back to end-of-document when an anchor names an item the engine does not have, and says nothing. | **not implemented** | The consumer's requirement R3: a silent relocation is data corruption. S05 specifies retention or a typed miss; G06/G08 own the GC interaction. `IdList::try_anchor_of` **is** typed (`unresolvable_anchor`) — the engine's item lookup is fixed, the position resolution path is not. |
 | **End-of-document position tokens.** `Anchor::end()` is an explicit past-the-end flag, not a token comparable with later-minted positions. | **not implemented** | S04b mints real scoped positions. |

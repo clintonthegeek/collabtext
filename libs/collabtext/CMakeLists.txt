@@ -41,7 +41,7 @@ add_library(collabtext_core STATIC
     src/crdt/UndoMap.cpp
     src/crdt/Buffer.cpp
     src/crdt/IdList.cpp
-    src/crdt/Serialization.cpp
+    src/codec/OperationCodec.cpp
     src/crdt/ApplyOutcome.cpp
     src/crdt/OperationValues.cpp
     src/crdt/OperationValidation.cpp

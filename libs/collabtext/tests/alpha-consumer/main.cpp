@@ -35,6 +35,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -42,6 +43,17 @@
 #include <vector>
 
 namespace {
+// Test/consumer assertion, active in Release too. Never erases a failed codec.
+template<class T> T checked_codec(CollabText::Result<T> result) {
+    if (!result.ok()) {
+        std::fprintf(stderr, "codec check failed: %.*s: %.*s\n",
+            int(CollabText::to_string(result.error().code()).size()), CollabText::to_string(result.error().code()).data(),
+            int(result.error().message().size()), result.error().message().data());
+        std::abort();
+    }
+    return std::move(result).value();
+}
+
 
 int failures = 0;
 
@@ -87,12 +99,12 @@ struct Wire {
 
     void attach_text(CollabText::CrdtEngine &engine) {
         engine.setOnLocalOp([this](const CollabText::Crdt::Operation &op) {
-            text_ops.push_back(CollabText::Crdt::encode_operation(op));
+            text_ops.push_back(checked_codec(CollabText::Crdt::encode_operation(op)));
         });
     }
     void attach_list(CollabText::IdListEngine &list) {
         list.set_on_local_op([this](const CollabText::Crdt::IdListOperation &op) {
-            list_ops.push_back(CollabText::Crdt::encode_idlist_operation(op));
+            list_ops.push_back(checked_codec(CollabText::Crdt::encode_idlist_operation(op)));
         });
     }
 };
@@ -102,18 +114,18 @@ struct Wire {
 /// outcome is a typed verdict.
 void deliver_text(const std::string &bytes, CollabText::CrdtEngine &target) {
     auto decoded = CollabText::Crdt::decode_operation(bytes);
-    check(decoded.has_value(), "an encoded text operation decodes");
+    check(decoded.ok(), "an encoded text operation decodes");
     if (!decoded) return;
-    check(CollabText::Crdt::encode_operation(*decoded) == bytes,
+    check(checked_codec(CollabText::Crdt::encode_operation(decoded.value())) == bytes,
           "a text operation survives a round trip unchanged");
-    target.applyRemoteOp(*decoded);
+    target.applyRemoteOp(decoded.value());
 }
 
 void deliver_list(const std::string &bytes, CollabText::IdListEngine &target) {
     auto decoded = CollabText::Crdt::decode_idlist_operation(bytes);
-    check(decoded.has_value(), "an encoded list operation decodes");
+    check(decoded.ok(), "an encoded list operation decodes");
     if (!decoded) return;
-    const auto outcomes = target.apply_ops({*decoded});
+    const auto outcomes = target.apply_ops({decoded.value()});
     check(outcomes.size() == size_t(1), "one operation produces one outcome");
     if (outcomes.empty()) return;
     check(outcomes.front().kind() == CollabText::ApplyOutcomeKind::applied,
@@ -159,7 +171,7 @@ int main() {
 
     // A duplicate is reported as a duplicate, not applied twice.
     if (!alice_wire.text_ops.empty()) {
-        bob.applyRemoteOp(*Crdt::decode_operation(alice_wire.text_ops.front()));
+        bob.applyRemoteOp(checked_codec(Crdt::decode_operation(alice_wire.text_ops.front())));
         check(bob.text() == alice.text(), "a re-delivered operation is idempotent");
     }
 
@@ -221,7 +233,7 @@ int main() {
     if (!list_wire_a.list_ops.empty()) {
         auto decoded = Crdt::decode_idlist_operation(list_wire_a.list_ops.front());
         if (decoded) {
-            const auto outcomes = list_b.apply_ops({*decoded});
+            const auto outcomes = list_b.apply_ops({decoded.value()});
             check(outcomes.size() == size_t(1), "a re-delivery reports one outcome");
             if (!outcomes.empty())
                 check(outcomes.front().kind() == ApplyOutcomeKind::duplicate,

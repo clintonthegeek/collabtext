@@ -141,13 +141,16 @@ retain the same operation independently. Copying shares `const` storage instead
 of granting write access or requiring a new clone protocol throughout the working
 engine. This is an implementation choice within the authorized fresh API, not a
 relaxation of operation immutability. No encoded-byte cache is added here; the
-existing codec remains the encoder/decoder, pending P06b's version/error work.
+versioned codecs return checked owned bytes/values; no byte cache is added.
 
 ```cpp
 Crdt::Operation retained = received; // read-only shared ownership
 Crdt::Identity id = Crdt::op_identity(retained);
-std::string bytes = Crdt::encode_operation(retained);
+auto encoded = Crdt::encode_operation(retained);
+if (!encoded.ok()) return encoded.error(); // owner keeps retained operation
+const std::string& bytes = encoded.value();
 auto decoded = Crdt::decode_operation(bytes);
+if (!decoded.ok()) return decoded.error(); // keep original bytes; no cursor commit
 ```
 
 The list uses `idlist_op_identity`, `encode_idlist_operation` and
@@ -156,9 +159,12 @@ identity and are rejected before mutation. Public callers cannot construct a
 payload or access a variant alternative; construction comes from engine output
 or decoding. Identity/counter remain the narrow existing accessor contract.
 P07 adds the document/stream/epoch envelope; opacity alone does not create that
-context. P06b still owes distinguishable version errors and canonical codecs;
-retain rejected bytes rather than interpreting a decode failure as permission
-to discard an event-log record.
+context. Version 1 codecs use CTBO/CTLO/CTGV/CTGP frames and exact-width hex
+integers, with distinguishable format/version/schema errors. See
+[vnext-operation-codec.md](vnext-operation-codec.md) for mandatory schemas,
+bounds and allocated intervals. `CounterGap` is owned terminal interval metadata,
+not an operation or proof of publication. P07/L02 integrate gaps. Keep rejected
+bytes; failure never grants permission to discard an event-log record.
 
 ## 4. Decode and store errors
 

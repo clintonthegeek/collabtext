@@ -110,8 +110,30 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
         if (peer == m_replica_name) continue;
         auto peer_stream_dir = dir_entry.path() / "log" / "streams" / name;
         if (!fs::exists(peer_stream_dir)) continue;
+        if (s.blocked.contains(peer)) continue;
         auto& reader = reader_for_(s, name, peer);
         auto records = reader.read_new();
+        // Validate this batch before callbacks/merged state can see any entry.
+        // Generic streams may carry arbitrary opaque payloads. Only recognized
+        // operation families are interpreted here; P07 supplies stream binding.
+        for (const auto& record : records) {
+            auto entry = decode_stream_entry(record);
+            Error error;
+            if (!entry) error = Error(ErrorCode::corrupt_record, "invalid stream entry");
+            else if (entry->payload.starts_with("CTBO")) {
+                auto op = decode_operation(entry->payload);
+                if (!op.ok()) error = op.error();
+            } else if (entry->payload.starts_with("CTLO")) {
+                auto op = decode_idlist_operation(entry->payload);
+                if (!op.ok()) error = op.error();
+            }
+            if (error) {
+                m_last_error = error.with_context("StreamSync " + name + " peer " + peer);
+                s.blocked.emplace(peer, std::move(records));
+                break;
+            }
+        }
+        if (s.blocked.contains(peer)) continue;
         for (auto& r : records) {
             auto e = decode_stream_entry(r);
             if (!e) continue;
@@ -120,7 +142,7 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
                     ++count;
                     if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
                     if (auto op = decode_operation(e->payload)) {
-                        uint64_t lc = op_identity(*op).counter;
+                        uint64_t lc = op_identity(op.value()).counter;
                         auto& ack = m_ack_state[e->replica_id];
                         if (lc > ack.max_lamport) {
                             ack.max_lamport = lc;
@@ -135,7 +157,7 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
                     ++count;
                     if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
                     if (auto op = decode_operation(e->payload)) {
-                        uint64_t lc = op_identity(*op).counter;
+                        uint64_t lc = op_identity(op.value()).counter;
                         auto& ack = m_ack_state[e->replica_id];
                         if (lc > ack.max_lamport) {
                             ack.max_lamport = lc;
@@ -147,7 +169,7 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
                     ++count;
                     if (m_on_inbound) m_on_inbound(name, e->replica_id, e->payload);
                     if (auto op = decode_operation(e->payload)) {
-                        uint64_t lc = op_identity(*op).counter;
+                        uint64_t lc = op_identity(op.value()).counter;
                         auto& ack = m_ack_state[e->replica_id];
                         if (lc > ack.max_lamport) {
                             ack.max_lamport = lc;
@@ -160,6 +182,15 @@ size_t StreamSync::read_remote_stream_(const std::string& name, StreamState& s) 
         reader.commit();
     }
     return count;
+}
+
+const std::vector<std::string>& StreamSync::blocked_records(const std::string& stream,
+                                                           const std::string& peer) const {
+    static const std::vector<std::string> empty;
+    auto s = m_streams.find(stream);
+    if (s == m_streams.end()) return empty;
+    auto batch = s->second.blocked.find(peer);
+    return batch == s->second.blocked.end() ? empty : batch->second;
 }
 
 std::vector<StreamEntry> StreamSync::entries(const std::string& stream) const {

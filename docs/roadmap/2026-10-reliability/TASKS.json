@@ -1533,7 +1533,7 @@
     "libs/collabtext/src/crdt/FileSync.cpp",
     "libs/collabtext/src/crdt/FileSync.h",
     "libs/collabtext/src/crdt/StreamSync.cpp",
-    "libs/collabtext/src/crdt/StreamSync.h"
+    "libs/collabtext/src/transport/StreamSync.h"
    ],
    "steps": [
     "Encode canonical sparse actor/counter vectors and an explicit payload version. The actor set is what the wire size must depend on, never the magnitude of the identity values.",
@@ -1555,17 +1555,22 @@
     "R13"
    ],
    "gate": null,
-   "status": "in_progress",
+   "status": "complete",
    "split_rationale": "Remaining half of P06 after P06a. See P06a.split_rationale.",
    "baseline_revision": "fa3e11a",
-   "progress": "Bounded public JSON syntax and Unicode-string decoding repair accepted. Public failures still return optional, payloads are unversioned, allocation/gap codecs are not implemented. Continue vnext-operation-codec.md; do not mark P06b complete or unlock S04b yet.",
+   "progress": "Complete: Result APIs and CTBO/CTLO/CTGV/CTGP version 1 codecs replace the interim parser; allocation/gap metadata, exact-width scalars, bounded Unicode/schema readers, public golden cases and installed consumers pass. S04b is unlocked. P07/L02/L03/L08 still own scoped envelopes, gap publication, transactions and recovery.",
    "verification_results": {
     "strict_syntax_regression": "Baseline public decoder accepted an actual emitted operation followed by garbage; new public test failed at the intended assertion before the repair (20261005T234223Z-changed-0cpids58).",
     "unicode_regression": "After syntax repair, valid escaped non-BMP input decoded into CESU-8 surrogate bytes; new actual-operation canonicalization assertion failed (20261005T234448Z-changed-i3j_x1fw). Reusing bounded JsonReader string decoding repairs it without a new Unicode parser.",
     "debug": "72/72 bounded CTest suites plus installed relocated Core consumer and package/isolation/negative-component checks pass. 81.572 s whole warm run, 9.36 s selected tests (20261005T234608Z-changed-okhhf9il); no benchmarks or long realistic simulation.",
     "release": "7/7 codec/public/value lifetime/validation/Buffer+IdList convergence suites pass, 0.67 s tests, 66.765 s whole rebuild/check (20261005T234609Z-changed-ol6vuyw_).",
     "asan": "Same seven already-built suites pass with ASan/UBSan/LSan and leak checking enabled outside process-inspection restriction; 11.75 s tests, no suppressions. /tmp/collabtext-codec-preflight-asan.log",
-    "api": "No signature/wire layout change in this partial repair. Manifest version 3 records stricter syntax and escaped Unicode, correctly calls current payloads unversioned, and keeps typed codecs/legacy file transactions unavailable."
+    "api": "No signature/wire layout change in this partial repair. Manifest version 3 records stricter syntax and escaped Unicode, correctly calls current payloads unversioned, and keeps typed codecs/legacy file transactions unavailable.",
+    "typed_version_red": "Old optional API failed unsupported_version_has_a_typed_verdict at the intended runtime assertion: build-roadmap-debug/verification/20261006T001802Z-changed-s6204n7p.",
+    "versioned_debug": "72/72 bounded Debug suites passed in 9.82 s. The initial installed consumer failed because its new codec case tried the legacy unsupported Anchor::end insertion path; corrected the case to the supported Anchor::min insertion without changing engine semantics. Relocated installed Core consumer, all standalone headers, dependency isolation and negative component gate then passed.",
+    "versioned_release": "14/14 codec, transport containment, value lifetime, both convergence families, operation stream replay/idempotence/acks suites passed in 0.38 s; 132.296 s warm compilation/check.",
+    "versioned_asan": "Same 14/14 already-built suites passed with ASan/UBSan/LeakSanitizer, 10.89 s, outside sandbox process-inspection restriction. No suppressions or disabled leaks.",
+    "versioned_api": "Installed manifest v4; no old-format decoder or optional wrapper. Seven independently schema-assembled golden frames compared with actual public engine operations; sparse/gap extremes round-trip. Rejected decoder batches remain owned and block further reads/commits; generic non-operation stream payloads remain allowed. Terminal gap integration and store transaction/recovery remain uncertified."
    },
    "artifacts": [
     "docs/specs/vnext-operation-codec.md",
@@ -1575,7 +1580,16 @@
     "build-consumer-verify/debug-package-20261005T234720Z-2107",
     "build-roadmap-release/verification/20261005T234609Z-changed-ol6vuyw_",
     "/tmp/collabtext-codec-preflight-asan-build.log",
-    "/tmp/collabtext-codec-preflight-asan.log"
+    "/tmp/collabtext-codec-preflight-asan.log",
+    "libs/collabtext/tests/fixtures/operation-codec/",
+    "build-roadmap-debug/verification/20261006T001802Z-changed-s6204n7p",
+    "build-roadmap-debug/verification/20261006T002803Z-changed-fjcqum2e",
+    "build-consumer-verify/debug-package-20261006T003004Z-2",
+    "build-roadmap-release/verification/20261006T002902Z-changed-7tdy0imj",
+    "/tmp/collabtext-sprint-codecs-debug-full.log",
+    "/tmp/collabtext-sprint-codecs-package.log",
+    "/tmp/collabtext-sprint-codecs-release.log",
+    "/tmp/collabtext-sprint-codecs-asan.log"
    ],
    "implementation_commits": [
     "3b19e2205b4fadcceb444066571ac8615a13dbe3"

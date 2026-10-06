@@ -1,8 +1,8 @@
 # P06b operation codec implementation contract
 
-Status: implementation plan. The bounded-syntax/string-decoding repair has
-landed separately; the wire format below is not implemented or a supported
-persisted format yet. Finish it before marking P06b complete or starting S04b.
+Status: native version 1 implementation. P06b acceptance is recorded in the
+roadmap registry after public and installed-consumer verification. No alpha
+has been published; this format is not a published compatibility commitment.
 No migration/legacy reader is required. Reuse the existing native payload builders
 and bounded JsonReader, not another CRDT engine.
 

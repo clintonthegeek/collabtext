@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 #include <QTest>
 
 #include <QTemporaryDir>
@@ -47,7 +48,7 @@ void TestOpStreamAcks::acks_json_written_after_poll() {
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
+        payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport) max_lamport = lc;
     });
@@ -105,7 +106,7 @@ void TestOpStreamAcks::acks_json_monotone_across_restarts() {
         CrdtEngine engine1(CollabText::Test::test_counter(1));
         std::vector<std::string> payloads;
         engine1.setOnLocalOp([&](const Operation& op) {
-            payloads.push_back(encode_operation(op));
+            payloads.push_back(checked_codec(encode_operation(op)));
             uint64_t lc = op_identity(op).counter;
             if (lc > max_lamport_session1) max_lamport_session1 = lc;
         });
@@ -151,7 +152,7 @@ void TestOpStreamAcks::acks_json_monotone_across_restarts() {
         uint64_t max_lamport_session2 = 0;
         std::vector<std::string> payloads;
         engine_new.setOnLocalOp([&](const Operation& op) {
-            payloads.push_back(encode_operation(op));
+            payloads.push_back(checked_codec(encode_operation(op)));
             uint64_t lc = op_identity(op).counter;
             if (lc > max_lamport_session2) max_lamport_session2 = lc;
         });
@@ -205,7 +206,7 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_returns_min_across_peers() {
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
+        payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport) max_lamport = lc;
     });
@@ -255,7 +256,7 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_callback_fires_on_advance() {
     std::vector<std::string> payloads;
     uint64_t max_lamport_1 = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
+        payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport_1) max_lamport_1 = lc;
     });
@@ -282,7 +283,7 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_callback_fires_on_advance() {
     payloads.clear();
     uint64_t max_lamport_2 = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
+        payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport_2) max_lamport_2 = lc;
     });
@@ -327,7 +328,7 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_bounded_by_lagging_peer() {
     uint64_t batch1_max = 0;
 
     engine1.setOnLocalOp([&](const Operation& op) {
-        batch1_payloads.push_back(encode_operation(op));
+        batch1_payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > batch1_max) batch1_max = lc;
     });
@@ -352,7 +353,7 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_bounded_by_lagging_peer() {
     uint64_t batch2_max = 0;
 
     engine1.setOnLocalOp([&](const Operation& op) {
-        batch2_payloads.push_back(encode_operation(op));
+        batch2_payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > batch2_max) batch2_max = lc;
     });
@@ -415,7 +416,7 @@ void TestOpStreamAcks::silent_peer_never_writes_acks_fence_stays_zero() {
     CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
+        payloads.push_back(checked_codec(encode_operation(op)));
     });
 
     for (int i = 0; i < 5; ++i) {
@@ -465,7 +466,7 @@ void TestOpStreamAcks::peer_acks_file_deleted_fence_persists() {
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
+        payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport) max_lamport = lc;
     });
@@ -531,7 +532,7 @@ void TestOpStreamAcks::peer_reconnects_fence_advances() {
     // Batch 1: 3 inserts — R2 does not poll.
     std::vector<std::string> batch1_payloads;
     engine1.setOnLocalOp([&](const Operation& op) {
-        batch1_payloads.push_back(encode_operation(op));
+        batch1_payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > batch1_max) batch1_max = lc;
     });
@@ -555,7 +556,7 @@ void TestOpStreamAcks::peer_reconnects_fence_advances() {
     std::vector<std::string> batch2_payloads;
     uint64_t batch2_max = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        batch2_payloads.push_back(encode_operation(op));
+        batch2_payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > batch2_max) batch2_max = lc;
     });
@@ -615,7 +616,7 @@ void TestOpStreamAcks::three_peer_partition_totally_silent_peer_excluded() {
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
+        payloads.push_back(checked_codec(encode_operation(op)));
         uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport) max_lamport = lc;
     });

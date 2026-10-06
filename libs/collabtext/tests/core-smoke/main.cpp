@@ -24,11 +24,23 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace {
+// Test/consumer assertion, active in Release too. Never erases a failed codec.
+template<class T> T checked_codec(CollabText::Result<T> result) {
+    if (!result.ok()) {
+        std::fprintf(stderr, "codec check failed: %.*s: %.*s\n",
+            int(CollabText::to_string(result.error().code()).size()), CollabText::to_string(result.error().code()).data(),
+            int(result.error().message().size()), result.error().message().data());
+        std::abort();
+    }
+    return std::move(result).value();
+}
+
 
 int failures = 0;
 
@@ -86,10 +98,10 @@ int main() {
 
     std::vector<std::string> wire;
     a.setOnLocalOp([&](const Crdt::Operation &op) {
-        wire.push_back(Crdt::encode_operation(op));
+        wire.push_back(checked_codec(Crdt::encode_operation(op)));
     });
     b.setOnLocalOp([&](const Crdt::Operation &op) {
-        wire.push_back(Crdt::encode_operation(op));
+        wire.push_back(checked_codec(Crdt::encode_operation(op)));
     });
 
     a.insert(0, "hello ");
@@ -98,12 +110,12 @@ int main() {
 
     for (const std::string &bytes : wire) {
         auto decoded = Crdt::decode_operation(bytes);
-        check(decoded.has_value(), "an encoded operation decodes");
+        check(decoded.ok(), "an encoded operation decodes");
         if (!decoded) continue;
-        check(Crdt::encode_operation(*decoded) == bytes,
+        check(checked_codec(Crdt::encode_operation(decoded.value())) == bytes,
               "an operation survives encode/decode unchanged");
-        a.applyRemoteOp(*decoded);
-        b.applyRemoteOp(*decoded);
+        a.applyRemoteOp(decoded.value());
+        b.applyRemoteOp(decoded.value());
     }
 
     check(a.text() == b.text(), "two engines converge after exchange");

@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 #include <QTest>
 #include "crdt/Buffer.h"
 #include "crdt/IdList.h"
@@ -23,11 +24,11 @@ private slots:
         auto builder = operation_get<EditOperation>(original);
         Operation frozen{builder};
         Operation peer_copy = frozen;
-        const auto wire = encode_operation(frozen);
+        const auto wire = checked_codec(encode_operation(frozen));
         builder.inserted_fragments[0].content = "BAD";
         builder.timestamp.counter = 999;
-        QCOMPARE(encode_operation(frozen), wire);
-        QCOMPARE(encode_operation(peer_copy), wire);
+        QCOMPARE(checked_codec(encode_operation(frozen)), wire);
+        QCOMPARE(checked_codec(encode_operation(peer_copy)), wire);
         Buffer receiver(Test::test_counter(2));
         QCOMPARE(receiver.apply_ops({peer_copy})[0].kind(), ApplyOutcomeKind::applied);
         QCOMPARE(receiver.text(), std::string("hello"));
@@ -38,11 +39,11 @@ private slots:
         auto builder = operation_get<IdListInsertOp>(original);
         IdListOperation frozen{builder};
         IdListOperation peer_copy = frozen;
-        const auto wire = encode_idlist_operation(frozen);
+        const auto wire = checked_codec(encode_idlist_operation(frozen));
         builder.id = 777;
         builder.timestamp.counter = 999;
-        QCOMPARE(encode_idlist_operation(frozen), wire);
-        QCOMPARE(encode_idlist_operation(peer_copy), wire);
+        QCOMPARE(checked_codec(encode_idlist_operation(frozen)), wire);
+        QCOMPARE(checked_codec(encode_idlist_operation(peer_copy)), wire);
         IdList receiver(Test::test_counter(2));
         QCOMPARE(receiver.apply_ops({peer_copy})[0].kind(), ApplyOutcomeKind::applied);
         QCOMPARE(receiver.ids(), std::vector<uint64_t>{42});
@@ -85,10 +86,10 @@ private slots:
         {
             Buffer source(Test::test_counter(1));
             auto op = source.apply_local_edit({{0, 0}}, {"\xce\xb1\xf0\x9f\x98\x80"});
-            auto wire = encode_operation(op);
+            auto wire = checked_codec(encode_operation(op));
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            retained = *decoded;
+            QVERIFY(decoded.ok());
+            retained = decoded.value();
             wire.assign(wire.size(), '!');
         }
         Buffer receiver(Test::test_counter(2));

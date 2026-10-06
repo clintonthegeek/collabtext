@@ -15,6 +15,7 @@
 #pragma once
 
 #include <collabtext/OpStream.h>
+#include <collabtext/ActorId.h>
 #include <crdt/SegmentReader.h>
 #include <crdt/SegmentWriter.h>
 
@@ -22,6 +23,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -57,6 +59,12 @@ public:
 
     size_t poll();
 
+    const std::optional<Error>& last_error() const { return m_last_error; }
+    /// Codec failures retain the entire uncommitted batch and freeze its reader.
+    /// P07/L03 replace this containment with transactional retry/recovery.
+    const std::vector<std::string>& blocked_records(const std::string& stream,
+                                                   const std::string& peer) const;
+
     /// Force-fsync all open tails. Used by save/shutdown paths.
     void flush();
 
@@ -81,6 +89,7 @@ private:
         std::unique_ptr<SegmentWriter> writer;
         std::unordered_map<std::string, std::unique_ptr<SegmentReader>> readers;
         std::unordered_map<std::string, StreamEntry> merged;
+        std::unordered_map<std::string, std::vector<std::string>> blocked;
         uint64_t next_seq = 1;
     };
 
@@ -109,6 +118,7 @@ private:
     std::unordered_map<uint16_t, AckState> m_ack_state;  // peer replica_id → state
     uint64_t m_cached_fence = 0;
     bool m_started = false;
+    std::optional<Error> m_last_error;
 };
 
 } // namespace CollabText::Crdt

@@ -83,13 +83,22 @@ carry the external persisted-data contract in W1/W3; versioning does not cancel 
 
 | Artifact | Identifier | Baseline version | Notes |
 |---|---|---|---|
-| Operation payload (Buffer) | `"collabtext.buffer-op"` | 1 | Text edits and undo variants |
-| Operation payload (IdList) | `"collabtext.idlist-op"` | 1 | Structural ops |
+| Operation payload (Buffer) | `CTBO` (`collabtext.buffer-op`) | 1 | Implemented text edits and undo variants |
+| Operation payload (IdList) | `CTLO` (`collabtext.idlist-op`) | 1 | Implemented structural ops |
+| Sparse causal vector | `CTGV` (`collabtext.global`) | 1 | Implemented exact sparse actor/head codec |
+| Terminal unused interval | `CTGP` (`collabtext.counter-gap`) | 1 | Codec only; P07/L02 own integration/publication |
 | Stream envelope | `"collabtext.envelope"` | 1 | Wraps context + payload + codec version |
 | Store manifest | `"collabtext.manifest"` | 1 | Document/stream inventory + membership |
 | Segment file | `"collabtext.segment"` | 1 | Sealed segment and open tail |
 | Checkpoint | `"collabtext.checkpoint"` | 1 | Covered prefix + snapshot reference |
 | Ack record | `"collabtext.ack"` | 1 | Per-stream receipt watermark |
+
+Operation/global/gap frames use the fixed nine-byte ASCII header `MAGC0001:`
+and bounded JSON. All unsigned integer payload fields are sixteen lowercase hex
+digits in strings; actors are 32 lowercase hex digits. No numeric conversion via
+double is permitted. [The operation codec contract](vnext-operation-codec.md)
+defines the exact supported fields, intervals and error classification. A codec
+success does not certify a stream envelope, state applicability or durable coverage.
 
 Rules:
 

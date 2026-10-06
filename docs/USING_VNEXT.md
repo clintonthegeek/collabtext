@@ -55,27 +55,34 @@ add_executable(my_consumer main.cpp)
 target_link_libraries(my_consumer PRIVATE CollabText::Core)
 ```
 
-`main.cpp`:
+The [installed consumer](../tests/consumer-smoke/main.cpp) is a complete working
+example of allocator construction, text/list editing and checked operation
+exchange. It uses an explicitly volatile allocator for a single-process smoke
+check. Production callers supply a `Crdt::IdentityAllocator` that persists
+reservations before returning them; the Core package does not supply a complete
+recovered document session yet.
+
+The operation exchange uses the checked public codecs:
 
 ```cpp
-#include <collabtext/CrdtEngine.h>
-#include <collabtext/IdListEngine.h>
-#include <collabtext/Operations.h>
+#include <collabtext/Serialization.h>
 
-int main() {
-    collabtext::Identity allocator{"my-app"};   // persisted by you, once
-    collabtext::CrdtEngine text{allocator};
-    collabtext::IdListEngine list{allocator};
-
-    text.insert(0, u"hello");
-    const auto op = text.localOperation();      // observe, then ship it
-    list.insert_after(list.end(), "item");
-
-    text.undo();
-    text.redo();
-    return text.length() == 5 ? 0 : 1;
+CollabText::Result<CollabText::Crdt::Operation>
+read_operation(std::string_view retained_record) {
+    auto decoded = CollabText::Crdt::decode_operation(retained_record);
+    if (!decoded.ok()) return decoded.error();
+    return std::move(decoded).value();
 }
 ```
+
+Encoding also returns `Result<std::string>`: check `ok()` before `value()`.
+Keep the original operation if encoding fails and the original record if decoding
+fails. A failure does not permit committing a reader cursor or advancing coverage.
+The wire is `CTBO0001:` / `CTLO0001:` plus bounded JSON; `CTGV` encodes sparse
+vectors and `CTGP` encodes terminal unused intervals. Every integer is an exact
+sixteen-digit hex string. Old bare JSON is refused with `unknown_format`; a newer
+version returns `unsupported_version`. Gap decoding does not publish the gap or
+advance coverage. See [the codec contract](specs/vnext-operation-codec.md).
 
 Ask for components you were given:
 
@@ -114,8 +121,8 @@ three build modes. Read its `--help`.
 - **An identity is unique within one (document, stream).** The same counter in two
   streams is two unrelated facts. Do not mint identifiers from your own string
   ids and assume they are globally unique.
-- **You supply the allocator.** `Identity` is the borrowed allocator; it does not
-  persist anything. Persist the 128-bit actor and the 64-bit counter before you
+- **You supply the allocator.** Engines retain a shared `Crdt::IdentityAllocator`;
+  the interface itself does not persist anything. Persist the 128-bit actor and the 64-bit counter before you
   use an operation, or you will reissue identities after a restart.
 - **Do not store `Anchor` or `Locator` in an external log.** Their layout is
   reserved for evolution, and there is no supported token encoding yet. Storing

@@ -1,6 +1,8 @@
 #include <QTest>
 #include <QTemporaryDir>
 #include "crdt/FileSync.h"
+#include "crdt/Serialization.h"
+#include "CodecTest.h"
 #include "TestActor.h"
 
 using CollabText::Test::actor;
@@ -20,6 +22,43 @@ size_t count_dir_entries(const fs::path& dir) {
 class TestFileSync : public QObject {
     Q_OBJECT
 private slots:
+    void failed_decode_retains_batch_and_blocks_later_records() {
+        QTemporaryDir tmp;
+        fs::path shared = tmp.path().toStdString();
+        Buffer source(CollabText::Test::test_counter(1)), target(CollabText::Test::test_counter(2));
+        FileSync receiver(target, shared, "receiver");
+        receiver.start();
+        SegmentWriter writer(shared / "replicas" / "sender" / "log" / "ops", SegmentKind::Ops);
+        writer.start();
+        const std::string unsupported = "CTBO0002:{}";
+        auto first = source.apply_local_edit({{0, 0}}, {"a"});
+        writer.append(checked_codec(encode_operation(first)), op_identity(first).counter);
+        writer.append(unsupported, 3);
+        writer.flush();
+        QCOMPARE(receiver.poll(), size_t(0));
+        QVERIFY(target.text().empty());
+        QVERIFY(receiver.last_error().has_value());
+        QCOMPARE(receiver.last_error()->code(), CollabText::ErrorCode::unsupported_version);
+        QCOMPARE(receiver.blocked_records().at("sender").size(), size_t(2));
+        QCOMPARE(receiver.blocked_records().at("sender")[1], unsupported);
+        auto later = source.apply_local_edit({{1, 1}}, {"b"});
+        writer.append(checked_codec(encode_operation(later)), op_identity(later).counter);
+        writer.flush();
+        QCOMPARE(receiver.poll(), size_t(0));
+        QVERIFY(target.text().empty());
+        const auto cursor = shared / "local" / "receiver" / "read-cursors" / "ops" / "sender.bin";
+        QVERIFY(!fs::exists(cursor));
+    }
+    void encoder_refusal_is_reported_to_local_owner() {
+        QTemporaryDir tmp;
+        Buffer target(CollabText::Test::test_counter(2));
+        FileSync sync(target, tmp.path().toStdString(), "receiver");
+        sync.start();
+        auto result = sync.push_local_op(Operation{});
+        QVERIFY(!result.ok());
+        QCOMPARE(result.error().code(), CollabText::ErrorCode::invalid_identity);
+        QVERIFY(sync.last_error().has_value());
+    }
     void start_creates_directory_structure() {
         QTemporaryDir tmp;
         fs::path shared = tmp.path().toStdString();
@@ -38,7 +77,7 @@ private slots:
         FileSync sync(buf, shared, "r");
         sync.start();
         auto op = buf.apply_local_edit({{0, 0}}, {"hello"});
-        sync.push_local_op(op);
+        QVERIFY(sync.push_local_op(op).ok());
         sync.poll();
         sync.flush();
         QVERIFY(!fs::exists(shared / "replicas" / "r" / "sequences.json"));
@@ -52,7 +91,7 @@ private slots:
         FileSync sync(buf, shared, "r");
         sync.start();
         auto op = buf.apply_local_edit({{0, 0}}, {"hello"});
-        sync.push_local_op(op);
+        QVERIFY(sync.push_local_op(op).ok());
         sync.poll();
         sync.flush();
         auto log_ops = shared / "replicas" / "r" / "log" / "ops";
@@ -74,7 +113,7 @@ private slots:
         FileSync syncB(bufB, shared, "B");
         syncA.start(); syncB.start();
         auto opA = bufA.apply_local_edit({{0, 0}}, {"hello"});
-        syncA.push_local_op(opA);
+        QVERIFY(syncA.push_local_op(opA).ok());
         syncA.poll(); syncA.flush();
         size_t applied = syncB.poll();
         QVERIFY(applied > 0);
@@ -90,14 +129,14 @@ private slots:
         syncA.start(); syncB.start();
 
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
-        syncA.push_local_op(op1);
+        QVERIFY(syncA.push_local_op(op1).ok());
         syncA.poll(); syncA.flush();
 
         syncB.poll();
         QCOMPARE(bufB.text(), std::string("hello"));
 
         auto op2 = bufB.apply_local_edit({{5, 5}}, {" world"});
-        syncB.push_local_op(op2);
+        QVERIFY(syncB.push_local_op(op2).ok());
         syncB.poll(); syncB.flush();
 
         syncA.poll();
@@ -113,7 +152,7 @@ private slots:
         std::string text = "the quick brown fox";
         for (size_t i = 0; i < text.size(); ++i) {
             auto op = buf.apply_local_edit({{i, i}}, {std::string(1, text[i])});
-            sync.push_local_op(op);
+            QVERIFY(sync.push_local_op(op).ok());
             sync.poll();
         }
         sync.flush();

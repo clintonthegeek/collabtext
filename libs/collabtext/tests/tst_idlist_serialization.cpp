@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 #include "crdt/OperationPayload.h"
 #include <QTest>
 #include "crdt/IdList.h"
@@ -15,19 +16,19 @@ private slots:
     void insert_op_round_trip() {
         IdList list(CollabText::Test::test_counter(1));
         auto op = list.insert_after(Anchor::min(), 0xDEADBEEF);
-        std::string encoded = encode_idlist_operation(op);
+        std::string encoded = checked_codec(encode_idlist_operation(op));
         auto decoded = decode_idlist_operation(encoded);
-        QVERIFY(decoded.has_value());
-        QVERIFY(operation_holds<IdListInsertOp>(*decoded));
-        const auto& d = operation_get<IdListInsertOp>(*decoded);
+        QVERIFY(decoded.ok());
+        QVERIFY(operation_holds<IdListInsertOp>(decoded.value()));
+        const auto& d = operation_get<IdListInsertOp>(decoded.value());
         QCOMPARE(d.id, quint64(0xDEADBEEF));
     }
 
     // β8.2
     void malformed_json_returns_nullopt() {
-        QVERIFY(!decode_idlist_operation("not json").has_value());
-        QVERIFY(!decode_idlist_operation("{").has_value());
-        QVERIFY(!decode_idlist_operation(R"({"t":"unknown"})").has_value());
+        QVERIFY(!decode_idlist_operation("not json").ok());
+        QVERIFY(!decode_idlist_operation("{").ok());
+        QVERIFY(!decode_idlist_operation(R"({"t":"unknown"})").ok());
     }
 
     // β8.4
@@ -35,10 +36,10 @@ private slots:
         IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         auto op = list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
-        auto encoded = encode_idlist_operation(op);
+        auto encoded = checked_codec(encode_idlist_operation(op));
         auto decoded = decode_idlist_operation(encoded);
-        QVERIFY(decoded.has_value());
-        QVERIFY(operation_holds<IdListRemoveOp>(*decoded));
+        QVERIFY(decoded.ok());
+        QVERIFY(operation_holds<IdListRemoveOp>(decoded.value()));
     }
 
     void undo_op_round_trip() {
@@ -46,17 +47,17 @@ private slots:
         list.insert_after(Anchor::min(), 0xAA);
         auto undo = list.undo();
         QVERIFY(undo.has_value());
-        auto encoded = encode_idlist_operation(*undo);
+        auto encoded = checked_codec(encode_idlist_operation(*undo));
         auto decoded = decode_idlist_operation(encoded);
-        QVERIFY(decoded.has_value());
-        QVERIFY(operation_holds<IdListUndoOpVariant>(*decoded));
+        QVERIFY(decoded.ok());
+        QVERIFY(operation_holds<IdListUndoOpVariant>(decoded.value()));
     }
 
     // β8.5 — Buffer ops still parse after schema bump
     void buffer_op_decode_still_works() {
         // encode_operation / decode_operation are for Buffer ops and must be unaffected
         // Just verify the decode functions are distinct and both callable.
-        QVERIFY(!decode_idlist_operation("{}").has_value());  // empty obj has no "t" key
+        QVERIFY(!decode_idlist_operation("{}").ok());  // empty obj has no "t" key
     }
 };
 

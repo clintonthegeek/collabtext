@@ -38,12 +38,15 @@ void FileSync::start() {
     m_started = true;
 }
 
-void FileSync::push_local_op(const Operation& op) {
-    if (!m_writer) return;
+Result<void> FileSync::push_local_op(const Operation& op) {
+    if (!m_writer) return Error(ErrorCode::io_error, "FileSync is not started");
     Identity ts;
     if (auto* e = operation_get_if<EditOperation>(&op))      ts = e->timestamp;
     else if (auto* u = operation_get_if<UndoOperation>(&op)) ts = u->timestamp;
-    m_writer->append(encode_operation(op), ts.counter);
+    auto wire = encode_operation(op);
+    if (!wire.ok()) { m_last_error = wire.error(); return wire.error(); }
+    m_writer->append(wire.value(), ts.counter);
+    return {};
 }
 
 void FileSync::flush() {
@@ -77,6 +80,7 @@ size_t FileSync::poll() {
         if (!entry.is_directory()) continue;
         std::string peer = entry.path().filename().string();
         if (peer == m_replica_name) continue;
+        if (m_blocked_records.contains(peer)) continue;
 
         auto& reader = reader_for_(peer);
         auto records = reader.read_new();
@@ -86,8 +90,14 @@ size_t FileSync::poll() {
         ops.reserve(records.size());
         for (auto& r : records) {
             auto op = decode_operation(r);
-            if (op) ops.push_back(std::move(*op));
+            if (!op.ok()) {
+                m_last_error = op.error().with_context("FileSync peer " + peer);
+                m_blocked_records.emplace(peer, std::move(records));
+                break;
+            }
+            ops.push_back(std::move(op).value());
         }
+        if (m_blocked_records.contains(peer)) continue;
         if (!ops.empty()) {
             m_buffer.apply_ops(ops);
             total_applied += ops.size();

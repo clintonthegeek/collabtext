@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 /// tst_opstream_convergence_buffer.cpp — Two-replica Buffer convergence over OpStream
 ///
 /// Proves that two CrdtEngines wired through StreamSync (via the OpStream interface)
@@ -58,12 +59,12 @@ private slots:
 
         // Wire engine1 → op1 (outbound)
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buf:doc", encode_operation(op));
+            op1->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         // Wire engine2 → op2 (outbound)
         engine2.setOnLocalOp([&](const Operation& op) {
-            op2->push("buf:doc", encode_operation(op));
+            op2->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         // Wire op1 inbound → engine1 (skip own-replica ops)
@@ -71,8 +72,8 @@ private slots:
                                 const std::string& payload) {
             if (replica_id == 1) return;  // don't apply own ops
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine1.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine1.applyRemoteOp(decoded.value());
         });
 
         // Wire op2 inbound → engine2 (skip own-replica ops)
@@ -80,8 +81,8 @@ private slots:
                                 const std::string& payload) {
             if (replica_id == 2) return;  // don't apply own ops
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine2.applyRemoteOp(decoded.value());
         });
 
         // Step 1: engine1 inserts "hello " at position 0
@@ -134,27 +135,27 @@ private slots:
         CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buf:doc", encode_operation(op));
+            op1->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         engine2.setOnLocalOp([&](const Operation& op) {
-            op2->push("buf:doc", encode_operation(op));
+            op2->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         op1->set_on_inbound([&](const std::string& /*stream*/, uint16_t replica_id,
                                 const std::string& payload) {
             if (replica_id == 1) return;
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine1.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine1.applyRemoteOp(decoded.value());
         });
 
         op2->set_on_inbound([&](const std::string& /*stream*/, uint16_t replica_id,
                                 const std::string& payload) {
             if (replica_id == 2) return;
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine2.applyRemoteOp(decoded.value());
         });
 
         // Concurrent local inserts — neither engine has seen the other's ops yet
@@ -200,14 +201,14 @@ private slots:
 
         // One-directional wiring: engine1 → op1 → engine2 only
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buf:doc", encode_operation(op));
+            op1->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         sync2.set_on_inbound([&](const std::string& /*stream*/, uint16_t /*replica_id*/,
                                  const std::string& payload) {
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            engine2.applyRemoteOp(decoded.value());
         });
 
         // Three sequential edits on engine1

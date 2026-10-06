@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -189,7 +190,7 @@ private slots:
         bool decoded = true;
         receiver.set_on_inbound([&](const auto&, auto, const auto& payload) {
             auto operation = decode_operation(payload);
-            if (operation) b.apply_ops({*operation});
+            if (operation) b.apply_ops({operation.value()});
             else decoded = false;
         });
         auto first = a.apply_local_edit({{0, 0}}, {"a"});
@@ -197,7 +198,7 @@ private slots:
             StreamSync sender(root, "A", 1);
             sender.register_stream("doc", StreamSync::StreamType::AppendOnly);
             sender.start();
-            sender.push("doc", encode_operation(first));
+            sender.push("doc", checked_codec(encode_operation(first)));
             sender.flush();
             receiver.poll();
         }
@@ -209,7 +210,7 @@ private slots:
             StreamSync sender(root, "A", 1);
             sender.register_stream("doc", StreamSync::StreamType::AppendOnly);
             sender.start();
-            sender.push("doc", encode_operation(second));
+            sender.push("doc", checked_codec(encode_operation(second)));
             sender.flush();
             receiver.poll();
         }
@@ -227,7 +228,7 @@ private slots:
         StreamSync sender(root, "A", 1);
         sender.register_stream("doc", StreamSync::StreamType::AppendOnly);
         sender.start();
-        sender.push("doc", encode_operation(a.apply_local_edit({{0, 0}}, {"abc"})));
+        sender.push("doc", checked_codec(encode_operation(a.apply_local_edit({{0, 0}}, {"abc"}))));
         sender.flush();
         for (int session = 0; session != 2; ++session) {
             Buffer b(CollabText::Test::test_counter(2));
@@ -237,7 +238,7 @@ private slots:
             bool decoded = true;
             receiver.set_on_inbound([&](const auto&, auto, const auto& payload) {
                 auto operation = decode_operation(payload);
-                if (operation) b.apply_ops({*operation});
+                if (operation) b.apply_ops({operation.value()});
                 else decoded = false;
             });
             receiver.poll();

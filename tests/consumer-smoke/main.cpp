@@ -36,12 +36,24 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace {
+// Test/consumer assertion, active in Release too. Never erases a failed codec.
+template<class T> T checked_codec(CollabText::Result<T> result) {
+    if (!result.ok()) {
+        std::fprintf(stderr, "codec check failed: %.*s: %.*s\n",
+            int(CollabText::to_string(result.error().code()).size()), CollabText::to_string(result.error().code()).data(),
+            int(result.error().message().size()), result.error().message().data());
+        std::abort();
+    }
+    return std::move(result).value();
+}
+
 
 int failures = 0;
 
@@ -93,10 +105,10 @@ int main() {
     std::vector<std::string> from_alice;
     std::vector<std::string> from_bob;
     alice.setOnLocalOp([&](const Crdt::Operation &op) {
-        from_alice.push_back(Crdt::encode_operation(op));
+        from_alice.push_back(checked_codec(Crdt::encode_operation(op)));
     });
     bob.setOnLocalOp([&](const Crdt::Operation &op) {
-        from_bob.push_back(Crdt::encode_operation(op));
+        from_bob.push_back(checked_codec(Crdt::encode_operation(op)));
     });
 
     // Local edit, read, undo, redo -- offsets are UTF-16 code units.
@@ -110,13 +122,13 @@ int main() {
     bob.insert(0, "world");
     for (const std::string &bytes : from_alice) {
         auto decoded = Crdt::decode_operation(bytes);
-        check(decoded.has_value(), "an operation from a peer decodes");
-        if (decoded) bob.applyRemoteOp(*decoded);
+        check(decoded.ok(), "an operation from a peer decodes");
+        if (decoded) bob.applyRemoteOp(decoded.value());
     }
     for (const std::string &bytes : from_bob) {
         auto decoded = Crdt::decode_operation(bytes);
-        check(decoded.has_value(), "an operation from a peer decodes");
-        if (decoded) alice.applyRemoteOp(*decoded);
+        check(decoded.ok(), "an operation from a peer decodes");
+        if (decoded) alice.applyRemoteOp(decoded.value());
     }
     check(alice.text() == bob.text(), "two peers converge over the wire codec");
     // Concurrent inserts at one position interleave (F8); the manifest says so.
@@ -137,6 +149,41 @@ int main() {
     check(list.undo().has_value(), "list undo succeeds");
     const auto missing = list.try_anchor_of(4242);
     check(!missing.ok(), "an unknown element is an explicit miss");
+
+    // Installed-only versioned codec contract, both primitives + gap metadata.
+    const auto list_op = list.try_insert_after(Crdt::Anchor::min(), UINT64_MAX);
+    check(list_op.ok(), "list creates full-width application value");
+    if (list_op.ok()) {
+        auto encoded = Crdt::encode_idlist_operation(list_op.value());
+        check(encoded.ok(), "list encoding succeeds");
+        if (encoded.ok()) {
+            auto decoded = Crdt::decode_idlist_operation(encoded.value());
+            check(decoded.ok(), "installed list decoder reads installed encoder");
+            if (decoded.ok()) check(Crdt::idlist_op_identity(decoded.value()) ==
+                                  Crdt::idlist_op_identity(list_op.value()), "list identity stays exact");
+        }
+    }
+    Crdt::CounterGap gap{actor(1), UINT64_MAX - 1, 1, {}};
+    auto gap_wire = Crdt::encode_counter_gap(gap);
+    check(gap_wire.ok(), "full-width gap encoding succeeds");
+    if (gap_wire.ok()) {
+        auto decoded = Crdt::decode_counter_gap(gap_wire.value());
+        check(decoded.ok(), "gap decodes through installed headers");
+        if (decoded.ok()) check(decoded.value().first == gap.first && decoded.value().count == 1,
+                               "gap metadata remains exact");
+    }
+    auto newer = Crdt::decode_operation("CTBO0002:{}");
+    check(!newer.ok() && newer.error().code() == ErrorCode::unsupported_version,
+          "newer format has a typed verdict");
+    Crdt::Global frontier;
+    frontier.observe({actor(1), UINT64_MAX - 1});
+    auto frontier_wire = Crdt::encode_global(frontier);
+    check(frontier_wire.ok(), "frontier encoding succeeds");
+    if (frontier_wire.ok()) {
+        auto decoded = Crdt::decode_global(frontier_wire.value());
+        check(decoded.ok(), "frontier decoding succeeds");
+        if (decoded.ok()) check(decoded.value() == frontier, "frontier stays exact");
+    }
 
     if (failures == 0)
         std::printf("consumer: ok (text=%zu bytes, list=%zu ids)\n",

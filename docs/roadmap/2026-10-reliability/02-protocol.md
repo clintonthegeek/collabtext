@@ -253,7 +253,7 @@ Run the identity model and Buffer/IdList convergence suites in Debug, Release, a
 - `libs/collabtext/src/crdt/FileSync.cpp`
 - `libs/collabtext/src/crdt/FileSync.h`
 - `libs/collabtext/src/crdt/StreamSync.cpp`
-- `libs/collabtext/src/crdt/StreamSync.h`
+- `libs/collabtext/src/transport/StreamSync.h`
 
 **Steps:**
 
