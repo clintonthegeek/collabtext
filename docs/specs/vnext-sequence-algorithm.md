@@ -280,6 +280,31 @@ per-scalar interleave (`aaabbbccc`). That case, and only that case, needs a
 position-representation decision. It remains an expected failure in
 `tst_sequence_semantics` (`reverse` row).
 
+### 5a-prior-art. This is a solved problem; the locator-reuse spike is not the answer
+
+Weidner and Kleppmann, *The Art of the Fugue: Minimizing Interleaving in
+Collaborative Text Editing* (arXiv 2305.00583), Table 1 classifies the families:
+Logoot, LSEQ and Treedoc -- fractional/path identifiers sorted as a flat order,
+which is what `Locator` is -- interleave on **forward** typing. RGA and Yjs are
+proven forward non-interleaving. Fugue and FugueMax are proven for forward and
+backward insertion (FugueMax maximally so, Definition 4).
+
+What separates the families is not the position representation but whether an
+insert records **what it was typed after** (its left origin), and for Fugue its
+side. Fugue's rule (Algorithm 1): a new element is a right child of its left
+origin if that origin has no right children; otherwise it is a left child of its
+right origin. Same-side siblings are ordered by ID (replica, then counter) and
+the document is the in-order traversal. FugueMax additionally tags right children
+with their right origin and orders same-side siblings by reverse right origin
+first. Nothing there needs more than the identities the engine already mints.
+
+That also explains the two failures the spike could not close. A reused locator
+carries no origin, so a continuation cannot follow its predecessor when a peer
+relocates the run (`insertionInsideTypedRunConverges`), and a flat per-actor
+order cannot express a left-side child (`reverse`). The S02 model here already
+orders by parent plus right boundary and agrees on `typing-into-split-run`
+(`abXcde` in every arrival order), the case the spike displaced.
+
 ## 6. Limits, and what S03 must not inherit as settled
 
 - **No maximal non-interleaving is claimed.** R1/R2 order whole operations. They
