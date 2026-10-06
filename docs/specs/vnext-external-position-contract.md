@@ -248,3 +248,19 @@ attachment resolve at byte 1; a redo detaches. Loss of only its other neighbor
 need not detach it. Empty/end are scoped edge tags; local_clear invalidates
 position history even when a token has only edge tags. These are specified and
 model-checked choices; S04b still implements production behavior and token bytes.
+
+### Installed baseline implementation (W02)
+
+`tests/consumer-smoke/wave-contract/` supplies a consumer-owned document/block
+map, routing and Resolved/Collapsed/Stale/Gone adapter using installed public
+headers only. Its independent checked case table covers all fourteen W01
+fixtures and eight probe IDs. Worker results are exact observations; the Python
+runner compares them against reviewed expectations, logs child exits/signals and
+retains hashes. Original bytes survive unknown/deleted-block interpretation.
+
+Only `concurrent_paste_passages_contiguous` may reproduce the exact converged
+`aXbYcZ` defect; only `durable_pin_registration` may be unsupported, with the
+installed manifest agreeing that pins are unimplemented. Those results are not
+feature passes. Any other mismatch, abort, missing fixture or unknown worker
+case fails baseline. W03 adds the stricter installed live set and fresh-process
+replay; real storage recovery and durable retention remain later gates.

@@ -2260,3 +2260,33 @@ Manifest v5 advertises actual live APIs and labels token bytes experimental and
 unpublished. Installed strict consumer certification is W03. Repaired ordering,
 real store recovery, persistent undo and durable retention remain outstanding.
 **Next: W02 → W03 installed consumer gates.**
+
+## 2026-10-05 sprint — W02 complete: installed consumer baseline
+
+Added an installed-only, consumer-owned Document fixture with block identity,
+local/remote operation routing, exact text/list position forwarding and
+Resolved/Collapsed/Stale/Gone mapping. It uses no Wave checkout, source-tree
+headers, Qt widgets, event log or engine-owned block map. The case table executes
+all fourteen W01 fixtures under WP1–WP8 and compares worker JSON to independent
+reviewed expectations; workers cannot classify their own results.
+
+The relocated Core baseline has 17 cases in Debug and Release: 15 pass, the
+exact WP6 `aXbYcZ` passage-order defect is `known_failure` owned by S02/S03, and
+durable pins are `unsupported` owned by S05/G01/G06/G08. The no-GC smoke remains
+containment evidence only. Every fixture/result retains case ID, capability,
+format, seed, fixture hash, revision, stdout/stderr, exit status and signal.
+
+Negative checks are active: a deliberately bad expectation fails, an injected
+SIGABRT fails with signal 6, and a Debug producer is refused for a Release gate.
+The optional Qt installation exposed and fixed an export dependency omission:
+QtAdapter's enabled FileTransport target is now loaded when requested. Core-only
+consumers still discover no Qt, zstd or OpenSSL. Local workflow YAML/shell checks
+pass; remote CI is pending branch publication.
+
+Evidence: `build-consumer-verify/debug-baseline-20261006T010146Z-2`,
+`build-consumer-verify/release-baseline-20261006T010013Z-2`,
+`build-consumer-verify/debug-baseline-20261006T010107Z-2`,
+`build-consumer-verify/w02-negative/`, and
+`docs/reports/vnext-consumer-probe-baseline.md`.
+
+**Next: W03 strict installed live-position probes.**

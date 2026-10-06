@@ -71,6 +71,13 @@ foreach(_comp IN LISTS _collabtext_wanted)
     endif()
 endforeach()
 
+# QtAdapter links FileTransport when it was enabled in the producer. Load that
+# exported target (and its dependency) even when the consumer only requests qt.
+# Core-only requests still perform no optional dependency discovery.
+if("qt" IN_LIST _collabtext_wanted AND "file-transport" IN_LIST _collabtext_enabled_components)
+    list(APPEND _collabtext_wanted file-transport)
+endif()
+
 # ---------------------------------------------------------------------------
 # Dependencies for the components actually requested
 #

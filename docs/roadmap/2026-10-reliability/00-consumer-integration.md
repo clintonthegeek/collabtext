@@ -169,7 +169,7 @@ remain required later features rather than being dropped to accelerate integrati
 
 ## W01 — Capture the eight consumer probes as versioned fixtures
 
-**Status:** see TASKS.json (initially not started)\
+**Status:** complete; see TASKS.json and [baseline report](../../reports/vnext-consumer-probe-baseline.md)\
 **Depends on:** V04, V08\
 **Coverage:** F7, F8, R4, R11\
 
@@ -214,6 +214,11 @@ Run python3 tools/validate-consumer-fixtures.py --self-test and validate the che
 - `docs/reports/vnext-consumer-probe-baseline.md`
 - `docs/specs/vnext-alpha-capabilities.md`
 - `docs/specs/vnext-external-position-contract.md`
+
+- `tests/consumer-smoke/CMakeLists.txt`
+- `docs/specs/vnext-consumer-probes.md`
+
+- `cmake/collabtext-config.cmake.in` (load enabled dependencies of the Qt export)
 
 **Steps:**
 

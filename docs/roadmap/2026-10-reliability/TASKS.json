@@ -1291,7 +1291,10 @@
     ".github/workflows/consumer-alpha.yml",
     "docs/reports/vnext-consumer-probe-baseline.md",
     "docs/specs/vnext-alpha-capabilities.md",
-    "docs/specs/vnext-external-position-contract.md"
+    "docs/specs/vnext-external-position-contract.md",
+    "tests/consumer-smoke/CMakeLists.txt",
+    "docs/specs/vnext-consumer-probes.md",
+    "cmake/collabtext-config.cmake.in"
    ],
    "steps": [
     "Implement a minimal consumer-owned Document adapter entirely in the installed consumer fixture: a block-ID-to-engine map, UTF-8 body access, local/remote operation routing, and capability-aware anchorAt/resolveAnchor forwarding. Keep block lifecycle/formatting/canonical events in this test consumer; do not edit Wave or prescribe its production adapter.",
@@ -1314,12 +1317,32 @@
     "R13"
    ],
    "gate": null,
-   "status": "not_started",
+   "status": "complete",
    "consumer_requirements": [
     "W1",
     "W2",
     "W3",
     "W6"
+   ],
+   "baseline_revision": "9c5c0e6c0ff3525e38be203120de79d0f6957c9a",
+   "progress": "Installed-only Wave-shaped consumer adapter and exact WP1-WP8 case matrix are complete. The gate preserves consumer-owned block lifecycle and formatting boundaries, uses only relocated public headers, and never treats unsupported or known-failure rows as feature evidence.",
+   "verification_results": {
+    "debug_core": "Installed relocated Core baseline passes 2/2 CTest: consumer_main plus the complete 17-case WP1-WP8 matrix. 15 cases pass, WP6 is the exact known aXbYcZ ordering failure, and WP8 durable_pins is the exact unsupported capability. Evidence build-consumer-verify/debug-baseline-20261006T010146Z-2.",
+    "release_core": "Installed relocated Release Core baseline has the same 17 exact observations and 15/1/1 pass/known_failure/unsupported classification. Evidence build-consumer-verify/release-baseline-20261006T010013Z-2.",
+    "debug_qt": "Installed Debug baseline with Core+Qt passes 2/2, including all installed Qt header units; package export now loads FileTransport when QtAdapter references it. Evidence build-consumer-verify/debug-baseline-20261006T010107Z-2.",
+    "negative_runner": "A deliberately wrong expectation exits 1 with an error result; an injected SIGABRT exits 1 and records signal 6. A Debug producer supplied to a Release gate is refused before build. Evidence build-consumer-verify/w02-negative/ and /tmp/collabtext-sprint-w02-wrong-mode.log.",
+    "workflow": "Prepared .github/workflows/consumer-alpha.yml has Debug/Release matrix, Core gate, optional Qt discovery, and failure artifacts. Local YAML parse, shell syntax and matrix checks pass; remote CI execution remains pending until the branch is pushed.",
+    "limits": "WP6 remains assigned to S02/S03; durable pins remain assigned to S05/G01/G06/G08. This baseline does not certify Wave production readiness, durable stores, crash recovery, persistent undo or reclamation. No benchmarks ran."
+   },
+   "artifacts": [
+    "docs/reports/vnext-consumer-probe-baseline.md",
+    "build-consumer-verify/debug-baseline-20261006T010146Z-2",
+    "build-consumer-verify/release-baseline-20261006T010013Z-2",
+    "build-consumer-verify/debug-baseline-20261006T010107Z-2",
+    "build-consumer-verify/w02-negative/"
+   ],
+   "implementation_commits": [
+    "9c5c0e6c0ff3525e38be203120de79d0f6957c9a"
    ]
   },
   {
@@ -1684,6 +1707,9 @@
     "build-roadmap-release/verification/20261006T005011Z-changed-r381m4mk",
     "/tmp/collabtext-sprint-positions-asan-build.log",
     "/tmp/collabtext-sprint-positions-asan.log"
+   ],
+   "implementation_commits": [
+    "9c5c0e6c0ff3525e38be203120de79d0f6957c9a"
    ]
   },
   {

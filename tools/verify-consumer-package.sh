@@ -157,12 +157,14 @@ finish() {
     if [[ $rc -eq 0 && $step_status -eq 0 ]]; then
         printf '\nverify-consumer-package: PASS (%s/%s)\n' "$mode" "$gate"
     else
-        printf '\nverify-consumer-package: FAIL (%s/%s, last status %s)\n' "$mode" "$gate" "$step_status"
+        printf '\nverify-consumer-package: FAIL (%s/%s, exit status %s)\n' "$mode" "$gate" "$rc"
     fi
 
     python3 - "$output_dir/results.json" "$steps_file" <<PY
 import json, pathlib, sys
 steps = [l for l in pathlib.Path(sys.argv[2]).read_text().splitlines() if l.strip()]
+probe_path = pathlib.Path("$output_dir/consumer-build/wave-probe-results/results.json")
+probes = json.loads(probe_path.read_text()) if probe_path.exists() else None
 json.dump({
     "schema": "collabtext-consumer-package-results/1",
     "tool": "tools/verify-consumer-package.sh",
@@ -171,10 +173,12 @@ json.dump({
     "gate_owner": "$owner",
     "components_requested": "${wanted_components[*]}",
     "producer_revision": "$producer_revision",
+    "compiler": "${compiler_path:-}",
     "repo_root": "$repo_root",
     "output_dir": "$output_dir",
     "capability_manifest_version": "${manifest_version:-}",
     "steps": steps,
+    "probes": probes,
     # rc, not step_status: they disagree on the paths that fail before any
     # run_step, and the recorded value has to be the one the caller saw.
     "exit_status": $rc,
@@ -195,9 +199,6 @@ case "$gate" in
     package)
         ;;
     baseline)
-        step_status=4
-        echo "!! --gate baseline is owned by W02 (installed consumer probe matrix) and is not implemented yet." >&2
-        exit 4
         ;;
     live)
         step_status=4
@@ -264,6 +265,12 @@ if [[ -n "$producer_build_in" ]]; then
         echo "!! --producer-build '$producer_build_in' is not a configured CMake tree" >&2
         trap - EXIT; finish 3
     fi
+    cached_type=$(sed -n 's/^CMAKE_BUILD_TYPE:[^=]*=//p' "$producer_build_in/CMakeCache.txt")
+    cached_sanitizers=$(sed -n 's/^COLLABTEXT_ENABLE_SANITIZERS:[^=]*=//p' "$producer_build_in/CMakeCache.txt")
+    if [[ "$cached_type" != "$build_type" || "$cached_sanitizers" != "$sanitizers" ]]; then
+        echo "!! supplied producer configuration differs from requested mode: $cached_type/$cached_sanitizers, expected $build_type/$sanitizers" >&2
+        trap - EXIT; finish 3
+    fi
     # Build it anyway: it may be stale, and a stale install is the one failure
     # mode this script must not have.
     producer_build="$producer_build_in"
@@ -282,6 +289,8 @@ else
     run_step producer-build cmake --build "$producer_build" --parallel "$jobs" \
         || { trap - EXIT; finish 3; }
 fi
+
+compiler_path=$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$producer_build/CMakeCache.txt")
 
 if [[ "$mode" == "asan" ]]; then
     # The sanitizer runner's rule, applied here: prove instrumentation is actually
@@ -321,6 +330,11 @@ printf 'capability manifest: version %s at %s\n' "${manifest_version:-unknown}" 
 consumer_flags=(
     "-DCMAKE_PREFIX_PATH=$prefix_b"
     "-DCMAKE_BUILD_TYPE=$build_type"
+    "-DCONSUMER_PROBE_GATE=$gate"
+    "-DCONSUMER_PROBE_FIXTURES=$repo_root/libs/collabtext/tests/fixtures/external-position"
+    "-DCONSUMER_CAPABILITY_MANIFEST=$prefix_b/include/collabtext/ALPHA_CAPABILITIES.md"
+    "-DCONSUMER_PRODUCER_REVISION=$producer_revision"
+    "-DCONSUMER_BUILD_MODE=$mode"
     # Needed so the leakage check below has something to inspect.
     "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 )

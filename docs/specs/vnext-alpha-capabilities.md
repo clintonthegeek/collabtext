@@ -12,7 +12,8 @@ been published and no persisted token version has been approved for release.
 | Caret collapse and strict referent restoration | Native deletion/undo/redo and competing-delete checks |
 | Scope rejection and missing list-value lookup | Native scoped typed API and full-width/duplicate list-value cases |
 | Binary token version / codec / replay process | Native CTPT v1 goldens, strict decoder and fresh-process original-token replay |
-| Installed strict probe pass | W03 after S04b; no pass claimed now |
+| Installed baseline probe pass | W02: all eight probes through an installed-only consumer map; exact WP6 known failure and WP8 unsupported pins remain explicit |
+| Installed strict probe pass | W03; no strict pass claimed now |
 | Full repaired sequence ordering | S02 model and S03 integration remain pending |
 | Actual file/session reopen, persistent undo | L06/L08 and S04 remain pending |
 | Durable external pins, checkpoint translation, physical GC | S05/G-series remain pending; physical GC disabled |

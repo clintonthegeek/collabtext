@@ -110,3 +110,23 @@ if(CONSUMER_WANT_QT)
     target_link_libraries(consumer_main PRIVATE CollabText::Widgets Qt6::Widgets)
     target_link_libraries(consumer_installed_headers PRIVATE Qt6::Widgets)
 endif()
+
+# The worker consumes only the relocated installation. JSON fixtures are data,
+# not source include paths or an engine substitute.
+set(CONSUMER_PROBE_GATE "package" CACHE STRING "package/baseline/live")
+if(CONSUMER_PROBE_GATE STREQUAL "baseline" OR CONSUMER_PROBE_GATE STREQUAL "live")
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_executable(consumer_wave_probes wave-contract/probes.cpp)
+    target_link_libraries(consumer_wave_probes PRIVATE CollabText::Core)
+    add_test(NAME consumer_wave_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/wave-contract/run.py
+        --worker $<TARGET_FILE:consumer_wave_probes>
+        --cases ${CMAKE_CURRENT_SOURCE_DIR}/wave-contract/cases.json
+        --fixtures ${CONSUMER_PROBE_FIXTURES}
+        --manifest ${CONSUMER_CAPABILITY_MANIFEST}
+        --revision ${CONSUMER_PRODUCER_REVISION}
+        --mode ${CONSUMER_BUILD_MODE}
+        --gate ${CONSUMER_PROBE_GATE}
+        --output ${CMAKE_CURRENT_BINARY_DIR}/wave-probe-results)
+    set_tests_properties(consumer_wave_contract PROPERTIES TIMEOUT 120)
+endif()

@@ -1,0 +1,470 @@
+{
+  "schema": "collabtext-installed-probe-cases/1",
+  "seed": 20261005,
+  "cases": [
+    {
+      "id": "boundary_affinity_ab_insert_X",
+      "worker": "affinity",
+      "probe": "WP1",
+      "fixture": "wp1-affinity-ab-insert-x",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "text": "aXb",
+        "left": {
+          "state": "Resolved",
+          "offset": 1,
+          "error": "",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "right": {
+          "state": "Resolved",
+          "offset": 2,
+          "error": "",
+          "lost_left": false,
+          "lost_right": false
+        }
+      }
+    },
+    {
+      "id": "every_scalar_boundary_both_affinities",
+      "worker": "scalar_sweep",
+      "probe": "WP1",
+      "fixture": "wp1-affinity-boundary-sweep",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "offsets": [
+          0,
+          0,
+          1,
+          1,
+          5,
+          5,
+          6,
+          6
+        ],
+        "comparison": 1,
+        "pure": true
+      }
+    },
+    {
+      "id": "same_token_two_replicas_reordered_duplicates",
+      "worker": "shared_token",
+      "probe": "WP1",
+      "fixture": "wp1-shared-token-concurrent-boundary",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "text": "aXb!",
+        "replicas": [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "id": "caret_neighbour_delete",
+      "worker": "caret_neighbour",
+      "probe": "WP2",
+      "fixture": "wp2-caret-neighbour-delete",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "text": "bc",
+        "result": {
+          "state": "Resolved",
+          "offset": 1,
+          "error": "",
+          "lost_left": false,
+          "lost_right": false
+        }
+      }
+    },
+    {
+      "id": "deleted_referent_explicit_collapse_undo",
+      "worker": "caret_delete",
+      "probe": "WP2",
+      "fixture": "wp2-strict-referent-delete",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "deleted": {
+          "state": "Collapsed",
+          "offset": 1,
+          "error": "",
+          "lost_left": false,
+          "lost_right": true
+        },
+        "restored": {
+          "state": "Resolved",
+          "offset": 1,
+          "error": "",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "redone": {
+          "state": "Collapsed",
+          "offset": 1,
+          "error": "",
+          "lost_left": false,
+          "lost_right": true
+        },
+        "original_bytes": true
+      }
+    },
+    {
+      "id": "strict_selected_referent_delete_undo",
+      "worker": "strict_delete",
+      "probe": "WP2",
+      "fixture": "wp2-strict-referent-delete",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "deleted": {
+          "state": "Stale",
+          "offset": null,
+          "error": "detached",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "restored": {
+          "state": "Resolved",
+          "offset": 1,
+          "error": "",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "redone": {
+          "state": "Stale",
+          "offset": null,
+          "error": "detached",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "original_bytes": true
+      }
+    },
+    {
+      "id": "consumer_deleted_containing_block",
+      "worker": "block_gone",
+      "probe": "WP3",
+      "fixture": "wp3-containing-block-gone",
+      "capability": "consumer_block_map",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "valid": {
+          "state": "Gone",
+          "offset": null,
+          "error": "missing_block",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "invalid": {
+          "state": "Gone",
+          "offset": null,
+          "error": "missing_block",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "retained": true
+      }
+    },
+    {
+      "id": "scoped_empty_end_edges",
+      "worker": "empty_edges",
+      "probe": "WP4",
+      "fixture": "wp4-empty-document-token",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "empty": [
+          0,
+          3
+        ],
+        "end": [
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "id": "exact_scalar_end_offend_nonbmp",
+      "worker": "scalar_boundaries",
+      "probe": "WP4",
+      "fixture": "wp4-scalar-boundaries",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "offsets": [
+          0,
+          0,
+          1,
+          1,
+          5,
+          5,
+          6,
+          6
+        ],
+        "comparison": 1,
+        "pure": true,
+        "off_end": "off_end",
+        "interiors": [
+          "not_scalar_boundary",
+          "not_scalar_boundary",
+          "not_scalar_boundary"
+        ]
+      }
+    },
+    {
+      "id": "distinct_list_indices_and_same_element_replica",
+      "worker": "list_indices",
+      "probe": "WP4",
+      "fixture": "wp4-list-indices",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "element": 1,
+        "peer": 1,
+        "off_end": "off_end"
+      }
+    },
+    {
+      "id": "token_canonical_bounds_ownership_and_purity",
+      "worker": "codec",
+      "probe": "WP5",
+      "fixture": "wp5-token-codec",
+      "capability": "position_codec",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "roundtrip": true,
+        "prefixes": 103,
+        "suffixes": 256,
+        "version": "unsupported_version",
+        "enum": "malformed",
+        "pure": true,
+        "owned": true
+      }
+    },
+    {
+      "id": "isolated_malformed_token_no_offset",
+      "worker": "malformed",
+      "probe": "WP5",
+      "fixture": "wp5-token-codec",
+      "capability": "position_codec",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "result": {
+          "state": "Stale",
+          "offset": null,
+          "error": "malformed",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "pure": true
+      }
+    },
+    {
+      "id": "concurrent_paste_passages_contiguous",
+      "worker": "split_paste",
+      "probe": "WP6",
+      "fixture": "wp6-split-paste",
+      "capability": "passage_order",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "text": "abcXYZ",
+        "contiguous": true,
+        "converged": true
+      },
+      "baseline_exception": {
+        "outcome": "known_failure",
+        "observed": {
+          "text": "aXbYcZ",
+          "contiguous": false,
+          "converged": true
+        },
+        "owner": "S02/S03",
+        "formats": [
+          "CTBO/1"
+        ]
+      }
+    },
+    {
+      "id": "scope_axes_refuse_before_lookup",
+      "worker": "wrong_context",
+      "probe": "WP7",
+      "fixture": "wp7-wrong-context",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "document": {
+          "state": "Stale",
+          "offset": null,
+          "error": "wrong_document",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "stream": {
+          "state": "Stale",
+          "offset": null,
+          "error": "wrong_stream",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "epoch": {
+          "state": "Stale",
+          "offset": null,
+          "error": "wrong_epoch",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "primitive": "wrong_primitive",
+        "factory": "wrong_primitive",
+        "pure": true
+      }
+    },
+    {
+      "id": "missing_list_cannot_be_end_mutation",
+      "worker": "missing_list",
+      "probe": "WP7",
+      "fixture": "wp7-missing-list-id",
+      "capability": "scoped_positions",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "lookup": "not_found",
+        "legacy_lookup": "unresolvable_anchor",
+        "insert": "unresolvable_anchor",
+        "remove": "unresolvable_anchor",
+        "pure": true
+      }
+    },
+    {
+      "id": "no_gc_retains_deleted_items_for_undo",
+      "worker": "no_gc",
+      "probe": "WP8",
+      "fixture": "wp8-no-gc-retention",
+      "capability": "gc_disabled",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "deleted": {
+          "state": "Stale",
+          "offset": null,
+          "error": "detached",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "restored": {
+          "state": "Resolved",
+          "offset": 1,
+          "error": "",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "retained_entries": 1,
+        "gc_enabled": false
+      }
+    },
+    {
+      "id": "durable_pin_registration",
+      "worker": "pins",
+      "probe": "WP8",
+      "fixture": "wp8-no-gc-retention",
+      "capability": "durable_pins",
+      "formats": [
+        "CTPT/1",
+        "CTBO/1",
+        "CTLO/1"
+      ],
+      "expected": {
+        "capability": "durable_pins",
+        "available": true
+      },
+      "baseline_exception": {
+        "outcome": "unsupported",
+        "observed": {
+          "capability": "durable_pins",
+          "available": false,
+          "owner": "S05/G01/G06/G08"
+        },
+        "owner": "S05/G01/G06/G08",
+        "formats": []
+      }
+    }
+  ]
+}

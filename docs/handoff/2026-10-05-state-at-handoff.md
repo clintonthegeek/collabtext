@@ -7,7 +7,7 @@ and registry dependencies; a prose assertion does not complete a task.
 
 ## Completed work
 
-V01–V08, D01, P01–P06b, L01, S01, W01, S04a/S04b and packaging A01/A02a/A06a.
+V01–V08, D01, P01–P06b, L01, S01, W01–W02, S04a/S04b and packaging A01/A02a/A06a.
 P06a includes the final public operation-opacity step (`01614af`, `d52dceb`),
 with immutable shared values and affected Debug/Release/leak-enabled sanitizers.
 S04a supplies a full scoped-boundary contract, implementation map, compile-checked
@@ -29,7 +29,11 @@ Full F7 recovery/retention, F8 ordering, durable undo/pins and store recovery re
 3. **W02/S02** are independently ready. W02 establishes installed baseline probes;
    S02 must generate S04a's supplied orders and prove stable relative order of
    already integrated retained items before S03 can change integration.
-4. W03/E07b and later recovery/order/pin tasks follow registry dependencies.
+4. **W02 is complete:** the relocated installed baseline has 17 exact cases in
+   Debug/Release (15 pass, WP6 exact known failure, WP8 durable-pins unsupported),
+   plus negative expectation/abort and optional Qt/export checks. Continue with
+   W03 strict live probes, then E07a/E07b and later recovery/order/pin tasks follow
+   registry dependencies.
    No product-policy question is outstanding. No backend substitution, consumer
    edits/messages, publication or master integration is authorized by these tasks.
 

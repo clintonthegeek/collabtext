@@ -115,7 +115,7 @@ byte 1; redo detaches. This replaces the pending placement/restoration entries.
 The former a/c pair enclosed still-visible b and was not a caret gap.
 [vnext-boundary-semantics.md](vnext-boundary-semantics.md) specifies the rules;
 these choices are tagged roadmap_inference and model-checked, with production
-implementation still assigned to S04b. WP8's strict token likewise now selects
+native implementation complete in S04b; installed certification is W03. WP8's strict token likewise now selects
 the actually deleted b, rather than the surviving a.
 
 ## 5. WP3 — Deleted containing block
@@ -261,7 +261,8 @@ This task **specifies cases**. It supplies no engine change, no anchor or
 ordering behaviour, and no evidence that any probe passes. In particular:
 
 - S04a has settled the pending offset/restoration rules in §4 with an independent
-  model. Production behavior and token bytes remain S04b work.
+  model. Native behavior/token bytes are implemented by S04b; W03 certifies
+  their installed adapter and fresh-process replay.
 - No fixture here is an executable regression against production code. W02
   supplies the executable adapter and result matrix.
 - Third-party observations are attributed historical measurements, reproduced
