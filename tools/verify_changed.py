@@ -18,6 +18,10 @@ ROUTES = [
     ('.gitignore', ''), ('*.md', ''), ('docs/*.json', ''),
     ('docs/roadmap/*/*.py', 'tst_verification_tools'),
     ('tools/verify-consumer-package.sh', PACKAGING),
+    # E07a/E07b candidate preparation configures, builds, installs, consumes and
+    # checksums a staged tree, so a change here is a packaging change. Left
+    # unrouted it fails the whole diff, which is the correct default.
+    ('tools/prepare-integration-alpha.sh', PACKAGING),
     ('tools/verify*', 'tst_verification_tools'),
     ('tools/verification-env.sh', 'tst_verification_tools'),
     ('tools/test_verify_changed.py', 'tst_verification_tools'),
@@ -56,7 +60,8 @@ ROUTES = [
 ]
 PACKAGE_PATHS = ('CMakeLists.txt', 'libs/collabtext/CMakeLists.txt', 'cmake/*',
                  'tests/consumer-smoke/*', 'libs/collabtext/include/*',
-                 '.github/workflows/*', 'tools/verify-consumer-package.sh')
+                 '.github/workflows/*', 'tools/verify-consumer-package.sh',
+                 'tools/prepare-integration-alpha.sh')
 
 
 def route(paths):

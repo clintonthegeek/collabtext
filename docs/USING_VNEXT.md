@@ -1,12 +1,25 @@
 # Using the collabtext alpha package
 
-This is the consumer-facing guide for the alpha on branch `feat/fuguemax-placement`.
-It is an alpha: not a supported release, not published, and expected to change its
-API between candidates. What it can and cannot do is stated in
-`<collabtext/ALPHA_CAPABILITIES.md>`, which is installed beside the headers and
-versioned independently of this document. **Read that before designing against this**. Scoped live positions and FugueMax passage order are implemented.
-Store recovery, persistent undo and durable pins remain pending. `CTPT/1` is
-experimental. Operation bytes are `CTBO`/`CTLO` version 0002; version 1 is refused.
+This is the consumer-facing guide for the alpha on branch `feat/fuguemax-placement`,
+package version **`0.2.0-alpha.1`**. It is an alpha: not a supported release, not
+published, and expected to change its API between candidates. What it can and
+cannot do is stated in `<collabtext/ALPHA_CAPABILITIES.md>`, which is installed
+beside the headers and versioned independently of this document. **Read that before
+designing against this**. Scoped live positions and FugueMax passage order are
+implemented. Store recovery, persistent undo and durable pins remain pending.
+`CTPT/1` is experimental. Operation bytes are `CTBO`/`CTLO` version 0002; version 1
+is refused.
+
+`0.2.0-alpha.1` is a SemVer **prerelease**, so it is older than `0.2.0`.
+CMake's `project(VERSION)` accepts only a numeric version, so the installed
+`collabtext-config-version.cmake` reports `0.2.0` and a `find_package` request
+cannot name the prerelease label at all. Ask for no version or for `0.2.0`; read
+`COLLABTEXT_VERSION_STRING` from the config file if you need the full label, and
+use the `v0.2.0-alpha.1` tag for pinning.
+
+Release notes, the candidate SHA, pinning instructions and the serialized-format
+stability statement are in
+[docs/releases/integration-alpha.md](releases/integration-alpha.md).
 
 ## What is installed
 
@@ -78,11 +91,13 @@ read_operation(std::string_view retained_record) {
 Encoding also returns `Result<std::string>`: check `ok()` before `value()`.
 Keep the original operation if encoding fails and the original record if decoding
 fails. A failure does not permit committing a reader cursor or advancing coverage.
-The wire is `CTBO0001:` / `CTLO0001:` plus bounded JSON; `CTGV` encodes sparse
-vectors and `CTGP` encodes terminal unused intervals. Every integer is an exact
-sixteen-digit hex string. Old bare JSON is refused with `unknown_format`; a newer
-version returns `unsupported_version`. Gap decoding does not publish the gap or
-advance coverage. See [the codec contract](specs/vnext-operation-codec.md).
+The wire is `CTBO0002:` / `CTLO0002:` plus bounded JSON; `CTGV0001:` encodes sparse
+vectors and `CTGP0001:` encodes terminal unused intervals. Every integer is an
+exact sixteen-digit hex string. Version 1 text/list frames are **refused** with
+`unsupported_version` — deliberately, so a v1 operation is never misread as a
+malformed v2 — and bare JSON with no frame header is `unknown_format`. Gap
+decoding does not publish the gap or advance coverage. See
+[the codec contract](specs/vnext-operation-codec.md).
 
 Ask for components you were given:
 
@@ -171,10 +186,17 @@ and the retained-order assumption that S02/S03 still certify.
 
 Summarised here; the manifest is authoritative and versioned.
 
-- **Ordering repair.** Two peers inserting at the same position interleave
-  character-by-character. Convergent, and wrong for prose.
-- **Persistent undo**, **crash recovery**, **GC/pins/checkpoints**, **epoch on the
-  operation**.
+- **Persistent undo/redo** — in-memory only, does not survive a reopen (L06).
+- **Crash recovery** — no replay-from-log session exists (L02–L08).
+- **GC, pins, checkpoints, reclamation** — `collect_garbage()` and `compact()`
+  return zero and retain everything (G01–G08).
+- **Epoch on the operation** — a receiver cannot check one (P07 owns the
+  envelope).
+- **A supported persisted position token** — see `CTPT/1` above.
+
+Concurrent-insertion ordering **is** repaired: each author's run stays contiguous,
+for forward and reverse typing, and a peer editing inside a typed run does not
+split it (F8/S03, placement spec §0).
 
 ## Verifying an installation
 
@@ -211,8 +233,8 @@ through the public encode functions. Concrete edit/list/undo payload structs and
 `std::get`/`std::visit` access are no longer public. No consumer can mutate an
 emitted operation. An empty or moved-from value is rejected before application.
 
-P06b replaces the old unversioned schema with checked version 1 codecs. The
-public encode/decode functions return `Result` and preserve exact 64-bit values.
-Document/stream/epoch operation envelopes remain P07 work. Failed records must
-be retained and progress blocked; full transactional file recovery is not yet
-certified. Live scoped positions are implemented as described above.
+P06b replaced the old unversioned schema with checked, independently versioned
+codecs. The public encode/decode functions return `Result` and preserve exact
+64-bit values. Document/stream/epoch operation envelopes remain P07 work. Failed
+records must be retained and progress blocked; full transactional file recovery is
+not yet certified. Live scoped positions are implemented as described above.

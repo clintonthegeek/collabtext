@@ -23,6 +23,8 @@
 include(CMakeFindDependencyMacro)
 
 set(COLLABTEXT_VERSION "@PROJECT_VERSION@")
+set(COLLABTEXT_PRERELEASE "@COLLABTEXT_PRERELEASE@")
+set(COLLABTEXT_VERSION_STRING "@COLLABTEXT_VERSION_STRING@")
 set(collabtext_core_FOUND TRUE)
 
 # ---------------------------------------------------------------------------

@@ -72,6 +72,20 @@ class VerificationTests(unittest.TestCase):
         self.assertTrue(package)
         self.assertRegex('tst_identity_types', '^' + next(iter(routes.values())) + '$')
 
+    def test_alpha_preparation_and_probes_are_packaging_changes(self):
+        # E07a added tools/prepare-integration-alpha.sh and W02's probe runner
+        # lives under tests/consumer-smoke. Both build, install and consume a
+        # tree, so both must demand the package gate. An unrouted path fails the
+        # diff, which is right, but it means a route deleted here turns a
+        # packaging change into a hard failure rather than a silent docs-only
+        # pass -- so pin the route instead of trusting it.
+        for path in ('tools/prepare-integration-alpha.sh',
+                     'tests/consumer-smoke/wave-contract/run.py'):
+            routes, package = verify.route([path])
+            self.assertTrue(package, path)
+            self.assertTrue(routes[path], path)
+            self.assertRegex('collabtext_core_smoke', '^' + routes[path] + '$')
+
     def test_documentation_has_no_engine_build(self):
         routes, package = verify.route(['docs/report.md', 'AGENTS.md'])
         self.assertFalse(any(routes.values()))

@@ -1,5 +1,20 @@
 cmake_minimum_required(VERSION 3.19)
-project(collabtext VERSION 0.1.0 LANGUAGES CXX)
+
+# Roadmap task E07a. 0.1.0 was the pre-vNext baseline. The alpha candidate is
+# 0.2.0-alpha.1: the release line is 0.2.0 and the SemVer prerelease label is
+# carried separately, because CMake's project(VERSION) accepts only a plain
+# numeric version and rejects "-alpha.1" outright.
+#
+# The reliability workstream is *named* "v2" internally. That name is a
+# workstream label, not a promise of package major version 2, and 2.0.0 here
+# would read as an API break nobody has evaluated. The break that did happen --
+# Locator removed, CTBO/CTLO at version 0002 -- is already a hard cut inside 0.x.
+#
+# COLLABTEXT_PRERELEASE must equal the one in libs/collabtext/CMakeLists.txt.
+# tools/prepare-integration-alpha.sh refuses a candidate when they disagree.
+project(collabtext VERSION 0.2.0 LANGUAGES CXX)
+set(COLLABTEXT_PRERELEASE "alpha.1")
+set(COLLABTEXT_VERSION_STRING "${PROJECT_VERSION}-${COLLABTEXT_PRERELEASE}")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

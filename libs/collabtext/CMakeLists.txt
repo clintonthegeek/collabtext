@@ -1,5 +1,21 @@
 cmake_minimum_required(VERSION 3.19)
-project(collabtext-lib VERSION 0.1.0 LANGUAGES CXX)
+
+# Roadmap task E07a. This is the version a consumer actually sees: it is
+# substituted into collabtext-config.cmake as COLLABTEXT_VERSION and it is what
+# collabtext-config-version.cmake compares a find_package request against.
+#
+# Two numbers, deliberately. PROJECT_VERSION must stay numeric -- CMake rejects
+# a SemVer prerelease in project(VERSION) -- so it is the release line, and
+# COLLABTEXT_PRERELEASE carries the prerelease label that the tag and the
+# release notes use. The pair must stay equal to the superproject's in the
+# top-level CMakeLists.txt; tools/prepare-integration-alpha.sh checks that.
+#
+# Note the consequence for consumers: collabtext-config-version.cmake reports
+# "0.2.0", not "0.2.0-alpha.1", so a find_package request cannot name the
+# prerelease. COLLABTEXT_VERSION_STRING carries the full label.
+project(collabtext-lib VERSION 0.2.0 LANGUAGES CXX)
+set(COLLABTEXT_PRERELEASE "alpha.1")
+set(COLLABTEXT_VERSION_STRING "${PROJECT_VERSION}-${COLLABTEXT_PRERELEASE}")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

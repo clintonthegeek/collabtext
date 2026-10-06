@@ -1,11 +1,17 @@
 # collabtext alpha capability manifest
 
-**Version:** 7
+**Version:** 8
 **Introduced by:** roadmap task A02a
-**Branch:** `roadmap/reliability-v2`
+**Package version at this manifest revision:** `0.2.0-alpha.1`
+**Branch:** `feat/fuguemax-placement` (the workstream label "v2" is not a
+package major version)
 **Status:** alpha. Not a supported release, and not published. E07a prepares a
 pinnable candidate; publication is a separate user instruction that has not been
-given.
+given. `0.2.0-alpha.1` is a SemVer **prerelease**. CMake's `project(VERSION)`
+accepts only a numeric version, so the installed `collabtext-config-version.cmake`
+reports `0.2.0` and a `find_package` request cannot name the prerelease label —
+ask for no version or for `0.2.0`, and read `COLLABTEXT_VERSION_STRING` from the
+config file for the full label.
 
 This manifest exists because an alpha surface that does not say what it cannot do
 is worse than no alpha surface. Every line below is a fact about *this* branch,
@@ -25,7 +31,7 @@ documentation. A capability with no evidence is marked `not implemented`, not
 | Text: local insert/remove, read, undo/redo. Offsets are UTF-16 code units | **available** | `collabtext_alpha_consumer`, `tst_crdtengine_op_api` |
 | Structural list: insert after anchor, remove at anchor, read ids/size, undo/redo | **available** | `collabtext_alpha_consumer` |
 | Opaque immutable text/list operation values; read-only copies survive engine/callback lifetime | **available** | `tst_operation_values`, installed `consumer_main`, `tst_serialization_public` compile-time variant exclusion |
-| Checked version 1 text/list/global/counter-gap codecs: CTBO/CTLO/CTGV/CTGP frames, fixed-width hex integers, allocation interval validation | **available** | `tst_serialization_public` golden/width/shape/interval/version tests, `tst_serialization`, installed `consumer_main` |
+| Checked versioned text/list/global/counter-gap codecs: `CTBO/0002`, `CTLO/0002`, `CTGV/0001`, `CTGP/0001` frames, fixed-width hex integers, allocation interval validation; version 1 text/list frames are refused | **available** | `tst_serialization_public` golden/width/shape/interval/version tests, `tst_serialization`, installed `consumer_main` |
 | Public JSON decoders reject trailing garbage, duplicate keys, invalid Unicode/escapes and bounded input overflow; valid escaped non-BMP text remains exact | **available** | `tst_serialization_public::public_decoders_reject_untrusted_json_syntax`, `escaped_non_bmp_text_preserves_the_actual_operation`, `tst_decode_validation` |
 | Scoped immutable text boundaries/strict attachments and list boundaries/elements; explicit document/stream/primitive/epoch factory | **available** | `tst_positions`, installed `consumer_main` |
 | Exact affinity, scoped empty/start/end, UTF-8 scalar-boundary positions, explicit collapse and selected-referent detachment/undo restoration | **available** | `tst_anchor`, `tst_positions` exact/concurrent/differential cases |
@@ -57,6 +63,47 @@ These are stated so a consumer designs around them rather than discovering them.
 | **Formatting / annotation layer.** | **not planned** | Deliberately out of scope. A consumer's document layer owns it over character CRDTs. |
 | **Qt widget layer** | **available, not part of Core** | `CollabText::Widgets`. The alpha's headless path is Core alone. |
 
+## Serialized formats and what is promised about them
+
+Two different stability questions get answered here, because they are answered
+differently and conflating them is how an alpha breaks somebody's storage.
+
+**The C++ API/ABI is unstable on purpose.** Between alpha candidates a header,
+a signature or a type may change without notice or deprecation. This alpha
+removed a public type (`Locator`), so the break already happened. Do not pin to
+a C++ symbol; pin to the candidate SHA and rebuild.
+
+**A serialized format's obligation is separate, and starts only when a version is
+declared supported.** Declaring it supported means: this reader exists, its
+golden bytes are retained, and later supported releases keep reading those bytes
+or translate them. Publishing an alpha does **not** retroactively declare
+anything supported.
+
+| Identifier | Version | Status | Reader obligation |
+|---|---|---|---|
+| `CTBO` — text/buffer operation frame | 0002 | **alpha interchange.** Versioned, checked, strict-decoding, and what an installed consumer actually exchanges operations over. Version 0001 is refused with `unsupported_version`. | **none yet.** Usable between peers pinned to the same candidate. Not a storage format. |
+| `CTLO` — list operation frame | 0002 | as above | as above |
+| `CTGV` — sparse global/coverage vector | 0001 | alpha interchange | as above |
+| `CTGP` — terminal counter-gap record | 0001 | alpha interchange. Validating a gap record does **not** publish the gap or advance coverage. | as above |
+| `CTPT` — position token, **binary** | 1 | **experimental. Not approved for consumer persistence.** | none; no supported token version exists |
+
+No reader obligation has started for any of these, because nothing is supported
+yet. One starts when a specific format version is declared supported in an
+approved alpha: from that candidate forward, that reader and its golden bytes are
+retained, or a checked translation is provided. `CTPT/1` is the format most
+likely to be misused, so it gets its own sentence. The codec is real, strict,
+versioned, and its bytes round-trip exactly including in a fresh process — that
+is `tst_anchor_codec` and `tst_positions::fresh_process_original_token_replay`.
+None of that makes these bytes a durable storage format. A supported token
+version is frozen by a later approved alpha with a reader manifest and golden
+fixtures, not by this one. Do not remint stored bytes to paper over a resolve
+failure, and do not store a tree link (`parent`, `side`, `right_origin`) in its
+place.
+
+There is no supported **store** or **checkpoint** format: none exists. There is
+nothing to migrate — the user confirmed there is no production data, history or
+store — and no pre-vNext format is supported or will be converted.
+
 ## Supported configuration
 
 - **Language:** C++20. No exceptions required, no RTTI required.
@@ -78,8 +125,13 @@ These are stated so a consumer designs around them rather than discovering them.
 
 ## Known limits that are not capability gaps
 
-  pasting at the same position no longer does. Everything else about convergence
-  holds.
+- **Placement is O(n) on purpose.** Every insertion walks the tree. This is not a
+  capability gap and was not an oversight; it is what makes a placement change
+  safe to review. A performance task may change it later, and
+  `tst_sequence_differential` is what makes such a change safe.
+- Passage order is verified against the independent model over the enumerated S01
+  histories and 240 seeded differential traces, not proven exhaustively for all
+  histories. S06 owns bounded enumeration of combined sequence/undo histories.
 - `Global::coverage_intersection` treats absence as zero coverage, which is
   correct for a watermark and is why `meet` is a different operation. Do not use
   `meet` to ask what every peer has seen.

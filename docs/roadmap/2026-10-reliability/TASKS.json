@@ -1391,7 +1391,8 @@
     "R13"
    ],
    "gate": null,
-   "status": "not_started"
+   "status": "in_progress",
+   "baseline_revision": "add5cf1"
   },
   {
    "id": "S01",

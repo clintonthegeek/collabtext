@@ -43,6 +43,23 @@ def main():
         raise ValueError('every W01 fixture must have an executed case')
     manifest_text = Path(args.manifest).read_text()
     version = next(line.removeprefix('**Version:** ').strip() for line in manifest_text.splitlines() if line.startswith('**Version:**'))
+    # The recorded formats come from the case file, not from literals in this
+    # runner. They used to be hardcoded as CTBO/1 and CTLO/1, which the same file
+    # declared as CTBO/2 and CTLO/2 -- so every retained result disagreed with the
+    # codec it exercised, in the one field a reader would use to identify the
+    # wire version. Derived, they cannot drift again; absent, the run fails.
+    declared = sorted({f for row in rows for f in row.get('formats', [])})
+
+    def family(prefix):
+        found = next((f for f in declared if f.startswith(prefix)), None)
+        if found is None:
+            raise ValueError(f'no case declares a {prefix} format; declared: {declared}')
+        return found
+    formats = {
+        'position': 'CTPT/1 experimental unpublished' if family('CTPT') == 'CTPT/1' else family('CTPT'),
+        'text': family('CTBO'),
+        'list': family('CTLO'),
+    }
     results = []
     for index, row in enumerate(rows):
         fixture = fixtures[row['fixture']]
@@ -124,7 +141,7 @@ def main():
     report = dict(schema='collabtext-installed-probe-results/1', producer_revision=args.revision,
                   mode=args.mode, gate=args.gate, seed=specification['seed'], capability_manifest_version=version,
                   capability_manifest_sha256=digest(args.manifest), case_spec_sha256=digest(args.cases),
-                  formats={'position': 'CTPT/1 experimental unpublished', 'text': 'CTBO/1', 'list': 'CTLO/1'},
+                  formats=formats, declared_formats=declared,
                   strict_probes=sorted(LIVE_PROBES), cases=results, case_count=len(results),
                   strict_case_count=len(strict),
                   strict_pass_count=sum(row['outcome']=='pass' for row in strict),
