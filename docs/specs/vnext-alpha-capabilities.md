@@ -14,8 +14,7 @@ been published and no persisted token version has been approved for release.
 | Binary token version / codec / replay process | Native CTPT v1 goldens, strict decoder and fresh-process original-token replay |
 | Installed baseline probe pass | W02: all eight probes through an installed-only consumer map; exact WP6 known failure and WP8 unsupported pins remain explicit |
 | Installed strict probe pass | W03: WP1-WP5/WP7 plus the no-GC containment smoke, strict in Debug/Release/ASan through an installed consumer block map, plus a second independent Markdown consumer (exact bytes, optional transport routing, caret collapse apart from strict loss) |
-| Concurrent-paste ordering | applied in S03: whole operations stay contiguous, exact branch order |
-| Concurrent-typing ordering | blocked: flat locator chain cannot express group-atomic typing; locator reuse under investigation |
+| Concurrent-paste and concurrent-typing ordering | applied in S03: FugueMax placement; every author's run stays contiguous, forward and reverse (docs/specs/vnext-sequence-algorithm.md §0) |
 | Actual file/session reopen, persistent undo | L06/L08 and S04 remain pending |
 | Durable external pins, checkpoint translation, physical GC | S05/G-series remain pending; physical GC disabled |
 

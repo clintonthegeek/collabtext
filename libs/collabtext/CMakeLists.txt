@@ -37,7 +37,6 @@ add_library(collabtext_core STATIC
     src/codec/Utf.cpp
     src/codec/JsonReader.cpp
     src/crdt/Clock.cpp
-    src/crdt/Locator.cpp
     src/crdt/UndoMap.cpp
     src/crdt/Buffer.cpp
     src/crdt/IdList.cpp
@@ -297,7 +296,6 @@ endif()
 # ===========================================================================
 if(COLLABTEXT_BUILD_TESTS)
 add_crdt_test(tst_clock)
-add_crdt_test(tst_locator)
 add_crdt_test(tst_buffer)
 add_crdt_test(tst_convergence)
 add_crdt_test(tst_sumtree)

@@ -51,7 +51,7 @@ counter-first. It is used in three places, and only the first is subtle:
 
 | Use | Where | Consequence of disagreement |
 |---|---|---|
-| **Tie-breaking equal locators** | `FragmentSummary::add_summary`, `Buffer::insert_fragment`, `IdList::insert_entry`, `Buffer::normalize_fragments` | **Divergence.** Replicas order the document differently. |
+| **Tie-breaking siblings** (S03: formerly equal locators) | `SequenceOrder::integrate` | **Divergence.** Replicas order the document differently. |
 | Undo-map key identity | `UndoMapKey` | Undo resolves the wrong target |
 | Causality comparison | `Global::observed_all` | Operations defer forever |
 

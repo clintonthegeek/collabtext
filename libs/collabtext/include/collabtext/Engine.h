@@ -3,20 +3,22 @@
 /// Roadmap task A02a: "Every advertised public header compiles independently
 /// without `crdt/` or `src` includes."
 ///
-/// Six public headers included `crdt/Clock.h` or `crdt/Locator.h`, and one
+/// Six public headers included `crdt/Clock.h` or `crdt/Locator.h` (S03 later deleted
+/// the locator outright: placement is by tree link now, and a link is built from
+/// the identities defined here), and one
 /// included `crdt/Anchor.h`. That is why `src/` was on the build interface: the
 /// values an operation is made of lived under `src/`, so any consumer of the
 /// public headers was reaching into the implementation tree to get them. The
 /// fix is not a longer include path, it is giving those values a public home.
 ///
-/// `src/crdt/Clock.h`, `src/crdt/Locator.h` and `src/crdt/Anchor.h` are now
+/// `src/crdt/Clock.h` and `src/crdt/Anchor.h` are now
 /// one-line shims that include this header, so the ~60 engine translation units
 /// and the tests that reach for `crdt/Clock.h` keep working unchanged. This is
 /// the same promotion `src/crdt/Operations.h` already went through.
 ///
 /// ─── What is here, and what is deliberately not ───────────────────────────
 ///
-/// Here: `Identity`, `Global`, `Locator`, `Anchor`, `Bias` and the
+/// Here: `Identity`, `Global`, `Anchor`, `Bias` and the
 /// `IdentityAllocator` interface — the values the public operation and outcome
 /// types are built from. Not here: `Fragment`, `SumTree`, `UndoMap`, `Buffer`,
 /// `IdList`. Those are the engine's storage and internals; a consumer reaches
@@ -177,36 +179,6 @@ private:
     uint32_t m_capacity = SBO_CAP;
     alignas(Pair) std::byte m_inline_storage[sizeof(Pair) * SBO_CAP];
     Pair *m_heap_data = nullptr;
-};
-
-// ============================================================================
-// Locator
-// ============================================================================
-
-/// A fractional position identifier: a variable-length sequence of uint64_t
-/// digits compared lexicographically.
-///
-/// A locator is a *position*, not an identity — which is why it keeps its
-/// representation when identity changed (docs/specs/vnext-identity.md §6).
-class Locator {
-public:
-    Locator() = default;
-    explicit Locator(std::vector<uint64_t> digits) : m_digits(std::move(digits)) {}
-    explicit Locator(uint64_t single) : m_digits{single} {}
-
-    static Locator min();
-    static Locator max();
-    /// A locator strictly between `lo` and `hi`. Precondition: lo < hi.
-    static Locator between(const Locator &lo, const Locator &hi);
-
-    const std::vector<uint64_t> &digits() const { return m_digits; }
-    size_t depth() const { return m_digits.size(); }
-
-    std::strong_ordering operator<=>(const Locator &other) const;
-    bool operator==(const Locator &other) const = default;
-
-private:
-    std::vector<uint64_t> m_digits;
 };
 
 // ============================================================================

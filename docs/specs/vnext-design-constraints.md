@@ -96,7 +96,7 @@ kept and improved, not frozen: the roadmap expects them to change internally.
 | `Buffer` + fragment/run storage | `src/crdt/Buffer.*` | The text engine. Its behaviour is specified and its tests are extensive; V08 froze nine fixtures against it. |
 | `IdList` | `src/crdt/IdList.*` | The structural primitive; the only new CRDT primitive this project will ever add. |
 | `SumTree` | `src/crdt/SumTree.h` | The indexed storage both engines share, with monoid summaries. |
-| `Locator` | `src/crdt/Locator.*` | Fractional positions that survive concurrent insertion without renumbering. |
+| `SequenceOrder` + `Link` | `src/crdt/SequenceOrder.*`, `Placement.h` | FugueMax placement: an inserted run records its parent, side and right origin, and the list is the tree's in-order traversal. Replaced the fractional `Locator` in S03 (docs/specs/vnext-sequence-algorithm.md §0). |
 | `UndoMap` + selective undo | `src/crdt/UndoMap.*` | Per-actor restoration state; C3 depends on it. |
 | `Anchor` | `src/crdt/Anchor.*` | The basis for cursors, comments, and chat anchors; needs affinity and context fixes, not replacement. |
 | `Clock` / `Global` | `src/crdt/Clock.h` | Lamport clocks and version vectors; need persistent identities and 64-bit counters. |
