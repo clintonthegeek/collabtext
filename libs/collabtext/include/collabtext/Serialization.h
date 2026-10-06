@@ -13,8 +13,9 @@
 ///
 ///   • decode_operation(std::string_view json) -> std::optional<Operation>
 ///       Deserialises JSON to an Operation.  Returns std::nullopt on parse
-///       failure or schema mismatch.  Consumers MUST warn-and-skip nullopt
-///       rather than treating it as fatal.
+///       failure or schema mismatch.  A failure must retain the original bytes and block any coverage/cursor
+///       advance over that record. The interim optional result cannot classify
+///       the failure; P06b adds typed version/format errors.
 ///
 ///   • encode_idlist_operation(const IdListOperation& op) -> std::string
 ///       Serialises an IdList operation to single-line JSON.
@@ -35,8 +36,8 @@
 ///   output for the same logical value.
 ///
 ///   Schema mismatch: decode_* returns std::nullopt when the input was
-///   produced by an incompatible schema_version.  Consumers should log and
-///   continue, not abort.
+///   produced by an incompatible schema_version.  Retain failed records; do not silently skip them or advance coverage.
+///   Callers must not infer semantic/causal validity from syntactic decode.
 ///
 #pragma once
 
@@ -53,7 +54,8 @@ namespace CollabText::Crdt {
 std::string encode_operation(const Operation& op);
 
 /// Deserialise single-line JSON to a Buffer Operation.
-/// Returns std::nullopt on parse failure or schema mismatch.
+/// Returns std::nullopt on bounded JSON syntax or payload failure.
+/// Retain original bytes on failure; this interim API has no typed version errors.
 std::optional<Operation> decode_operation(std::string_view json);
 
 /// Serialise a Global (version vector) to JSON.
@@ -66,7 +68,8 @@ std::optional<Global> decode_global(std::string_view json);
 std::string encode_idlist_operation(const IdListOperation& op);
 
 /// Deserialise JSON to an IdListOperation.
-/// Returns std::nullopt on parse failure or schema mismatch.
+/// Returns std::nullopt on bounded JSON syntax or payload failure.
+/// Retain original bytes on failure; this interim API has no typed version errors.
 std::optional<IdListOperation> decode_idlist_operation(std::string_view json);
 
 } // namespace CollabText::Crdt

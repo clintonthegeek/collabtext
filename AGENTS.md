@@ -18,7 +18,10 @@ A01/A02a/A06a. Registry count: 72. S01/W01 are validated desired histories and
 probe fixtures, not production F7/F8 fixes. P06a's final operation-opacity step
 has passed affected Debug/Release/sanitizer and installed-consumer checks.
 
-**Do next: P06b**, checked versioned operation codecs, then S04b's live positions.
+**Continue P06b**, checked versioned operation codecs, then S04b's live positions.
+The first native repair now routes public JSON through bounded syntax/Unicode
+checks; typed versions and allocation/gap records remain pending. Follow
+`docs/specs/vnext-operation-codec.md`, not the old optional/warn-and-skip header.
 S04a is complete: exact scoped boundary semantics, strict selected-referent loss
 and original-token undo restoration, canonical codec candidate and independent
 model. Debug/Release/sanitizer gates passed; production positions remain pending.

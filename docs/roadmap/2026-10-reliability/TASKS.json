@@ -1518,16 +1518,34 @@
    "files": [
     "libs/collabtext/include/collabtext/Serialization.h",
     "libs/collabtext/src/codec/OperationCodec.cpp",
-    "libs/collabtext/tests/tst_serialization_public.cpp"
+    "libs/collabtext/tests/tst_serialization_public.cpp",
+    "libs/collabtext/src/crdt/Serialization.cpp",
+    "libs/collabtext/src/codec/JsonReader.h",
+    "libs/collabtext/src/codec/JsonReader.cpp",
+    "libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md",
+    "docs/specs/vnext-operation-codec.md",
+    "docs/specs/vnext-protocol.md",
+    "docs/specs/vnext-public-api.md",
+    "docs/USING_VNEXT.md",
+    "libs/collabtext/CMakeLists.txt",
+    "libs/collabtext/tests/",
+    "tests/consumer-smoke/",
+    "libs/collabtext/src/crdt/FileSync.cpp",
+    "libs/collabtext/src/crdt/FileSync.h",
+    "libs/collabtext/src/crdt/StreamSync.cpp",
+    "libs/collabtext/src/crdt/StreamSync.h"
    ],
    "steps": [
     "Encode canonical sparse actor/counter vectors and an explicit payload version. The actor set is what the wire size must depend on, never the magnitude of the identity values.",
     "Encode 64-bit counters exactly, with no conversion through double. A counter above 2^53 is a legal value and must round-trip bit for bit.",
-    "Define and test only the new codecs. An old or unknown format identifier produces an explicit incompatible-format error before mutation; diagnostic input is retained and no record is skipped silently. No legacy decoder or conversion mapping is required."
+    "Define and test only the new codecs. An old or unknown format identifier produces an explicit incompatible-format error before mutation; diagnostic input is retained and no record is skipped silently. No legacy decoder or conversion mapping is required.",
+    "Follow docs/specs/vnext-operation-codec.md for the fixed family/version header, exact-width scalar representation, checked Result APIs, payload fields, allocation-interval and terminal gap record codec. Reuse bounded JsonReader syntax and Unicode logic; remove the interim unversioned/optional-only public path when the new format lands. P07/L02 retain responsibility for scoped envelopes and applying/publishing gaps.",
+    "Update codec callers and installed examples to preserve original failed records and report typed errors before any coverage advancement. Do not treat a syntax-only repair as completion: legacy reader/transport transactions and actual recovery remain P07/L03/L08; codec acceptance uses actual owned core values and installed-only tests."
    ],
    "acceptance": [
     "Wire size depends on the number of observed actors and the text, not on the magnitude of identity values; Buffer and IdList round-trips preserve logical operations.",
-    "Header-only external compilation uses only installed public includes; unknown versions return distinguishable unsupported-version errors."
+    "Header-only external compilation uses only installed public includes; unknown versions return distinguishable unsupported-version errors.",
+    "Allocation intervals and terminal gap metadata round-trip with checked full-width arithmetic; invalid/default values and bad/unknown/truncated/oversize input fail explicitly without engine mutation or silent byte loss. Gap integration/publication is not claimed by codec evidence."
    ],
    "verification": "Compare equal-cardinality small/large-valued actor sets and exact uint64 bounds; verify new-format golden round trips and explicit rejection of old and unknown formats.",
    "addresses": [
@@ -1537,8 +1555,28 @@
     "R13"
    ],
    "gate": null,
-   "status": "not_started",
-   "split_rationale": "Remaining half of P06 after P06a. See P06a.split_rationale."
+   "status": "in_progress",
+   "split_rationale": "Remaining half of P06 after P06a. See P06a.split_rationale.",
+   "baseline_revision": "fa3e11a",
+   "progress": "Bounded public JSON syntax and Unicode-string decoding repair accepted. Public failures still return optional, payloads are unversioned, allocation/gap codecs are not implemented. Continue vnext-operation-codec.md; do not mark P06b complete or unlock S04b yet.",
+   "verification_results": {
+    "strict_syntax_regression": "Baseline public decoder accepted an actual emitted operation followed by garbage; new public test failed at the intended assertion before the repair (20261005T234223Z-changed-0cpids58).",
+    "unicode_regression": "After syntax repair, valid escaped non-BMP input decoded into CESU-8 surrogate bytes; new actual-operation canonicalization assertion failed (20261005T234448Z-changed-i3j_x1fw). Reusing bounded JsonReader string decoding repairs it without a new Unicode parser.",
+    "debug": "72/72 bounded CTest suites plus installed relocated Core consumer and package/isolation/negative-component checks pass. 81.572 s whole warm run, 9.36 s selected tests (20261005T234608Z-changed-okhhf9il); no benchmarks or long realistic simulation.",
+    "release": "7/7 codec/public/value lifetime/validation/Buffer+IdList convergence suites pass, 0.67 s tests, 66.765 s whole rebuild/check (20261005T234609Z-changed-ol6vuyw_).",
+    "asan": "Same seven already-built suites pass with ASan/UBSan/LSan and leak checking enabled outside process-inspection restriction; 11.75 s tests, no suppressions. /tmp/collabtext-codec-preflight-asan.log",
+    "api": "No signature/wire layout change in this partial repair. Manifest version 3 records stricter syntax and escaped Unicode, correctly calls current payloads unversioned, and keeps typed codecs/legacy file transactions unavailable."
+   },
+   "artifacts": [
+    "docs/specs/vnext-operation-codec.md",
+    "build-roadmap-debug/verification/20261005T234223Z-changed-0cpids58",
+    "build-roadmap-debug/verification/20261005T234448Z-changed-i3j_x1fw",
+    "build-roadmap-debug/verification/20261005T234608Z-changed-okhhf9il",
+    "build-consumer-verify/debug-package-20261005T234720Z-2107",
+    "build-roadmap-release/verification/20261005T234609Z-changed-ol6vuyw_",
+    "/tmp/collabtext-codec-preflight-asan-build.log",
+    "/tmp/collabtext-codec-preflight-asan.log"
+   ]
   },
   {
    "id": "S04b",
@@ -1568,7 +1606,8 @@
     "libs/collabtext/src/CrdtEngine.cpp",
     "libs/collabtext/src/IdListEngine.cpp",
     "libs/collabtext/tests/reference/BoundaryApiContract.h",
-    "libs/collabtext/CMakeLists.txt"
+    "libs/collabtext/CMakeLists.txt",
+    "libs/collabtext/src/identity/ReplicaState.cpp"
    ],
    "steps": [
     "Implement the reviewed S04a boundary representation and helpers within the existing Buffer/IdList engines. Start with a straightforward checked traversal; preserve item identities through split/deletion/undo and avoid adding a second production sequence engine or an optimization project.",

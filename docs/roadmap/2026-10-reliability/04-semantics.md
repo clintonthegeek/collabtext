@@ -179,6 +179,8 @@ Run ./tools/verify-roadmap.sh debug tst_boundary_model and Release/ASan equivale
 - `libs/collabtext/tests/reference/BoundaryApiContract.h`
 - `libs/collabtext/CMakeLists.txt`
 
+- `libs/collabtext/src/identity/ReplicaState.cpp`
+
 **Steps:**
 
 1. Implement the reviewed S04a boundary representation and helpers within the existing Buffer/IdList engines. Start with a straightforward checked traversal; preserve item identities through split/deletion/undo and avoid adding a second production sequence engine or an optimization project.

@@ -246,6 +246,15 @@ bool JsonReader::expect(char c, JsonError& error) {
 }
 
 bool JsonReader::parse(std::string_view input, JsonValue& out, JsonError& error) {
+    return parse_impl(input, out, error, true);
+}
+
+bool JsonReader::parse_syntax(std::string_view input, JsonValue& out, JsonError& error) {
+    return parse_impl(input, out, error, false);
+}
+
+bool JsonReader::parse_impl(std::string_view input, JsonValue& out, JsonError& error,
+                            bool interpret_header) {
     // The output starts empty. A caller that reuses one JsonValue across parses
     // would otherwise accumulate the previous document's members, and a
     // two-field object would be reported as a duplicate key on the second call.
@@ -290,7 +299,7 @@ bool JsonReader::parse(std::string_view input, JsonValue& out, JsonError& error)
         return false;
     }
 
-    if (out.is_object()) {
+    if (interpret_header && out.is_object()) {
         if (const JsonValue* id = out.find("t"))
             if (id->is_string()) identifier_ = id->string_value();
         if (const JsonValue* version = out.find("v")) {

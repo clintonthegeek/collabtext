@@ -237,16 +237,39 @@ Run the identity model and Buffer/IdList convergence suites in Debug, Release, a
 - `libs/collabtext/src/codec/OperationCodec.cpp`
 - `libs/collabtext/tests/tst_serialization_public.cpp`
 
+- `libs/collabtext/src/crdt/Serialization.cpp`
+- `libs/collabtext/src/codec/JsonReader.h`
+- `libs/collabtext/src/codec/JsonReader.cpp`
+- `libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md`
+
+- `docs/specs/vnext-operation-codec.md`
+- `docs/specs/vnext-protocol.md`
+- `docs/specs/vnext-public-api.md`
+- `docs/USING_VNEXT.md`
+- `libs/collabtext/CMakeLists.txt`
+- `libs/collabtext/tests/`
+- `tests/consumer-smoke/`
+
+- `libs/collabtext/src/crdt/FileSync.cpp`
+- `libs/collabtext/src/crdt/FileSync.h`
+- `libs/collabtext/src/crdt/StreamSync.cpp`
+- `libs/collabtext/src/crdt/StreamSync.h`
+
 **Steps:**
 
 1. Encode canonical sparse actor/counter vectors and an explicit payload version. The actor set is what the wire size must depend on, never the magnitude of the identity values.
 2. Encode 64-bit counters exactly, with no conversion through double. A counter above 2^53 is a legal value and must round-trip bit for bit.
 3. Define and test only the new codecs. An old or unknown format identifier produces an explicit incompatible-format error before mutation; diagnostic input is retained and no record is skipped silently. No legacy decoder or conversion mapping is required.
 
+4. Follow docs/specs/vnext-operation-codec.md for the fixed family/version header, exact-width scalar representation, checked Result APIs, payload fields, allocation-interval and terminal gap record codec. Reuse bounded JsonReader syntax and Unicode logic; remove the interim unversioned/optional-only public path when the new format lands. P07/L02 retain responsibility for scoped envelopes and applying/publishing gaps.
+5. Update codec callers and installed examples to preserve original failed records and report typed errors before any coverage advancement. Do not treat a syntax-only repair as completion: legacy reader/transport transactions and actual recovery remain P07/L03/L08; codec acceptance uses actual owned core values and installed-only tests.
+
 **Acceptance:**
 
 - Wire size depends on the number of observed actors and the text, not on the magnitude of identity values; Buffer and IdList round-trips preserve logical operations.
 - Header-only external compilation uses only installed public includes; unknown versions return distinguishable unsupported-version errors.
+
+- Allocation intervals and terminal gap metadata round-trip with checked full-width arithmetic; invalid/default values and bad/unknown/truncated/oversize input fail explicitly without engine mutation or silent byte loss. Gap integration/publication is not claimed by codec evidence.
 
 **Verification:** Compare equal-cardinality small/large-valued actor sets and exact uint64 bounds; verify new-format golden round trips and explicit rejection of old and unknown formats.
 

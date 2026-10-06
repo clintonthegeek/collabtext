@@ -2168,3 +2168,30 @@ run model/anchor checks. No benchmarks or engine optimization.
 
 S04a is complete. P06b is next before S04b; W02/S02 are separately ready.
 No production F7/F8 marker or installed position capability was promoted.
+
+
+## 2026-10-05 — P06b partial: repair actual public syntax/Unicode decoding
+
+Baseline fa3e11a. P06b remains in_progress: the versioned Result API and
+allocation/gap codecs are still pending, with an exact implementation contract
+in vnext-operation-codec.md. This is a real native decoder repair, not a completed
+wire-format task or a store-recovery claim.
+
+Regression 1: the public decoder accepted an actual operation followed by garbage.
+Regression 2: a valid escaped emoji became invalid surrogate UTF-8 bytes. Each
+new test failed before its corresponding repair. Public operation/list/global
+paths now use bounded complete-input syntax validation; root v is treated as a
+causal vector in syntax-only mode. String decoding reuses the existing checked
+Unicode implementation. Invalid/oversize/duplicate input is refused and escaped
+non-BMP content preserves the exact logical operation on replay. Public header
+warn-and-skip advice is removed; caller/legacy transport retention still needs
+its actual transactional implementation.
+
+Verification: Debug bounded **72/72** plus installed relocated Core/package gates,
+**81.572 s total**, **9.36 s CTest**; Release **7/7**, **66.765 s total**,
+**0.67 s CTest**; already-built unrestricted ASan/UBSan/LSan **7/7**, **11.75 s**,
+leak checks on and no suppressions. Exact paths/selections are in TASKS.json.
+No benchmark, optimization campaign or long realistic simulation. Manifest v3
+records implemented syntax/Unicode and keeps typed/versioned codec and legacy
+file transactions explicitly unavailable. S04b remains dependency-blocked by
+unfinished P06b; W02 and S02 remain independently ready.

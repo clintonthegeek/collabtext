@@ -127,3 +127,35 @@ version errors. P06b must replace them with bounded, typed versioned decoding an
 retain failures at its callers. Do not conceal that behavior behind a round-trip
 pass. The codec also owns allocation/gap representation under identity §3.6;
 P07/L02 own integration/publication, which remains separate.
+
+
+## Native public decoder repair started P06b
+
+The bounded JsonReader existed, but public decode_operation/decode_idlist_operation/
+decode_global still bypassed it. A real emitted operation followed by garbage
+was accepted. Connecting bounded syntax validation rejects trailing garbage/NUL,
+duplicate keys, invalid literal Unicode/escapes and oversized frames before the
+legacy builder runs. Syntax-only parsing avoids confusing causal-vector v with
+an envelope's numeric version.
+
+A second regression then exposed valid escaped emoji being decoded as two
+UTF-8-encoded surrogate halves. The string builder now reuses JsonReader's tested
+scalar/escape decoding; escaped and literal forms produce the same actual operation
+and apply as the exact emoji. The failing-before/passing-after public tests and
+artifact paths are in the registry.
+
+The broad bounded Debug/package gate passed 72/72 plus the installed Core consumer
+in **81.572 seconds total**, with selected CTest work **9.36 seconds**. Affected
+Release and leak-enabled ASan/UBSan/LSan each passed 7/7. No benchmarks ran, and
+these are warm affected builds, not clean-build estimates. Manifest version 3
+corrects the prior misleading payload schema-version label: current operation
+payloads remain unversioned. Optional errors, allocation/gap formats and legacy
+file-reader transactions remain unfinished; P06b stays in_progress.
+
+[vnext-operation-codec.md](../specs/vnext-operation-codec.md) now provides exact
+family headers, full-width scalar representation, fields, bounds, typed API
+transition, allocated interval/gap metadata and an acceptance sequence. It also
+identifies that causal counter raises create permanently unused ranges: L02 must
+account for those and abandoned reservations rather than treating a maximum
+counter as contiguous coverage. Those lifecycle guarantees are not claimed by
+this parser repair.

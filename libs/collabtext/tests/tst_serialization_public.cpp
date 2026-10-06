@@ -124,6 +124,59 @@ private slots:
         QCOMPARE(receiver.apply_ops({*decoded})[0].kind(), CollabText::ApplyOutcomeKind::applied);
         QVERIFY(receiver.ids().empty());
     }
+    void escaped_non_bmp_text_preserves_the_actual_operation() {
+        const std::string emoji = "\xf0\x9f\x98\x80";
+        const auto original = text_op(1, emoji);
+        const auto literal_wire = encode_operation(original);
+        auto escaped_wire = literal_wire;
+        const std::string escape = "\\ud83d\\ude00";
+        size_t start = 0, replacements = 0;
+        while ((start = escaped_wire.find(emoji, start)) != std::string::npos) {
+            escaped_wire.replace(start, emoji.size(), escape);
+            start += escape.size(); ++replacements;
+        }
+        QVERIFY(replacements > 0);
+        auto decoded = decode_operation(escaped_wire);
+        QVERIFY(decoded.has_value());
+        QCOMPARE(encode_operation(*decoded), literal_wire);
+        CollabText::CrdtEngine receiver(CollabText::Test::test_counter(9));
+        QVERIFY(receiver.applyRemoteOp(*decoded));
+        QCOMPARE(receiver.text(), emoji);
+    }
+    void public_decoders_reject_untrusted_json_syntax() {
+        const auto wire = encode_operation(text_op(1, "hello"));
+        QVERIFY(decode_operation(wire).has_value());
+        QVERIFY(!decode_operation(wire + "garbage").has_value());
+        QVERIFY(!decode_operation(wire + std::string(1, '\0')).has_value());
+        auto duplicate = wire;
+        duplicate.insert(duplicate.size() - 1, ",\"t\":\"u\"");
+        QVERIFY(!decode_operation(duplicate).has_value());
+        auto invalid_utf8 = wire;
+        invalid_utf8.replace(invalid_utf8.find("hello"), 1, std::string(1, char(0xc0)));
+        QVERIFY(!decode_operation(invalid_utf8).has_value());
+        auto invalid_escape = wire;
+        invalid_escape.replace(invalid_escape.find("hello"), 1, "\\q");
+        QVERIFY(!decode_operation(invalid_escape).has_value());
+        CollabText::IdListEngine list(CollabText::Test::test_counter(2));
+        auto inserted = list.try_insert_after(Anchor::min(), 42);
+        QVERIFY(inserted.ok());
+        auto list_wire = encode_idlist_operation(inserted.value());
+        QVERIFY(!decode_idlist_operation(list_wire + "garbage").has_value());
+        list_wire.insert(list_wire.size() - 1, ",\"t\":\"il-u\"");
+        QVERIFY(!decode_idlist_operation(list_wire).has_value());
+        Global version;
+        version.observe(Identity(actor(1), (uint64_t(1) << 53) + 1));
+        auto version_wire = encode_global(version);
+        QVERIFY(!decode_global(version_wire + "garbage").has_value());
+        auto empty = encode_global(Global{});
+        empty.insert(empty.size() - 1, "\"" + actor(1).to_string() + "\":1,\"" + actor(1).to_string() + "\":2");
+        QVERIFY(!decode_global(empty).has_value());
+        // Same entry point as normal decoding; no unbounded old-parser allocation.
+        const std::string oversized((8u << 20) + 1, ' ');
+        QVERIFY(!decode_operation(oversized).has_value());
+        QVERIFY(!decode_idlist_operation(oversized).has_value());
+        QVERIFY(!decode_global(oversized).has_value());
+    }
     void decode_operation_nullopt_on_invalid() {
         for (auto bytes : {"", "not json", "{}", "{\"t\":\"x\"}"})
             QVERIFY(!decode_operation(bytes).has_value());

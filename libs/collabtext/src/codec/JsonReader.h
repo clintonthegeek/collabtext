@@ -157,6 +157,10 @@ public:
     /// Parse and return the root value. Requires complete consumption.
     bool parse(std::string_view input, JsonValue& out, JsonError& error);
 
+    /// Validate complete bounded JSON without interpreting root t/v as envelope
+    /// metadata. Interim operation payloads use v for their causal vector.
+    bool parse_syntax(std::string_view input, JsonValue& out, JsonError& error);
+
     /// Identifier of the root object, for schema resolution. Empty when the root
     /// is not an object. Callers that must distinguish "newer writer" from
     /// "corrupt" should use this instead of rejecting an unknown `v` themselves.
@@ -173,6 +177,7 @@ public:
     const JsonError& error() const { return error_; }
 
 private:
+    bool parse_impl(std::string_view input, JsonValue& out, JsonError& error, bool interpret_header);
     bool parse_value(JsonValue& out, size_t depth, size_t& element_budget,
                      JsonError& error);
     bool parse_object(JsonValue& out, size_t depth, size_t& element_budget,

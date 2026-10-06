@@ -1,5 +1,6 @@
 #include "crdt/OperationPayload.h"
 #include "crdt/Serialization.h"
+#include "codec/JsonReader.h"
 
 #include <collabtext/ActorId.h>
 
@@ -267,54 +268,24 @@ struct Parser {
 
     std::optional<std::string> parse_string() {
         skip_ws();
+        const size_t begin = pos;
         if (!expect('"')) return std::nullopt;
-        std::string out;
+        bool escaped = false;
         while (!at_end()) {
-            char c = advance();
-            if (c == '"') return out;
-            if (c == '\\') {
-                if (at_end()) return std::nullopt;
-                char esc = advance();
-                switch (esc) {
-                    case '"':  out += '"'; break;
-                    case '\\': out += '\\'; break;
-                    case '/':  out += '/'; break;
-                    case 'b':  out += '\b'; break;
-                    case 'f':  out += '\f'; break;
-                    case 'n':  out += '\n'; break;
-                    case 'r':  out += '\r'; break;
-                    case 't':  out += '\t'; break;
-                    case 'u': {
-                        if (pos + 4 > src.size()) return std::nullopt;
-                        uint16_t cp = 0;
-                        for (int i = 0; i < 4; ++i) {
-                            char h = advance();
-                            cp <<= 4;
-                            if (h >= '0' && h <= '9') cp |= (h - '0');
-                            else if (h >= 'a' && h <= 'f') cp |= (h - 'a' + 10);
-                            else if (h >= 'A' && h <= 'F') cp |= (h - 'A' + 10);
-                            else return std::nullopt;
-                        }
-                        // Encode as UTF-8
-                        if (cp < 0x80) {
-                            out += static_cast<char>(cp);
-                        } else if (cp < 0x800) {
-                            out += static_cast<char>(0xC0 | (cp >> 6));
-                            out += static_cast<char>(0x80 | (cp & 0x3F));
-                        } else {
-                            out += static_cast<char>(0xE0 | (cp >> 12));
-                            out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-                            out += static_cast<char>(0x80 | (cp & 0x3F));
-                        }
-                        break;
-                    }
-                    default: return std::nullopt;
-                }
-            } else {
-                out += c;
-            }
+            const char c = advance();
+            if (escaped) { escaped = false; continue; }
+            if (c == '\\') { escaped = true; continue; }
+            if (c != '"') continue;
+            // Reuse the strict scalar/escape decoder instead of emitting each
+            // UTF-16 surrogate as a separate three-byte UTF-8 sequence.
+            Codec::JsonReader reader;
+            Codec::JsonValue value;
+            Codec::JsonError error;
+            if (!reader.parse_syntax(src.substr(begin, pos - begin), value, error)
+                || !value.is_string()) return std::nullopt;
+            return value.string_value();
         }
-        return std::nullopt; // Unterminated string
+        return std::nullopt;
     }
 
     std::optional<Identity> parse_identity() {
@@ -703,17 +674,31 @@ struct Parser {
 
 } // anonymous namespace
 
+// P06b's first repair: the public entry points must not bypass P04's bounded
+// grammar reader. The old payload builder below still owns interim field decode;
+// typed versions/new schema follow in OperationCodec. No header interpretation:
+// this payload's v is a causal vector, not an envelope version number.
+static bool valid_payload_json(std::string_view json) {
+    Codec::JsonReader reader;
+    Codec::JsonValue root;
+    Codec::JsonError error;
+    return reader.parse_syntax(json, root, error) && root.is_object();
+}
+
 std::optional<Operation> decode_operation(std::string_view json) {
+    if (!valid_payload_json(json)) return std::nullopt;
     Parser p{json};
     return p.parse_operation();
 }
 
 std::optional<IdListOperation> decode_idlist_operation(std::string_view json) {
+    if (!valid_payload_json(json)) return std::nullopt;
     Parser p{json};
     return p.parse_idlist_operation();
 }
 
 std::optional<Global> decode_global(std::string_view json) {
+    if (!valid_payload_json(json)) return std::nullopt;
     Parser p{json};
     return p.parse_global();
 }
