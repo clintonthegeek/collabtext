@@ -27,6 +27,8 @@ struct DocumentSessionConfig {
   DocumentId document;
   StreamId stream;
   uint64_t epoch = 1;
+  size_t max_undo_steps = 1000;
+  size_t max_undo_bytes = 16 * 1024 * 1024;
 };
 
 struct SessionRecoveryReport {

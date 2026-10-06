@@ -182,6 +182,31 @@ private slots:
     QVERIFY(session->close().ok());
   }
 
+  void session_reopens_with_configured_undo_budget() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "doc-undo-budget", "text-undo-budget", 1};
+    config.max_undo_steps = 10;
+    config.max_undo_bytes = 40;
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QVERIFY(session->apply_local({{0, 0}}, {"A"}).ok());
+      QVERIFY(session->apply_local({{1, 1}}, {"B"}).ok());
+      QCOMPARE(session->text(), std::string("AB"));
+      QVERIFY(session->close().ok());
+    }
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    QVERIFY(session->undo().ok());
+    QCOMPARE(session->text(), std::string("A"));
+    QVERIFY(session->close().ok());
+  }
+
   void session_reconciles_pending_local_commit_before_replay() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());

@@ -225,6 +225,8 @@ DocumentSession::open(DocumentSessionConfig config) {
         &*impl->replica, impl->config.document, impl->config.stream,
         impl->config.epoch);
     impl->buffer = std::make_unique<Crdt::Buffer>(impl->allocator);
+    impl->buffer->set_max_undo_depth(impl->config.max_undo_steps);
+    impl->buffer->set_max_undo_bytes(impl->config.max_undo_bytes);
     auto local_history = Storage::LocalHistoryLog::open(
         Impl::history_path(impl->config), impl->replica->actor());
     if (!local_history.ok()) return local_history.error();
