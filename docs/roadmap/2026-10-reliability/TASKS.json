@@ -2216,7 +2216,10 @@
       "files": [
         "libs/collabtext/src/crdt/SegmentReader.h",
         "libs/collabtext/src/crdt/SegmentReader.cpp",
-        "libs/collabtext/tests/tst_segment_reader.cpp"
+        "libs/collabtext/tests/tst_segment_reader.cpp",
+        "libs/collabtext/src/crdt/FileSync.cpp",
+        "libs/collabtext/src/crdt/StreamSync.cpp",
+        "libs/collabtext/tests/tst_evaluation_regressions.cpp"
       ],
       "steps": [
         "Replace one highest-segment cursor with an explicit contiguous committed frontier and bounded read state. Safest baseline: stop at missing/invalid predecessors; do not acknowledge later segments past a gap.",
@@ -2232,7 +2235,20 @@
         "F6"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "baseline_revision": "22d72d6",
+      "implementation_commits": [
+        "0771f018aba8ebe17e455a2bd009a07587c3c53e"
+      ],
+      "verification_results": {
+        "debug_required_and_affected": "5/5 passed: tst_segment_reader, tst_evaluation_regressions, tst_filesync, tst_opstream_streamsync, tst_decode_validation",
+        "arrival_matrix": "All six arrival permutations of a three-segment fixture pass; late, corrupt-and-repaired predecessors do not advance coverage.",
+        "recovery_boundaries": "Open-tail prefix replacement, partial line, seal transition, uncommitted replay, stale/foreign token rejection, bounded multi-batch sealed read, and checkpoint-matched cursor restore pass.",
+        "plan_validation": "72-task dependency graph and consumer sequencing valid"
+      },
+      "artifacts": [
+        "build-roadmap-debug/verification/20261006T210317Z-2/"
+      ]
     },
     {
       "id": "L04",

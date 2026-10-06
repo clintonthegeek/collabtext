@@ -2741,3 +2741,33 @@ Verification:
   - validate-plan.py passed for all 72 tasks.
   - No merge, push, or publication performed.
 ```
+
+```text
+Task: L03
+Status: complete
+Branch: feat/fuguemax-placement
+Baseline: 22d72d6
+Implementation: 0771f018aba8ebe17e455a2bd009a07587c3c53e
+
+Delivered:
+  - Segment reads stop at missing or invalid predecessors and expose the gap.
+    They return bounded batches with reader-owned delivery tokens; reads do not
+    advance coverage, and stale or foreign tokens cannot commit.
+  - Open and sealed progress carry a consumed-prefix hash. Rewritten/truncated
+    tails replay safely, open-to-sealed transitions skip only verified prefixes,
+    and large sealed segments resume across bounded batches.
+  - Cursor files use L01 atomic durable replacement and are bound to a consumer
+    checkpoint ID. Without a matching recovered checkpoint, readers replay from
+    the beginning. FileSync and StreamSync accept progress only in memory.
+  - Removed F6's expected-failure marker. F5's receiver-restart fixture also
+    passes now that legacy readers do not persist coverage without recoverable
+    consumer state; L05 still owns the full session lifecycle.
+
+Verification:
+  - Debug selected suites passed 5/5: tst_segment_reader,
+    tst_evaluation_regressions, tst_filesync, tst_opstream_streamsync, and
+    tst_decode_validation.
+  - All six arrival permutations of the three-segment fixture passed.
+  - validate-plan.py passed for all 72 tasks.
+  - No merge, push, or publication performed.
+```
