@@ -389,6 +389,57 @@ fi
 note_step "format-identifiers-match-codecs: ok"
 
 # ---------------------------------------------------------------------------
+# Supported-token declaration.
+#
+# Declaring a format version supported for consumer persistence is the one claim
+# in a candidate that obliges *later* releases. It must therefore be backed by
+# retained golden bytes that a reader actually reads, not by a sentence in a
+# manifest. The installed manifest is checked for the declaration, and the
+# declared token version must be the version the retained fixture covers.
+# ---------------------------------------------------------------------------
+printf '\n=== supported token version declaration\n'
+token_fixture="$repo_root/libs/collabtext/tests/fixtures/position-tokens/ctpt-v1-supported.json"
+# grep rather than sed: the pattern spans several capture-free groups and a sed
+# substitution that only selects a line has no group to reference.
+if grep -qE '^\| `CTPT` .*\| 1 \| \*\*SUPPORTED' \
+        "$repo_root/libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md"; then
+    declared_supported=CTPT/1
+else
+    declared_supported=""
+fi
+if [[ -z "$declared_supported" ]]; then
+    printf '  this candidate declares no supported position-token version (CTPT/1 remains\n'
+    printf '  experimental). That is a legitimate state for a package-only alpha.\n'
+    token_supported="none"
+else
+    [[ -f "$token_fixture" ]] || {
+        echo "!! the manifest declares CTPT/1 supported but $token_fixture does not exist." >&2
+        echo "   A supported version without retained golden bytes is an obligation with" >&2
+        echo "   nothing behind it." >&2
+        trap - EXIT; finish 3
+    }
+    python3 - "$token_fixture" <<'PY' || { trap - EXIT; finish 3; }
+import json, pathlib, sys
+fixture = json.loads(pathlib.Path(sys.argv[1]).read_text())
+if fixture.get('schema') != 'collabtext-position-token-goldens/1':
+    sys.exit('unexpected retained position-token fixture schema')
+if fixture.get('format') != 'CTPT' or fixture.get('version') != 1:
+    sys.exit(f"the retained fixture covers {fixture.get('format')}/{fixture.get('version')}, not CTPT/1")
+cases = fixture.get('cases') or []
+kinds = {c['kind'] for c in cases}
+missing = {'TextBoundary', 'TextAttachment', 'ListBoundary', 'ListElement'} - kinds
+if missing:
+    sys.exit(f'the retained fixture does not cover token kinds: {sorted(missing)}')
+print(f"  CTPT/1 declared supported; retained fixture covers {len(cases)} cases, "
+      f"kinds {sorted(kinds)}, since {fixture.get('supported_since')}")
+print(f"  fixture sha256 recorded by this run: see alpha-candidate.json")
+PY
+    token_supported="CTPT/1"
+    token_fixture_sha=$(sha256sum "$token_fixture" | cut -d' ' -f1)
+    note_step "supported-token-has-retained-goldens: ok ($token_fixture_sha)"
+fi
+
+# ---------------------------------------------------------------------------
 # Stage the install tree.
 # ---------------------------------------------------------------------------
 prefix="$output_dir/prefix"
@@ -633,16 +684,20 @@ json.dump({
   "serialized_formats": {
     "declared": "$declared_formats",
     "discovered_in_codecs": "$discovered",
-    "supported_for_durable_storage": [],
-    "note": "No format version is supported for consumer persistence at this candidate. "
-            "CTPT/1 is experimental. No store or checkpoint format exists.",
+    "supported_for_durable_storage": "$token_supported",
+    "supported_token_golden_fixture": "${token_fixture:-none}",
+    "supported_token_fixture_sha256": "${token_fixture_sha:-}",
+    "note": "CTPT/1 is a supported position-token version when listed above: a later "
+            "supported release keeps its reader and these bytes, or translates them. "
+            "It is not a pin and does not survive reclamation, an epoch change, "
+            "local_clear() or store recovery. No store or checkpoint format exists.",
   },
   "verification_evidence": json.load(open(sys.argv[2])),
   "known_limits": [
     "Not a supported release and not published.",
     "C++ API/ABI is unstable between candidates; pin the SHA and rebuild.",
     "No crash recovery, no persistent undo/redo, no durable pins, no GC (G-series pending).",
-    "No supported position-token version; CTPT/1 must not be used as a durable store format.",
+    "CTPT/1 is a supported serialized token version, but a token is not a pin: it does not survive reclamation, an epoch change, local_clear() or store recovery, and physical GC is disabled.",
     "Qt widget layer and file transport are optional and not part of the headless Core path.",
   ],
 }, open("$candidate_json", "w"), indent=2)

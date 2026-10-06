@@ -1,4 +1,4 @@
-# collabtext 0.2.0-alpha.1 — integration alpha
+# collabtext 0.2.0-alpha.2 — position-capable integration alpha
 
 **Status: prepared, not published.** No tag exists on any remote, no package has
 been published, `master` has not been merged or touched, and no consumer has been
@@ -11,18 +11,29 @@ GC. What it can and cannot do is stated in the installed capability manifest
 `<collabtext/ALPHA_CAPABILITIES.md>`, which is versioned separately from this
 document and is the authority.
 
+Two candidates are described here:
+
+| Candidate | Version | Tag | What it adds |
+|---|---|---|---|
+| package alpha | `0.2.0-alpha.1` | `v0.2.0-alpha.1` | the installable package, pins, checksums, publication checklist |
+| **position alpha (this release)** | **`0.2.0-alpha.2`** | `v0.2.0-alpha.2` | **`CTPT/1` declared a supported serialized token version**, with retained golden bytes and a reader fixture |
+
+Neither tag exists on any remote. Neither release has been published.
+
 ## Candidate
 
 | | |
 |---|---|
-| Package version | `0.2.0-alpha.1` (SemVer prerelease) |
-| **Candidate SHA** | `bdbae5c3d310f2388b1d445a254b4ac35474d215` |
+| Package version | `0.2.0-alpha.2` (SemVer prerelease) |
+| **Candidate SHA (position alpha)** | _filled in by the preparation commit; see `docs/reports/vnext-task-log.md` (E07b) and the generated `alpha-candidate.json`_ |
+| **Candidate SHA (package alpha, superseded)** | `bdbae5c3d310f2388b1d445a254b4ac35474d215` — tag `v0.2.0-alpha.1` proposed and **not created** |
 | Branch | `feat/fuguemax-placement` |
-| Proposed tag | `v0.2.0-alpha.1` — **not created** |
+| Proposed tag | `v0.2.0-alpha.2` — **not created** |
 | Destination remote | recorded only (`origin`); this task contacted no remote |
-| Capability manifest | version 8, installed beside the headers |
+| Capability manifest | version 9, installed beside the headers |
 | Serialized formats present | `CTBO/0002`, `CTLO/0002`, `CTGV/0001`, `CTGP/0001`, `CTPT/1` |
-| Staged archive | `collabtext-0.2.0-alpha.1-x86_64.tar.gz`, sha256 `356f639526ef146ecb653efd3e93e25f333318e3622a744a2a4e029b41396f9f` |
+| **Supported for consumer persistence** | **`CTPT/1` only** |
+| Retained token goldens | `libs/collabtext/tests/fixtures/position-tokens/ctpt-v1-supported.json`, 16 cases, all four token kinds |
 | Toolchain | GCC 16.2.1, CMake 4.4.3; libzstd 1.5.7, Qt6 6.11.2, OpenSSL 3.6.4 present but undiscovered by the Core consumer |
 
 The packaged content — headers, `ALPHA_CAPABILITIES.md`, exported CMake config,
@@ -30,7 +41,7 @@ The packaged content — headers, `ALPHA_CAPABILITIES.md`, exported CMake config
 records this table. Only this document and the task registry changed after
 verification.
 
-### How this candidate was verified
+### How the package candidate was verified
 
 All five gate runs completed at `bdbae5c`, in this worktree, from clean
 configuration each time:
@@ -56,7 +67,11 @@ repository was cloned to a fresh directory, checked out at
 consumed by a separate CMake project against the install prefix with public
 headers only. It prints `text=aXb byte_offset=1 token_bytes=104`.
 
-### Why `0.2.0-alpha.1` and not `2.0.0`
+### How the position candidate was verified
+
+_filled in by the preparation commit from the retained run results._
+
+### Why `0.2.0-alpha.2` and not `2.0.0`
 
 The reliability workstream is internally called "v2", and its branch names carry
 "reliability-v2". **That is a workstream label, not a package major version.**
@@ -66,7 +81,11 @@ The break that actually happened is already a hard cut inside `0.x`: `Locator` w
 removed, and the operation codec moved from version 1 to version 2. Version 1
 frames are refused rather than read.
 
-`0.2.0-alpha.1` is a prerelease and is therefore **older than `0.2.0`**. One
+The workstream label "v2" is also not the reason the token became supported.
+`CTPT/1` was supported because its representation is independent of placement and
+its meaning survived S03 — see below — not because of a version number.
+
+`0.2.0-alpha.2` is a prerelease and is therefore **older than `0.2.0`**. One
 CMake consequence, stated precisely because it is easy to guess wrong:
 `project(VERSION)` accepts only a numeric version, so the installed
 `collabtext-config-version.cmake` reports `0.2.0` and **a `find_package` request
@@ -88,6 +107,10 @@ test for each:
 - **Scoped positions**: immutable text boundaries and strict attachments, list
   boundaries and elements, exact affinity, explicit collapse, typed
   wrong-context failures, and a binary `CTPT/1` codec with strict decoding.
+- **`CTPT/1` as a supported token format** (new in this candidate): 16 retained
+  golden cases covering all four token kinds, an independent literal §4 reader in
+  the test suite, and a per-case replay that re-mints every golden on the current
+  engines.
 - **FugueMax passage order** (S03): concurrent runs stay contiguous for forward
   and reverse typing, and a peer editing inside a typed run does not split it.
 - **The installed package**: relocatable install, negative discovery for Qt/zstd/
@@ -104,9 +127,12 @@ Stated so a consumer designs around them rather than discovering them:
 - **Crash recovery, persistent undo/redo** — L02–L08, pending.
 - **Durable external pins, checkpoints, GC.** `collect_garbage()` and `compact()`
   return zero and retain everything. Physical GC is disabled on purpose.
-- **A supported persisted position token.** `CTPT/1` is real, versioned, and
-  round-trips exactly, and it is still **experimental**. Do not store it as a
-  durable reference, and do not substitute a stored tree link for it.
+- **A token that survives everything.** `CTPT/1` is supported as *bytes*, which is
+  a promise about reading stored tokens — not about pinning, reclamation, epoch
+  changes, `local_clear()` or store recovery. The full list is in "What this
+  candidate guarantees, exactly". Do not substitute a stored tree link
+  (`parent`, `side`, `right_origin`) for a token; that is the mistake the token
+  format exists to prevent.
 - **A supported store or checkpoint format.** None exists.
 
 ### Baseline probe results at this candidate
@@ -130,9 +156,26 @@ The pre-S03 WP6 known-failure exception is gone. There is **no known failure**
 in the baseline matrix at this candidate: the single non-pass is an
 unimplemented capability recorded as `unsupported`, not a defect.
 
-The strict live-position set (WP1–WP5, WP7 plus the containment smoke, plus the
-independent Markdown consumer) passed at `4bf732f` and is re-certified at
-`0.2.0-alpha.2` by E07b.
+### Strict live-position gate
+
+The baseline above is deliberately permissive: it accepts the exact capability
+state of each probe. The **strict** gate is a separate set that refuses
+`known_failure` and `unsupported` for the live-position capabilities:
+
+| Case set | What it requires |
+|---|---|
+| WP1 | exact affinity, all scalar boundaries, both affinities, two independent replicas |
+| WP2 | explicit collapse for a caret, typed `detached` for a strict referent, undo and redo restore it |
+| WP3 | the consumer's own deleted-containing-block check returning `Gone` before any engine lookup |
+| WP4 | exact start/end/empty boundaries; off-end and interior-of-scalar offsets refused |
+| WP5 | token canonical round-trip, all truncations, all 256 trailing bytes, malformed/foreign refusal, original-token replay in a **fresh process** |
+| WP7 | wrong document, stream, primitive and epoch each refused with no mutation |
+| WP8 | the no-GC containment smoke only — **never** counted as certified reclamation |
+| Markdown consumer | a second, independent fixture: exact Markdown bytes, optional transport routing, and caret collapse shown apart from strict attachment loss |
+
+The results at this candidate are recorded under "How the position candidate was
+verified". A strict row that is `unsupported` or `known_failure` fails the gate;
+a missing row fails it too, rather than shrinking the set.
 
 ## Pinning this candidate
 
@@ -270,11 +313,28 @@ The same script that produced the evidence is in the repository, and needs no
 network, no sibling checkout and no temporary harness:
 
 ```sh
-tools/verify-consumer-package.sh --mode debug   --gate package  --components core
-tools/verify-consumer-package.sh --mode release --gate package  --components core
-tools/verify-consumer-package.sh --mode asan    --gate package  --components core
-tools/verify-consumer-package.sh --mode debug   --gate live     --components core
+# The package gate: install, relocate, and an independent consumer.
+tools/verify-consumer-package.sh --mode debug   --gate package --components core
+tools/verify-consumer-package.sh --mode release --gate package --components core
+tools/verify-consumer-package.sh --mode asan    --gate package --components core
+
+# The strict live-position gate, required for a position-capable candidate.
+tools/verify-consumer-package.sh --mode debug   --gate live    --components core
+tools/verify-consumer-package.sh --mode release --gate live    --components core
+tools/verify-consumer-package.sh --mode asan    --gate live    --components core
 ```
+
+The preparation script is told which gate the evidence must come from, so a
+package-only candidate cannot be passed off as a position one:
+
+```sh
+tools/prepare-integration-alpha.sh --gate live \
+    --evidence <dir from each live run above>
+```
+
+It additionally refuses a candidate whose manifest declares `CTPT/1` supported
+without the retained golden fixture being present and covering all four token
+kinds. A supported-format promise with nothing behind it fails the run.
 
 It configures a producer, installs to prefix A, **moves** it to prefix B, builds a
 separate consumer against B with Qt/zstd/OpenSSL made undiscoverable, and refuses
@@ -303,23 +363,23 @@ somebody's storage.
 change without notice or deprecation. Pin the SHA and rebuild; do not pin a
 symbol.
 
-**No serialized format is supported for durable consumer storage at this
-candidate.** `CTBO/0002`, `CTLO/0002`, `CTGV/0001` and `CTGP/0001` are the alpha's
-interchange formats: versioned, checked, strict-decoding, and what an installed
+**`CTPT/1` position tokens are supported for consumer persistence, from
+`0.2.0-alpha.2`.** This is the one format in this candidate with a reader
+obligation attached. From this candidate forward a supported release either keeps
+reading these bytes or ships a checked translation, reports a version it cannot
+read as `unsupported_version` (distinct from `malformed`), and never remints a
+stored token to make a resolve succeed. The C++ API may break freely; that does
+not excuse reinterpreting stored tokens.
+
+`CTBO/0002`, `CTLO/0002`, `CTGV/0001` and `CTGP/0001` remain the alpha's
+*interchange* formats: versioned, checked, strict-decoding, and what an installed
 consumer actually exchanges operations over. They are usable between peers pinned
-to the same candidate. They are not storage formats, and no reader obligation has
-started for them. `CTPT/1` is additionally *experimental* and is not approved for
-consumer persistence.
+to the same candidate. They are not storage formats, and **no reader obligation
+has started for them** — an operation you store yourself may not be readable by a
+later release.
 
-A reader obligation starts only when a specific format version is declared
-supported in an approved alpha: from that candidate forward, that reader and its
-golden bytes are retained, or a checked translation is provided. Publishing this
-package alpha does not retroactively certify any format, and it does not oblige a
-future release to keep reading obsolete prototype readers. Later supported
-releases must keep the readers of formats they declared supported — API
-instability is not an excuse to silently reinterpret stored bytes.
-
-There is nothing to migrate: no production data, store or history exists.
+There is nothing to migrate: no production data, store or history exists, and no
+pre-vNext or earlier experimental token is supported or will be converted.
 
 ## Known documentation drift at this candidate
 
@@ -338,6 +398,115 @@ Recorded here rather than left to be discovered:
   it). The consumer probe runner also recorded hardcoded `CTBO/1`/`CTLO/1` while
   its own case file declared `CTBO/2`/`CTLO/2`; the retained results in this
   candidate correctly report `CTBO/2` and `CTLO/2`.
+
+## What this candidate guarantees, exactly
+
+Stated positively, because the "not available" list above reads as if less is
+working than is.
+
+**Guaranteed at `0.2.0-alpha.2`:**
+
+- Local text (`Buffer`) and structural list (`IdList`) editing, reading, and
+  in-memory undo/redo.
+- Scoped live positions: exact affinity, start/end/empty boundaries, UTF-8 scalar
+  boundaries, explicit collapse, and typed failure for the wrong
+  document/stream/primitive/epoch.
+- `CTPT/1` as a supported serialized token, with retained golden bytes.
+- Tokens round-trip through encode/decode exactly, including all truncations and
+  all 256 trailing suffixes, and the *original* bytes resolve in a fresh process
+  given operations the consumer retained.
+- Concurrent insertion keeps each author's run contiguous, forward and reverse.
+- An installable, relocatable Core package with no Qt, zstd or crypto dependency,
+  and independent consumers that prove it.
+- Physical GC disabled: `collect_garbage()` and `compact()` retain everything, so
+  nothing a token references can disappear from under it today.
+
+**Explicitly *not* guaranteed, and each has an owner:**
+
+| Not guaranteed | Owner | What a consumer gets instead |
+|---|---|---|
+| Crash recovery | L02–L08 | nothing recovered; a reopen loses the document |
+| Persistent undo/redo across reopen | L06 | in-memory only |
+| Durable external pins | S05/G01/G06/G08 | storing a token is not a pin; WP8 is `unsupported` |
+| Physical reclamation | G06–G08 | disabled; nothing is reclaimed, so nothing breaks |
+| Checkpoint serialization / translation | G04/G05 | no checkpoint format exists |
+| Epoch-change translation | G01/G02 | `wrong_epoch` |
+| Anchors across a durable reopen | S04 (needs L08) | fresh-process replay of self-retained operations only |
+| Enumerated proof of combined sequence/undo histories | S06 | fixtures and 240 seeded differential traces, not exhaustion |
+
+**What the consumer owns** (library behaviour does not extend into it):
+
+- **Block structure and existence.** The engine scopes a position by
+  (document, stream, primitive, epoch); it does not know what a "block" is. A
+  deleted containing block is the consumer's check, and it must run *before*
+  engine lookup — `WP3` tests this in the installed fixture.
+- **Formatting and block-level annotations.** Deliberately out of scope; a consumer
+  layers it over character CRDTs.
+- **Encoding token bytes for its own transport.** `CTPT/1` is binary and may
+  contain NUL. A JSON log must ASCII-wrap it (base64url under its own version
+  prefix); raw binary through UTF-8 conversion loses data.
+- **Interpreting collapse.** The library reports `lost_left`/`lost_right`; whether
+  that is acceptable for a caret and unacceptable for a strict reference is the
+  consumer's policy.
+- **Authorization, event logs and transport choice.** A successful decode grants
+  no permission and a CRDT timestamp is not an authorization.
+
+**Strict reference versus caret** — the distinction a consumer must implement,
+with both branches in `docs/USING_VNEXT.md`:
+
+```cpp
+auto caret  = engine.boundary_at(1, Affinity::left);              // TextBoundary
+auto strict = engine.attachment_at(1, Affinity::left,             // TextAttachment
+                                   ReferentSide::preceding);
+```
+
+A caret keeps resolving after its neighbour is deleted, possibly with
+`collapsed()` set. A strict reference returns typed `detached` with **no offset**,
+because there is no honest nearby position for it. Never resolve a strict
+reference to a nearest offset: that turns a deleted character into a live one,
+which is the failure the typed result exists to prevent.
+
+## Saved reply draft for the user to relay — NOT SENT
+
+Written per E07b step 5 so a consumer conversation can happen on the user's
+terms. **Nothing was sent, and no consumer repository was touched.** Draft:
+
+> Subject: collabtext position alpha `0.2.0-alpha.2` — usable live positions, one
+> supported token format, no recovery yet
+>
+> We've prepared an alpha you can pin by commit SHA. It is an alpha: the C++ API
+> may change between candidates, so pin the SHA and rebuild rather than pinning a
+> tag or a symbol.
+>
+> What it does that you asked about: scoped live positions for text and list
+> primitives, with exact left/right affinity, explicit start/end/empty boundaries,
+> UTF-8 scalar-boundary positions, and typed failures for the wrong document,
+> stream, primitive or epoch instead of a fallback offset. Concurrent insertion is
+> repaired — each author's run stays contiguous for forward and reverse typing —
+> so a pasted paragraph no longer interleaves character by character.
+>
+> `CTPT` version 1 position tokens are now a **supported serialized format**. The
+> golden bytes for all four token kinds are retained in the repository and a
+> reader fixture keeps them working, so a later supported release will keep reading
+> them or provide a translation. Store `encode_position`'s bytes; they are binary
+> and may contain NUL, so wrap them (base64url is fine) rather than passing them
+> through UTF-8 conversion.
+>
+> What it does **not** do yet, so you can plan around it: no crash recovery, no
+> persistent undo/redo across a reopen, no durable external pins, and no garbage
+> collection. Storing a token is not a pin. Physical GC is disabled, so nothing is
+> reclaimed today and a stored token cannot be pulled out from under you yet — but
+> that changes when reclamation lands, and a pin register is on the roadmap.
+> Anchors are not yet certified across a durable reopen; the same bytes resolve in
+> a fresh process given operations you retained yourself.
+>
+> Block structure, existence checks, Markdown/formatting, the event log and
+> transport remain yours. A deleted containing block is your check to make before
+> asking us to resolve anything.
+>
+> Nothing has been published yet — no tag, no release, no package registry entry —
+> so pin the SHA only once the branch is reachable. Tell us if you want it
+> published and we will prepare it for your approval first.
 
 ## Publication checklist
 

@@ -1,17 +1,23 @@
 # collabtext alpha capability manifest
 
-**Version:** 8
+**Version:** 9
 **Introduced by:** roadmap task A02a
-**Package version at this manifest revision:** `0.2.0-alpha.1`
+**Package version at this manifest revision:** `0.2.0-alpha.2`
 **Branch:** `feat/fuguemax-placement` (the workstream label "v2" is not a
 package major version)
-**Status:** alpha. Not a supported release, and not published. E07a prepares a
-pinnable candidate; publication is a separate user instruction that has not been
-given. `0.2.0-alpha.1` is a SemVer **prerelease**. CMake's `project(VERSION)`
-accepts only a numeric version, so the installed `collabtext-config-version.cmake`
-reports `0.2.0` and a `find_package` request cannot name the prerelease label —
-ask for no version or for `0.2.0`, and read `COLLABTEXT_VERSION_STRING` from the
-config file for the full label.
+**Status:** alpha. Not a supported release, and not published. E07a and E07b
+prepared pinnable candidates; publication is a separate user instruction that has
+not been given. `0.2.0-alpha.2` is a SemVer **prerelease**. CMake's
+`project(VERSION)` accepts only a numeric version, so the installed
+`collabtext-config-version.cmake` reports `0.2.0` and a `find_package` request
+cannot name the prerelease label — ask for no version or for `0.2.0`, and read
+`COLLABTEXT_VERSION_STRING` from the config file for the full label.
+
+**What changed at version 9:** `CTPT/1` position tokens became a **supported
+serialized format for consumer persistence**, with retained golden bytes and a
+reader fixture. It was experimental at version 8. Nothing else about the engine
+changed; see the serialized-format section for exactly what the support does and
+does not include.
 
 This manifest exists because an alpha surface that does not say what it cannot do
 is worse than no alpha surface. Every line below is a fact about *this* branch,
@@ -36,7 +42,7 @@ documentation. A capability with no evidence is marked `not implemented`, not
 | Scoped immutable text boundaries/strict attachments and list boundaries/elements; explicit document/stream/primitive/epoch factory | **available** | `tst_positions`, installed `consumer_main` |
 | Exact affinity, scoped empty/start/end, UTF-8 scalar-boundary positions, explicit collapse and selected-referent detachment/undo restoration | **available** | `tst_anchor`, `tst_positions` exact/concurrent/differential cases |
 | Typed wrong-context, delayed-state, missing-history/off-end/list-value failures; position queries allocate no identity and emit no callback | **available** | `tst_positions`, `tst_anchor_codec` |
-| Independently versioned binary CTPT v1 position bytes, strict EOF and owned decode; original token replay in a fresh process | **available, experimental unpublished format** | `tst_anchor_codec` goldens/all prefixes/all 256 trailing values; `tst_positions::fresh_process_original_token_replay` |
+| Independently versioned binary CTPT v1 position bytes, strict EOF and owned decode; original token replay in a fresh process | **available; a supported serialized format since `0.2.0-alpha.2`** | `tst_anchor_codec` goldens/all prefixes/all 256 trailing values; `tst_positions::fresh_process_original_token_replay`; `tst_position_token_reader` retained goldens for all four kinds, independent literal reader, per-case replay |
 | Per-operation outcome vocabulary (applied / duplicate / deferred / rejected) on the **list** facade | **available** | `collabtext_alpha_consumer`, `tst_operation_validation` |
 | Two peers converge over the wire codec | **available** | `tst_convergence`, `tst_opstream_convergence_*`, `tst_sequence_differential` |
 | Core builds and links with no Qt, no zstd, no hash provider | **available** | `collabtext_core_smoke` under `CMAKE_DISABLE_FIND_PACKAGE_Qt6/zstd/OpenSSL=ON` |
@@ -85,20 +91,34 @@ anything supported.
 | `CTLO` — list operation frame | 0002 | as above | as above |
 | `CTGV` — sparse global/coverage vector | 0001 | alpha interchange | as above |
 | `CTGP` — terminal counter-gap record | 0001 | alpha interchange. Validating a gap record does **not** publish the gap or advance coverage. | as above |
-| `CTPT` — position token, **binary** | 1 | **experimental. Not approved for consumer persistence.** | none; no supported token version exists |
+| `CTPT` — position token, **binary** | 1 | **SUPPORTED for consumer persistence, since `0.2.0-alpha.2`.** | **Active.** Retain the reader and these bytes, or provide a checked translation. |
 
-No reader obligation has started for any of these, because nothing is supported
-yet. One starts when a specific format version is declared supported in an
-approved alpha: from that candidate forward, that reader and its golden bytes are
-retained, or a checked translation is provided. `CTPT/1` is the format most
-likely to be misused, so it gets its own sentence. The codec is real, strict,
-versioned, and its bytes round-trip exactly including in a fresh process — that
-is `tst_anchor_codec` and `tst_positions::fresh_process_original_token_replay`.
-None of that makes these bytes a durable storage format. A supported token
-version is frozen by a later approved alpha with a reader manifest and golden
-fixtures, not by this one. Do not remint stored bytes to paper over a resolve
-failure, and do not store a tree link (`parent`, `side`, `right_origin`) in its
-place.
+**`CTPT/1` is a supported token version.** That is a promise about *bytes*, and
+it is deliberately narrow. A later supported release keeps reading stored version
+1 tokens — or translates them — and reports a version it cannot read as
+`unsupported_version` rather than `malformed`. It never remints a stored token to
+make a resolve succeed.
+
+Storing these bytes is safe. What it does **not** buy you:
+
+- **It is not a pin.** Storing a token creates no retention obligation, and
+  `collect_garbage()` currently retains everything anyway, so nothing can be
+  reclaimed out from under one yet.
+- **It does not survive reclamation.** When S05/G06/G08 enable physical GC, a
+  live registered pin must keep its referent alive or a boundary stub must keep
+  the bytes resolving. That does not exist yet.
+- **It does not survive an epoch change.** A token from another epoch reports
+  `wrong_epoch`; G01/G02 own translation.
+- **It does not survive `local_clear()`.** That invalidates position history,
+  including for empty-edge tokens; stored bytes then report `history_unavailable`.
+- **It is not a recovered store.** The same bytes resolve in a fresh process given
+  operations the consumer itself retained. There is no crash-recovered store.
+
+No pre-vNext or earlier experimental token is supported, and none will be
+converted: there is no production data to convert.
+
+Retained golden bytes for all four token kinds, and the reader fixture that keeps
+them working, are `tests/fixtures/position-tokens/` in the source repository.
 
 There is no supported **store** or **checkpoint** format: none exists. There is
 nothing to migrate — the user confirmed there is no production data, history or

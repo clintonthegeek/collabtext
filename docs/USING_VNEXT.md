@@ -1,21 +1,22 @@
 # Using the collabtext alpha package
 
 This is the consumer-facing guide for the alpha on branch `feat/fuguemax-placement`,
-package version **`0.2.0-alpha.1`**. It is an alpha: not a supported release, not
+package version **`0.2.0-alpha.2`**. It is an alpha: not a supported release, not
 published, and expected to change its API between candidates. What it can and
 cannot do is stated in `<collabtext/ALPHA_CAPABILITIES.md>`, which is installed
 beside the headers and versioned independently of this document. **Read that before
 designing against this**. Scoped live positions and FugueMax passage order are
 implemented. Store recovery, persistent undo and durable pins remain pending.
-`CTPT/1` is experimental. Operation bytes are `CTBO`/`CTLO` version 0002; version 1
-is refused.
+`CTPT/1` is a **supported serialized format** from this candidate — a promise about
+bytes, not about recovery. Operation bytes are `CTBO`/`CTLO` version 0002; version
+1 is refused.
 
-`0.2.0-alpha.1` is a SemVer **prerelease**, so it is older than `0.2.0`.
+`0.2.0-alpha.2` is a SemVer **prerelease**, so it is older than `0.2.0`.
 CMake's `project(VERSION)` accepts only a numeric version, so the installed
 `collabtext-config-version.cmake` reports `0.2.0` and a `find_package` request
 cannot name the prerelease label at all. Ask for no version or for `0.2.0`; read
 `COLLABTEXT_VERSION_STRING` from the config file if you need the full label, and
-use the `v0.2.0-alpha.1` tag for pinning.
+use the `v0.2.0-alpha.2` tag for pinning.
 
 Release notes, the candidate SHA, pinning instructions and the serialized-format
 stability statement are in
@@ -141,8 +142,10 @@ three build modes. Read its `--help`.
   use an operation, or you will reissue identities after a restart.
 - **Persist the library-owned position token, not internal fields.** `Locator`
   no longer exists. Do not persist a tree link (`parent`, `side`, `right_origin`)
-  as if it were the public token. `CTPT/1` is experimental until a later alpha
-  candidate says a token version is supported for storage.
+  as if it were the public token. `CTPT/1` is a **supported serialized format
+  since `0.2.0-alpha.2`**: persist `encode_position`'s bytes and later supported
+  releases keep reading them. See the limits below — supported is not the same as
+  safe against everything.
 - **Do not call `collect_garbage()` or `compact()` expecting reclamation.** They
   return zero and retain everything.
 
@@ -177,8 +180,63 @@ trailing byte. Wave's JSON adapter must ASCII-wrap bytes (for example base64url)
 raw binary must not pass through UTF-8 conversion. Wave owns block existence and
 its UI's stale/gone interpretation. Position queries create no pins.
 
-No alpha has been published. This version is experimental until approved release
-preparation freezes its supported-reader obligation. See
+### Caret versus strict reference
+
+The same stored bytes, two different intents, two different outcomes. This is the
+distinction a consumer has to implement on its side; the library only reports it.
+
+```cpp
+// A caret: "put the cursor back roughly where it was".
+auto caret = engine.boundary_at(1, CollabText::Affinity::left);   // TextBoundary
+auto caret_bytes = CollabText::encode_position(caret.value());    // persist this
+// After the character it sat after is deleted:
+auto where = engine.resolve(caret.value());
+if (where.ok()) {
+    // byte_offset is usable and where.value().collapsed() may be true. Show the
+    // caret at byte_offset. Losing the exact neighbour is normal here.
+}
+
+// A strict reference: "this position means *that specific character*".
+auto strict = engine.attachment_at(1, CollabText::Affinity::left,
+                                   CollabText::ReferentSide::preceding);
+auto strict_bytes = CollabText::encode_position(strict.value());  // persist this
+auto attached = engine.resolve(strict.value());
+if (!attached.ok()) {
+    // detached: the selected character is hidden. There is deliberately no
+    // offset to fall back to. Show "the thing you pointed at is gone".
+} else if (attached.value().collapsed()) {
+    // The referent still exists but the boundary lost a side. Surface it.
+}
+```
+
+Never resolve a strict reference to "nearest offset" to make the UI simpler: that
+silently reinterprets a deleted character as a live one, which is the exact
+failure the typed `detached` result exists to prevent.
+
+### What "supported token" does and does not mean
+
+Since `0.2.0-alpha.2`, `CTPT/1` is a supported format for consumer persistence. A
+later supported release keeps this reader and these bytes, or translates them, and
+reports a version it cannot read as `unsupported_version` rather than
+`malformed`. It will not remint your stored token to make a resolve succeed.
+
+It is **not**:
+
+- a pin — storing bytes creates no retention obligation;
+- safe against reclamation — physical GC is disabled, and when S05/G06/G08 enable
+  it a live pin must keep its referent or a stub must keep the bytes resolving;
+- safe across an epoch change — that reports `wrong_epoch`;
+- safe across `local_clear()` — that reports `history_unavailable`;
+- a recovered store — the bytes resolve in a fresh process given operations you
+  retained yourself; L05/L08 own recovered stores.
+
+Retained golden bytes for all four token kinds and the reader fixture that keeps
+them working live in `libs/collabtext/tests/fixtures/position-tokens/`.
+
+No alpha has been published. `CTPT/1` is a supported serialized format from
+`0.2.0-alpha.2`, which is a promise about *bytes*; the release itself is still
+unpublished and the engine still has no recovery, persistent undo, durable pins
+or GC. See
 [the position contract](specs/vnext-boundary-semantics.md) for exact guarantees
 and the retained-order assumption that S02/S03 still certify.
 

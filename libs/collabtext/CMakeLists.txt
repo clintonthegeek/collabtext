@@ -14,7 +14,7 @@ cmake_minimum_required(VERSION 3.19)
 # "0.2.0", not "0.2.0-alpha.1", so a find_package request cannot name the
 # prerelease. COLLABTEXT_VERSION_STRING carries the full label.
 project(collabtext-lib VERSION 0.2.0 LANGUAGES CXX)
-set(COLLABTEXT_PRERELEASE "alpha.1")
+set(COLLABTEXT_PRERELEASE "alpha.2")
 set(COLLABTEXT_VERSION_STRING "${PROJECT_VERSION}-${COLLABTEXT_PRERELEASE}")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -317,6 +317,9 @@ add_crdt_test(tst_convergence)
 add_crdt_test(tst_sumtree)
 add_crdt_test(tst_anchor)
 add_crdt_test(tst_anchor_codec)
+# E07b: the supported-reader fixture for the CTPT/1 token format. Registered as a
+# test so a candidate cannot declare a token version supported without it passing.
+add_crdt_test(tst_position_token_reader)
 add_crdt_test(tst_positions)
 add_executable(collabtext_position_replay_worker tests/position-replay/main.cpp)
 target_link_libraries(collabtext_position_replay_worker PRIVATE collabtext_core)
