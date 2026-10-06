@@ -495,72 +495,42 @@ Locator Buffer::locator_between(const std::vector<Fragment>& frags,
     return Locator::between(lo, hi);
 }
 
+/// Order the fragments of one shared-locator run, keeping every fragment whole.
+///
+/// A run is a set of whole operations competing for one position. Order them by
+/// `origin` -- each fragment's FIRST item identity, compared counter-first then
+/// actor bytes -- and do not split them.
+///
+/// This used to atomize the run into single scalars and sort those. A fragment's
+/// items are `origin.counter + offset` and item counters are per-actor, so two
+/// three-character pastes own counters 1,2,3 each: ranking per-scalar identity
+/// interleaved them into `aXbYcZ`. Both replicas agreed, which is why the defect
+/// survived as "convergent". The comparator was never wrong -- `FragmentOrderDim`'s
+/// `<=>` is already (locator, origin) -- feeding it atomized scalars was.
+///
+/// WHAT THIS DOES NOT FIX: concurrent *typing*. Each keystroke is its own
+/// operation and takes its own strictly increasing locator, so actor A's third
+/// character sorts above actor B's first no matter how same-locator ties are
+/// broken. `tst_sequence_semantics` keeps that case failing on purpose; see
+/// docs/specs/vnext-sequence-algorithm.md §"What remains open".
 void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
     size_t i = 0;
     while (i < frags.size()) {
-        size_t run_start = i;
-        Locator loc = frags[i].locator;
+        const size_t run_start = i;
+        const Locator loc = frags[i].locator;
         size_t run_end = i + 1;
         while (run_end < frags.size() && frags[run_end].locator == loc)
-            run_end++;
+            ++run_end;
 
-        bool multi_actor = false;
-        ActorId first_actor = frags[run_start].origin.actor;
-        for (size_t j = run_start + 1; j < run_end; ++j) {
-            if (frags[j].origin.actor != first_actor) {
-                multi_actor = true;
-                break;
-            }
+        if (run_end - run_start > 1) {
+            std::stable_sort(frags.begin() + static_cast<ptrdiff_t>(run_start),
+                             frags.begin() + static_cast<ptrdiff_t>(run_end),
+                             [](const Fragment& a, const Fragment& b) {
+                                 if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
+                                 return a.origin < b.origin;
+                             });
         }
-
-        if (multi_actor) {
-            std::vector<Fragment> extracted;
-            for (size_t j = run_start; j < run_end; ++j) {
-                auto &f = frags[j];
-                if (f.length == 1) {
-                    extracted.push_back(std::move(f));
-                } else {
-                    const std::string& ftext = f.text;
-                    uint32_t byte_pos = 0;
-                    for (uint32_t c = 0; c < f.length; ++c) {
-                        uint32_t char_bytes = 1;
-                        unsigned char ch = static_cast<unsigned char>(ftext[byte_pos]);
-                        if (ch >= 0xF0) char_bytes = 4;
-                        else if (ch >= 0xE0) char_bytes = 3;
-                        else if (ch >= 0xC0) char_bytes = 2;
-
-                        Identity single_origin = f.item_at(c);
-                        Fragment single;
-                        single.origin = single_origin;
-                        single.locator = f.locator;
-                        single.text = ftext.substr(byte_pos, char_bytes);
-                        single.byte_length = char_bytes;
-                        single.length = 1;
-                        single.deletions = f.deletions;
-                        extracted.push_back(std::move(single));
-                        byte_pos += char_bytes;
-                    }
-                }
-            }
-
-            std::sort(extracted.begin(), extracted.end(),
-                [](const Fragment &a, const Fragment &b) {
-                    auto cmp = a.locator <=> b.locator;
-                    if (cmp != 0) return cmp < 0;
-                    return a.origin < b.origin;
-                });
-
-            frags.erase(
-                frags.begin() + static_cast<ptrdiff_t>(run_start),
-                frags.begin() + static_cast<ptrdiff_t>(run_end));
-            frags.insert(
-                frags.begin() + static_cast<ptrdiff_t>(run_start),
-                std::make_move_iterator(extracted.begin()),
-                std::make_move_iterator(extracted.end()));
-            i = run_start + extracted.size();
-        } else {
-            i = run_end;
-        }
+        i = run_end;
     }
 }
 

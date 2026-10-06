@@ -1,6 +1,6 @@
 # collabtext alpha capability manifest
 
-**Version:** 6
+**Version:** 7
 **Introduced by:** roadmap task A02a
 **Branch:** `roadmap/reliability-v2`
 **Status:** alpha. Not a supported release, and not published. E07a prepares a
@@ -47,7 +47,8 @@ These are stated so a consumer designs around them rather than discovering them.
 |---|---|---|
 | **Terminal gap integration and transactional transport/recovery.** Gap codecs only validate metadata. Legacy FileSync/StreamSync retain and block a failed codec batch before cursor commit; this is containment, not recovery or durable coverage certification. | **not implemented** | P07/L02/L03/L08 own gap publication, terminal coverage, retries and recovered state/cursor transactions. |
 | **Persisting legacy Anchor/Locator fields.** Scoped `TextBoundary`/`TextAttachment`/`ListBoundary`/`ListElement` and `encode_position` are the supported API shape. Legacy internal resolution still ignores bias or falls back on a miss. | **unsupported legacy helper path** | S04b adds the checked scoped path; A02/S04 and presence integration retire remaining legacy usage. Do not serialize raw layout. |
-| **Ordering repair (F8).** Two peers inserting at the same position interleave character-by-character. Convergent, and wrong for prose. | **not implemented** | S01 specifies, S02 designs, S03 applies. The core smoke asserts the character *multiset* for exactly this reason. |
+| **Ordering repair — concurrent pastes (F8, partial).** Two peers pasting whole passages at the same position now keep each passage contiguous and land in the exact branch order. | **available** | `tst_evaluation_regressions::f8_concurrent_pastes_remain_contiguous` (exact `abcXYZ`), `tst_sequence_semantics::concurrentWholePassagesStayContiguous` (two/three actor, unequal lengths, contiguity) |
+| **Ordering repair — concurrent typing (F8, blocked).** Two peers typing character-by-character at the same position still interleave. Convergent, and wrong for prose. | **not implemented, and blocked** | Each keystroke is its own operation taking its own strictly increasing locator, so A's third character sorts above B's first regardless of tie-break — the constraint is in the flat locator chain, not in the ordering of equal locators. Needs locator reuse or a tree-structured position. `tst_evaluation_regressions::f8_concurrent_typing_remains_grouped` stays expected-fail and S01's typing oracle is deliberately not weakened. See `docs/specs/vnext-sequence-algorithm.md` §5a. |
 | **Typed outcome on the text facade.** `CrdtEngine::applyRemoteOp` returns a bool, so deferred and rejected are indistinguishable. | **partial** | A02 renames it to `apply_remote(...) -> ApplyOutcome`. A02a fixed the worse bug — it used to return true unconditionally, which would have told a retrying caller that a rejected operation succeeded. |
 | **Persistent undo/redo.** Undo is in-memory and does not survive a reopen. | **not implemented** | L06. Consumer requirement R5. |
 | **Crash recovery.** No replay-from-log session exists. A reopened `ReplicaState` knows the counter but not the document. | **not implemented** | L02–L08. The installed fresh-process replay re-reads bytes a consumer persisted itself; it is codec and token evidence, not a recovered store. |
@@ -78,8 +79,9 @@ These are stated so a consumer designs around them rather than discovering them.
 
 ## Known limits that are not capability gaps
 
-- Two peers' visible text can be character-interleaved after concurrent inserts
-  at one position (F8, above). Everything else about convergence holds.
+- Two peers typing at the same position still interleave (F8 typing, above);
+  pasting at the same position no longer does. Everything else about convergence
+  holds.
 - `Global::coverage_intersection` treats absence as zero coverage, which is
   correct for a watermark and is why `meet` is a different operation. Do not use
   `meet` to ask what every peer has seen.

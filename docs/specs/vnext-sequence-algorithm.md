@@ -148,7 +148,7 @@ second sequence representation, no new wire format.
 | --- | --- | --- |
 | `Fragment` (`src/crdt/Fragment.h:139`) | Keep `origin`, `locator`, `length`, `deletions`. Add nothing mandatory. | A fragment already *is* a group: one actor's contiguous run with `origin` the first item. `item_at` stays as the derivation the codec and S04b tokens rely on. |
 | `Buffer::normalize_fragments` (`:498`) | **Remove the atomization branch.** Replace the run's per-scalar sort with a sort of the whole same-locator fragments by `(locator, origin)`. | This is the defect and the whole repair site. `origin` is already the per-operation key R2 needs. |
-| `Locator` minting (`Buffer::locator_between`, `Buffer.cpp:478`) | Unchanged. | A peer insertion strictly inside a fragment still splits it and takes a locator strictly between, which is exactly the "immediately before" relation R1 needs. `Locator::between` already produces it. |
+| `Locator` minting (`Buffer::locator_between`, `Buffer.cpp:478`) | **RETRACTED — unchanged is wrong for typing.** This row originally claimed `Locator::between` already expresses R1's "immediately before" relation. That is false. Each keystroke takes its own strictly increasing locator, so A's third character sorts above B's first no matter how same-locator ties break. See "What remains open". |
 | `FragmentOrderDim` (`:101`) | Unchanged. | Its `operator<=>` is already `(locator, origin)`, and `origin` is already counter-then-actor. The comparator was never the defect; feeding it atomized scalars was. |
 | `SumTree` fragment tree | Unchanged. | Ordering keys and insertion points are unchanged; only the contents of a same-locator run change. |
 | `IdList::compare_anchors` (`:381`) | Apply the same rule to equal-boundary insertions. | The list facade orders by anchor, and the same-position tie is the same defect in miniature. `list-same-position-tie` and `list-local-undo-and-redo` are its oracles. |
@@ -203,6 +203,45 @@ executes, not an argument.
 | Duplicate and deferred delivery | Duplicates counted not reapplied; `B/6` before its prerequisites defers, then drains to `a!bcXYZ` | pass |
 | The oracle can reject | `productionAtomizingRuleIsRejected` reproduces `aXbYcZ`, `aXbYcZ!`, `cZbYaX`, `aXbYcZ` for exactly the four comparable fixtures | pass |
 
+## 5a. What remains open: R1 is not expressible in a flat locator order
+
+**S03 disproved part of this specification's transformation map, and the
+production test is what caught it.** `tst_sequence_semantics` drives real
+`Buffer` instances, not the reference model, and it separates two cases that
+looked like one:
+
+| Case | Shape | After removing the atomization |
+| --- | --- | --- |
+| Concurrent **pastes** | one operation holding all its items | **fixed** — `abcXYZ`, contiguous |
+| Concurrent **typing** | one operation per keystroke | **still interleaved** — `aaabbbccc` |
+
+The cause is representational, and it is measurable without any CRDT reasoning.
+Actor A typing `a`,`b`,`c` into an empty document gets locators `[m]`, `[m+1]`,
+`[m+2]`. Actor B, typing into its own empty view, gets the same three. So `A/3`
+is forced above `B/1`, and `b` can never precede `X`:
+
+```
+A/1 == B/1  : 1     both first keystrokes occupy the same position
+A/3 <  B/1  : 0     forward-typing's oracle requires this to be true
+```
+
+No tie-break rule can fix that, because the constraint is in the locator chain
+rather than in the ordering of equal locators. **R1 (group-atomic ordering) is
+correct as a specification and is not representable by a flat fractional index.**
+It needs position to be tree-structured — or, as the S03 spike investigates,
+locator *reuse*: a local insert that continues the author's own contiguous
+preceding fragment inheriting that fragment's locator, which keeps the whole
+typed run inside one same-locator run where R2 can then keep it contiguous.
+
+The honest status of §3's table is therefore: rows for `Fragment`,
+`normalize_fragments`, `FragmentOrderDim` and `Identity` hold for the paste
+case; the `Locator` row does not. This document does not claim the typing case.
+
+S01's typing oracles are **not** weakened to `ababab` or any other convergent
+output. The requirement stands, the F8 typing marker stays expected-fail in
+`tst_evaluation_regressions.cpp`, and the capability manifest records the paste
+case as repaired and the typing case as blocked.
+
 ## 6. Limits, and what S03 must not inherit as settled
 
 - **No maximal non-interleaving is claimed.** R1/R2 order whole operations. They
@@ -216,15 +255,18 @@ executes, not an argument.
 - **Reverse typing relies on `Locator::between` producing a strictly decreasing
   locator.** That is observed behavior of `Buffer::locator_between`
   (`Buffer.cpp:478`) and is covered by `reverse-typing`, but it is an assumption
-  about a function S03 will touch. If S03 changes locator minting, this
-  specification must be re-checked, not assumed.
+  about a function the S03 spike touches. §5a supersedes this: the constraint
+  that actually blocks typing is not monotonicity but the flatness of the
+  representation.
 - **List equality-position ordering is specified but only lightly exercised.**
   Two list fixtures cover it. `IdList::compare_anchors` needs the same treatment
   as the text path and has proportionally less evidence.
-- **Nothing here is production behavior.** No engine code changed. The engine
-  still produces `aXbYcZ`, and
-  `docs/specs/vnext-consumer-probes.md`'s WP6 remains an exact known failure
-  until S03 lands and S04 re-runs the installed probes.
+- **The paste half is applied; the typing half is not.**
+  `normalize_fragments` no longer atomizes, so concurrent pastes keep their
+  passages intact (`abcXYZ`, exact). Concurrent typing still interleaves, for the
+  reason in §5a. `docs/specs/vnext-consumer-probes.md`'s WP6 exercises
+  whole-paste concurrency, so S04 must re-run the installed probes before its
+  allowlist entry can be removed — this document does not authorise that.
 - **GC and pins are untouched.** R1/R2 reorder nothing; retained items keep
   their identities, so an eventual certificate is unaffected. It is also not
   evidence for one — S05/G-series remain open.

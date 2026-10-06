@@ -293,15 +293,50 @@ private slots:
         QCOMPARE(a.resolve_anchor(left), 1u);
     }
 
-    void f8_concurrent_passages_remain_contiguous() {
+    /// F8 split in two by S03. The paste half is repaired; the typing half is not,
+    /// and the difference is representational rather than a leftover.
+    ///
+    /// A paste is one operation holding all its items, so keeping whole fragments
+    /// contiguous is enough and `normalize_fragments` now does it: `abcXYZ`
+    /// instead of `aXbYcZ`.
+    ///
+    /// Typing is one operation per keystroke, each taking its own strictly
+    /// increasing locator, so actor A's third character sorts above actor B's
+    /// first whatever the tie-break. That needs locator reuse, not a comparator
+    /// change, and is tracked as blocked rather than closed. S01's typing oracle
+    /// is deliberately NOT weakened to `ababab` to make this pass.
+    void f8_concurrent_pastes_remain_contiguous() {
         Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
         auto first = a.apply_local_edit({{0, 0}}, {"abc"});
         auto second = b.apply_local_edit({{0, 0}}, {"XYZ"});
         a.apply_ops({second}); b.apply_ops({first});
         QCOMPARE(a.text(), b.text()); // convergence alone already works
-        const auto text = a.text();
-        EVALUATION_EXPECT_FAIL("", "F8 / S02,S03: concurrent whole passages must not interleave character by character");
-        QVERIFY(text == "abcXYZ" || text == "XYZabc");
+        // Exact content, not agreement: the actors' bytes order the branches, so
+        // A's paste leads. This was `aXbYcZ` before S03.
+        QCOMPARE(a.text(), std::string("abcXYZ"));
+        QVERIFY(a.text().find("abc") == 0);
+        QVERIFY(a.text().find("XYZ") == 3);
+    }
+
+    void f8_concurrent_typing_remains_grouped() {
+        Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
+        // A types a,b,c one scalar at a time; B types X,Y,Z the same way. Each
+        // keystroke is its own operation with its own locator.
+        auto a1 = a.apply_local_edit({{0, 0}}, {"a"});
+        auto a2 = a.apply_local_edit({{1, 1}}, {"b"});
+        auto a3 = a.apply_local_edit({{2, 2}}, {"c"});
+        auto b1 = b.apply_local_edit({{0, 0}}, {"X"});
+        auto b2 = b.apply_local_edit({{1, 1}}, {"Y"});
+        auto b3 = b.apply_local_edit({{2, 2}}, {"Z"});
+        for (const auto &op : {b1, b2, b3}) a.apply_ops({op});
+        for (const auto &op : {a1, a2, a3}) b.apply_ops({op});
+        QCOMPARE(a.text(), b.text());
+        EVALUATION_EXPECT_FAIL("",
+            "F8 / S03 blocked: typing locator minting -- each keystroke takes its own "
+            "locator, so per-scalar interleave survives; needs locator reuse, not a "
+            "comparator change");
+        // S01's forward-typing oracle, unmodified.
+        QVERIFY(a.text() == "abcXYZ");
     }
 };
 

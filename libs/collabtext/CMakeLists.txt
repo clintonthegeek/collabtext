@@ -340,6 +340,12 @@ target_include_directories(tst_sequence_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR
 target_compile_definitions(tst_sequence_model PRIVATE
     COLLABTEXT_SEQUENCE_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/sequence-semantics")
 add_test(NAME tst_sequence_model COMMAND tst_sequence_model)
+# S03 drives the PRODUCTION engines through the same S01 fixtures, against the
+# same exact-content oracle. It is the counterpart to tst_sequence_model, not a
+# variant of it: one runs the reference interpreter, the other runs the engine.
+add_crdt_test(tst_sequence_semantics)
+target_compile_definitions(tst_sequence_semantics PRIVATE
+    COLLABTEXT_SEQUENCE_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/sequence-semantics")
 add_crdt_test(tst_identity_ordering_model)
 add_crdt_test(tst_identity_allocation_model)
 add_crdt_test(tst_identity_types)

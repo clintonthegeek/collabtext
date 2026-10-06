@@ -1912,7 +1912,20 @@
     "F8"
    ],
    "gate": null,
-   "status": "not_started"
+   "status": "in_progress",
+   "baseline_revision": "d436f9a",
+   "progress": "PARTIAL, deliberately. The paste half is applied and verified; the typing half is blocked on the position representation and is not worked around. normalize_fragments no longer atomizes a same-locator run, so whole operations stay contiguous: concurrent pastes give exact abcXYZ. Concurrent typing still interleaves because each keystroke takes its own strictly increasing locator, so A/3 sorts above B/1 regardless of tie-break -- verified directly (A/1==B/1 is 1, A/3<B/1 is 0). S02's transformation-map claim that Locator::between already expresses R1 is retracted in its \u00a73 table and the counterexample recorded in a new \u00a75a. The F8 marker is split: the paste case passes exactly, the typing case stays expected-fail tagged blocked: typing locator minting. S01's typing oracle is NOT weakened. A time-boxed spike on locator reuse is the next step, pending a user decision on landing it, minimal-scope, or tree positions.",
+   "verification_results": {
+    "paste": "tst_sequence_semantics::concurrentWholePassagesStayContiguous passes for two-pastes, unequal-lengths and three-pastes, asserting exact content AND per-run contiguity. tst_evaluation_regressions::f8_concurrent_pastes_remain_contiguous asserts exact abcXYZ with no marker.",
+    "typing": "tst_sequence_semantics::concurrentTypingStaysGrouped fails in both directions with aaabbbccc, and tst_evaluation_regressions::f8_concurrent_typing_remains_grouped stays XFAIL. Both are intentional.",
+    "root_cause": "Measured without CRDT reasoning: two actors typing into their own empty views both receive locators [m],[m+1],[m+2], so A/1==B/1 but A/3<B/1 is false. The interleave is forced by the flat locator chain, not by same-locator tie ordering. No comparator rule can change it.",
+    "retraction": "S02 \u00a73 asserted Buffer::locator_between already yields the 'immediately before' relation R1 needs. That is false and is retracted in the same commit as the fix; a new \u00a75a records the counterexample and scopes the transformation map to the paste case.",
+    "not_done": "No oracle narrowed, no assertion removed to obtain green, no DECISIONS.md scope change, no benchmark. WP6's installed allowlist entry is unchanged and cannot be removed until S04 re-runs the installed probes."
+   },
+   "artifacts": [
+    "libs/collabtext/tests/tst_sequence_semantics.cpp",
+    "docs/specs/vnext-sequence-algorithm.md"
+   ]
   },
   {
    "id": "P07",

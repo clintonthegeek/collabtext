@@ -138,11 +138,46 @@ equals the total order, so no item can be quietly dropped.
 - Under-evidenced area: equal-boundary `IdList` ordering has two fixtures against
   six text fixtures.
 
+## Correction after S03 (2026-10-06)
+
+S03 ran the rule against production `Buffer` rather than only against this model,
+and the production test disproved part of §"The decision" above.
+
+**Retracted.** The transformation map claimed `Buffer::locator_between` already
+produces the "immediately before" relation R1 needs, so locator minting could
+stay unchanged. That is false. Each keystroke takes its own strictly increasing
+locator, so two actors typing into their own empty views receive the *same*
+locator sequence and A's third character is forced above B's first:
+
+```
+A/1 == B/1  : 1     both first keystrokes occupy one position
+A/3 <  B/1  : 0     forward-typing's oracle requires this to be true
+```
+
+No tie-break rule can repair that; the constraint is in the flat locator chain,
+not in the ordering of equal locators. R1 remains a correct specification and is
+not representable by a flat fractional index.
+
+**What was applied.** Removing the atomization alone fixes concurrent *pastes*:
+one operation holds all its items, so keeping fragments whole is sufficient.
+`aXbYcZ` becomes `abcXYZ`, verified for two-actor, unequal-length and three-actor
+cases including contiguity. That part of the analysis — the comparator was never
+the defect, feeding it atomized scalars was — held up under production.
+
+**What was not applied.** Concurrent typing still interleaves. S01's typing
+oracle was not weakened; the F8 marker is split so the paste case passes exactly
+and the typing case stays expected-fail, tagged *blocked: typing locator
+minting*.
+
+The lesson is about this document, not about the code: the independent model
+cannot catch this class of defect, because it never uses locators. The rule was
+specified, modelled and reviewed, and the claim that mattered most was wrong
+because no test exercised the representation it depended on.
+
 ## Still pending
 
-Ordering repair is not done. The engine still interleaves concurrent pastes, the
-installed WP6 probe is still an exact known failure, and
-`libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md` still records F8 as
-`not implemented`. S03 applies the algorithm; S04 re-runs the installed position
-probes and the retained-token replay against a repaired engine. Nothing here
-authorises a production change, and no benchmark ran.
+Ordering repair is partial. Concurrent pastes are repaired and verified; the
+installed WP6 probe exercises whole-paste concurrency but its allowlist entry
+cannot be removed until S04 re-runs the installed probes. Concurrent typing
+remains blocked on the position representation, with the evidence above attached.
+No benchmark ran.
