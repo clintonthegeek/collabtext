@@ -35,7 +35,12 @@ Result<RetentionState> RetentionState::open(std::filesystem::path path,
                                              ActorId producer,
                                              const StepHook *hook) {
   if (!producer.valid()) return Error(ErrorCode::invalid_identity, "retention producer is invalid");
-  RetentionState state(std::move(path), producer, hook);
+  auto lease_path = path;
+  lease_path += ".lock";
+  auto lease = ProcessLease::acquire(lease_path);
+  if (!lease.ok()) return lease.error().with_context("opening retention journal");
+  RetentionState state(std::move(path), producer, hook,
+                       std::move(lease.value()));
   auto loaded = state.recover();
   if (!loaded.ok()) return loaded.error();
   return state;

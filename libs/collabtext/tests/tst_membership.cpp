@@ -4,6 +4,7 @@
 #include "storage/MembershipStore.h"
 
 #include <fstream>
+#include <optional>
 
 using namespace CollabText;
 using namespace CollabText::Storage;
@@ -33,6 +34,9 @@ private slots:
       auto opened = MembershipStore::open(path, producer);
       QVERIFY(opened.ok());
       auto store = std::move(opened.value());
+      auto competing = MembershipStore::open(path, producer);
+      QVERIFY(!competing.ok());
+      QCOMPARE(competing.error().code(), ErrorCode::writer_conflict);
       const auto invalid_kind = static_cast<MembershipEvent::Kind>(99);
       QVERIFY(!store.append({1, 1, peer, invalid_kind, "proof"}).ok());
       QCOMPARE(store.last_sequence(), uint64_t(0));
@@ -40,14 +44,16 @@ private slots:
       QVERIFY(store.append({2, 2, peer, MembershipEvent::Kind::Retired, "confirmed"}).ok());
       QVERIFY(!store.append({4, 3, peer, MembershipEvent::Kind::Enrolled, {}}).ok());
     }
-    auto reopened = MembershipStore::open(path, producer);
-    QVERIFY(reopened.ok());
-    QCOMPARE(reopened.value().last_sequence(), uint64_t(2));
-    auto events = reopened.value().recover();
-    QVERIFY(events.ok());
-    QCOMPARE(events.value().size(), size_t(2));
-    QCOMPARE(events.value()[0].evidence, std::string("signed\nproof"));
-    QCOMPARE(events.value()[1].kind, MembershipEvent::Kind::Retired);
+    {
+      auto reopened = MembershipStore::open(path, producer);
+      QVERIFY(reopened.ok());
+      QCOMPARE(reopened.value().last_sequence(), uint64_t(2));
+      auto events = reopened.value().recover();
+      QVERIFY(events.ok());
+      QCOMPARE(events.value().size(), size_t(2));
+      QCOMPARE(events.value()[0].evidence, std::string("signed\nproof"));
+      QCOMPARE(events.value()[1].kind, MembershipEvent::Kind::Retired);
+    }
     auto wrong_owner = MembershipStore::open(path, actor(9));
     QVERIFY(!wrong_owner.ok());
   }
@@ -234,7 +240,7 @@ private slots:
     const auto path=std::filesystem::path(dir.path().toStdString())/"churn.log";
     const auto producer=actor(90);
     auto opened=MembershipStore::open(path,producer); QVERIFY(opened.ok());
-    auto store=std::move(opened.value());
+    std::optional<MembershipStore> store(std::move(opened.value()));
     MembershipDescriptor current{1,"descriptor-1",{actor(1),actor(2)}};
     uint64_t random=UINT64_C(0x9e3779b97f4a7c15);
     auto next_random=[&]() {
@@ -261,19 +267,19 @@ private slots:
         for(const auto &who:preview.value().required_acknowledgers)
           acks.push_back({who,simulated_ack(who,preview.value().digest)});
         auto incomplete=acks; incomplete.pop_back();
-        auto refused=store.commit_enrollment(preview.value(),current,incomplete,verifier);
+        auto refused=store->commit_enrollment(preview.value(),current,incomplete,verifier);
         QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::awaiting_state);
-        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
+        QCOMPARE(store->last_sequence(),static_cast<uint64_t>(i));
         auto corrupted=acks;
         corrupted.front().signature="corrupted-ack";
-        refused=store.commit_enrollment(preview.value(),current,corrupted,verifier);
+        refused=store->commit_enrollment(preview.value(),current,corrupted,verifier);
         QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::corrupt_record);
-        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
+        QCOMPARE(store->last_sequence(),static_cast<uint64_t>(i));
         auto fork=current; fork.hash+="-fork";
-        refused=store.commit_enrollment(preview.value(),fork,acks,verifier);
+        refused=store->commit_enrollment(preview.value(),fork,acks,verifier);
         QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::wrong_epoch);
-        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
-        auto result=store.commit_enrollment(preview.value(),current,acks,verifier);
+        QCOMPARE(store->last_sequence(),static_cast<uint64_t>(i));
+        auto result=store->commit_enrollment(preview.value(),current,acks,verifier);
         QVERIFY(result.ok()); committed=std::move(result.value());
         current.members.push_back(joining);
       } else {
@@ -291,16 +297,16 @@ private slots:
         for(const auto &who:preview.value().required_acknowledgers)
           acks.push_back({who,simulated_ack(who,preview.value().digest)});
         auto incomplete=acks; incomplete.pop_back();
-        auto refused=store.commit_retirement(preview.value(),current,impacts,
+        auto refused=store->commit_retirement(preview.value(),current,impacts,
             incomplete,"simulated-user-confirmation",verifier);
         QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::awaiting_state);
-        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
+        QCOMPARE(store->last_sequence(),static_cast<uint64_t>(i));
         auto fork=current; fork.hash+="-fork";
-        refused=store.commit_retirement(preview.value(),fork,impacts,acks,
+        refused=store->commit_retirement(preview.value(),fork,impacts,acks,
             "simulated-user-confirmation",verifier);
         QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::wrong_epoch);
-        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
-        auto result=store.commit_retirement(preview.value(),current,impacts,acks,
+        QCOMPARE(store->last_sequence(),static_cast<uint64_t>(i));
+        auto result=store->commit_retirement(preview.value(),current,impacts,acks,
             "simulated-user-confirmation",verifier);
         QVERIFY(result.ok()); committed=std::move(result.value());
         current.members.erase(current.members.begin()+static_cast<std::ptrdiff_t>(index));
@@ -312,14 +318,15 @@ private slots:
                    std::to_string(current.members.size())+"-"+std::to_string(i);
 
       // A process restart must recover the just-committed sequence and event.
+      store.reset();
       auto reopened=MembershipStore::open(path,producer); QVERIFY(reopened.ok());
-      store=std::move(reopened.value());
-      QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i+1));
-      auto recovered=store.recover(); QVERIFY(recovered.ok());
+      QCOMPARE(reopened.value().last_sequence(),static_cast<uint64_t>(i+1));
+      auto recovered=reopened.value().recover(); QVERIFY(recovered.ok());
       QCOMPARE(recovered.value().size(),i+1);
       QCOMPARE(recovered.value().back().epoch,current.epoch);
       QCOMPARE(recovered.value().back().kind,committed.kind);
       QCOMPARE(recovered.value().back().subject,committed.subject);
+      store.emplace(std::move(reopened.value()));
     }
   }
 };

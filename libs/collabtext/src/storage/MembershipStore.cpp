@@ -221,7 +221,12 @@ Result<MembershipStore> MembershipStore::open(std::filesystem::path path,
                                              const StepHook *hook) {
   if (!producer.valid())
     return Error(ErrorCode::invalid_identity, "membership producer is invalid");
-  MembershipStore store(std::move(path), producer, hook);
+  auto lease_path = path;
+  lease_path += ".lock";
+  auto lease = ProcessLease::acquire(lease_path);
+  if (!lease.ok()) return lease.error().with_context("opening membership journal");
+  MembershipStore store(std::move(path), producer, hook,
+                        std::move(lease.value()));
   auto events = store.recover();
   if (!events.ok()) return events.error();
   store.m_last_sequence = events.value().empty() ? 0 : events.value().back().sequence;

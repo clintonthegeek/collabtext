@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <string_view>
 #include <vector>
@@ -14,6 +15,8 @@ namespace CollabText::Storage {
 
 /// Per-stream, producer-local monotonic set of undo groups whose history has
 /// been retired. It never asserts that a peer has acknowledged the retirement.
+/// Open holds an OS writer lease for the state lifetime so concurrent handles
+/// cannot publish colliding journal sequences.
 class RetentionState {
 public:
   [[nodiscard]] static Result<RetentionState>
@@ -37,12 +40,14 @@ public:
 
 private:
   RetentionState(std::filesystem::path path, ActorId producer,
-                 const StepHook *hook)
-      : m_path(std::move(path)), m_producer(producer), m_hook(hook) {}
+                 const StepHook *hook, ProcessLease lease)
+      : m_path(std::move(path)), m_producer(producer), m_hook(hook),
+        m_lease(std::move(lease)) {}
   [[nodiscard]] Result<void> recover();
   std::filesystem::path m_path;
   ActorId m_producer;
   const StepHook *m_hook = nullptr;
+  std::optional<ProcessLease> m_lease;
   uint64_t m_sequence = 0;
   std::map<std::string, std::set<Crdt::Identity>> m_retired;
 };

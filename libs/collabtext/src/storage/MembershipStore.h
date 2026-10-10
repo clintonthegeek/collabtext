@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -80,7 +81,9 @@ using DurableAcknowledgementVerifier = std::function<Result<void>(
 [[nodiscard]] Result<EnrollmentPreview> preview_enrollment(
     const MembershipDescriptor &current, const ActorId &device);
 
-/// Durable per-producer journal for explicit membership transitions.
+/// Durable per-producer journal for explicit membership transitions. Open
+/// holds an OS writer lease for the store lifetime; competing opens fail with
+/// writer_conflict instead of risking duplicate event sequences.
 class MembershipStore {
 public:
   [[nodiscard]] static Result<MembershipStore>
@@ -114,11 +117,13 @@ public:
 
 private:
   MembershipStore(std::filesystem::path path, ActorId producer,
-                  const StepHook *hook)
-      : m_path(std::move(path)), m_producer(producer), m_hook(hook) {}
+                  const StepHook *hook, ProcessLease lease)
+      : m_path(std::move(path)), m_producer(producer), m_hook(hook),
+        m_lease(std::move(lease)) {}
   std::filesystem::path m_path;
   ActorId m_producer;
   const StepHook *m_hook = nullptr;
+  std::optional<ProcessLease> m_lease;
   uint64_t m_last_sequence = 0;
 };
 
