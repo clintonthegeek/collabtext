@@ -49,6 +49,13 @@ Malformed operation payloads and rejected operations remain in their source
 logs and keep the session incomplete. Corrupt envelope framing stops open with
 a typed recovery error.
 
+`DocumentSessionConfig::initial_text` supplies deterministic seed content for
+sidecar formats that reconstruct their seed locally instead of storing it as a
+normal operation. The session applies that content-derived seed operation
+before replaying durable envelopes, so positions and editor deltas are based
+on the same initial state on every device. The seed operation does not consume
+the device's persistent identity or enter the actor-local undo stack.
+
 Local apply reserves operation identity durably, appends the resulting
 operation as a durable envelope, and returns success only after the log write
 reports durable publication. If publication fails after the in-memory edit,

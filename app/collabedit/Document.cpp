@@ -2,11 +2,14 @@
 #include "CollabPane.h"
 
 #include "crdt/SidecarManifest.h"
+#include <collabtext/DocumentSession.h>
 
 #include <QFile>
 #include <QFileInfo>
 #include <QLabel>
 #include <QPlainTextEdit>
+#include <QSaveFile>
+#include <QStandardPaths>
 #include <QTextStream>
 #include <QUuid>
 
@@ -43,15 +46,16 @@ QString readFileToString(const QString &path, QString *err) {
 }
 
 QString writeStringToFile(const QString &path, const QString &content) {
-    QFile tmp(path + ".tmp");
-    if (!tmp.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
-        return QObject::tr("cannot write %1: %2").arg(path + ".tmp", tmp.errorString());
+    QSaveFile tmp(path);
+    if (!tmp.open(QIODevice::WriteOnly | QIODevice::Text))
+        return QObject::tr("cannot write %1: %2").arg(path, tmp.errorString());
     QTextStream out(&tmp);
     out << content;
-    tmp.close();
-    QFile::remove(path);
-    if (!QFile::rename(path + ".tmp", path))
-        return QObject::tr("rename failed for %1").arg(path);
+    out.flush();
+    if (out.status() != QTextStream::Ok)
+        return QObject::tr("cannot write %1: %2").arg(path, tmp.errorString());
+    if (!tmp.commit())
+        return QObject::tr("cannot replace %1: %2").arg(path, tmp.errorString());
     return {};
 }
 
@@ -59,11 +63,18 @@ QString writeStringToFile(const QString &path, const QString &content) {
 
 Document::Document(CollabText::Identity::Identity identity,
                    std::string replica_name,
-                   QObject *parent)
+                   QObject *parent,
+                   fs::path private_state_root)
     : QObject(parent)
     , m_identity(std::move(identity))
     , m_replicaName(std::move(replica_name))
+    , m_privateStateRoot(std::move(private_state_root))
 {
+    if (m_privateStateRoot.empty()) {
+        const QString appData = QStandardPaths::writableLocation(
+            QStandardPaths::AppLocalDataLocation);
+        m_privateStateRoot = fs::path(appData.toStdString()) / "replica-state";
+    }
     auto *lbl = new QLabel(tr("(no document open — use File → New or Open...)"));
     lbl->setAlignment(Qt::AlignCenter);
     m_emptyWidget = lbl;
@@ -71,7 +82,10 @@ Document::Document(CollabText::Identity::Identity identity,
 }
 
 Document::~Document() {
-    if (m_collabPane) m_collabPane->shutdown();
+    if (m_collabPane) {
+        const auto error = m_collabPane->shutdown();
+        if (!error.isEmpty()) qWarning("collabtext: %s", qPrintable(error));
+    }
     delete m_plainEdit;
     delete m_collabPane;
     delete m_emptyWidget;
@@ -88,6 +102,7 @@ QString Document::path() const { return m_path; }
 bool Document::isCollab() const { return m_collab; }
 
 bool Document::isModified() const {
+    if (m_collabPane) return m_collabPane->isModified();
     if (m_plainEdit) return m_plainEdit->document()->isModified();
     return false;
 }
@@ -97,7 +112,8 @@ fs::path Document::sidecarPath(const QString &filePath) const {
 }
 
 QString Document::newDoc() {
-    closeDoc();
+    const auto closeError = closeDoc();
+    if (!closeError.isEmpty()) return closeError;
     m_path.clear();
     m_collab = false;
     m_plainEdit = new QPlainTextEdit;
@@ -109,14 +125,20 @@ QString Document::newDoc() {
 }
 
 QString Document::open(const QString &path) {
-    closeDoc();
-    m_path = path;
+    const auto closeError = closeDoc();
+    if (!closeError.isEmpty()) return closeError;
 
     auto sidecar = sidecarPath(path);
     if (fs::exists(sidecar / "manifest.json")) {
-        return openInCollabMode(path);
+        m_path = path;
+        QString error = openInCollabMode(path);
+        if (!error.isEmpty()) m_path.clear();
+        return error;
     }
-    return openInPlainMode(path);
+    m_path = path;
+    QString error = openInPlainMode(path);
+    if (!error.isEmpty()) m_path.clear();
+    return error;
 }
 
 QString Document::openInPlainMode(const QString &path) {
@@ -137,6 +159,9 @@ QString Document::openInPlainMode(const QString &path) {
 
 QString Document::openInCollabMode(const QString &path) {
     auto sidecar = sidecarPath(path);
+    QString materializedError;
+    const QString materializedView = readFileToString(path, &materializedError);
+    if (!materializedError.isEmpty()) return materializedError;
     auto manifest = read_manifest(sidecar / "manifest.json");
     if (!manifest)
         return tr("Sidecar exists but manifest is invalid: %1")
@@ -159,9 +184,29 @@ QString Document::openInCollabMode(const QString &path) {
     if (CollabText::sha256_hex(seed) != manifest->seed_sha256)
         return tr("seed.txt SHA mismatch — sidecar may be corrupt");
 
+    CollabText::DocumentSessionConfig config;
+    config.shared_store = sidecar;
+    config.private_state = m_privateStateRoot / manifest->doc_id;
+    config.document = manifest->doc_id;
+    config.stream = "text";
+    config.epoch = 1;
+    config.initial_text = seed;
+    auto opened = CollabText::DocumentSession::open(std::move(config));
+    if (!opened.ok())
+        return tr("Cannot recover collaborative document: %1")
+            .arg(QString::fromUtf8(opened.error().message().data(),
+                                   static_cast<qsizetype>(opened.error().message().size())));
+
+    const bool viewNeedsSave =
+        QString::fromStdString(opened.value()->text()) != materializedView;
     m_collab = true;
     m_collabPane = new CollabPane(m_identity, m_replicaName,
-                                  sidecar, manifest->doc_id, seed);
+                                  sidecar, std::move(opened).value());
+    connect(m_collabPane, &CollabPane::changed,
+            this, &Document::emitChanged);
+    connect(m_collabPane, &CollabPane::errorOccurred,
+            this, [this](const QString &message) { emit errorOccurred(message); });
+    if (viewNeedsSave) m_collabPane->markModified();
     m_currentWidget = m_collabPane;
     emit changed();
     return {};
@@ -170,9 +215,14 @@ QString Document::openInCollabMode(const QString &path) {
 QString Document::save() {
     if (m_collab && m_collabPane) {
         if (m_path.isEmpty()) return tr("no file path");
+        QString err = m_collabPane->flush();
+        if (!err.isEmpty()) return err;
         QString content = QString::fromStdString(m_collabPane->text());
-        QString err = writeStringToFile(m_path, content);
-        if (err.isEmpty()) emit changed();
+        err = writeStringToFile(m_path, content);
+        if (err.isEmpty()) {
+            m_collabPane->markSaved();
+            emit changed();
+        }
         return err;
     }
     if (m_plainEdit) {
@@ -190,8 +240,11 @@ QString Document::save() {
 QString Document::saveAs(const QString &path) {
     if (m_collab) return tr("Save As is disabled in Collab mode");
     if (!m_plainEdit) return tr("no document");
+    const QString previousPath = m_path;
     m_path = path;
-    return save();
+    const QString error = save();
+    if (!error.isEmpty()) m_path = previousPath;
+    return error;
 }
 
 QString Document::enableCollab() {
@@ -224,7 +277,7 @@ QString Document::enableCollab() {
     }
 
     SidecarManifest manifest;
-    manifest.schema_version = 2;
+    manifest.schema_version = 4;
     manifest.doc_id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     manifest.enrolled_at = now_iso8601_utc();
     manifest.original_filename = QFileInfo(m_path).fileName().toStdString();
@@ -235,16 +288,19 @@ QString Document::enableCollab() {
         return tr("cannot write manifest: %1").arg(e.what());
     }
 
+    err = openInCollabMode(m_path);
+    if (!err.isEmpty()) return err;
     if (m_plainEdit) {
         m_plainEdit->deleteLater();
         m_plainEdit = nullptr;
     }
-    return openInCollabMode(m_path);
+    return {};
 }
 
-void Document::closeDoc() {
+QString Document::closeDoc() {
     if (m_collabPane) {
-        m_collabPane->shutdown();
+        const auto error = m_collabPane->shutdown();
+        if (!error.isEmpty()) return error;
         m_collabPane->deleteLater();
         m_collabPane = nullptr;
     }
@@ -256,6 +312,7 @@ void Document::closeDoc() {
     m_collab = false;
     m_currentWidget = m_emptyWidget;
     emit changed();
+    return {};
 }
 
 } // namespace CollabEdit

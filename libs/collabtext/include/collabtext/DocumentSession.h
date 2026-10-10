@@ -34,6 +34,8 @@ struct DocumentSessionConfig {
   uint64_t epoch = 1;
   size_t max_undo_steps = 1000;
   size_t max_undo_bytes = 16 * 1024 * 1024;
+  /// Deterministic baseline content reconstructed locally before log replay.
+  std::string initial_text;
 };
 
 struct SessionRecoveryReport {
@@ -89,6 +91,11 @@ public:
   [[nodiscard]] Result<void> close();
 
   [[nodiscard]] std::string text() const;
+  [[nodiscard]] uint32_t visible_length() const;
+  [[nodiscard]] size_t undo_depth() const;
+  [[nodiscard]] Crdt::Anchor anchor_at(uint32_t byte_offset,
+                                       Crdt::Bias bias = Crdt::Bias::Left) const;
+  [[nodiscard]] uint32_t resolve_anchor(const Crdt::Anchor &) const;
   [[nodiscard]] Crdt::Global recovery_frontier() const;
   [[nodiscard]] std::vector<SessionTextEdit>
   edits_since(const Crdt::Global &) const;

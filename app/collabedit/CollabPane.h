@@ -3,11 +3,9 @@
 #include "collabtext/Identity.h"
 #include "collabtext/IdentityProjector.h"
 #include "collabtext/PresenceManager.h"
+#include <collabtext/DocumentSession.h>
 #include <collabtext/ActorId.h>
 #include "crdt/Anchor.h"
-#include "crdt/Buffer.h"
-#include "crdt/FileSync.h"
-#include "identity/ReplicaAllocator.h"
 #include "transport/StreamSync.h"
 
 #include <QWidget>
@@ -36,8 +34,7 @@ public:
     CollabPane(CollabText::Identity::Identity identity,
                std::string replica_name,
                std::filesystem::path sidecar_dir,
-               std::string doc_id,
-               const std::string &seed_text,
+               std::unique_ptr<CollabText::DocumentSession> session,
                QWidget *parent = nullptr);
     ~CollabPane() override;
 
@@ -45,7 +42,15 @@ public:
     std::string text() const;
 
     /// Stop sync timer, mark presence departed, flush remaining ops.
-    void shutdown();
+    QString shutdown();
+    QString flush();
+    bool isModified() const noexcept { return m_modified; }
+    void markModified() { m_modified = true; emit changed(); }
+    void markSaved() noexcept { m_modified = false; emit changed(); }
+
+signals:
+    void changed();
+    void errorOccurred(const QString &message);
 
 private slots:
     void onContentsChange(int position, int charsRemoved, int charsAdded);
@@ -65,24 +70,15 @@ private:
     void writePresence();
     void writeEphemeral();
     void applyRemoteCursorsAndFollow();
-    void applyEditsPreservingScroll(const std::vector<CollabText::Crdt::TextEdit> &edits);
-    void applyEditsToQt(const std::vector<CollabText::Crdt::TextEdit> &edits);
+    void applyEditsPreservingScroll(const std::vector<CollabText::SessionTextEdit> &edits);
+    void applyEditsToQt(const std::vector<CollabText::SessionTextEdit> &edits);
     void syncStreams();
     uint32_t qtPosToByteOffset(int qtPos) const;
     int      byteOffsetToQtPos(uint32_t byteOffset) const;
 
     CollabText::Identity::Identity m_identity;
     std::string m_replicaName;
-    /// This device's private state: the durable owner of the actor identity
-    /// and the per-(actor, stream) counter. Held rather than borrowed, because
-    /// it owns an OS lock for as long as this pane is open.
-    CollabText::ReplicaState m_replicaState;
-    /// This device's allocator for the text stream. Borrowed by the buffer; the
-    /// pane owns both the state and the handle, and the state outlives them.
-    std::shared_ptr<CollabText::Identity::ReplicaAllocator> m_allocator;
-
-    CollabText::Crdt::Buffer m_buffer;
-    CollabText::Crdt::FileSync m_sync;
+    std::unique_ptr<CollabText::DocumentSession> m_session;
     CollabText::Identity::PresenceManager m_presence;
     CollabText::Identity::IdentityProjector m_projector;
     std::unique_ptr<CollabText::Crdt::StreamSync> m_streamSync;
@@ -103,7 +99,9 @@ private:
     uint64_t m_commentSeq = 0;
     size_t m_lastChatCount = 0;
     bool m_syncing = false;
-    bool m_shutdown = false;
+    bool m_shutdownComplete = false;
+    bool m_modified = false;
+    bool m_recoveryErrorShown = false;
 
     // Follow mode
     bool m_following = false;

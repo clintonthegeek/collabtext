@@ -20,7 +20,8 @@ class Document : public QObject {
 public:
     Document(CollabText::Identity::Identity identity,
              std::string replica_name,
-             QObject *parent = nullptr);
+             QObject *parent = nullptr,
+             std::filesystem::path private_state_root = {});
     ~Document() override;
 
     QWidget *widget() const;
@@ -34,10 +35,11 @@ public:
     QString save();
     QString saveAs(const QString &path);
     QString enableCollab();
-    void    closeDoc();
+    QString closeDoc();
 
 signals:
     void changed();
+    void errorOccurred(const QString &message);
 
 private:
     std::filesystem::path sidecarPath(const QString &filePath) const;
@@ -48,6 +50,7 @@ private:
 
     CollabText::Identity::Identity m_identity;
     std::string m_replicaName;
+    std::filesystem::path m_privateStateRoot;
 
     QString m_path;
     bool    m_collab = false;

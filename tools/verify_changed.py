@@ -33,6 +33,9 @@ ROUTES = [
     # to it is a packaging change. Left unrouted it fails the whole diff, which is
     # the correct default: an unknown path must never turn into a docs-only pass.
     ('.github/workflows/*', PACKAGING),
+    # The dogfood editor integration has a real offscreen open/edit/reopen test;
+    # keep the existing widget and viewport regressions beside it.
+    ('app/collabedit/*', r'tst_(editor_recovery|scroll_stability|collab_plain_text_edit)'),
     ('libs/collabtext/CMakeLists.txt', PACKAGING), ('CMakeLists.txt', PACKAGING),
     ('cmake/*', PACKAGING), ('tests/consumer-smoke/*', PACKAGING),
     ('libs/collabtext/include/*', PACKAGING),

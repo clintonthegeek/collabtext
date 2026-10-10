@@ -82,6 +82,13 @@ if(COLLABTEXT_BUILD_APPS AND NOT COLLABTEXT_BUILD_QT)
         "are Qt widget applications.")
 endif()
 
+if(COLLABTEXT_BUILD_TESTS)
+    # Enable test registration before configuring sibling app targets so
+    # offscreen integration tests declared by the dogfood applications appear
+    # in the root CTest manifest too.
+    enable_testing()
+endif()
+
 add_subdirectory(libs/collabtext)
 
 if(COLLABTEXT_BUILD_APPS)
@@ -89,7 +96,6 @@ if(COLLABTEXT_BUILD_APPS)
 endif()
 
 if(COLLABTEXT_BUILD_TESTS)
-    enable_testing()
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_custom_target(tst_verification_tools)
     add_test(NAME tst_verification_tools

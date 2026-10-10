@@ -1,6 +1,7 @@
 #include <collabtext/DocumentSession.h>
 
 #include "crdt/Buffer.h"
+#include "crdt/SeedOp.h"
 #include "core/Sha256.h"
 #include "identity/ReplicaAllocator.h"
 #include "storage/LocalHistoryLog.h"
@@ -237,6 +238,8 @@ DocumentSession::open_with_writer_config(
     auto byte_limit = impl->buffer->set_max_undo_bytes(
         impl->config.max_undo_bytes);
     if (!byte_limit.ok()) return byte_limit.error();
+    if (!impl->config.initial_text.empty())
+      impl->buffer->apply_ops({Crdt::op_for_seed(impl->config.initial_text)});
     auto local_history = Storage::LocalHistoryLog::open(
         Impl::history_path(impl->config), impl->replica->actor());
     if (!local_history.ok()) return local_history.error();
@@ -491,6 +494,21 @@ Result<void> DocumentSession::close() {
 
 std::string DocumentSession::text() const {
   return m_impl && m_impl->buffer ? m_impl->buffer->text() : std::string{};
+}
+uint32_t DocumentSession::visible_length() const {
+  return m_impl && m_impl->buffer ? m_impl->buffer->visible_length() : 0;
+}
+size_t DocumentSession::undo_depth() const {
+  return m_impl && m_impl->buffer ? m_impl->buffer->undo_depth() : 0;
+}
+Crdt::Anchor DocumentSession::anchor_at(uint32_t byte_offset,
+                                         Crdt::Bias bias) const {
+  return m_impl && m_impl->buffer
+             ? m_impl->buffer->anchor_at(byte_offset, bias)
+             : Crdt::Anchor::min();
+}
+uint32_t DocumentSession::resolve_anchor(const Crdt::Anchor &anchor) const {
+  return m_impl && m_impl->buffer ? m_impl->buffer->resolve_anchor(anchor) : 0;
 }
 Global DocumentSession::recovery_frontier() const {
   return m_impl && m_impl->buffer ? m_impl->buffer->version() : Global{};
