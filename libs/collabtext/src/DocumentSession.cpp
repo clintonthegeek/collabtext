@@ -31,6 +31,25 @@ struct DocumentSession::Impl {
   bool closed = false;
   bool poisoned = false;
 
+  Result<std::shared_ptr<void>> authorize_local_mutation() const {
+    if (!config.authorize_local_mutation) return std::shared_ptr<void>{};
+    try {
+      auto permit = config.authorize_local_mutation(
+          config.document, config.stream, config.epoch, replica->actor());
+      if (!permit.ok()) return permit.error();
+      if (!permit.value())
+        return Error(ErrorCode::malformed,
+                     "membership authorization returned no mutation lease");
+      return permit;
+    } catch (const std::exception &error) {
+      return Error(ErrorCode::io_error, error.what(),
+                   "checking local membership authorization");
+    } catch (...) {
+      return Error(ErrorCode::io_error,
+                   "membership authorization callback threw an unknown exception");
+    }
+  }
+
   Result<Operation> publish_local(Operation op) {
     if (next_envelope == UINT64_MAX) {
       poisoned = true;
@@ -369,6 +388,8 @@ Result<Operation> DocumentSession::apply_local(
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; local edits are disabled");
+  auto authorized = m_impl->authorize_local_mutation();
+  if (!authorized.ok()) return authorized.error();
   auto operation = m_impl->buffer->try_apply_local_edit(ranges, replacements);
   if (!operation.ok())
     return operation.error();
@@ -379,6 +400,8 @@ Result<Operation> DocumentSession::undo() {
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; undo is disabled");
+  auto authorized = m_impl->authorize_local_mutation();
+  if (!authorized.ok()) return authorized.error();
   auto operation = m_impl->buffer->try_undo();
   if (!operation.ok()) return operation.error();
   if (!operation.value())
@@ -390,6 +413,8 @@ Result<Operation> DocumentSession::redo() {
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; redo is disabled");
+  auto authorized = m_impl->authorize_local_mutation();
+  if (!authorized.ok()) return authorized.error();
   auto operation = m_impl->buffer->try_redo();
   if (!operation.ok()) return operation.error();
   if (!operation.value())
@@ -440,6 +465,8 @@ Result<bool> DocumentSession::coalesce_last_undo() {
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; undo coalescing is disabled");
+  auto authorized = m_impl->authorize_local_mutation();
+  if (!authorized.ok()) return authorized.error();
   if (!m_impl->buffer->coalesce_last_undo()) return false;
   auto checkpoint = m_impl->local_history->store_snapshot(
       m_impl->buffer->local_history_snapshot());

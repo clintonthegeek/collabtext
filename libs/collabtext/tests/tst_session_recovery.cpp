@@ -86,6 +86,92 @@ private:
 class TestSessionRecovery : public QObject {
   Q_OBJECT
 private slots:
+  void localMutationAuthorizationBlocksBeforeChangingSessionState() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    bool enrolled = false;
+    bool omit_lease = false;
+    bool throw_from_callback = false;
+    bool publication_had_lease = false;
+    std::weak_ptr<void> outstanding_lease;
+    size_t checks = 0;
+    Storage::StepHook hook;
+    hook.observe = [&](Storage::Step step, const std::filesystem::path &) {
+      if (step == Storage::Step::Write && !outstanding_lease.expired())
+        publication_had_lease = true;
+    };
+    Crdt::WriterConfig writer_config;
+    writer_config.step_hook = &hook;
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "doc-membership-gate", "text", 4};
+    config.authorize_local_mutation = [&](const DocumentId &document,
+                                          const StreamId &stream,
+                                          uint64_t epoch,
+                                          const ActorId &producer)
+      -> Result<std::shared_ptr<void>> {
+      ++checks;
+      if (document != config.document || stream != config.stream || epoch != config.epoch ||
+          !producer.valid())
+        return Error(ErrorCode::malformed, "membership callback received the wrong scope");
+      if (throw_from_callback) throw std::runtime_error("membership lookup failed");
+      if (!enrolled)
+        return Error(ErrorCode::wrong_epoch, "producer has been retired from this epoch");
+      if (omit_lease) return std::shared_ptr<void>{};
+      auto lease = std::make_shared<int>(1);
+      outstanding_lease = lease;
+      return std::static_pointer_cast<void>(lease);
+    };
+
+    auto opened = DocumentSessionTestAccess::open(config, writer_config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    auto denied_edit = session->apply_local({{0, 0}}, {"a"});
+    QVERIFY(!denied_edit.ok());
+    QCOMPARE(denied_edit.error().code(), ErrorCode::wrong_epoch);
+    QCOMPARE(session->text(), std::string());
+    QCOMPARE(session->undo_depth(), size_t(0));
+
+    enrolled = true;
+    omit_lease = true;
+    auto missing_lease_edit = session->apply_local({{0, 0}}, {"a"});
+    QVERIFY(!missing_lease_edit.ok());
+    QCOMPARE(missing_lease_edit.error().code(), ErrorCode::malformed);
+    omit_lease = false;
+    throw_from_callback = true;
+    auto throwing_callback_edit = session->apply_local({{0, 0}}, {"a"});
+    QVERIFY(!throwing_callback_edit.ok());
+    QCOMPARE(throwing_callback_edit.error().code(), ErrorCode::io_error);
+    throw_from_callback = false;
+    QCOMPARE(session->text(), std::string());
+    QCOMPARE(session->undo_depth(), size_t(0));
+    QVERIFY(session->apply_local({{0, 0}}, {"a"}).ok());
+    QVERIFY(publication_had_lease);
+    QVERIFY(outstanding_lease.expired());
+    QVERIFY(session->apply_local({{1, 1}}, {"b"}).ok());
+    const auto depth_before_denials = session->undo_depth();
+    enrolled = false;
+    auto denied_undo = session->undo();
+    QVERIFY(!denied_undo.ok()); QCOMPARE(denied_undo.error().code(), ErrorCode::wrong_epoch);
+    auto denied_coalesce = session->coalesce_last_undo();
+    QVERIFY(!denied_coalesce.ok());
+    QCOMPARE(denied_coalesce.error().code(), ErrorCode::wrong_epoch);
+    QCOMPARE(session->text(), std::string("ab"));
+    QCOMPARE(session->undo_depth(), depth_before_denials);
+
+    enrolled = true;
+    QVERIFY(session->undo().ok());
+    enrolled = false;
+    auto denied_redo = session->redo();
+    QVERIFY(!denied_redo.ok()); QCOMPARE(denied_redo.error().code(), ErrorCode::wrong_epoch);
+    QCOMPARE(session->text(), std::string("a"));
+    enrolled = true;
+    QVERIFY(session->redo().ok());
+    QCOMPARE(session->text(), std::string("ab"));
+    QVERIFY(checks >= size_t(8));
+    QVERIFY(session->close().ok());
+  }
+
   void external_token_roundtrip_reopen_durable_file_replay() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());

@@ -37,6 +37,14 @@ struct DocumentSessionConfig {
   size_t max_undo_bytes = 16 * 1024 * 1024;
   /// Deterministic baseline content reconstructed locally before log replay.
   std::string initial_text;
+  /// Optional live membership check invoked before each local document or
+  /// undo mutation. Consumers enforcing retirement should return a nonnull
+  /// lease that prevents a concurrent epoch transition until the mutation's
+  /// durable publication completes. An empty callback leaves the session in
+  /// its uncoordinated mode for callers that manage authorization externally.
+  std::function<Result<std::shared_ptr<void>>(
+      const DocumentId &, const StreamId &, uint64_t, const ActorId &)>
+      authorize_local_mutation;
 };
 
 /// Local producer deliveries retained for one original document epoch.
