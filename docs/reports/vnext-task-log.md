@@ -3104,3 +3104,5 @@ The integrated G02 gate (`tst_membership|tst_undo_retirement|tst_persistent_undo
 Extended membership retirement commit failure injection across `Step::Write`, `Step::FileSync`, and `Step::DirSync`. Each failure recovers safely, an identical retry reaches durable success, and a retry with different confirmation is refused. `tst_membership` passed Debug (`20261010T165551Z-2`), Release (`20261010T165605Z-12`), and ASan/UBSan (`20261010T165615Z-2`, leak detection disabled for the ptrace-limited runner).
 
 Revalidated installed consumers against revision `aafb159`: the relocated FileTransport package gate passed (`build-consumer-verify/debug-package-20261010T165735Z-2`); the installed live gate passed Wave 16/16 strict cases and Markdown/Markoff 4/4 (`build-consumer-verify/debug-live-20261010T165746Z-2`). Both builds also compiled the consumer's installed public-header translation units without source-tree leakage.
+
+Ran the full 87-test CTest set after the membership publication and branch export changes. Debug passed (`20261010T165917Z-2`), Release passed (`20261010T170025Z-2`), and ASan/UBSan passed (`20261010T170125Z-2`, `ASAN_OPTIONS=detect_leaks=0`).
