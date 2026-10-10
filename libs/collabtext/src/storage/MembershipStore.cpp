@@ -2,8 +2,10 @@
 
 #include "core/Sha256.h"
 
+#include <algorithm>
 #include <charconv>
 #include <fstream>
+#include <map>
 #include <sstream>
 
 namespace CollabText::Storage {
@@ -51,6 +53,44 @@ std::string body(const MembershipEvent &e, const ActorId &producer) {
          hex(e.evidence);
 }
 
+void add_field(std::string &out, std::string_view value) {
+  out += std::to_string(value.size());
+  out += ':';
+  out.append(value);
+}
+
+std::string preview_material(const RetirementPreview &preview) {
+  std::string out = "retirement-preview-v1";
+  add_field(out, preview.device.to_string());
+  add_field(out, std::to_string(preview.parent_epoch));
+  add_field(out, std::to_string(preview.next_epoch));
+  add_field(out, preview.parent_descriptor_hash);
+  for (const auto &member : preview.parent_members)
+    add_field(out, member.to_string());
+  out += "|acks|";
+  for (const auto &member : preview.required_acknowledgers)
+    add_field(out, member.to_string());
+  out += "|impacts|";
+  for (const auto &impact : preview.impacts) {
+    add_field(out, impact.document);
+    add_field(out, impact.stream);
+    add_field(out, std::to_string(impact.epoch));
+    add_field(out, std::to_string(impact.unsynced_operations));
+    add_field(out, std::to_string(impact.retained_undo_groups));
+    add_field(out, impact.recoverable_branch_hash);
+  }
+  return out;
+}
+
+bool same_preview(const RetirementPreview &a, const RetirementPreview &b) {
+  return a.device == b.device && a.parent_epoch == b.parent_epoch &&
+         a.next_epoch == b.next_epoch &&
+         a.parent_descriptor_hash == b.parent_descriptor_hash &&
+         a.parent_members == b.parent_members &&
+         a.required_acknowledgers == b.required_acknowledgers &&
+         a.impacts == b.impacts && a.digest == b.digest;
+}
+
 Result<MembershipEvent> parse_line(std::string_view line,
                                    const ActorId &producer,
                                    uint64_t expected) {
@@ -82,6 +122,45 @@ Result<MembershipEvent> parse_line(std::string_view line,
   return event;
 }
 } // namespace
+
+Result<RetirementPreview> preview_retirement(
+    const MembershipDescriptor &current, const ActorId &device,
+    std::vector<RetirementImpact> impacts) {
+  if (current.epoch == 0 || current.epoch == UINT64_MAX ||
+      current.hash.empty() || current.hash.size() > 4096 ||
+      !device.valid() || current.members.size() < 2 ||
+      current.members.size() > 4096 || impacts.size() > 4096)
+    return Error(ErrorCode::malformed, "retirement descriptor is invalid or cannot retire a member");
+  auto members = current.members;
+  std::sort(members.begin(), members.end());
+  if (std::any_of(members.begin(), members.end(), [](const ActorId &id) { return !id.valid(); }) ||
+      std::adjacent_find(members.begin(), members.end()) != members.end() ||
+      !std::binary_search(members.begin(), members.end(), device))
+    return Error(ErrorCode::malformed, "retirement descriptor has unknown or duplicate members");
+  for (const auto &impact : impacts)
+    if (impact.document.empty() || impact.document.size() > 4096 ||
+        impact.stream.empty() || impact.stream.size() > 4096 ||
+        impact.epoch != current.epoch || impact.recoverable_branch_hash.empty() ||
+        impact.recoverable_branch_hash.size() > 4096)
+      return Error(ErrorCode::malformed, "retirement consequence data is incomplete");
+  std::sort(impacts.begin(), impacts.end());
+  if (std::adjacent_find(impacts.begin(), impacts.end(), [](const auto &a, const auto &b) {
+        return a.document == b.document && a.stream == b.stream;
+      }) != impacts.end())
+    return Error(ErrorCode::malformed, "retirement preview repeats a document stream");
+
+  RetirementPreview preview;
+  preview.device = device;
+  preview.parent_epoch = current.epoch;
+  preview.next_epoch = current.epoch + 1;
+  preview.parent_descriptor_hash = current.hash;
+  preview.parent_members = std::move(members);
+  preview.impacts = std::move(impacts);
+  for (const auto &member : preview.parent_members)
+    if (member != device) preview.required_acknowledgers.push_back(member);
+  preview.digest = sha256_hex(preview_material(preview));
+  return preview;
+}
 
 Result<MembershipStore> MembershipStore::open(std::filesystem::path path,
                                              ActorId producer,
@@ -148,6 +227,55 @@ Result<void> MembershipStore::append(const MembershipEvent &event) {
   }
   m_last_sequence = event.sequence;
   return {};
+}
+
+Result<MembershipEvent> MembershipStore::commit_retirement(
+    const RetirementPreview &preview, const MembershipDescriptor &current,
+    const std::vector<RetirementImpact> &current_impacts,
+    const std::vector<MembershipAcknowledgement> &acknowledgements,
+    std::string_view explicit_confirmation,
+    const DurableAcknowledgementVerifier &verify_acknowledgement) {
+  auto fresh = preview_retirement(current, preview.device, current_impacts);
+  if (!fresh.ok()) return fresh.error();
+  if (!same_preview(preview, fresh.value()))
+    return Error(ErrorCode::wrong_epoch,
+                 "retirement preview is stale; review current consequences again");
+  if (explicit_confirmation.empty() || explicit_confirmation.size() > 4096 ||
+      !verify_acknowledgement)
+    return Error(ErrorCode::malformed,
+                 "retirement requires explicit confirmation and an acknowledgement verifier");
+  if (acknowledgements.size() != preview.required_acknowledgers.size())
+    return Error(ErrorCode::awaiting_state,
+                 "retirement is awaiting acknowledgements from every remaining member");
+  std::map<ActorId, std::string> signatures;
+  for (const auto &ack : acknowledgements) {
+    if (!ack.actor.valid() || ack.signature.empty() || ack.signature.size() > 4096 ||
+        !signatures.emplace(ack.actor, ack.signature).second)
+      return Error(ErrorCode::malformed, "retirement acknowledgement is invalid or duplicated");
+  }
+  for (const auto &member : preview.required_acknowledgers) {
+    auto ack = signatures.find(member);
+    if (ack == signatures.end())
+      return Error(ErrorCode::awaiting_state,
+                   "retirement acknowledgement set does not match remaining members");
+    auto verified = verify_acknowledgement(member, preview.digest, ack->second);
+    if (!verified.ok()) return verified.error();
+  }
+  if (m_last_sequence == UINT64_MAX)
+    return Error(ErrorCode::limit_exceeded, "membership event sequence is exhausted");
+  std::string evidence = "retirement-v1 " + hex(preview.digest) + " ";
+  const auto material = preview_material(preview);
+  evidence += hex(material) + " " + hex(explicit_confirmation) + " " +
+              std::to_string(signatures.size());
+  for (const auto &[actor, signature] : signatures)
+    evidence += " " + actor.to_string() + " " + hex(signature);
+  if (evidence.size() > kMaxEvidenceBytes)
+    return Error(ErrorCode::limit_exceeded, "retirement evidence exceeds journal limit");
+  MembershipEvent event{m_last_sequence + 1, preview.next_epoch, preview.device,
+                        MembershipEvent::Kind::Retired, std::move(evidence)};
+  auto persisted = append(event);
+  if (!persisted.ok()) return persisted.error();
+  return event;
 }
 
 } // namespace CollabText::Storage
