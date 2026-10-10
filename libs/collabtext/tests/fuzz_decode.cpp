@@ -8,6 +8,7 @@
 #include "crdt/SegmentReader.h"
 #include "crdt/StreamSerialization.h"
 #include "crdt/ZstdUtil.h"
+#include "core/Sha256.h"
 #include "storage/CheckpointCodec.h"
 #include "transport/StreamSync.h"
 
@@ -50,7 +51,42 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     const auto shareable = CollabText::Storage::decode_checkpoint(
         bytes, CollabText::Storage::CheckpointKind::Shareable);
     if (shareable) {
-        (void)CollabText::Storage::decode_checkpoint_core(shareable.value());
+        const auto core = CollabText::Storage::decode_checkpoint_core(shareable.value());
+        if (core && !core.value().translations.supported_token_versions.empty()) {
+            auto descriptor = CollabText::Storage::MembershipDescriptor{};
+            descriptor.epoch = core.value().context.epoch;
+            descriptor.parent_hash = core.value().context.parent_descriptor_hash;
+            if (descriptor.epoch > 1)
+                descriptor.transition_event_hash =
+                    CollabText::sha256_hex("fuzz transition event");
+            descriptor.base_checkpoint_hash = CollabText::sha256_hex(bytes);
+            descriptor.base_frontiers.push_back({
+                core.value().context.stream, core.value().coverage.operation,
+                core.value().coverage.delivery});
+            for (const auto &[actor, _] : core.value().coverage.operation)
+                if (core.value().coverage.delivery.contains(actor))
+                    descriptor.members.push_back(actor);
+            if (descriptor.members.empty()) {
+                const auto fallback = CollabText::ActorId::parse(
+                    "ffffffffffffffffffffffffffffffff");
+                if (fallback) {
+                    descriptor.members.push_back(fallback.value());
+                    descriptor.base_frontiers.front().operation.emplace(
+                        fallback.value(), 0);
+                    descriptor.base_frontiers.front().delivery.emplace(
+                        fallback.value(), 0);
+                }
+            }
+            descriptor.supported_token_versions =
+                core.value().translations.supported_token_versions;
+            descriptor.translation_manifest_hash =
+                core.value().translations.manifest_hash;
+            auto sealed = CollabText::Storage::seal_membership_descriptor(
+                std::move(descriptor));
+            if (sealed)
+                (void)CollabText::Storage::validate_checkpoint_artifact_membership(
+                    bytes, sealed.value());
+        }
         for (const auto& section : shareable.value().sections) {
             if (section.id == 1)
                 (void)CollabText::Storage::decode_checkpoint_context(section);
