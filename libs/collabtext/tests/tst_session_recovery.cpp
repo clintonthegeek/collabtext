@@ -221,6 +221,43 @@ private slots:
     QVERIFY(session->close().ok());
   }
 
+  void session_coalesced_group_metadata_survives_reopen() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const DocumentSessionConfig config{root / "shared", root / "device",
+                                       "doc-coalesce", "text-coalesce", 1};
+    Crdt::Identity stable_group_id;
+    std::vector<Crdt::Identity> members;
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QVERIFY(session->apply_local({{0, 0}}, {"a"}).ok());
+      const auto first_group = session->next_undo_group();
+      QVERIFY(first_group.has_value());
+      stable_group_id = first_group->id;
+      QVERIFY(session->apply_local({{1, 1}}, {"b"}).ok());
+      QVERIFY(session->coalesce_last_undo().ok());
+      auto after = session->next_undo_group();
+      QVERIFY(after.has_value());
+      QCOMPARE(after->operations.size(), size_t(2));
+      QCOMPARE(after->id, stable_group_id);
+      members = after->operations;
+      QVERIFY(session->close().ok());
+    }
+    auto reopened = DocumentSession::open(config);
+    QVERIFY(reopened.ok());
+    auto session = std::move(reopened).value();
+    const auto group = session->next_undo_group();
+    QVERIFY(group.has_value());
+    QCOMPARE(group->id, stable_group_id);
+    QCOMPARE(group->operations, members);
+    QVERIFY(session->undo().ok());
+    QCOMPARE(session->text(), std::string{});
+    QVERIFY(session->close().ok());
+  }
+
   void session_reconciles_pending_local_commit_before_replay() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());

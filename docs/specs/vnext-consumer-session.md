@@ -61,8 +61,9 @@ owning actor's bounded Buffer undo/redo history alongside operation commits.
 `next_undo_group()` and `next_redo_group()` expose a stable group identity and
 the local operation identities represented by that group. Coalescing keeps the
 older group's identity and appends the newer operations; reopening preserves
-that metadata. Consumers can correlate those identities with their own event
-log, while undo remains a new compensating event. The consumer owns engine and
+that metadata. `coalesce_last_undo()` checkpoints the boundary before reporting
+success. Consumers can correlate those identities with their own event log,
+while undo remains a new compensating event. The consumer owns engine and
 session lifetime and may instead construct its own headless document seam
 around public primitives and a custom `OpStream`; persistence of a consumer's
 IdList history and multi-block group policy remain consumer work.

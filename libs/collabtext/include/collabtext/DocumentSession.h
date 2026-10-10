@@ -69,6 +69,8 @@ public:
   [[nodiscard]] Result<Crdt::Operation> undo();
   /// Publish a compensating local operation and persist the updated redo cursor.
   [[nodiscard]] Result<Crdt::Operation> redo();
+  /// Merge the newest local undo group into its predecessor and checkpoint it.
+  [[nodiscard]] Result<bool> coalesce_last_undo();
   [[nodiscard]] std::optional<LocalUndoGroupMetadata> next_undo_group() const;
   [[nodiscard]] std::optional<LocalUndoGroupMetadata> next_redo_group() const;
   [[nodiscard]] Result<PollReport> poll(PollBudget budget = {});

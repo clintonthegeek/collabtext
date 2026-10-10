@@ -398,6 +398,21 @@ DocumentSession::next_redo_group() const {
   return LocalUndoGroupMetadata{entry->group_id, std::move(entry->operation_ids)};
 }
 
+Result<bool> DocumentSession::coalesce_last_undo() {
+  if (!m_impl || !m_impl->ready())
+    return Error(ErrorCode::awaiting_state,
+                 "session recovery is incomplete; undo coalescing is disabled");
+  if (!m_impl->buffer->coalesce_last_undo()) return false;
+  auto checkpoint = m_impl->local_history->store_snapshot(
+      m_impl->buffer->local_history_snapshot());
+  if (!checkpoint.ok()) {
+    m_impl->poisoned = true;
+    return checkpoint.error().with_context(
+        "undo groups coalesced in memory but checkpoint failed; reopen to reconcile");
+  }
+  return true;
+}
+
 Result<PollReport> DocumentSession::poll(PollBudget budget) {
   if (!m_impl || m_impl->closed)
     return Error(ErrorCode::writer_conflict, "session is closed");
