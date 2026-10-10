@@ -97,7 +97,9 @@ public:
                                        Crdt::Bias bias = Crdt::Bias::Left) const;
   [[nodiscard]] uint32_t resolve_anchor(const Crdt::Anchor &) const;
   [[nodiscard]] Crdt::Global recovery_frontier() const;
-  [[nodiscard]] std::vector<SessionTextEdit>
+  /// Returns a delta only when `since` is within this session's retained
+  /// history. Requests below the floor fail with history_unavailable.
+  [[nodiscard]] Result<std::vector<SessionTextEdit>>
   edits_since(const Crdt::Global &) const;
   [[nodiscard]] const SessionRecoveryReport &recovery_report() const noexcept;
   [[nodiscard]] const ActorId &actor() const noexcept;

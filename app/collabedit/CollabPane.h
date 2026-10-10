@@ -70,6 +70,7 @@ private:
     void writePresence();
     void writeEphemeral();
     void applyRemoteCursorsAndFollow();
+    void applySessionEditsSince(const CollabText::Crdt::Global &version);
     void applyEditsPreservingScroll(const std::vector<CollabText::SessionTextEdit> &edits);
     void applyEditsToQt(const std::vector<CollabText::SessionTextEdit> &edits);
     void syncStreams();

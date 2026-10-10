@@ -104,15 +104,16 @@ Storing these bytes is safe. What it does **not** buy you:
 - **It is not a pin.** Storing a token creates no retention obligation, and
   `collect_garbage()` currently retains everything anyway, so nothing can be
   reclaimed out from under one yet.
-- **It does not survive reclamation.** When S05/G06/G08 enable physical GC, a
-  live registered pin must keep its referent alive or a boundary stub must keep
-  the bytes resolving. That does not exist yet.
+- **It does not survive reclamation.** `AnchorPinRegistry` exposes durable
+  consumer-event projection and live-pin obligations, but physical GC is still
+  disabled. G01/G06 must connect those obligations to validated certificates.
 - **It does not survive an epoch change.** A token from another epoch reports
   `wrong_epoch`; G01/G02 own translation.
 - **It does not survive `local_clear()`.** That invalidates position history,
   including for empty-edge tokens; stored bytes then report `history_unavailable`.
-- **It is not a recovered store.** The same bytes resolve in a fresh process given
-  operations the consumer itself retained. There is no crash-recovered store.
+- **It is not a built-in recovered store.** A consumer supplies its canonical
+  persistence callback and replays pin events before enabling future GC. The
+  registry does not own that log or automatically recover it.
 
 No pre-vNext or earlier experimental token is supported, and none will be
 converted: there is no production data to convert.

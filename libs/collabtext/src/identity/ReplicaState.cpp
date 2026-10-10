@@ -158,6 +158,7 @@ std::string_view to_string(ErrorCode code) {
     case ErrorCode::invalid_unicode: return "invalid_unicode";
     case ErrorCode::invalid_identity: return "invalid_identity";
     case ErrorCode::actor_conflict: return "actor_conflict";
+    case ErrorCode::pin_conflict: return "pin_conflict";
     case ErrorCode::writer_conflict: return "writer_conflict";
     case ErrorCode::unknown_stream: return "unknown_stream";
     case ErrorCode::wrong_epoch: return "wrong_epoch";

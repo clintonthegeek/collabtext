@@ -49,6 +49,7 @@ endif()
 # Core
 # ---------------------------------------------------------------------------
 add_library(collabtext_core STATIC
+    src/AnchorPins.cpp
     src/CrdtEngine.cpp
     src/IdListEngine.cpp
     src/core/Sha256.cpp
@@ -297,6 +298,7 @@ endif()
 add_library(collabtext_public_headers_core OBJECT
     tests/public-headers/only_ActorId_h.cpp
     tests/public-headers/only_Anchor_h.cpp
+    tests/public-headers/only_AnchorPins_h.cpp
     tests/public-headers/only_ApplyOutcome_h.cpp
     tests/public-headers/only_CrdtEngine_h.cpp
     tests/public-headers/only_Engine_h.cpp
@@ -338,6 +340,7 @@ add_crdt_test(tst_convergence)
 add_crdt_test(tst_sumtree)
 add_crdt_test(tst_anchor)
 add_crdt_test(tst_anchor_codec)
+add_crdt_test(tst_anchor_retention)
 # E07b: the supported-reader fixture for the CTPT/1 token format. Registered as a
 # test so a candidate cannot declare a token version supported without it passing.
 add_crdt_test(tst_position_token_reader)

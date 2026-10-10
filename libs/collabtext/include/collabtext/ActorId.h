@@ -53,6 +53,7 @@ enum class ErrorCode {
     // identity and context
     invalid_identity,
     actor_conflict,
+    pin_conflict,           // durable reference/event ID was reused inconsistently
     writer_conflict,
     unknown_stream,
     wrong_epoch,            // operation belongs to another membership era

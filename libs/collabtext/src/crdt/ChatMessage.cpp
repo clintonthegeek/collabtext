@@ -34,6 +34,28 @@ static std::string escape_json(std::string_view s) {
     out += '"';
     return out;
 }
+static std::string hex_bytes(std::string_view bytes) {
+    constexpr char digits[] = "0123456789abcdef";
+    std::string out; out.reserve(bytes.size() * 2);
+    for (unsigned char c : bytes) { out += digits[c >> 4]; out += digits[c & 15]; }
+    return out;
+}
+static std::optional<std::string> unhex_bytes(std::string_view text) {
+    if (text.size() % 2 || text.size() > (64u << 10) * 2) return std::nullopt;
+    auto nibble = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    std::string out; out.reserve(text.size() / 2);
+    for (size_t i = 0; i < text.size(); i += 2) {
+        int hi = nibble(text[i]), lo = nibble(text[i + 1]);
+        if (hi < 0 || lo < 0) return std::nullopt;
+        out += static_cast<char>((hi << 4) | lo);
+    }
+    return out;
+}
 
 namespace {
 
@@ -188,13 +210,15 @@ StreamEntry chat_message_to_entry(const ChatMessage& msg) {
         payload += (msg.anchor->bias == Bias::Left) ? "\"left\"" : "\"right\"";
         payload += "}";
     }
+    if (msg.position_token)
+        payload += ",\"position_token\":" + escape_json(hex_bytes(*msg.position_token));
     payload += "}";
     entry.payload = std::move(payload);
 
     return entry;
 }
 
-std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
+static std::optional<ChatMessage> parse_chat_message_entry(const StreamEntry& entry) {
     ChatPayloadParser p{entry.payload};
     p.skip_ws();
     if (!p.expect('{')) return std::nullopt;
@@ -206,6 +230,7 @@ std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
     bool has_body   = false;
     Anchor anchor_val;
     bool has_anchor = false;
+    std::optional<std::string> position_token;
 
     while (auto key = p.next_key()) {
         if (*key == "author") {
@@ -247,6 +272,12 @@ std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
             p.expect('}');
             anchor_val = Anchor(position, a_bias);
             has_anchor = true;
+        } else if (*key == "position_token") {
+            auto encoded = p.parse_string();
+            if (!encoded) return std::nullopt;
+            auto decoded = unhex_bytes(*encoded);
+            if (!decoded) return std::nullopt;
+            position_token = std::move(*decoded);
         } else {
             if (!p.skip_value()) return std::nullopt;
         }
@@ -265,7 +296,25 @@ std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
     msg.body        = std::move(body);
     if (has_anchor)
         msg.anchor = anchor_val;
+    msg.position_token = std::move(position_token);
     return msg;
+}
+
+std::optional<ChatMessage> chat_message_from_entry(const StreamEntry& entry) {
+    auto message = parse_chat_message_entry(entry);
+    if (message && message->position_token) return std::nullopt;
+    return message;
+}
+
+Result<ChatMessage> chat_message_from_entry(const StreamEntry& entry,
+                                             const PositionScope& expected_scope) {
+    auto message = parse_chat_message_entry(entry);
+    if (!message) return Error(ErrorCode::malformed, "invalid chat message entry");
+    if (message->position_token) {
+        auto checked = validate_position_scope(*message->position_token, expected_scope);
+        if (!checked) return checked.error();
+    }
+    return std::move(*message);
 }
 
 } // namespace CollabText::Crdt

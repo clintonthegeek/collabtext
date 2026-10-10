@@ -2,6 +2,7 @@
 #include "crdt/Comment.h"
 #include "crdt/Anchor.h"
 #include "TestActor.h"
+#include <collabtext/CrdtEngine.h>
 
 using CollabText::Test::actor;
 
@@ -108,6 +109,34 @@ private slots:
         auto result = comment_from_entry(entry);
         QVERIFY(result.has_value());
         QCOMPARE(result->resolved, false);
+    }
+
+    void scoped_position_bytes_require_context_and_survive_causal_delay() {
+        const CollabText::PositionScope scope{"doc-comments", "body", CollabText::Primitive::text, 3};
+        auto engine = CollabText::CrdtEngine::create(CollabText::Test::test_counter(10), scope);
+        QVERIFY(engine.ok());
+        auto left = engine.value()->boundary_at(0, CollabText::Affinity::left);
+        auto right = engine.value()->boundary_at(0, CollabText::Affinity::right);
+        QVERIFY(left.ok()); QVERIFY(right.ok());
+        auto left_bytes = CollabText::encode_position(CollabText::PositionToken{left.value()});
+        auto right_bytes = CollabText::encode_position(CollabText::PositionToken{right.value()});
+        QVERIFY(left_bytes.ok()); QVERIFY(right_bytes.ok());
+        Comment comment;
+        comment.id = "durable-1"; comment.author = "alice"; comment.body = "note";
+        comment.range_start_token = left_bytes.value();
+        comment.range_end_token = right_bytes.value();
+        comment.range_start = Anchor(Identity(actor(1), 1), Bias::Left);
+        comment.range_end = Anchor(Identity(actor(1), 2), Bias::Right);
+        const auto entry = comment_to_entry(comment);
+        QVERIFY(!comment_from_entry(entry).has_value()); // no implicit scope
+        auto restored = comment_from_entry(entry, scope);
+        QVERIFY(restored.ok());
+        QCOMPARE(restored.value().range_start_token.value(), left_bytes.value());
+        QCOMPARE(restored.value().range_end_token.value(), right_bytes.value());
+        auto wrong_epoch = comment_from_entry(entry, CollabText::PositionScope{
+            "doc-comments", "body", CollabText::Primitive::text, 4});
+        QVERIFY(!wrong_epoch.ok());
+        QCOMPARE(wrong_epoch.error().code(), CollabText::ErrorCode::wrong_epoch);
     }
 };
 

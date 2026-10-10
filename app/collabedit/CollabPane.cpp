@@ -328,12 +328,21 @@ void CollabPane::onViewportScrolled() {
     }
 }
 
+void CollabPane::applySessionEditsSince(const Global &version) {
+    auto edits = m_session->edits_since(version);
+    if (!edits.ok()) {
+        emit errorOccurred(toQString(edits.error().message()));
+        return;
+    }
+    applyEditsPreservingScroll(edits.value());
+}
+
 void CollabPane::undoLocal() {
     Global before = m_session->recovery_frontier();
     auto op = m_session->undo();
     if (!op.ok()) {
         if (!m_session->ready()) {
-            applyEditsPreservingScroll(m_session->edits_since(before));
+            applySessionEditsSince(before);
             m_edit->setReadOnly(true);
             m_modified = true;
             emit changed();
@@ -342,7 +351,7 @@ void CollabPane::undoLocal() {
             emit errorOccurred(toQString(op.error().message()));
         return;
     }
-    applyEditsPreservingScroll(m_session->edits_since(before));
+    applySessionEditsSince(before);
     m_modified = true;
     emit changed();
     m_lastEditKind = EditKind::None;
@@ -354,7 +363,7 @@ void CollabPane::redoLocal() {
     auto op = m_session->redo();
     if (!op.ok()) {
         if (!m_session->ready()) {
-            applyEditsPreservingScroll(m_session->edits_since(before));
+            applySessionEditsSince(before);
             m_edit->setReadOnly(true);
             m_modified = true;
             emit changed();
@@ -363,7 +372,7 @@ void CollabPane::redoLocal() {
             emit errorOccurred(toQString(op.error().message()));
         return;
     }
-    applyEditsPreservingScroll(m_session->edits_since(before));
+    applySessionEditsSince(before);
     m_modified = true;
     emit changed();
     m_lastEditKind = EditKind::None;
@@ -393,7 +402,7 @@ void CollabPane::gremlinTick() {
         auto result = m_session->apply_local({{pos, pos + delLen}}, {""});
         if (!result.ok()) {
             if (!m_session->ready()) {
-                applyEditsPreservingScroll(m_session->edits_since(before));
+                applySessionEditsSince(before);
                 m_edit->setReadOnly(true);
                 m_modified = true;
                 emit changed();
@@ -407,7 +416,7 @@ void CollabPane::gremlinTick() {
         auto result = m_session->apply_local({{pos, pos}}, {"\n"});
         if (!result.ok()) {
             if (!m_session->ready()) {
-                applyEditsPreservingScroll(m_session->edits_since(before));
+                applySessionEditsSince(before);
                 m_edit->setReadOnly(true);
                 m_modified = true;
                 emit changed();
@@ -424,7 +433,7 @@ void CollabPane::gremlinTick() {
         auto result = m_session->apply_local({{pos, pos}}, {word});
         if (!result.ok()) {
             if (!m_session->ready()) {
-                applyEditsPreservingScroll(m_session->edits_since(before));
+                applySessionEditsSince(before);
                 m_edit->setReadOnly(true);
                 m_modified = true;
                 emit changed();
@@ -437,7 +446,7 @@ void CollabPane::gremlinTick() {
 
     m_modified = true;
     emit changed();
-    applyEditsPreservingScroll(m_session->edits_since(before));
+    applySessionEditsSince(before);
 
     // Move the widget's text cursor to where the gremlin just typed so
     // that the next writeEphemeral() broadcasts this position.
@@ -462,10 +471,12 @@ void CollabPane::syncCycle() {
             : tr("Document recovery is incomplete; editing is disabled."));
     }
     auto edits = m_session->edits_since(before);
-    if (!edits.empty()) {
+    if (!edits.ok()) {
+        emit errorOccurred(toQString(edits.error().message()));
+    } else if (!edits.value().empty()) {
         m_modified = true;
         emit changed();
-        applyEditsPreservingScroll(edits);
+        applyEditsPreservingScroll(edits.value());
         // Remote edits break any in-progress local coalescing run.
         m_lastEditKind = EditKind::None;
     }

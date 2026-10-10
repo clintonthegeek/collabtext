@@ -477,16 +477,6 @@
       "expected": {
         "capability": "durable_pins",
         "available": true
-      },
-      "baseline_exception": {
-        "outcome": "unsupported",
-        "observed": {
-          "capability": "durable_pins",
-          "available": false,
-          "owner": "S05/G01/G06/G08"
-        },
-        "owner": "S05/G01/G06/G08",
-        "formats": []
       }
     }
   ]

@@ -284,8 +284,9 @@ private slots:
       QVERIFY(wire.ok());
       original_operation = wire.value();
       auto deltas = session->edits_since(before);
-      QCOMPARE(deltas.size(), size_t(1));
-      QCOMPARE(deltas[0].new_text, std::string("hello"));
+      QVERIFY(deltas.ok());
+      QCOMPARE(deltas.value().size(), size_t(1));
+      QCOMPARE(deltas.value()[0].new_text, std::string("hello"));
       QVERIFY(session->save().ok());
       QVERIFY(session->close().ok());
     }
@@ -324,6 +325,29 @@ private slots:
       QCOMPARE(session->text(), std::string("hello!"));
       QVERIFY(session->close().ok());
     }
+  }
+
+  void edits_since_reports_history_floor_and_future_frontier() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const auto root = std::filesystem::path(tmp.path().toStdString());
+    DocumentSessionConfig config{root / "shared", root / "device", "doc-floor",
+                                 "stream-floor", 1};
+    config.initial_text = "seed";
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    Crdt::Global before_seed;
+    auto unavailable = session->edits_since(before_seed);
+    QVERIFY(!unavailable.ok());
+    QCOMPARE(unavailable.error().code(), ErrorCode::history_unavailable);
+
+    auto ahead = session->recovery_frontier();
+    ahead.observe({Test::actor(123), 1});
+    auto waiting = session->edits_since(ahead);
+    QVERIFY(!waiting.ok());
+    QCOMPARE(waiting.error().code(), ErrorCode::awaiting_state);
+    QVERIFY(session->close().ok());
   }
 
   void session_undo_and_redo_survive_reopen() {

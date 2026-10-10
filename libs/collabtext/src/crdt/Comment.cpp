@@ -35,6 +35,29 @@ static std::string escape_json(std::string_view s) {
     return out;
 }
 
+static std::string hex_bytes(std::string_view bytes) {
+    constexpr char digits[] = "0123456789abcdef";
+    std::string out; out.reserve(bytes.size() * 2);
+    for (unsigned char c : bytes) { out += digits[c >> 4]; out += digits[c & 15]; }
+    return out;
+}
+static std::optional<std::string> unhex_bytes(std::string_view text) {
+    if (text.size() % 2 || text.size() > (64u << 10) * 2) return std::nullopt;
+    auto nibble = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    std::string out; out.reserve(text.size() / 2);
+    for (size_t i = 0; i < text.size(); i += 2) {
+        int hi = nibble(text[i]), lo = nibble(text[i + 1]);
+        if (hi < 0 || lo < 0) return std::nullopt;
+        out += static_cast<char>((hi << 4) | lo);
+    }
+    return out;
+}
+
 namespace {
 
 struct CommentPayloadParser {
@@ -228,13 +251,17 @@ StreamEntry comment_to_entry(const Comment& comment) {
     payload += ",\"b\":";
     payload += (comment.range_end.bias == Bias::Left) ? "\"left\"" : "\"right\"";
     payload += "}}";
+    if (comment.range_start_token)
+        payload += ",\"position_start\":" + escape_json(hex_bytes(*comment.range_start_token));
+    if (comment.range_end_token)
+        payload += ",\"position_end\":" + escape_json(hex_bytes(*comment.range_end_token));
     payload += "}";
     entry.payload = std::move(payload);
 
     return entry;
 }
 
-std::optional<Comment> comment_from_entry(const StreamEntry& entry) {
+static std::optional<Comment> parse_comment_entry(const StreamEntry& entry) {
     CommentPayloadParser p{entry.payload};
     p.skip_ws();
     if (!p.expect('{')) return std::nullopt;
@@ -248,6 +275,7 @@ std::optional<Comment> comment_from_entry(const StreamEntry& entry) {
     Anchor range_end_val;
     bool has_range  = false;
     bool resolved   = false;
+    std::optional<std::string> start_token, end_token;
 
     while (auto key = p.next_key()) {
         if (*key == "author") {
@@ -298,6 +326,13 @@ std::optional<Comment> comment_from_entry(const StreamEntry& entry) {
             } else {
                 return std::nullopt;
             }
+        } else if (*key == "position_start" || *key == "position_end") {
+            auto value = p.parse_string();
+            if (!value) return std::nullopt;
+            auto decoded = unhex_bytes(*value);
+            if (!decoded) return std::nullopt;
+            if (*key == "position_start") start_token = std::move(*decoded);
+            else end_token = std::move(*decoded);
         } else {
             if (!p.skip_value()) return std::nullopt;
         }
@@ -316,8 +351,32 @@ std::optional<Comment> comment_from_entry(const StreamEntry& entry) {
     comment.body        = std::move(body);
     comment.range_start = range_start_val;
     comment.range_end   = range_end_val;
+    comment.range_start_token = std::move(start_token);
+    comment.range_end_token = std::move(end_token);
     comment.resolved    = resolved;
     return comment;
+}
+
+std::optional<Comment> comment_from_entry(const StreamEntry& entry) {
+    auto comment = parse_comment_entry(entry);
+    if (comment && (comment->range_start_token || comment->range_end_token))
+        return std::nullopt; // scoped bytes require an expected document context
+    return comment;
+}
+
+Result<Comment> comment_from_entry(const StreamEntry& entry,
+                                   const PositionScope& expected_scope) {
+    auto comment = parse_comment_entry(entry);
+    if (!comment) return Error(ErrorCode::malformed, "invalid comment entry");
+    if (comment->range_start_token.has_value() != comment->range_end_token.has_value())
+        return Error(ErrorCode::malformed, "comment requires both scoped range endpoints");
+    if (comment->range_start_token) {
+        auto start = validate_position_scope(*comment->range_start_token, expected_scope);
+        if (!start) return start.error();
+        auto end = validate_position_scope(*comment->range_end_token, expected_scope);
+        if (!end) return end.error();
+    }
+    return std::move(*comment);
 }
 
 } // namespace CollabText::Crdt

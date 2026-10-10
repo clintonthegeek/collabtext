@@ -117,6 +117,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_sequence_semantics|tst_convergence|tst
 
 - `docs/specs/vnext-boundary-semantics.md`
 - `docs/specs/vnext-public-api.md`
+- `docs/reports/vnext-task-log.md`
 - `docs/specs/vnext-sequence-semantics.md`
 - `docs/specs/vnext-alpha-capabilities.md`
 - `libs/collabtext/tests/reference/BoundaryModel.h`
@@ -262,11 +263,35 @@ Run `./tools/verify-roadmap.sh debug "tst_anchor_codec|tst_anchor|tst_idlist_anc
 
 **Files / scope:**
 
+- `app/collabedit/CollabPane.cpp`
+- `app/collabedit/CollabPane.h`
 - `docs/specs/vnext-anchor-retention.md`
+- `libs/collabtext/include/collabtext/Anchor.h`
+- `libs/collabtext/include/collabtext/AnchorPins.h`
+- `libs/collabtext/include/collabtext/DocumentSession.h`
+- `libs/collabtext/src/AnchorPins.cpp`
 - `libs/collabtext/src/DocumentSession.cpp`
+- `libs/collabtext/src/codec/AnchorCodec.cpp`
+- `libs/collabtext/src/crdt/Comment.h`
 - `libs/collabtext/src/crdt/Comment.cpp`
+- `libs/collabtext/src/crdt/ChatMessage.h`
 - `libs/collabtext/src/crdt/ChatMessage.cpp`
+- `libs/collabtext/src/identity/ReplicaState.cpp`
+- `libs/collabtext/include/collabtext/ActorId.h`
+- `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/tests/tst_anchor_retention.cpp`
+- `libs/collabtext/tests/tst_comment.cpp`
+- `libs/collabtext/tests/tst_chat_message.cpp`
+- `libs/collabtext/tests/tst_session_recovery.cpp`
+- `libs/collabtext/tests/public-headers/only_AnchorPins_h.cpp`
+- `libs/collabtext/tests/public-headers/only_DocumentSession_h.cpp`
+- `libs/collabtext/tests/public-headers/only_LocalHistory_h.cpp`
+- `tests/consumer-smoke/wave-contract/probes.cpp`
+- `tests/consumer-smoke/wave-contract/cases.json`
+- `docs/specs/vnext-public-api.md`
+- `libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md`
+- `docs/roadmap/2026-10-reliability/TASKS.json`
+- `docs/reports/vnext-task-log.md`
 - `docs/specs/vnext-external-position-contract.md`
 - `libs/collabtext/tests/fixtures/external-position/`
 

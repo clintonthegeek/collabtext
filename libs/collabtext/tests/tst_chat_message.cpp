@@ -2,6 +2,7 @@
 #include "crdt/ChatMessage.h"
 #include "crdt/Anchor.h"
 #include "TestActor.h"
+#include <collabtext/CrdtEngine.h>
 
 using CollabText::Test::actor;
 
@@ -121,6 +122,28 @@ private slots:
         QVERIFY(decoded.has_value());
         QVERIFY(!decoded->anchor.has_value());
         QCOMPARE(decoded->body, msg.body);
+    }
+
+    void scoped_position_bytes_reject_foreign_document_and_preserve_unresolved() {
+        const CollabText::PositionScope scope{"doc-chat", "body", CollabText::Primitive::text, 9};
+        auto engine = CollabText::CrdtEngine::create(CollabText::Test::test_counter(11), scope);
+        QVERIFY(engine.ok());
+        auto token = engine.value()->boundary_at(0, CollabText::Affinity::right);
+        QVERIFY(token.ok());
+        auto bytes = CollabText::encode_position(CollabText::PositionToken{token.value()});
+        QVERIFY(bytes.ok());
+        ChatMessage message;
+        message.id = "reply-1"; message.author = "bob"; message.body = "reply";
+        message.position_token = bytes.value();
+        const auto entry = chat_message_to_entry(message);
+        QVERIFY(!chat_message_from_entry(entry).has_value());
+        auto restored = chat_message_from_entry(entry, scope);
+        QVERIFY(restored.ok());
+        QCOMPARE(restored.value().position_token.value(), bytes.value());
+        auto foreign = chat_message_from_entry(entry, CollabText::PositionScope{
+            "other-doc", "body", CollabText::Primitive::text, 9});
+        QVERIFY(!foreign.ok());
+        QCOMPARE(foreign.error().code(), CollabText::ErrorCode::wrong_document);
     }
 };
 

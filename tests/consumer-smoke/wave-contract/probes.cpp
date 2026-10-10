@@ -1,4 +1,5 @@
 #include "Adapter.h"
+#include <collabtext/AnchorPins.h>
 #include <csignal>
 #include <fstream>
 #include <iostream>
@@ -224,9 +225,26 @@ std::string run(const std::string& name) {
         return "{\"deleted\":"+position(detached)+",\"restored\":"+position(restored)+",\"retained_entries\":1,\"gc_enabled\":false}";
     }
     if(name=="pins") {
-        // This build has no exported durable pin registration API. This is
-        // capability information, deliberately never a strict passing case.
-        return "{\"capability\":\"durable_pins\",\"available\":false,\"owner\":\"S05/G01/G06/G08\"}";
+        const PositionScope scope{"doc", "body", Primitive::text, 1};
+        auto boundary=checked(e.boundary_at(0,Affinity::left));
+        auto bytes=checked(encode_position(PositionToken{boundary}));
+        std::vector<AnchorPinEvent> canonical;
+        auto registry=checked(AnchorPinRegistry::create(scope,[&](const AnchorPinEvent& event) {
+            canonical.push_back(event); return Result<void>{};
+        }));
+        require(registry->register_pin(1,"event-1","reply-1",bytes).ok(),"pin register");
+        require(registry->live_pins().size()==1 && !registry->recovery_complete(2),"pin register/frontier");
+        require(checked(registry->lookup_pin("reply-1")).token_bytes==bytes,"pin lookup");
+        auto recovered=checked(AnchorPinRegistry::create(scope,[](const AnchorPinEvent&) {
+            return Result<void>(Error(ErrorCode::io_error,"replay must not append"));
+        }));
+        require(recovered->replay(canonical.front()).ok(),"pin replay");
+        require(recovered->recovery_complete(1) && recovered->live_pins().front().token_bytes==bytes,
+                "pin recovery before collection");
+        require(registry->release_pin(2,"event-2","reply-1").ok(),"pin release event");
+        require(registry->live_pins().empty(),"pin release");
+        require(refusal(registry->lookup_pin("reply-1"))=="not_found","released pin lookup");
+        return "{\"capability\":\"durable_pins\",\"available\":true}";
     }
     throw std::runtime_error("unknown probe case");
 }

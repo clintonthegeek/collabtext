@@ -266,6 +266,17 @@ context, foreign/unsupported tokens, and unavailable history. The final type nam
 and fields are frozen at S04/A02; an ApplyOutcome with no position cannot satisfy
 resolution. Scoped start/end/empty anchors are values, not universal sentinels.
 
+`AnchorPinRegistry` is the headless projection for durable external references.
+Consumers supply the canonical event persistence callback, replay a contiguous
+event prefix on restart, and wait for `recovery_complete(canonical_frontier)`
+before any collector is enabled. `live_pins()` exposes the original token bytes
+and scope for future certificate checks. This API does not persist the consumer
+log itself or enable garbage collection. `validate_position_scope()` provides
+typed document, stream, primitive, and epoch rejection at comment/chat ingestion
+seams. `DocumentSession::edits_since()` returns `Result`; callers must handle
+`history_unavailable` below its retained floor and `awaiting_state` for a future
+frontier.
+
 ```cpp
 class Buffer {
 public:

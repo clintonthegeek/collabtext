@@ -24,6 +24,7 @@ struct DocumentSession::Impl {
   std::unique_ptr<Crdt::FileOpStream> transport;
   std::unique_ptr<Storage::LocalHistoryLog> local_history;
   SessionRecoveryReport report;
+  Global history_floor;
   uint64_t next_envelope = 1;
   std::unordered_set<std::string> replayed_tokens;
   std::unordered_map<std::string, Operation> deferred_tokens;
@@ -240,6 +241,7 @@ DocumentSession::open_with_writer_config(
     if (!byte_limit.ok()) return byte_limit.error();
     if (!impl->config.initial_text.empty())
       impl->buffer->apply_ops({Crdt::op_for_seed(impl->config.initial_text)});
+    impl->history_floor = impl->buffer->version();
     auto local_history = Storage::LocalHistoryLog::open(
         Impl::history_path(impl->config), impl->replica->actor());
     if (!local_history.ok()) return local_history.error();
@@ -513,11 +515,18 @@ uint32_t DocumentSession::resolve_anchor(const Crdt::Anchor &anchor) const {
 Global DocumentSession::recovery_frontier() const {
   return m_impl && m_impl->buffer ? m_impl->buffer->version() : Global{};
 }
-std::vector<SessionTextEdit>
+Result<std::vector<SessionTextEdit>>
 DocumentSession::edits_since(const Global &since) const {
   std::vector<SessionTextEdit> out;
   if (!m_impl || !m_impl->buffer)
-    return out;
+    return Error(ErrorCode::history_unavailable, "session history is unavailable");
+  const auto current = m_impl->buffer->version();
+  if (!current.observed_all(since))
+    return Error(ErrorCode::awaiting_state,
+                 "requested edit version is ahead of the session frontier");
+  if (!since.observed_all(m_impl->history_floor))
+    return Error(ErrorCode::history_unavailable,
+                 "requested edit version is below the retained history floor");
   for (auto &edit : m_impl->buffer->edits_since(since))
     out.push_back({edit.old_start, edit.old_end, std::move(edit.new_text)});
   return out;

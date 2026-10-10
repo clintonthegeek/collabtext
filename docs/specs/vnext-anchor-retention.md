@@ -13,7 +13,8 @@ explicit retention registration. Undo history and external references are
 independent obligations. Device enrollment and presence do not own these
 references: retiring an author device cannot remove another live object's pin.
 
-The stable pin key is a consumer supplied, nonempty opaque reference ID, scoped
+The stable pin key is a consumer supplied, nonempty printable-ASCII reference ID
+(at most 256 bytes), scoped
 by document, stream, primitive and epoch. IDs are immutable and never reused.
 Recreating a reference after release uses a fresh ID. A pin stores the original
 encoded token bytes and their validated scope, not a reminted token or C++ object
@@ -62,6 +63,12 @@ The pin registry is usable with any public engine composition; it does not
 require FileOpStream, DocumentSession, a library-owned block tree, or a
 cross-block undo manager.
 
+The projection retains original token bytes only for live registrations.
+Released references retain a terminal ID tombstone and a SHA-256 event
+fingerprint so duplicate/conflicting replay can be checked without retaining a
+released token payload. These ledgers still have metadata cost proportional to
+canonical pin events and reference IDs; G08 measures it.
+
 ## Retained context, epochs, and history
 
 A live pin obligates the collector to preserve enough checked context to resolve
@@ -102,10 +109,23 @@ resolution. A well-formed but causally unresolved supported token is preserved
 byte-for-byte for retry after dependencies arrive; wrong-document, wrong-epoch,
 malformed and unsupported-version input is rejected with a typed error.
 
-The legacy comment/chat codecs do not currently carry this scope or an unresolved
-token representation. They must not be presented as the durable external
-anchor API; that adapter work remains gated on the public pin registry and
-consumer envelope contract.
+The legacy comment/chat JSON anchor fields remain unscoped and are not accepted
+as durable positions. Their codecs now also carry optional `position_start` /
+`position_end` or `position_token` CTPT bytes. Ingestion must use the overload
+that supplies the expected scope; the legacy overload rejects records carrying
+these fields. The scoped overload rejects wrong scope with a typed error and
+preserves valid original bytes unchanged, including when the receiver has not
+yet replayed enough operations to resolve them. The external pin registry,
+rather than these codec records alone, establishes the retention obligation.
+
+Headless consumers use `AnchorPinRegistry` with their own canonical event log.
+Its persistence callback appends `AnchorPinEvent` durably before the in-memory
+projection advances; after restart, replay the contiguous canonical events
+before declaring `recovery_complete(frontier)`. The registry exposes live
+reference IDs and original token bytes for certificate construction. It does
+not enable or perform collection. Use `validate_position_scope` at any comment
+or chat ingestion seam that accepts stored CTPT bytes; keep the bytes unchanged
+if resolution reports `awaiting_state`, then retry after operation replay.
 
 ## Memory and collection accounting
 

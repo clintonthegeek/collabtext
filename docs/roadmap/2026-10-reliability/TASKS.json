@@ -2654,13 +2654,26 @@
         "L06"
       ],
       "files": [
+        "app/collabedit/CollabPane.cpp",
+        "app/collabedit/CollabPane.h",
         "docs/specs/vnext-anchor-retention.md",
-        "libs/collabtext/src/DocumentSession.cpp",
-        "libs/collabtext/src/crdt/Comment.cpp",
-        "libs/collabtext/src/crdt/ChatMessage.cpp",
-        "libs/collabtext/tests/tst_anchor_retention.cpp",
         "docs/specs/vnext-external-position-contract.md",
-        "libs/collabtext/tests/fixtures/external-position/"
+        "libs/collabtext/include/collabtext/Anchor.h",
+        "libs/collabtext/include/collabtext/AnchorPins.h",
+        "libs/collabtext/include/collabtext/DocumentSession.h",
+        "libs/collabtext/src/AnchorPins.cpp",
+        "libs/collabtext/src/DocumentSession.cpp",
+        "libs/collabtext/src/codec/AnchorCodec.cpp",
+        "libs/collabtext/src/crdt/ChatMessage.cpp",
+        "libs/collabtext/src/crdt/ChatMessage.h",
+        "libs/collabtext/src/crdt/Comment.cpp",
+        "libs/collabtext/src/crdt/Comment.h",
+        "libs/collabtext/tests/fixtures/external-position/",
+        "libs/collabtext/tests/public-headers/only_AnchorPins_h.cpp",
+        "libs/collabtext/tests/public-headers/only_DocumentSession_h.cpp",
+        "libs/collabtext/tests/tst_anchor_retention.cpp",
+        "tests/consumer-smoke/wave-contract/cases.json",
+        "tests/consumer-smoke/wave-contract/probes.cpp"
       ],
       "steps": [
         "Classify ephemeral cursors separately from durable internal and external comments/bookmarks/replies/undo selections. Implement explicit durable anchor pins and their typed outcomes; pins are released through the specified durable lifecycle, never through a device presence timeout.",
@@ -2687,7 +2700,7 @@
         "W5"
       ],
       "baseline_revision": "0eb0579",
-      "notes": "W3 lifecycle contract drafted in docs/specs/vnext-anchor-retention.md: immutable reference IDs, terminal idempotent release, contiguous consumer projection frontier, conservative orphan retention, typed history floor, and separate historical projection. Implementation remains open: public engines have no token-scope inspection API or durable pin projection/hooks; DocumentSession has no typed edits_since/history-floor result; legacy Comment/ChatMessage anchors carry no document/epoch scope. No GC is enabled. Requires public API, recovery, and consumer-adapter implementation plus runtime tests before completion."
+      "notes": "W3 contract is in docs/specs/vnext-anchor-retention.md. Implemented headless AnchorPinRegistry with consumer persistence callback, token-scope validation, contiguous replay, idempotency fingerprints, release tombstones and live-pin projection; DocumentSession edits_since now returns typed history-floor/future-frontier errors; comment/chat codecs preserve CTPT bytes and have expected-scope ingestion overloads. Targeted Debug and Release suites pass; ASan and final installed gates pending. GC remains inert pending G01/G06."
     },
     {
       "id": "S06",

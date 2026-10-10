@@ -82,6 +82,31 @@ Result<std::string> encode_position(const PositionToken& token) {
         return std::move(w.bytes);
     },token);
 }
+Result<PositionScope> position_scope(const PositionToken& token) {
+    return std::visit([](const auto& typed) -> Result<PositionScope> {
+        const auto* p = detail::PositionAccess::get(typed);
+        if (!p) return malformed("moved-from position");
+        auto valid = detail::validate_position(*p);
+        if (!valid) return valid.error();
+        return p->scope;
+    }, token);
+}
+Result<void> validate_position_scope(std::string_view bytes,
+                                     const PositionScope& expected) {
+    auto decoded = decode_position(bytes);
+    if (!decoded) return decoded.error();
+    auto actual = position_scope(decoded.value());
+    if (!actual) return actual.error();
+    if (actual.value().document != expected.document)
+        return Error(ErrorCode::wrong_document, "position belongs to another document");
+    if (actual.value().stream != expected.stream)
+        return Error(ErrorCode::wrong_stream, "position belongs to another stream");
+    if (actual.value().primitive != expected.primitive)
+        return Error(ErrorCode::wrong_primitive, "position belongs to another primitive");
+    if (actual.value().epoch != expected.epoch)
+        return Error(ErrorCode::wrong_epoch, "position belongs to another epoch");
+    return {};
+}
 Result<PositionToken> decode_position(std::string_view bytes) {
     if (bytes.size()>token_limit) return malformed("position input exceeds 64 KiB");
     if (bytes.size()<4) {

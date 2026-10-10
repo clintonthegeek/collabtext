@@ -92,6 +92,11 @@ recovery rules are specified in
 [`vnext-anchor-retention.md`](vnext-anchor-retention.md). That contract makes
 reference IDs immutable (release is terminal; a restored reference gets a new
 ID) and requires a contiguous consumer projection frontier before collection.
+The headless public `AnchorPinRegistry` persists through a caller supplied
+canonical-event callback and replays those events into an inspectable live-pin
+projection; it does not turn collection on. `validate_position_scope` gives
+comment/chat ingestion seams typed wrong-document, wrong-stream,
+wrong-primitive and wrong-epoch outcomes.
 
 Storing bytes in an external log is **not** notification that the engine must
 retain their referents. S05 provides explicit durable pin registration, lookup,

@@ -52,6 +52,11 @@ using PositionToken = std::variant<TextBoundary,TextAttachment,ListBoundary,List
 /// requires exact EOF, retains no input reference, creates no pin or identity.
 Result<std::string> encode_position(const PositionToken& token);
 Result<PositionToken> decode_position(std::string_view bytes);
+/// Returns the checked scope embedded in a valid, live position token.
+Result<PositionScope> position_scope(const PositionToken& token);
+/// Validates stored CTPT bytes and rejects any scope mismatch explicitly.
+Result<void> validate_position_scope(std::string_view bytes,
+                                     const PositionScope& expected);
 /// A typed read refuses a different kind instead of converting its meaning.
 template<class Position> Result<Position> decode_position_as(std::string_view bytes) {
     auto decoded = decode_position(bytes);
