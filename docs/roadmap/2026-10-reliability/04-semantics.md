@@ -265,6 +265,10 @@ Run `./tools/verify-roadmap.sh debug "tst_anchor_codec|tst_anchor|tst_idlist_anc
 
 - `app/collabedit/CollabPane.cpp`
 - `app/collabedit/CollabPane.h`
+- `docs/roadmap/2026-10-reliability/04-semantics.md`
+- `docs/roadmap/2026-10-reliability/TASKS.json`
+- `docs/reports/vnext-anchor-retention-milestone.md`
+- `docs/reports/vnext-task-log.md`
 - `docs/specs/vnext-anchor-retention.md`
 - `libs/collabtext/include/collabtext/Anchor.h`
 - `libs/collabtext/include/collabtext/AnchorPins.h`

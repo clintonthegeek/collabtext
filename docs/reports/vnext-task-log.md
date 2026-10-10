@@ -2920,3 +2920,26 @@ scope. These are implementation gaps, not supported features; GC remains
 inert. Add the public API and crash/recovery tests before marking S05 complete.
 Verification: `python3 docs/roadmap/2026-10-reliability/validate-plan.py` passed
 (72 tasks, acyclic graph and coverage checks); `git diff --check` passed.
+
+Task: S05
+Status: complete
+Commit: b450139 feat(retention): add durable external anchor pins (S05)
+Scope: Added a headless caller-persisted `AnchorPinRegistry` with scoped token
+validation, canonical event replay, contiguous-frontier gating, idempotent
+release/lookup, terminal reference tombstones and live pin enumeration. Added
+typed DocumentSession history-floor errors, scoped CTPT payloads and expected-
+scope comment/chat ingestion. Updated CollabEdit to surface history query
+errors, and made installed Wave WP8 assert pin registration, lookup, release
+and restart recovery. The crash test simulates a published event with an
+uncertain durability result, then proves recovery restores the pin before its
+frontier gate opens.
+Verification: S05's seven suites passed in Debug, Release and ASan/UBSan;
+84/84 change-routed Debug correctness tests passed. The installed live gate at
+the candidate passed Debug/Release/ASan: Wave 16/16 strict cases and Markdown
+4/4 in each mode. See `docs/reports/vnext-anchor-retention-milestone.md` for
+commands, evidence paths and limits. LeakSanitizer is unavailable in this
+runner; sanitizer evidence disables leak detection.
+Remaining: Pin projection does not enable or perform GC. G01/G06 own
+certificate checks, epoch translations and physical reclamation; G08 measures
+retained pin metadata. Historical playback remains bounded by its own
+projection/archive floor.

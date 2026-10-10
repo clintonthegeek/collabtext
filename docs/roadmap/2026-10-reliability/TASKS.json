@@ -2656,8 +2656,16 @@
       "files": [
         "app/collabedit/CollabPane.cpp",
         "app/collabedit/CollabPane.h",
+        "docs/roadmap/2026-10-reliability/04-semantics.md",
+        "docs/roadmap/2026-10-reliability/TASKS.json",
+        "docs/reports/vnext-anchor-retention-milestone.md",
+        "docs/reports/vnext-task-log.md",
         "docs/specs/vnext-anchor-retention.md",
         "docs/specs/vnext-external-position-contract.md",
+        "docs/specs/vnext-public-api.md",
+        "libs/collabtext/CMakeLists.txt",
+        "libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md",
+        "libs/collabtext/include/collabtext/ActorId.h",
         "libs/collabtext/include/collabtext/Anchor.h",
         "libs/collabtext/include/collabtext/AnchorPins.h",
         "libs/collabtext/include/collabtext/DocumentSession.h",
@@ -2668,10 +2676,15 @@
         "libs/collabtext/src/crdt/ChatMessage.h",
         "libs/collabtext/src/crdt/Comment.cpp",
         "libs/collabtext/src/crdt/Comment.h",
+        "libs/collabtext/src/identity/ReplicaState.cpp",
         "libs/collabtext/tests/fixtures/external-position/",
         "libs/collabtext/tests/public-headers/only_AnchorPins_h.cpp",
         "libs/collabtext/tests/public-headers/only_DocumentSession_h.cpp",
+        "libs/collabtext/tests/public-headers/only_LocalHistory_h.cpp",
         "libs/collabtext/tests/tst_anchor_retention.cpp",
+        "libs/collabtext/tests/tst_chat_message.cpp",
+        "libs/collabtext/tests/tst_comment.cpp",
+        "libs/collabtext/tests/tst_session_recovery.cpp",
         "tests/consumer-smoke/wave-contract/cases.json",
         "tests/consumer-smoke/wave-contract/probes.cpp"
       ],
@@ -2693,14 +2706,40 @@
         "R10"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "consumer_requirements": [
         "W1",
         "W3",
         "W5"
       ],
       "baseline_revision": "0eb0579",
-      "notes": "W3 contract is in docs/specs/vnext-anchor-retention.md. Implemented headless AnchorPinRegistry with consumer persistence callback, token-scope validation, contiguous replay, idempotency fingerprints, release tombstones and live-pin projection; DocumentSession edits_since now returns typed history-floor/future-frontier errors; comment/chat codecs preserve CTPT bytes and have expected-scope ingestion overloads. Targeted Debug and Release suites pass; ASan and final installed gates pending. GC remains inert pending G01/G06."
+      "notes": "Implemented and certified in b450139. The consumer-owned pin projection, scoped comment/chat token paths, typed session history errors and installed WP8 assertion are complete. Physical GC and epoch translation remain disabled and belong to G01/G06; retention cost measurement belongs to G08.",
+      "verification_results": {
+        "required_debug": "PASS: 7/7 S05 suites; build-roadmap-debug/verification/20261010T072851Z-2.",
+        "required_release": "PASS: 7/7 S05 suites; build-roadmap-release/verification/20261010T072913Z-2.",
+        "asan_ubsan": "PASS: 7/7 S05 suites with ASAN_OPTIONS=detect_leaks=0; build-roadmap-asan/verification/20261010T072943Z-2.",
+        "change_routed_debug": "PASS: 84/84 routed correctness tests, public headers and editor recovery; build-roadmap-debug/verification/20261010T073135Z-changed-511t5876.",
+        "installed_package": "PASS: Debug installed Core package and isolated-consumer gate; build-consumer-verify/debug-package-20261010T073323Z-2175.",
+        "installed_live_debug": "PASS: Wave 16/16 strict and Markdown 4/4 at b450139; build-consumer-verify/debug-live-20261010T073355Z-2.",
+        "installed_live_release": "PASS: Wave 16/16 strict and Markdown 4/4 at b450139; build-consumer-verify/release-live-20261010T073407Z-2.",
+        "installed_live_asan_ubsan": "PASS: Wave 16/16 strict and Markdown 4/4 with ASAN_OPTIONS=detect_leaks=0 at b450139; build-consumer-verify/asan-live-20261010T073418Z-2.",
+        "plan_and_headers": "PASS: roadmap validator, standalone public-header independence check, git diff --check."
+      },
+      "artifacts": [
+        "docs/specs/vnext-anchor-retention.md",
+        "docs/reports/vnext-anchor-retention-milestone.md",
+        "build-roadmap-debug/verification/20261010T072851Z-2/",
+        "build-roadmap-release/verification/20261010T072913Z-2/",
+        "build-roadmap-asan/verification/20261010T072943Z-2/",
+        "build-roadmap-debug/verification/20261010T073135Z-changed-511t5876/",
+        "build-consumer-verify/debug-live-20261010T073355Z-2/",
+        "build-consumer-verify/release-live-20261010T073407Z-2/",
+        "build-consumer-verify/asan-live-20261010T073418Z-2/"
+      ],
+      "remaining_gap": "The pin registry is a caller-persisted projection; consumers must recover to their canonical frontier before GC. It does not delete CRDT state or translate tokens across epochs. G01/G06 own certificate eligibility, translation and physical reclamation; G08 measures retained metadata. The feature makes no unlimited historical playback claim.",
+      "implementation_commits": [
+        "b450139"
+      ]
     },
     {
       "id": "S06",
