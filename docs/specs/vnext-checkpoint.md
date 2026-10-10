@@ -86,6 +86,22 @@ most 256 bytes each. A non-genesis parent hash is exactly 32 raw digest bytes;
 the public typed value renders it as 64 lowercase hexadecimal digits. Complete
 section consumption is required.
 
+The Causal state section payload is encoded as:
+
+```text
+u32 version_actor_count
+version_actor_count × (16-byte actor ID, u64 nonzero counter)
+u32 undo_entry_count
+undo_entry_count × (edit identity, undo operation identity, u32 nonzero count)
+```
+
+Each identity is a 16-byte actor ID followed by a u64 nonzero counter. Actor
+IDs in the version vector are strictly increasing by canonical actor order;
+UndoMap entries use the engine's strict `(edit identity, undo identity)` order.
+Each count is limited to 1,000,000, and complete section consumption is
+required. Restore rebuilds the UndoMap and rejects invalid identities, duplicate
+or unordered keys, and zero counts.
+
 Visibility flags, summary-tree nodes, lookup tables, and other indexes are
 derived. Import rebuilds them from logical entries and UndoMap state, then
 checks visible text/count, fragment ranges, identities, links, and summaries

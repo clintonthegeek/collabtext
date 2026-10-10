@@ -97,6 +97,45 @@ private slots:
     QVERIFY(!decode_checkpoint_context(trailing));
   }
 
+  void causalSectionRoundTripsAndRejectsMalformedState() {
+    const auto actor_a = ActorId::parse("01000000000000000000000000000001").value();
+    const auto actor_b = ActorId::parse("02000000000000000000000000000001").value();
+    CheckpointCausalState state;
+    state.version.observe(Crdt::Identity(actor_a, 9));
+    state.version.observe(Crdt::Identity(actor_b, 4));
+    state.undo_entries = {
+        {Crdt::UndoTreeKey{Crdt::Identity(actor_a, 2), Crdt::Identity(actor_b, 7)}, 1},
+        {Crdt::UndoTreeKey{Crdt::Identity(actor_a, 3), Crdt::Identity(actor_b, 8)}, 2}};
+    auto encoded = encode_checkpoint_causal(state);
+    QVERIFY(encoded);
+    QCOMPARE(encoded.value().id, uint16_t{3});
+    auto decoded = decode_checkpoint_causal(encoded.value());
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value().version, state.version);
+    QCOMPARE(decoded.value().undo_entries.size(), state.undo_entries.size());
+    for (size_t i = 0; i < state.undo_entries.size(); ++i) {
+      QCOMPARE(decoded.value().undo_entries[i].key.edit_id,
+               state.undo_entries[i].key.edit_id);
+      QCOMPARE(decoded.value().undo_entries[i].key.undo_id,
+               state.undo_entries[i].key.undo_id);
+      QCOMPARE(decoded.value().undo_entries[i].undo_count,
+               state.undo_entries[i].undo_count);
+    }
+
+    auto unordered = state;
+    std::reverse(unordered.undo_entries.begin(), unordered.undo_entries.end());
+    QVERIFY(!encode_checkpoint_causal(unordered));
+    auto zero_count = state;
+    zero_count.undo_entries[0].undo_count = 0;
+    QVERIFY(!encode_checkpoint_causal(zero_count));
+    auto trailing = encoded.value();
+    trailing.bytes.push_back('\0');
+    QVERIFY(!decode_checkpoint_causal(trailing));
+    auto bad_identity = encoded.value();
+    std::fill(bad_identity.bytes.begin() + 4, bad_identity.bytes.begin() + 20, '\0');
+    QVERIFY(!decode_checkpoint_causal(bad_identity));
+  }
+
   void rejectsEveryTruncation() {
     auto encoded = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
     QVERIFY(encoded);

@@ -31,6 +31,11 @@ void append_u16(std::string &out, uint16_t value) {
   out.push_back(static_cast<char>(value));
 }
 
+void append_u32(std::string &out, uint32_t value) {
+  for (int shift = 24; shift >= 0; shift -= 8)
+    out.push_back(static_cast<char>(value >> shift));
+}
+
 void append_u64(std::string &out, uint64_t value) {
   for (int shift = 56; shift >= 0; shift -= 8)
     out.push_back(static_cast<char>(value >> shift));
@@ -40,6 +45,35 @@ uint16_t read_u16(std::string_view bytes, size_t at) {
   return static_cast<uint16_t>(
       (static_cast<uint16_t>(static_cast<uint8_t>(bytes[at])) << 8) |
       static_cast<uint8_t>(bytes[at + 1]));
+}
+
+uint32_t read_u32(std::string_view bytes, size_t at) {
+  uint32_t value = 0;
+  for (size_t i = 0; i < 4; ++i)
+    value = (value << 8) | static_cast<uint8_t>(bytes[at + i]);
+  return value;
+}
+
+uint64_t read_u64(std::string_view bytes, size_t at);
+
+void append_actor(std::string &out, const ActorId &actor) {
+  for (const auto byte : actor.bytes()) out.push_back(static_cast<char>(byte));
+}
+
+ActorId read_actor(std::string_view bytes, size_t at) {
+  std::array<uint8_t, ActorId::kBytes> raw{};
+  for (size_t i = 0; i < raw.size(); ++i)
+    raw[i] = static_cast<uint8_t>(bytes[at + i]);
+  return ActorId::from_bytes(raw);
+}
+
+void append_identity(std::string &out, const Crdt::Identity &identity) {
+  append_actor(out, identity.actor);
+  append_u64(out, identity.counter);
+}
+
+Crdt::Identity read_identity(std::string_view bytes, size_t at) {
+  return Crdt::Identity(read_actor(bytes, at), read_u64(bytes, at + ActorId::kBytes));
 }
 
 uint64_t read_u64(std::string_view bytes, size_t at) {
@@ -306,6 +340,103 @@ Result<CheckpointContext> decode_checkpoint_context(
     return malformed("checkpoint context has trailing bytes");
   if (auto valid = validate_context(context); !valid) return valid.error();
   return context;
+}
+
+Result<CheckpointSection> encode_checkpoint_causal(
+    const CheckpointCausalState &state) {
+  constexpr size_t kMaxEntries = 1'000'000;
+  if (state.version.pair_count() > kMaxEntries ||
+      state.undo_entries.size() > kMaxEntries)
+    return Error(ErrorCode::limit_exceeded,
+                 "checkpoint causal state exceeds entry limit",
+                 "checkpoint.causal");
+  std::string payload;
+  append_u32(payload, static_cast<uint32_t>(state.version.pair_count()));
+  for (size_t i = 0; i < state.version.pair_count(); ++i) {
+    const auto [actor, counter] = state.version.pair(i);
+    if (!actor.valid() || counter == 0 ||
+        (i && !(state.version.pair(i - 1).first < actor)))
+      return malformed("checkpoint causal version vector is not canonical");
+    append_actor(payload, actor);
+    append_u64(payload, counter);
+  }
+  append_u32(payload, static_cast<uint32_t>(state.undo_entries.size()));
+  const Crdt::UndoMapEntry *previous = nullptr;
+  for (const auto &entry : state.undo_entries) {
+    if (!entry.key.edit_id.actor.valid() || entry.key.edit_id.counter == 0 ||
+        !entry.key.undo_id.actor.valid() || entry.key.undo_id.counter == 0 ||
+        entry.undo_count == 0 ||
+        (previous && !(previous->key.edit_id < entry.key.edit_id ||
+                       (previous->key.edit_id == entry.key.edit_id &&
+                        previous->key.undo_id < entry.key.undo_id))))
+      return malformed("checkpoint UndoMap entries are not canonical");
+    append_identity(payload, entry.key.edit_id);
+    append_identity(payload, entry.key.undo_id);
+    append_u32(payload, entry.undo_count);
+    previous = &entry;
+  }
+  if (payload.size() > kCheckpointMaxBytes - kSectionHeaderBytes)
+    return Error(ErrorCode::limit_exceeded,
+                 "checkpoint causal section exceeds byte limit",
+                 "checkpoint.causal");
+  return CheckpointSection{3, 1, std::move(payload)};
+}
+
+Result<CheckpointCausalState> decode_checkpoint_causal(
+    const CheckpointSection &section) {
+  constexpr uint32_t kMaxEntries = 1'000'000;
+  if (section.id != 3)
+    return malformed("checkpoint causal state must be section 3");
+  if (section.version != 1)
+    return Error(ErrorCode::unsupported_version,
+                 "checkpoint causal section version is unsupported",
+                 "checkpoint.causal");
+  const std::string_view bytes(section.bytes);
+  size_t cursor = 0;
+  auto need = [&](size_t count) {
+    return cursor <= bytes.size() && count <= bytes.size() - cursor;
+  };
+  if (!need(4)) return malformed("checkpoint version vector count is truncated");
+  const auto version_count = read_u32(bytes, cursor);
+  cursor += 4;
+  if (version_count > kMaxEntries)
+    return Error(ErrorCode::limit_exceeded, "checkpoint version vector exceeds entry limit", "checkpoint.causal");
+  if (version_count > (bytes.size() - cursor) / 24)
+    return malformed("checkpoint version vector is truncated");
+  CheckpointCausalState state;
+  std::optional<ActorId> previous_actor;
+  for (uint32_t i = 0; i < version_count; ++i) {
+    const auto actor = read_actor(bytes, cursor);
+    const auto counter = read_u64(bytes, cursor + ActorId::kBytes);
+    cursor += 24;
+    if (!actor.valid() || counter == 0 ||
+        (previous_actor && !(*previous_actor < actor)))
+      return malformed("checkpoint version vector is not canonical");
+    state.version.observe(Crdt::Identity(actor, counter));
+    previous_actor = actor;
+  }
+  if (!need(4)) return malformed("checkpoint UndoMap count is truncated");
+  const auto undo_count = read_u32(bytes, cursor);
+  cursor += 4;
+  if (undo_count > kMaxEntries)
+    return Error(ErrorCode::limit_exceeded, "checkpoint UndoMap exceeds entry limit", "checkpoint.causal");
+  constexpr size_t kUndoBytes = 52;
+  if (undo_count > (bytes.size() - cursor) / kUndoBytes)
+    return malformed("checkpoint UndoMap entries are truncated");
+  state.undo_entries.reserve(undo_count);
+  for (uint32_t i = 0; i < undo_count; ++i) {
+    Crdt::UndoMapEntry entry;
+    entry.key.edit_id = read_identity(bytes, cursor);
+    entry.key.undo_id = read_identity(bytes, cursor + 24);
+    entry.undo_count = read_u32(bytes, cursor + 48);
+    cursor += kUndoBytes;
+    state.undo_entries.push_back(entry);
+  }
+  if (cursor != bytes.size()) return malformed("checkpoint causal section has trailing bytes");
+  Crdt::UndoMap validator;
+  if (auto valid = validator.restore_entries(state.undo_entries); !valid)
+    return valid.error().with_context("checkpoint.causal");
+  return state;
 }
 
 }  // namespace CollabText::Storage
