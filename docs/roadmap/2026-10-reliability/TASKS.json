@@ -2566,7 +2566,8 @@
       "remaining_gap": "No observed recovery defect in the tested matrix. This milestone does not claim live Syncthing/cloud-provider behavior or physical power-loss evidence. LeakSanitizer is unavailable in this runner; ASan/UBSan passed with leak detection disabled. Garbage collection remains disabled and is owned by later tasks.",
       "implementation_commits": [
         "5d42719",
-        "7f1b31b"
+        "7f1b31b",
+        "81d31f5"
       ]
     },
     {
