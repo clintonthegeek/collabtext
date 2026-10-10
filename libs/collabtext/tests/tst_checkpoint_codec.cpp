@@ -1,4 +1,7 @@
 #include "storage/CheckpointCodec.h"
+#include "crdt/Buffer.h"
+#include "crdt/IdList.h"
+#include "TestActor.h"
 
 #include "core/Sha256.h"
 
@@ -221,6 +224,47 @@ private slots:
     QVERIFY(!decode_checkpoint_engine(trailing));
     text.entries.push_back(list.entries[0]);
     QVERIFY(!encode_checkpoint_engine(text));
+  }
+
+  void enginePayloadsRestoreIntoBothPrimitives() {
+    Crdt::Buffer source_text(CollabText::Test::test_counter(1));
+    QVERIFY(source_text.try_apply_local_edit({{0, 0}}, {"A\xf0\x9f\x99\x82" "B"}));
+    QVERIFY(source_text.try_apply_local_edit({{1, 5}}, {""}));
+    auto text_snapshot = source_text.checkpoint_state();
+    CheckpointEngineState text_state;
+    text_state.fragments = text_snapshot.fragments;
+    auto text_payload = encode_checkpoint_engine(text_state);
+    QVERIFY(text_payload);
+    auto decoded_text = decode_checkpoint_engine(text_payload.value());
+    QVERIFY(decoded_text);
+    text_snapshot.fragments = std::move(decoded_text.value().fragments);
+    Crdt::Buffer restored_text(CollabText::Test::test_counter(2));
+    QVERIFY(restored_text.restore_checkpoint_state(text_snapshot));
+    QCOMPARE(restored_text.text(), source_text.text());
+    QCOMPARE(restored_text.fragments().size(), source_text.fragments().size());
+    for (uint32_t offset : {0u, 1u, 2u})
+      QCOMPARE(restored_text.resolve_anchor(source_text.anchor_at(offset)),
+               source_text.resolve_anchor(source_text.anchor_at(offset)));
+
+    Crdt::IdList source_list(CollabText::Test::test_counter(3));
+    source_list.insert_after(Crdt::Anchor::min(), 10);
+    source_list.insert_after(source_list.anchor_of(10), 20);
+    QVERIFY(source_list.try_remove_at(source_list.anchor_of(10)));
+    auto list_snapshot = source_list.checkpoint_state();
+    CheckpointEngineState list_state;
+    list_state.kind = CheckpointEngineKind::IdList;
+    list_state.entries = list_snapshot.entries;
+    auto list_payload = encode_checkpoint_engine(list_state);
+    QVERIFY(list_payload);
+    auto decoded_list = decode_checkpoint_engine(list_payload.value());
+    QVERIFY(decoded_list);
+    list_snapshot.entries = std::move(decoded_list.value().entries);
+    Crdt::IdList restored_list(CollabText::Test::test_counter(4));
+    QVERIFY(restored_list.restore_checkpoint_state(list_snapshot));
+    QCOMPARE(restored_list.ids(), source_list.ids());
+    QCOMPARE(restored_list.entries().size(), source_list.entries().size());
+    QCOMPARE(restored_list.resolve_anchor(source_list.anchor_of(20)),
+             source_list.resolve_anchor(source_list.anchor_of(20)));
   }
 
   void rejectsEveryTruncation() {
