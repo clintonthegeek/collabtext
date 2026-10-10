@@ -154,6 +154,10 @@ with the immutable epoch descriptor. The codec checks identity, scope, ordering
 and digest; the provider that creates a translation remains responsible for
 proving that it preserves boundary meaning before publication. Unsupported
 token versions fail closed in the CTPT reader and require a checked translation.
+The combined membership validator additionally requires the exact full-artifact
+SHA-256 to equal the descriptor's base-checkpoint hash and validates stream
+coverage, token versions, and the translation manifest as one binding before
+the checkpoint can be used as an epoch base.
 
 The Engine section starts with `u16 engine_kind` and `u32 entry_count`, with a
 maximum of 1,000,000 entries. Every identity uses the 24-byte encoding above.

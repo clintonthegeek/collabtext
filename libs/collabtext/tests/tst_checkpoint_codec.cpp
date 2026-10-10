@@ -212,6 +212,77 @@ private slots:
     QVERIFY(!decode_checkpoint_core(mismatched_artifact.value()));
   }
 
+  void checkpointCoreBindsToMembershipDescriptor() {
+    const auto actor = ActorId::parse("23000000000000000000000000000001").value();
+    CheckpointContext context{"membership-doc", "main", 1, "",
+                              CheckpointEngineKind::Text};
+    CheckpointCausalState causal;
+    CheckpointShareableCore::Pins pins;
+    pins.canonical_projection_hash = sha256_hex("");
+    auto context_section = encode_checkpoint_context(context);
+    auto engine_section = encode_checkpoint_engine(CheckpointEngineState{});
+    auto causal_section = encode_checkpoint_causal(causal);
+    auto deferred_section = encode_checkpoint_deferred({}, context, causal.version);
+    CheckpointShareableCore::Coverage coverage;
+    coverage.operation.emplace(actor, 0);
+    coverage.delivery.emplace(actor, 0);
+    auto coverage_section = encode_checkpoint_coverage(coverage);
+    auto pins_section = encode_checkpoint_pins(pins, context);
+    QVERIFY(context_section && engine_section && causal_section && deferred_section &&
+            coverage_section && pins_section);
+    CheckpointShareableCore::TokenTranslations translations;
+    translations.supported_token_versions = {1};
+    auto translations_section = encode_checkpoint_translations(translations,
+                                                               context, pins);
+    QVERIFY(translations_section);
+    auto sections = shared_sections();
+    sections[0] = context_section.value();
+    sections[1] = engine_section.value();
+    sections[2] = causal_section.value();
+    sections[3] = deferred_section.value();
+    sections[4] = coverage_section.value();
+    sections[5] = pins_section.value();
+    sections[6] = translations_section.value();
+    auto frame = encode_checkpoint(CheckpointKind::Shareable, sections);
+    QVERIFY(frame);
+    auto artifact = decode_checkpoint(frame.value(), CheckpointKind::Shareable);
+    QVERIFY(artifact);
+    auto core = decode_checkpoint_core(artifact.value());
+    QVERIFY(core);
+
+    MembershipDescriptor descriptor;
+    descriptor.epoch = 1;
+    descriptor.members = {actor};
+    descriptor.base_checkpoint_hash = sha256_hex(frame.value());
+    descriptor.base_frontiers.push_back({"main", {{actor, 0}}, {{actor, 0}}});
+    descriptor.supported_token_versions = {1};
+    descriptor.translation_manifest_hash = core.value().translations.manifest_hash;
+    auto sealed = seal_membership_descriptor(descriptor);
+    QVERIFY(sealed);
+    QVERIFY(validate_checkpoint_core_membership(
+        core.value(), sealed.value(), descriptor.base_checkpoint_hash));
+    QVERIFY(!validate_checkpoint_core_membership(
+        core.value(), sealed.value(), sha256_hex("another checkpoint")));
+
+    auto wrong_frontier = descriptor;
+    wrong_frontier.base_frontiers[0].delivery[actor] = 1;
+    auto sealed_wrong_frontier =
+        seal_membership_descriptor(std::move(wrong_frontier));
+    QVERIFY(sealed_wrong_frontier);
+    QVERIFY(!validate_checkpoint_core_membership(
+        core.value(), sealed_wrong_frontier.value(),
+        descriptor.base_checkpoint_hash));
+
+    auto wrong_manifest = descriptor;
+    wrong_manifest.translation_manifest_hash = sha256_hex("another manifest");
+    auto sealed_wrong_manifest =
+        seal_membership_descriptor(std::move(wrong_manifest));
+    QVERIFY(sealed_wrong_manifest);
+    QVERIFY(!validate_checkpoint_core_membership(
+        core.value(), sealed_wrong_manifest.value(),
+        descriptor.base_checkpoint_hash));
+  }
+
   void engineSectionRoundTripsTextAndIdList() {
     const auto actor = ActorId::parse("11000000000000000000000000000001").value();
     CheckpointEngineState text;
