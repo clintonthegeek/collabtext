@@ -118,7 +118,9 @@ void deliver_text(const std::string &bytes, CollabText::CrdtEngine &target) {
     if (!decoded) return;
     check(checked_codec(CollabText::Crdt::encode_operation(decoded.value())) == bytes,
           "a text operation survives a round trip unchanged");
-    target.applyRemoteOp(decoded.value());
+    const auto outcome = target.apply_remote(decoded.value());
+    check(outcome.kind() == CollabText::ApplyOutcomeKind::applied,
+          "a freshly delivered text operation applies");
 }
 
 void deliver_list(const std::string &bytes, CollabText::IdListEngine &target) {
@@ -171,12 +173,15 @@ int main() {
 
     // A duplicate is reported as a duplicate, not applied twice.
     if (!alice_wire.text_ops.empty()) {
-        bob.applyRemoteOp(checked_codec(Crdt::decode_operation(alice_wire.text_ops.front())));
+        const auto duplicate = bob.apply_remote(
+            checked_codec(Crdt::decode_operation(alice_wire.text_ops.front())));
+        check(duplicate.kind() == ApplyOutcomeKind::duplicate,
+              "a re-delivered text operation is a duplicate");
         check(bob.text() == alice.text(), "a re-delivered operation is idempotent");
     }
 
     // ---- text: a refusal is a refusal, not an assert ----
-    check(!alice.applyRemoteOp(Crdt::Operation{}),
+    check(alice.apply_remote(Crdt::Operation{}).kind() == ApplyOutcomeKind::rejected,
           "a default-constructed operation is refused rather than applied");
 
     // ---- structural list: construction, edits, reads, undo ----
@@ -224,12 +229,7 @@ int main() {
           "the list reports its allocator's actor");
     // ---- outcome vocabulary is typed where the facade offers it ----
     //
-    // `IdListEngine::apply_ops` returns one ApplyOutcome per offered operation,
-    // so a consumer can tell applied from duplicate from deferred from rejected.
-    // `CrdtEngine::applyRemoteOp` still returns a bool -- that rename to
-    // `apply_remote(...) -> ApplyOutcome` is A02's work, and A02a must not
-    // pretend it is done. The capability manifest records it as the one place a
-    // text consumer still cannot distinguish outcomes.
+    // Both facades expose the same typed operation outcome vocabulary.
     if (!list_wire_a.list_ops.empty()) {
         auto decoded = Crdt::decode_idlist_operation(list_wire_a.list_ops.front());
         if (decoded) {

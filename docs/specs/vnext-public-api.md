@@ -490,17 +490,19 @@ interface.
 | `src/` on the public include path | internal, `PRIVATE` | internals are not a contract (A01) |
 | `set_on_change` with no removal | `clear_on_change()` | lifecycle must be explicit (R9) |
 
-### 9.1 What P05 has and has not landed from this table
+### 9.1 P05 implementation history and current facade
 
-P05 made the *distinguishability* real without yet performing the *rename*, and
-the difference matters for anyone writing against the branch today.
+P05 first made outcomes distinguishable on the internal Buffer API. A02 has since
+completed the public facade: `CrdtEngine::apply_remote` returns one `ApplyOutcome`,
+and `CrdtEngine::apply_ops` returns a result for each offered operation. The
+P05 implementation notes below describe that intermediate stage, not the current
+installed API.
 
 Landed:
 
-- `apply_ops(...)` returns `std::vector<ApplyOutcome>`, one per offered
-  operation. The return value was added rather than the signature replaced,
-  because renaming to `apply_remote` at the same time as changing the return type
-  would have made every call site in the tree change for two unrelated reasons.
+- The internal `Buffer::apply_ops(...)` returns `std::vector<ApplyOutcome>`, one
+  per offered operation. P05 added that return while leaving internal call sites
+  alone; A02 completed the corresponding typed API at the public facade.
 - `ApplyOutcome` exists and is public, with `kind()`, `awaiting()`, and
   `error()`.
 - Local mutation refuses invalid requests instead of asserting:
@@ -539,11 +541,13 @@ Still owed, and still not invented here:
   carries no epoch to compare, so P05's validator records that check as a gap
   rather than fabricating one. It belongs with P07 (envelope and transport
   outcomes) and L04 (persisted envelope identity).
-- `undo()`/`redo()` returning `Result` — they still return
-  `std::optional<Operation>` and now return `nullopt` on a refused reservation
-  (exhaustion, or an allocator with no valid actor). A `Result` is owed because
-  persistence can fail (C3), and that is A02's rename.
-- Typed position resolution and opaque operations — S04 and A02.
+- `Buffer::undo()` / `redo()` still return `std::optional<Operation>` and return
+  `nullopt` on a refused reservation (exhaustion, or an allocator with no valid
+  actor). The public `CrdtEngine` facade exposes checked `try_undo()` /
+  `try_redo()` as `Result<std::optional<Operation>>`; its bool convenience
+  methods remain for editors that only need a handled/not-handled answer.
+- Typed position resolution and opaque operations are implemented by S04/A02
+  and available from the installed facade; their exact contracts are in §§7–8.
 
 ## 10. Examples
 
@@ -732,3 +736,13 @@ supported-token versions/golden bytes before persistence is advertised. An
 approved published supported token version remains readable through later
 supported releases even if C++ API/ABI changes. Preparing a release candidate
 does not publish it or merge master.
+
+
+### 12.1 A02 installed facade status
+
+A02 exposes typed `CrdtEngine::apply_remote` and ordered `apply_ops`, checked
+`try_undo` / `try_redo`, and undo depth/byte limits. `Buffer` remains an internal
+implementation detail. The installed consumer demonstrates a consumer-owned
+`OpStream` implementation with stable envelope types; no transport implementation
+layout is part of the API. Text edit offsets are UTF-16 code units, while public
+position mint/resolve offsets are UTF-8 bytes at scalar boundaries.

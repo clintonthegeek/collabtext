@@ -258,7 +258,10 @@ public:
     bool receive(uint64_t id, std::string_view bytes) {
         auto found = blocks_.find(id);
         if (found == blocks_.end()) return false;
-        return found->second.engine->applyRemoteOp(checked(Crdt::decode_operation(bytes)));
+        const auto outcome = found->second.engine->apply_remote(
+            checked(Crdt::decode_operation(bytes)));
+        return outcome.kind() == ApplyOutcomeKind::applied ||
+               outcome.kind() == ApplyOutcomeKind::duplicate;
     }
 };
 

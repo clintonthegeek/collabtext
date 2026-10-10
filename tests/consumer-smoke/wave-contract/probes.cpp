@@ -83,12 +83,15 @@ std::string replay(const std::string& path) {
     auto replica=checked(CrdtEngine::create(std::make_shared<Counter>(9),{"doc","body",Primitive::text,1}));
     auto peer=checked(CrdtEngine::create(std::make_shared<Counter>(2),{"doc","body",Primitive::text,1}));
     auto base=checked(Crdt::decode_operation(records[0]));
-    require(replica->applyRemoteOp(base),"seed operation refused by replica");
-    require(peer->applyRemoteOp(base),"seed operation refused by peer");
+    auto accepted=[](const ApplyOutcome& outcome) {
+        return outcome.kind()==ApplyOutcomeKind::applied || outcome.kind()==ApplyOutcomeKind::duplicate;
+    };
+    require(accepted(replica->apply_remote(base)),"seed operation refused by replica");
+    require(accepted(peer->apply_remote(base)),"seed operation refused by peer");
     Crdt::Operation edit; peer->setOnLocalOp([&](const auto& op){edit=op;});
     peer->insert(1,"X");
     const auto wire=checked(Crdt::encode_operation(edit));
-    require(replica->applyRemoteOp(checked(Crdt::decode_operation(wire))),"remote edit refused");
+    require(accepted(replica->apply_remote(checked(Crdt::decode_operation(wire)))),"remote edit refused");
     auto elements=checked(IdListEngine::create(std::make_shared<Counter>(9),{"doc","structure",Primitive::list,1}));
     require(elements->apply_ops({checked(Crdt::decode_idlist_operation(records[4]))})[0].kind()==ApplyOutcomeKind::applied,"list operation refused");
     const auto left=checked(decode_position_as<TextBoundary>(records[1]));

@@ -100,7 +100,7 @@ private slots:
       auto opened_engine = CrdtEngine::create(Test::test_counter(101), position_scope);
       QVERIFY(opened_engine.ok());
       auto engine = std::move(opened_engine).value();
-      QVERIFY(engine->applyRemoteOp(seed_op));
+      QVERIFY(CollabText::Test::apply_succeeded(engine->apply_remote(seed_op)));
       auto left = engine->boundary_at(1, Affinity::left);
       auto right = engine->boundary_at(1, Affinity::right);
       QVERIFY(left.ok()); QVERIFY(right.ok());
@@ -128,7 +128,7 @@ private slots:
       auto opened_engine = CrdtEngine::create(Test::test_counter(102), position_scope);
       QVERIFY(opened_engine.ok());
       auto engine = std::move(opened_engine).value();
-      QVERIFY(engine->applyRemoteOp(seed_op));
+      QVERIFY(CollabText::Test::apply_succeeded(engine->apply_remote(seed_op)));
       Crdt::FileOpStream writer(root, actor_b);
       QVERIFY(writer.start().ok());
       QVERIFY(writer.register_stream(stream).ok());
@@ -149,7 +149,7 @@ private slots:
     auto recover_replica = [&](uint8_t local_actor) -> Result<std::unique_ptr<CrdtEngine>> {
       auto engine = CrdtEngine::create(Test::test_counter(local_actor), position_scope);
       if (!engine.ok()) return engine.error();
-      if (!engine.value()->applyRemoteOp(seed_op))
+      if (!CollabText::Test::apply_succeeded(engine.value()->apply_remote(seed_op)))
         return Error(ErrorCode::malformed, "deterministic seed was not accepted");
       Crdt::FileOpStream reader(root, Test::actor(local_actor));
       auto started = reader.start(); if (!started.ok()) return started.error();
@@ -157,7 +157,7 @@ private slots:
       auto replayed = reader.replay_all(stream, [&](const InboundDelivery &delivery) -> Result<void> {
         auto op = Crdt::decode_operation(delivery.payload);
         if (!op.ok()) return op.error();
-        if (!engine.value()->applyRemoteOp(op.value()))
+        if (!CollabText::Test::apply_succeeded(engine.value()->apply_remote(op.value())))
           return Error(ErrorCode::malformed, "durable operation replay failed");
         return {};
       });
@@ -242,7 +242,7 @@ private slots:
     auto replayed = reader.replay_all(stream, [&](const InboundDelivery &delivery) -> Result<void> {
       auto op = Crdt::decode_operation(delivery.payload);
       if (!op.ok()) return op.error();
-      if (!recovered->applyRemoteOp(op.value()))
+      if (!CollabText::Test::apply_succeeded(recovered->apply_remote(op.value())))
         return Error(ErrorCode::malformed, "WP6 durable passage operation was not integrated");
       ++applied;
       return {};

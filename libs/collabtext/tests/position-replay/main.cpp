@@ -77,7 +77,10 @@ int main(int argc,char** argv) {
     auto text=checked(CrdtEngine::create(std::make_shared<Counter>(9),text_scope()));
     auto remote=checked(CrdtEngine::create(std::make_shared<Counter>(2),text_scope()));
     const auto base=checked(Crdt::decode_operation(records[0]));
-    if(!text->applyRemoteOp(base) || !remote->applyRemoteOp(base)) return 4;
+    auto accepted=[](const ApplyOutcome& outcome) {
+        return outcome.kind()==ApplyOutcomeKind::applied || outcome.kind()==ApplyOutcomeKind::duplicate;
+    };
+    if(!accepted(text->apply_remote(base)) || !accepted(remote->apply_remote(base))) return 4;
     const auto left=checked(decode_position_as<TextBoundary>(records[1]));
     const auto right=checked(decode_position_as<TextBoundary>(records[2]));
     const auto strict=checked(decode_position_as<TextAttachment>(records[3]));
@@ -85,7 +88,7 @@ int main(int argc,char** argv) {
     remote->setOnLocalOp([&](const auto& op){edit=op;});
     remote->insert(1,"X");
     const auto wire=checked(Crdt::encode_operation(edit));
-    if(!text->applyRemoteOp(checked(Crdt::decode_operation(wire)))) return 4;
+    if(!accepted(text->apply_remote(checked(Crdt::decode_operation(wire))))) return 4;
     auto list=checked(IdListEngine::create(std::make_shared<Counter>(9),list_scope()));
     const auto inserted=checked(Crdt::decode_idlist_operation(records[4]));
     if(list->apply_ops({inserted})[0].kind()!=ApplyOutcomeKind::applied) return 4;

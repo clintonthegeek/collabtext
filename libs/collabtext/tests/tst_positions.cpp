@@ -91,7 +91,7 @@ private slots:
         std::vector<Operation> ops_a,ops_b;
         a->setOnLocalOp([&](const auto& op){ops_a.push_back(op);});
         b->setOnLocalOp([&](const auto& op){ops_b.push_back(op);});
-        a->insert(0,"abc"); QVERIFY(b->applyRemoteOp(ops_a.back()));
+        a->insert(0,"abc"); QVERIFY(CollabText::Test::apply_succeeded(b->apply_remote(ops_a.back())));
         auto caret=checked_codec(a->boundary_at(1,Affinity::left));
         auto following=checked_codec(a->attachment_at(1,Affinity::left,ReferentSide::following));
         auto preceding=checked_codec(a->attachment_at(1,Affinity::left,ReferentSide::preceding));
@@ -107,9 +107,9 @@ private slots:
         QVERIFY(!checked_codec(a->resolve(original)).collapsed());
         QVERIFY(a->redo()); QCOMPARE(refused_code(a->resolve(original)),ErrorCode::detached);
         // B independently deletes b; undoing A's delete cannot restore B's.
-        b->remove(1,1); QVERIFY(a->applyRemoteOp(ops_b.back()));
+        b->remove(1,1); QVERIFY(CollabText::Test::apply_succeeded(a->apply_remote(ops_b.back())));
         QVERIFY(a->undo()); QCOMPARE(refused_code(a->resolve(original)),ErrorCode::detached);
-        QVERIFY(b->undo()); QVERIFY(a->applyRemoteOp(ops_b.back()));
+        QVERIFY(b->undo()); QVERIFY(CollabText::Test::apply_succeeded(a->apply_remote(ops_b.back())));
         QVERIFY(a->resolve(original).ok());
         auto edge=a->attachment_at(0,Affinity::left,ReferentSide::preceding); QVERIFY(!edge.ok());
         QCOMPARE(refused_code(edge),ErrorCode::malformed);
@@ -135,7 +135,7 @@ private slots:
         }
         auto delayed=checked_codec(CrdtEngine::create(Test::test_counter(2),text_scope()));
         auto result=delayed->resolve(token); QVERIFY(!result.ok()); QCOMPARE(refused_code(result),ErrorCode::awaiting_state);
-        QVERIFY(delayed->applyRemoteOp(ops[0])); QVERIFY(delayed->resolve(token).ok());
+        QVERIFY(CollabText::Test::apply_succeeded(delayed->apply_remote(ops[0]))); QVERIFY(delayed->resolve(token).ok());
         const auto next=allocator->peek(); source->local_clear();
         QVERIFY(source->text().empty()); QCOMPARE(allocator->peek(),next);
         QCOMPARE(refused_code(source->resolve(empty)),ErrorCode::history_unavailable);
@@ -247,13 +247,13 @@ private slots:
         auto b=checked_codec(CrdtEngine::create(Test::test_counter(2),text_scope()));
         Operation initial,op_a,op_b;
         seed->setOnLocalOp([&](const auto& op){initial=op;}); seed->insert(0,"ab");
-        QVERIFY(a->applyRemoteOp(initial)); QVERIFY(b->applyRemoteOp(initial));
+        QVERIFY(CollabText::Test::apply_succeeded(a->apply_remote(initial))); QVERIFY(CollabText::Test::apply_succeeded(b->apply_remote(initial)));
         auto left=checked_codec(a->boundary_at(1,Affinity::left));
         auto right=checked_codec(a->boundary_at(1,Affinity::right));
         a->setOnLocalOp([&](const auto& op){op_a=op;}); b->setOnLocalOp([&](const auto& op){op_b=op;});
         a->insert(1,"X"); b->insert(1,"Y");
         const auto inserted_a=op_a,inserted_b=op_b;
-        QVERIFY(a->applyRemoteOp(inserted_b)); QVERIFY(b->applyRemoteOp(inserted_a));
+        QVERIFY(CollabText::Test::apply_succeeded(a->apply_remote(inserted_b))); QVERIFY(CollabText::Test::apply_succeeded(b->apply_remote(inserted_a)));
         QCOMPARE(a->text(),b->text()); QCOMPARE(a->text(),std::string("aXYb"));
         QCOMPARE(checked_codec(a->resolve(left)).byte_offset,1u);
         QCOMPARE(checked_codec(b->resolve(left)).byte_offset,1u);
@@ -261,13 +261,13 @@ private slots:
         QCOMPARE(checked_codec(b->resolve(right)).byte_offset,3u);
         auto post=checked_codec(a->boundary_at(2,Affinity::left));
         auto strict=checked_codec(a->attachment_at(2,Affinity::left,ReferentSide::preceding));
-        QVERIFY(a->undo()); QVERIFY(b->applyRemoteOp(op_a));
+        QVERIFY(a->undo()); QVERIFY(CollabText::Test::apply_succeeded(b->apply_remote(op_a)));
         QCOMPARE(checked_codec(a->resolve(post)).byte_offset,1u);
         QVERIFY(checked_codec(a->resolve(post)).lost_left);
         QCOMPARE(refused_code(a->resolve(strict)),ErrorCode::detached);
         auto hidden_left=checked_codec(a->boundary_at(1,Affinity::left));
         auto hidden_right=checked_codec(a->boundary_at(1,Affinity::right));
-        QVERIFY(a->redo()); QVERIFY(b->applyRemoteOp(op_a));
+        QVERIFY(a->redo()); QVERIFY(CollabText::Test::apply_succeeded(b->apply_remote(op_a)));
         QCOMPARE(checked_codec(a->resolve(hidden_left)).byte_offset,1u);
         QCOMPARE(checked_codec(a->resolve(hidden_right)).byte_offset,2u);
         QVERIFY(a->resolve(strict).ok());

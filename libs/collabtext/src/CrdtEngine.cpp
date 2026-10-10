@@ -2,6 +2,8 @@
 #include "crdt/Buffer.h"
 #include "crdt/Utf16.h"
 
+#include <algorithm>
+
 namespace CollabText {
 
 struct CrdtEngine::Impl {
@@ -111,20 +113,45 @@ int CrdtEngine::length() const
 
 bool CrdtEngine::undo()
 {
-    auto op = m_impl->buffer.undo();
-    if (!op) return false;
-    m_impl->emit_op(*op);
-    m_impl->notify();
-    return true;
+    auto result = try_undo();
+    return result.ok() && result.value().has_value();
 }
 
 bool CrdtEngine::redo()
 {
-    auto op = m_impl->buffer.redo();
-    if (!op) return false;
-    m_impl->emit_op(*op);
-    m_impl->notify();
-    return true;
+    auto result = try_redo();
+    return result.ok() && result.value().has_value();
+}
+
+Result<std::optional<Crdt::Operation>> CrdtEngine::try_undo() {
+    auto result = m_impl->buffer.try_undo();
+    if (!result.ok()) return result.error();
+    if (result.value()) {
+        m_impl->emit_op(*result.value());
+        m_impl->notify();
+    }
+    return std::move(result).value();
+}
+
+Result<std::optional<Crdt::Operation>> CrdtEngine::try_redo() {
+    auto result = m_impl->buffer.try_redo();
+    if (!result.ok()) return result.error();
+    if (result.value()) {
+        m_impl->emit_op(*result.value());
+        m_impl->notify();
+    }
+    return std::move(result).value();
+}
+
+size_t CrdtEngine::undo_depth() const { return m_impl->buffer.undo_depth(); }
+size_t CrdtEngine::undo_history_bytes() const { return m_impl->buffer.undo_history_bytes(); }
+size_t CrdtEngine::max_undo_depth() const { return m_impl->buffer.max_undo_depth(); }
+size_t CrdtEngine::max_undo_bytes() const { return m_impl->buffer.max_undo_bytes(); }
+Result<void> CrdtEngine::set_max_undo_depth(size_t depth) {
+    return m_impl->buffer.set_max_undo_depth(depth);
+}
+Result<void> CrdtEngine::set_max_undo_bytes(size_t bytes) {
+    return m_impl->buffer.set_max_undo_bytes(bytes);
 }
 
 void CrdtEngine::setOnChange(ChangeCallback cb)
@@ -137,15 +164,20 @@ void CrdtEngine::setOnLocalOp(LocalOpCallback cb)
     m_impl->on_local_op = std::move(cb);
 }
 
-bool CrdtEngine::applyRemoteOp(const Crdt::Operation &op)
-{
-    const auto outcomes = m_impl->buffer.apply_ops({op});
-    if (!outcomes.empty() && outcomes.front().kind() != ApplyOutcomeKind::applied)
-        return false;
-    m_impl->notify();
-    // Duplicate counts as handled: the operation is already in the document, so
-    // telling a caller to retry it would make it retry forever.
-    return true;
+std::vector<ApplyOutcome> CrdtEngine::apply_ops(
+    const std::vector<Crdt::Operation>& operations) {
+    auto outcomes = m_impl->buffer.apply_ops(operations);
+    if (std::any_of(outcomes.begin(), outcomes.end(), [](const ApplyOutcome& outcome) {
+            return outcome.kind() == ApplyOutcomeKind::applied;
+        }))
+        m_impl->notify();
+    return outcomes;
+}
+
+ApplyOutcome CrdtEngine::apply_remote(const Crdt::Operation& operation) {
+    auto outcomes = apply_ops({operation});
+    return outcomes.empty() ? ApplyOutcome::rejected(
+        Error(ErrorCode::malformed, "engine returned no apply outcome")) : std::move(outcomes.front());
 }
 
 } // namespace CollabText

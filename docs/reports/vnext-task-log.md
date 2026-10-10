@@ -3002,3 +3002,39 @@ path plus production differential passed in Debug 2/2 (20261010T075615Z-2),
 Release 2/2 (20261010T075627Z-2), and ASan/UBSan 2/2 (20261010T075635Z-2).
 Release benchmark-format smoke passed with no speed assertion. No benchmark
 claim is made; counters are available for later measurement.
+
+## A02 — complete and certify the supported public API boundary
+
+**Task:** A02 **Status:** complete
+**Baseline:** `6b17304`
+**Scope:** Finished the installed text facade's typed remote apply surface:
+`apply_remote` returns `ApplyOutcome` and `apply_ops` preserves one ordered
+outcome per offered operation. Added checked `try_undo` / `try_redo`, undo depth
+and byte queries, and checked limit setters while keeping the convenience bool
+undo/redo methods. Updated Markoff and Wave adapters to consciously map typed
+outcomes onto their existing receive contracts. Updated existing direct tests to
+assert accepted or non-rejected outcomes according to the behavior they exercise;
+retry policy tests assert exact kinds.
+
+The engine regression covers applied, duplicate, deferred, rejected, batch result
+order, checked undo/redo, and depth/byte pruning. The relocated installed consumer
+now supplies its own `OpStream` implementation from the public contract, covers
+text/list facades, exercises single and batch apply plus undo bounds, and runs
+with Qt/zstd/OpenSSL package discovery disabled. Public capability manifest is
+version 10 and advertises these available features. The public API history and
+consumer inventory now describe the landed API instead of an obsolete bool
+signature.
+
+**Verification:** Debug full CTest 86/86 passed with
+`QT_QPA_PLATFORM=offscreen` (20261010; this platform setting is required by the
+headless runner). Fresh Release acceptance passed 86/86
+(20261010T081248Z-2). Header inventory check passed. Debug relocated package gate
+passed (20261010T080647Z-2): all 17 installed core headers compiled as separate
+translation units, consumer include paths contained only the relocated install
+prefix, and consumer test passed. Debug live installed-consumer gate passed
+(20261010T080823Z-2), as did Release live gate
+(20261010T081338Z-2): consumer main, Wave 16/16 strict cases, and Markoff 4/4;
+manifest v10. The final 14-case CrdtEngine API test passed in Debug, Release,
+and ASan/UBSan. Leak detection was disabled for ASan because this runner's
+LeakSanitizer shutdown is unsupported under ptrace; no ASan/UBSan finding was
+reported. `tools/check-public-headers.sh` passed.

@@ -114,8 +114,14 @@ int main() {
         if (!decoded) continue;
         check(checked_codec(Crdt::encode_operation(decoded.value())) == bytes,
               "an operation survives encode/decode unchanged");
-        a.applyRemoteOp(decoded.value());
-        b.applyRemoteOp(decoded.value());
+        const auto outcome_a = a.apply_remote(decoded.value());
+        const auto outcome_b = b.apply_remote(decoded.value());
+        check(outcome_a.kind() == ApplyOutcomeKind::applied ||
+                  outcome_a.kind() == ApplyOutcomeKind::duplicate,
+              "first replica accepts the operation");
+        check(outcome_b.kind() == ApplyOutcomeKind::applied ||
+                  outcome_b.kind() == ApplyOutcomeKind::duplicate,
+              "second replica accepts the operation");
     }
 
     check(a.text() == b.text(), "two engines converge after exchange");

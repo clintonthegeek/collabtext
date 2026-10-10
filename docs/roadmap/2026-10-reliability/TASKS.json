@@ -3135,11 +3135,16 @@
         "R13"
       ],
       "gate": null,
-      "status": "not_started",
+      "status": "complete",
       "consumer_requirements": [
         "W1",
         "W2",
         "W6"
+      ],
+      "notes": [
+        "Completed the public CrdtEngine facade with typed single/batch apply outcomes, checked undo/redo, and undo depth/byte limits. Markoff and Wave consumers map outcomes to their existing receive contracts.",
+        "Debug full suite 86/86 passed; fresh Release full suite 86/86 passed. Debug and Release installed live gates passed: Wave 16/16, Markdown 4/4, relocated headers and consumer passed. Changed API test passed Debug/Release and ASan/UBSan with ASAN_OPTIONS=detect_leaks=0; LeakSanitizer shutdown is unsupported in this runner ptrace environment.",
+        "Public header inventory and relocated include-path checks passed; capability manifest advanced to version 10."
       ]
     },
     {

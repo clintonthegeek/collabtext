@@ -30,6 +30,7 @@
 #include <collabtext/Engine.h>
 #include <collabtext/IdListEngine.h>
 #include <collabtext/IdListOperations.h>
+#include <collabtext/OpStream.h>
 #include <collabtext/Operations.h>
 #include <collabtext/Serialization.h>
 
@@ -62,6 +63,57 @@ void check(bool condition, const char *what) {
     std::fprintf(stderr, "consumer: FAILED %s\n", what);
     ++failures;
 }
+
+/// A consumer-owned transport implementing the installed interface with stable
+/// envelope and callback types only. It is intentionally small and in-memory.
+class ConsumerOpStream final : public CollabText::OpStream {
+public:
+    CollabText::Result<void> register_stream(const CollabText::StreamScope& scope) override {
+        m_scope = scope;
+        return {};
+    }
+    CollabText::Result<void> push(const CollabText::OutboundDelivery& delivery,
+                                  CollabText::PushDurability) override {
+        if (!m_scope || delivery.token.stream != m_scope->stream || delivery.token.epoch != m_scope->epoch)
+            return CollabText::Error(CollabText::ErrorCode::unknown_stream, "scope mismatch");
+        m_last = delivery;
+        return {};
+    }
+    CollabText::Result<CollabText::SubscriptionId> subscribe(
+        const CollabText::StreamScope& scope, CollabText::InboundHandler handler) override {
+        if (!m_scope || scope != *m_scope)
+            return CollabText::Error(CollabText::ErrorCode::unknown_stream, "scope mismatch");
+        m_handler = std::move(handler);
+        return CollabText::SubscriptionId{1};
+    }
+    CollabText::Result<CollabText::SubscriptionId> subscribe_receipts(
+        CollabText::ReceiptHandler handler) override {
+        m_receipt_handler = std::move(handler);
+        return CollabText::SubscriptionId{2};
+    }
+    CollabText::Result<void> unsubscribe(CollabText::SubscriptionId id) override {
+        if (id == 1) m_handler = {};
+        if (id == 2) m_receipt_handler = {};
+        return {};
+    }
+    CollabText::Result<CollabText::PollReport> poll(
+        const CollabText::StreamScope& scope, CollabText::PollBudget) override {
+        if (!m_scope || scope != *m_scope)
+            return CollabText::Error(CollabText::ErrorCode::unknown_stream, "scope mismatch");
+        return CollabText::PollReport{};
+    }
+    CollabText::Result<std::vector<CollabText::StreamReceipt>> receipts(
+        const CollabText::StreamScope& scope) const override {
+        if (!m_scope || scope != *m_scope)
+            return CollabText::Error(CollabText::ErrorCode::unknown_stream, "scope mismatch");
+        return std::vector<CollabText::StreamReceipt>{};
+    }
+private:
+    std::optional<CollabText::StreamScope> m_scope;
+    std::optional<CollabText::OutboundDelivery> m_last;
+    CollabText::InboundHandler m_handler;
+    CollabText::ReceiptHandler m_receipt_handler;
+};
 
 /// A consumer-supplied allocator. Durable identity needs a ReplicaState-backed
 /// allocator, which A06a installs but this program does not use: it wants two
@@ -118,22 +170,61 @@ int main() {
     check(alice.text().empty(), "undo removes the edit");
     check(alice.redo(), "redo succeeds");
     check(alice.text() == "hello", "redo restores it");
+    check(alice.set_max_undo_depth(32).ok() && alice.max_undo_depth() == 32,
+          "installed text facade exposes a checked undo depth limit");
+    check(alice.set_max_undo_bytes(4096).ok() && alice.max_undo_bytes() == 4096,
+          "installed text facade exposes a checked undo byte limit");
+
+    CrdtEngine batch_peer(std::make_shared<VolatileAllocator>(actor(4)));
+    const auto batch_outcomes = batch_peer.apply_ops({});
+    check(batch_outcomes.empty(), "empty text batch returns an empty ordered result");
+    std::vector<Crdt::Operation> alice_batch;
+    for (const std::string &bytes : from_alice) {
+        auto decoded = Crdt::decode_operation(bytes);
+        check(decoded.ok(), "batch source operation decodes");
+        if (decoded) alice_batch.push_back(decoded.value());
+    }
+    const auto batch_results = batch_peer.apply_ops(alice_batch);
+    check(batch_results.size() == alice_batch.size(), "text batch returns one result per operation");
+    check(batch_peer.text() == alice.text(), "ordered text batch reaches the same final state");
+    check(alice.set_max_undo_depth(0).ok(), "installed undo depth can be bounded to zero");
+    const auto no_undo = alice.try_undo();
+    check(no_undo.ok() && !no_undo.value().has_value(),
+          "checked undo reports an empty history without fabricating an operation");
 
     bob.insert(0, "world");
     for (const std::string &bytes : from_alice) {
         auto decoded = Crdt::decode_operation(bytes);
         check(decoded.ok(), "an operation from a peer decodes");
-        if (decoded) bob.applyRemoteOp(decoded.value());
+        if (decoded) check(bob.apply_remote(decoded.value()).kind() == ApplyOutcomeKind::applied,
+                           "text facade reports a typed first application");
     }
     for (const std::string &bytes : from_bob) {
         auto decoded = Crdt::decode_operation(bytes);
         check(decoded.ok(), "an operation from a peer decodes");
-        if (decoded) alice.applyRemoteOp(decoded.value());
+        if (decoded) check(alice.apply_remote(decoded.value()).kind() == ApplyOutcomeKind::applied,
+                           "text facade reports a typed first application");
     }
     check(alice.text() == bob.text(), "two peers converge over the wire codec");
     // Concurrent inserts at one position interleave (F8); the manifest says so.
     check(alice.text().size() == bob.text().size(),
           "both peers hold the same number of characters");
+
+    ConsumerOpStream stream;
+    const StreamScope stream_scope{"smoke", 1};
+    check(stream.register_stream(stream_scope).ok(), "consumer transport registers a scope");
+    const DeliveryToken delivery_token{"smoke", 1, actor(1), 1};
+    check(stream.push({delivery_token, "opaque"}, PushDurability::queued).ok(),
+          "consumer transport accepts stable delivery values");
+    auto subscription = stream.subscribe(stream_scope, [](const InboundDelivery&) {
+        return DeliveryDecision::commit(RecoveryPoint::replay_from_beginning());
+    });
+    check(subscription.ok(), "consumer transport implements inbound subscription");
+    auto poll = stream.poll(stream_scope, PollBudget{});
+    check(poll.ok(), "consumer transport implements bounded polling");
+    check(stream.receipts(stream_scope).ok(), "consumer transport exposes receipt snapshots");
+    if (subscription.ok()) check(stream.unsubscribe(subscription.value()).ok(),
+                                 "consumer transport removes a subscription");
 
     // A structural list, through the public facade.
     IdListEngine list(alice_counter);

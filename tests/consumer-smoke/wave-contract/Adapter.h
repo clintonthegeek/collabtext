@@ -68,7 +68,10 @@ public:
     void erase(const std::string& name) { blocks.erase(name); }
     bool receive(const std::string& name, std::string_view bytes) {
         auto found=blocks.find(name); if(found==blocks.end()) return false;
-        return found->second->engine->applyRemoteOp(checked(Crdt::decode_operation(bytes)));
+        const auto outcome = found->second->engine->apply_remote(
+            checked(Crdt::decode_operation(bytes)));
+        return outcome.kind() == ApplyOutcomeKind::applied ||
+               outcome.kind() == ApplyOutcomeKind::duplicate;
     }
     Resolution resolve(const std::string& name, std::string_view original) const {
         auto found=blocks.find(name);

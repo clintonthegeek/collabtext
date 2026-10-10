@@ -1,6 +1,6 @@
 # collabtext alpha capability manifest
 
-**Version:** 9
+**Version:** 10
 **Introduced by:** roadmap task A02a
 **Package version at this manifest revision:** `0.2.0-alpha.2`
 **Branch:** `feat/fuguemax-placement` (the workstream label "v2" is not a
@@ -13,11 +13,11 @@ not been given. `0.2.0-alpha.2` is a SemVer **prerelease**. CMake's
 cannot name the prerelease label — ask for no version or for `0.2.0`, and read
 `COLLABTEXT_VERSION_STRING` from the config file for the full label.
 
-**What changed at version 9:** `CTPT/1` position tokens became a **supported
-serialized format for consumer persistence**, with retained golden bytes and a
-reader fixture. It was experimental at version 8. Nothing else about the engine
-changed; see the serialized-format section for exactly what the support does and
-does not include.
+**What changed at version 10:** `CrdtEngine` now exposes typed single and batch
+remote-apply outcomes, checked undo/redo results, and configurable undo history
+limits. The installed consumer also implements `OpStream` using only stable
+public types. `CTPT/1` position tokens remain supported for consumer persistence;
+see the serialized-format section for the exact obligation.
 
 This manifest exists because an alpha surface that does not say what it cannot do
 is worse than no alpha surface. Every line below is a fact about *this* branch,
@@ -43,7 +43,9 @@ documentation. A capability with no evidence is marked `not implemented`, not
 | Exact affinity, scoped empty/start/end, UTF-8 scalar-boundary positions, explicit collapse and selected-referent detachment/undo restoration | **available** | `tst_anchor`, `tst_positions` exact/concurrent/differential cases |
 | Typed wrong-context, delayed-state, missing-history/off-end/list-value failures; position queries allocate no identity and emit no callback | **available** | `tst_positions`, `tst_anchor_codec` |
 | Independently versioned binary CTPT v1 position bytes, strict EOF and owned decode; original token replay in a fresh process | **available; a supported serialized format since `0.2.0-alpha.2`** | `tst_anchor_codec` goldens/all prefixes/all 256 trailing values; `tst_positions::fresh_process_original_token_replay`; `tst_position_token_reader` retained goldens for all four kinds, independent literal reader, per-case replay |
-| Per-operation outcome vocabulary (applied / duplicate / deferred / rejected) on the **list** facade | **available** | `collabtext_alpha_consumer`, `tst_operation_validation` |
+| Per-operation outcome vocabulary (applied / duplicate / deferred / rejected) on text and list facades, including batch order | **available** | `tst_crdtengine_op_api`, `collabtext_alpha_consumer`, `tst_operation_validation` |
+| Checked text undo/redo outcomes and configurable depth/byte limits | **available** | `tst_crdtengine_op_api`, `tst_persistent_undo` |
+| Consumer implementation of the stable transport interface | **available** | installed `consumer_main` implements `OpStream` and exercises registration, push, subscription, polling, and receipts |
 | Two peers converge over the wire codec | **available** | `tst_convergence`, `tst_opstream_convergence_*`, `tst_sequence_differential` |
 | Core builds and links with no Qt, no zstd, no hash provider | **available** | `collabtext_core_smoke` under `CMAKE_DISABLE_FIND_PACKAGE_Qt6/zstd/OpenSSL=ON` |
 | Every advertised public header compiles as the first and only library include | **available** | `collabtext_public_headers_core`, `collabtext_public_headers_qt` |
@@ -60,7 +62,7 @@ These are stated so a consumer designs around them rather than discovering them.
 | **Terminal gap integration and transactional transport/recovery.** Gap codecs only validate metadata. Legacy FileSync/StreamSync retain and block a failed codec batch before cursor commit; this is containment, not recovery or durable coverage certification. | **not implemented** | P07/L02/L03/L08 own gap publication, terminal coverage, retries and recovered state/cursor transactions. |
 | **Persisting legacy Anchor fields.** Scoped `TextBoundary`/`TextAttachment`/`ListBoundary`/`ListElement` and `encode_position` are the supported API shape. Legacy internal resolution still ignores bias or falls back on a miss. | **unsupported legacy helper path** | S04b adds the checked scoped path; A02/S04 and presence integration retire remaining legacy usage. Do not serialize raw layout. |
 | **Ordering repair — concurrent insertion (F8).** Two or more peers pasting or typing at the same position keep each author's text contiguous, forward and in reverse, and an author's run is not split into the middle by a peer editing inside it. Placement is FugueMax (a tree link per inserted run), for text and for lists. | **available** | `tst_sequence_differential` (240 seeded traces, production against a literal reference, every minted link compared), `tst_sequence_semantics` (all 18 S01 fixtures through the engines, every arrival order), `tst_evaluation_regressions::f8_*`, `tst_fuguemax_model`. Spec: `docs/specs/vnext-sequence-algorithm.md` §0. |
-| **Typed outcome on the text facade.** `CrdtEngine::applyRemoteOp` returns a bool, so deferred and rejected are indistinguishable. | **partial** | A02 renames it to `apply_remote(...) -> ApplyOutcome`. A02a fixed the worse bug — it used to return true unconditionally, which would have told a retrying caller that a rejected operation succeeded. |
+| **Typed outcome on the text facade.** `CrdtEngine::apply_remote` returns `ApplyOutcome`; `apply_ops` returns one outcome per offered operation. | **available** | `tst_crdtengine_op_api`, `tst_operation_validation`, installed `consumer_main`; duplicate, deferred/drained, rejected, and batch-order cases are covered. |
 | **Persistent bounded undo/redo.** Buffer persists actor-local undo/redo through `DocumentSession`; `IdListEngine` exposes replayable history snapshots for consumer-owned persistence. | **available** | `tst_persistent_undo`, `tst_idlist_undo`, `tst_session_recovery`, `tst_editor_recovery` reopen/undo/redo cases. |
 | **Crash recovery.** `DocumentSession` full-replays one text stream and recovers its local undo state; the broader sender/receiver arrival and fault matrix is pending. | **partial** | `tst_session_recovery`, `tst_editor_recovery`; L08 owns the cross-transport recovery milestone. |
 | **Durable identity for consumers.** A `ReplicaAllocator` exists in the source tree but is not exported or installed. | **partial** | Not part of the installed public surface. A consumer supplies its own `IdentityAllocator` and is responsible for durability. Making `ReplicaAllocator` public is a separate decision, because it means committing to its persistence format. |

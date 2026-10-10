@@ -2,13 +2,17 @@
 #include <collabtext/Anchor.h>
 
 #include <collabtext/ActorId.h>
+#include <collabtext/ApplyOutcome.h>
 #include <collabtext/Engine.h>
 #include <collabtext/Operations.h>
 
 #include <cstdint>
+#include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace CollabText {
 
@@ -50,6 +54,14 @@ public:
     // Undo / redo
     bool undo();
     bool redo();
+    [[nodiscard]] Result<std::optional<Crdt::Operation>> try_undo();
+    [[nodiscard]] Result<std::optional<Crdt::Operation>> try_redo();
+    [[nodiscard]] size_t undo_depth() const;
+    [[nodiscard]] size_t undo_history_bytes() const;
+    [[nodiscard]] size_t max_undo_depth() const;
+    [[nodiscard]] size_t max_undo_bytes() const;
+    [[nodiscard]] Result<void> set_max_undo_depth(size_t depth);
+    [[nodiscard]] Result<void> set_max_undo_bytes(size_t bytes);
 
     // Change notification
     using ChangeCallback = std::function<void()>;
@@ -72,35 +84,13 @@ public:
     using LocalOpCallback = std::function<void(const Crdt::Operation &)>;
     void setOnLocalOp(LocalOpCallback cb);
 
-    /// Apply a remote operation to this engine.
-    ///
-    /// Returns true when the operation is now in the document — applied, or a
-    /// duplicate of something already applied. It returns false for an operation
-    /// that is deferred (a causal dependency is missing, so try again later) and
-    /// for one that is rejected.
-    ///
-    /// The bool cannot say *which* of those happened, and that is the honest
-    /// limit of this facade: a caller that must distinguish deferred from
-    /// rejected, or must see what an operation is waiting for, needs the typed
-    /// `ApplyOutcome` that `apply_remote(...)` will return. That rename is A02's
-    /// work. Note that this method used to return true unconditionally, which
-    /// would have told a retrying caller that a rejected operation succeeded.
-    ///
-    /// Accepts ops that were emitted by another CrdtEngine via its
-    /// LocalOpCallback (or decoded from wire bytes via decode_operation()).
-    /// The op is applied with causal ordering: if a dependency is not yet
-    /// satisfied, Buffer will defer it internally.
-    ///
-    /// Returns true once the op has been handed to Buffer.  Buffer handles
-    /// causal ordering internally: out-of-order ops are deferred and retried
-    /// when their dependencies arrive, so the caller does not need to re-queue.
-    /// Returns false only for programming errors (e.g., null engine).  Never
-    /// throws on in-domain ops; malformed ops should be caught at
-    /// decode_operation() before reaching here.
-    ///
-    /// See docs/handoff/2026-05-08-d5-joint-design-outcomes.md §3.3 for the
-    /// error-path contract agreed with the Markoff side.
-    bool applyRemoteOp(const Crdt::Operation &op);
+    /// Apply remote operations in order and return one typed result per offered
+    /// operation. Deferred operations remain queued by the engine.
+    [[nodiscard]] std::vector<ApplyOutcome> apply_ops(
+        const std::vector<Crdt::Operation>& operations);
+    /// Single-operation form with the same applied/duplicate/deferred/rejected
+    /// distinction.
+    [[nodiscard]] ApplyOutcome apply_remote(const Crdt::Operation& operation);
 
 private:
     struct Impl;

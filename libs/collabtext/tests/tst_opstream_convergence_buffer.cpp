@@ -72,7 +72,7 @@ private slots:
             if (replica_id == 1) return;  // don't apply own ops
             auto decoded = decode_operation(payload);
             QVERIFY(decoded.ok());
-            engine1.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine1.apply_remote(decoded.value())));
         });
 
         // Wire op2 inbound → engine2 (skip own-replica ops)
@@ -81,7 +81,7 @@ private slots:
             if (replica_id == 2) return;  // don't apply own ops
             auto decoded = decode_operation(payload);
             QVERIFY(decoded.ok());
-            engine2.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         });
 
         // Step 1: engine1 inserts "hello " at position 0
@@ -146,7 +146,7 @@ private slots:
             if (replica_id == 1) return;
             auto decoded = decode_operation(payload);
             QVERIFY(decoded.ok());
-            engine1.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine1.apply_remote(decoded.value())));
         });
 
         op2->set_on_inbound([&](const std::string& /*stream*/, uint16_t replica_id,
@@ -154,7 +154,7 @@ private slots:
             if (replica_id == 2) return;
             auto decoded = decode_operation(payload);
             QVERIFY(decoded.ok());
-            engine2.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         });
 
         // Concurrent local inserts — neither engine has seen the other's ops yet
@@ -207,7 +207,7 @@ private slots:
                                  const std::string& payload) {
             auto decoded = decode_operation(payload);
             QVERIFY(decoded.ok());
-            engine2.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         });
 
         // Three sequential edits on engine1

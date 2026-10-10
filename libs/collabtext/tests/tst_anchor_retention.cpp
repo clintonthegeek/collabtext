@@ -261,7 +261,7 @@ private slots:
     for (const auto& wire : operations) {
       auto op = Crdt::decode_operation(wire);
       QVERIFY(op.ok());
-      QVERIFY(fresh.value()->applyRemoteOp(op.value()));
+      QVERIFY(CollabText::Test::apply_succeeded(fresh.value()->apply_remote(op.value())));
     }
     auto recovered = AnchorPinRegistry::create(scope, [](const AnchorPinEvent&) {
       return Result<void>(Error(ErrorCode::io_error, "replay must not append"));

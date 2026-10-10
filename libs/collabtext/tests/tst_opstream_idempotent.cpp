@@ -66,7 +66,7 @@ private slots:
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
             QVERIFY(decoded.ok());
-            engine2.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         }
         QCOMPARE(engine2.text(), std::string("hello"));
 
@@ -74,7 +74,7 @@ private slots:
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
             QVERIFY(decoded.ok());
-            engine2.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         }
         QCOMPARE(engine2.text(), std::string("hello"));
     }
@@ -103,7 +103,7 @@ private slots:
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
             QVERIFY(decoded.ok());
-            engine2.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         }
         QCOMPARE(engine2.text(), std::string(""));
 
@@ -112,7 +112,7 @@ private slots:
         const auto& undo_wire = wire_ops.back();
         auto decoded_undo = decode_operation(undo_wire);
         QVERIFY(decoded_undo.ok());
-        engine2.applyRemoteOp(decoded_undo.value());
+        QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded_undo.value())));
         QCOMPARE(engine2.text(), std::string(""));
     }
 
@@ -153,14 +153,14 @@ private slots:
         // Step 1: apply undo op first (out of order — causal dependency on insert
         // unmet).  Buffer defers it internally.  engine2 text may be empty (no
         // insert applied yet) or may differ from "hello" — it must NOT be "hello".
-        engine2.applyRemoteOp(undo_op);
+        QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(undo_op)));
         // We cannot assert exact state here because Buffer defers internally,
         // but we know "hello" has not been inserted yet.
         QVERIFY(engine2.text() != std::string("hello"));
 
         // Step 2: apply insert op. Buffer now has its causal dependency satisfied,
         // applies insert then the deferred undo — converging to empty.
-        engine2.applyRemoteOp(insert_op);
+        QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(insert_op)));
 
         // Both engines must converge to the same state (empty after undo)
         QCOMPARE(engine2.text(), engine1.text());

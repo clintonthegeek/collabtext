@@ -48,7 +48,7 @@ consumer includes it by name, not because it is in this directory.
 | `Serialization.h` | Version-vector and stream-snapshot encoders | Format version must become explicit per artifact (P06). |
 | `OpStream.h` | The transport boundary: `push`, `set_on_inbound`, `lowest_peer_acked_lamport`, `set_on_ack_update` | Keep the four-method shape. `lowest_peer_acked_lamport` must keep saying it is receipt information, not reclamation authority. |
 | `StreamSync.h` | The file-backed `OpStream` implementation | The only transport collabtext ships (DECISIONS.md). |
-| `CrdtEngine.h` | Buffer-backed engine with `insert`/`remove`/`undo`/`redo`/`applyRemoteOp` | Wrapper to be reviewed for obsolescence (A05). |
+| `CrdtEngine.h` | Buffer-backed engine with `insert`/`remove`/`undo`/`redo`/`apply_remote` with typed outcomes | Wrapper to be reviewed for obsolescence (A05). |
 | `CollabDocument.h` | Qt document wrapper: `insertText`, `removeText`, `undo`, `redo`, `updateReady` | Candidate for consolidation into one adapter (A03, R3). |
 | `SyncManager.h` | Qt sync orchestration over a shared folder | Exposes `syncCycle`, `flushLocalUpdates`, `readRemoteUpdates`; naming and responsibility are unclear. |
 | `Identity.h`, `IdentityStore.h`, `IdentityProjector.h`, `PresenceManager.h`, `Signing.h` | Identity and presence | Signing is a trusted-folder prototype; the scope must be stated honestly (E04). |

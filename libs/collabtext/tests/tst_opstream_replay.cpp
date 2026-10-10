@@ -368,7 +368,7 @@ private slots:
             if (replica_id == 2) return;  // skip own ops (none here)
             auto decoded = decode_operation(payload);
             QVERIFY(decoded.ok());
-            engine2.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         });
 
         // First poll — must replay all of replica A's history
@@ -418,7 +418,7 @@ private slots:
             if (replica_id == 2) return;
             auto decoded = decode_operation(payload);
             QVERIFY(decoded.ok());
-            engine2.applyRemoteOp(decoded.value());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
             ++apply_count;
         });
 

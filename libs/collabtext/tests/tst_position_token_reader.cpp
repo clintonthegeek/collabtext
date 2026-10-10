@@ -397,7 +397,7 @@ std::optional<std::string> mint(const QString &id) {
         for (const std::string &bytes : from_peer) {
             auto decoded = Crdt::decode_operation(bytes);
             if (!decoded.ok()) return std::nullopt;   // QVERIFY cannot return a value
-            mine->applyRemoteOp(decoded.value());
+            if (!CollabText::Test::apply_not_rejected(mine->apply_remote(decoded.value()))) return std::nullopt;
         }
         return encode(checked_codec(mine->boundary_at(4, Affinity::right)));
     }

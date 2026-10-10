@@ -95,7 +95,7 @@ private slots:
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
                 QVERIFY(op.ok());
-                engine1.applyRemoteOp(op.value());
+                QVERIFY(CollabText::Test::apply_not_rejected(engine1.apply_remote(op.value())));
             }
         });
 
@@ -110,7 +110,7 @@ private slots:
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
                 QVERIFY(op.ok());
-                engine2.applyRemoteOp(op.value());
+                QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(op.value())));
             }
         });
 
@@ -197,7 +197,7 @@ private slots:
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
                 QVERIFY(op.ok());
-                engine1.applyRemoteOp(op.value());
+                QVERIFY(CollabText::Test::apply_not_rejected(engine1.apply_remote(op.value())));
             }
         });
 
@@ -211,7 +211,7 @@ private slots:
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
                 QVERIFY(op.ok());
-                engine2.applyRemoteOp(op.value());
+                QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(op.value())));
             }
         });
 

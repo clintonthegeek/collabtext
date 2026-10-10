@@ -19,6 +19,7 @@
 #pragma once
 
 #include <collabtext/ActorId.h>
+#include <collabtext/ApplyOutcome.h>
 
 #include "VolatileCounter.h"
 #include <collabtext/Engine.h>
@@ -61,6 +62,16 @@ inline Crdt::Identity id(uint8_t actor_index, uint64_t counter) {
 inline std::shared_ptr<VolatileCounter> test_counter(uint8_t actor_index,
                                                      uint64_t start = 1) {
     return std::make_shared<VolatileCounter>(actor(actor_index), start);
+}
+
+/// For tests that only need the legacy handled/not-handled distinction. Tests
+/// concerned with retry policy should assert ApplyOutcomeKind directly.
+inline bool apply_succeeded(const ApplyOutcome& outcome) {
+    return outcome.kind() == ApplyOutcomeKind::applied ||
+           outcome.kind() == ApplyOutcomeKind::duplicate;
+}
+inline bool apply_not_rejected(const ApplyOutcome& outcome) {
+    return outcome.kind() != ApplyOutcomeKind::rejected;
 }
 
 } // namespace CollabText::Test

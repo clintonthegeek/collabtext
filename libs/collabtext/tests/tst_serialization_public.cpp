@@ -261,7 +261,7 @@ private slots:
         QCOMPARE(checked_codec(encode_operation(decoded.value())), wire);
         QCOMPARE(op_identity(decoded.value()), op_identity(op));
         CollabText::CrdtEngine receiver(CollabText::Test::test_counter(9));
-        QVERIFY(receiver.applyRemoteOp(decoded.value()));
+        QVERIFY(CollabText::Test::apply_succeeded(receiver.apply_remote(decoded.value())));
         QCOMPARE(receiver.text(), std::string("hello"));
     }
     void undo_operation_roundtrip() {
@@ -270,14 +270,14 @@ private slots:
         Operation captured;
         sender.setOnLocalOp([&](const Operation& op) { captured = op; });
         sender.insert(0, "hello");
-        QVERIFY(receiver.applyRemoteOp(captured));
+        QVERIFY(CollabText::Test::apply_succeeded(receiver.apply_remote(captured)));
         QVERIFY(sender.undo());
         const auto wire = checked_codec(encode_operation(captured));
         auto decoded = decode_operation(wire);
         QVERIFY(decoded.ok());
         QCOMPARE(checked_codec(encode_operation(decoded.value())), wire);
         QCOMPARE(op_identity(decoded.value()), op_identity(captured));
-        QVERIFY(receiver.applyRemoteOp(decoded.value()));
+        QVERIFY(CollabText::Test::apply_succeeded(receiver.apply_remote(decoded.value())));
         QVERIFY(receiver.text().empty());
     }
     void idlist_insert_roundtrip() {
@@ -342,7 +342,7 @@ private slots:
         QVERIFY(decoded.ok());
         QCOMPARE(checked_codec(encode_operation(decoded.value())), literal_wire);
         CollabText::CrdtEngine receiver(CollabText::Test::test_counter(9));
-        QVERIFY(receiver.applyRemoteOp(decoded.value()));
+        QVERIFY(CollabText::Test::apply_succeeded(receiver.apply_remote(decoded.value())));
         QCOMPARE(receiver.text(), emoji);
     }
     void public_decoders_reject_untrusted_json_syntax() {
