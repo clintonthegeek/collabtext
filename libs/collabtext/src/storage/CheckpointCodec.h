@@ -6,6 +6,8 @@
 #include "crdt/IdList.h"
 #include "crdt/UndoMap.h"
 
+#include "storage/MembershipStore.h"
+
 #include <cstddef>
 #include <compare>
 #include <cstdint>
@@ -63,6 +65,11 @@ struct CheckpointShareableCore {
     bool operator==(const DeferredRecord &) const = default;
   };
   std::vector<DeferredRecord> deferred;
+  struct Coverage {
+    std::map<ActorId, uint64_t> operation;
+    std::map<ActorId, uint64_t> delivery;
+    bool operator==(const Coverage &) const = default;
+  } coverage;
 };
 
 inline constexpr size_t kCheckpointMaxBytes = 256u * 1024u * 1024u;
@@ -104,5 +111,13 @@ encode_checkpoint_deferred(
 decode_checkpoint_deferred(const CheckpointSection &section,
                            const CheckpointContext &context,
                            const Crdt::Global &applied_version);
+[[nodiscard]] Result<CheckpointSection>
+encode_checkpoint_coverage(const CheckpointShareableCore::Coverage &coverage);
+[[nodiscard]] Result<CheckpointShareableCore::Coverage>
+decode_checkpoint_coverage(const CheckpointSection &section);
+[[nodiscard]] Result<void>
+validate_checkpoint_coverage(const CheckpointContext &context,
+                             const CheckpointShareableCore::Coverage &coverage,
+                             const MembershipDescriptor &descriptor);
 
 }  // namespace CollabText::Storage

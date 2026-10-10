@@ -320,6 +320,9 @@ Result<CheckpointShareableCore> decode_checkpoint_core(
       artifact.sections[3], core.context, core.causal.version);
   if (!deferred) return deferred.error().with_context("checkpoint.core");
   core.deferred = std::move(deferred.value());
+  auto coverage = decode_checkpoint_coverage(artifact.sections[4]);
+  if (!coverage) return coverage.error().with_context("checkpoint.core");
+  core.coverage = std::move(coverage.value());
 
   auto covered = [&](const Crdt::Identity &id) {
     return valid_identity(id) && core.causal.version.observed(id);
@@ -351,6 +354,13 @@ Result<CheckpointShareableCore> decode_checkpoint_core(
   for (const auto &entry : core.causal.undo_entries)
     if (!covered(entry.key.edit_id) || !covered(entry.key.undo_id))
       return malformed("checkpoint UndoMap identity is outside causal state");
+  for (const auto &[actor, frontier] : core.coverage.operation)
+    if (core.causal.version.get(actor) < frontier)
+      return malformed("checkpoint operation coverage exceeds causal state");
+  for (const auto &record : core.deferred)
+    if (core.coverage.delivery.contains(record.token.producer) &&
+        core.coverage.delivery.at(record.token.producer) >= record.token.sequence)
+      return malformed("deferred delivery is already included in committed coverage");
   return core;
 }
 

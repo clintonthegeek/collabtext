@@ -160,16 +160,19 @@ private slots:
     auto engine_section = encode_checkpoint_engine(CheckpointEngineState{});
     auto causal_section = encode_checkpoint_causal(causal);
     auto deferred_section = encode_checkpoint_deferred({}, context, causal.version);
+    auto coverage_section = encode_checkpoint_coverage({});
     QVERIFY(context_section);
     QVERIFY(engine_section);
     QVERIFY(causal_section);
     QVERIFY(deferred_section);
+    QVERIFY(coverage_section);
 
     auto sections = shared_sections();
     sections[0] = context_section.value();
     sections[1] = engine_section.value();
     sections[2] = causal_section.value();
     sections[3] = deferred_section.value();
+    sections[4] = coverage_section.value();
     const auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
     const auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
@@ -266,14 +269,17 @@ private slots:
     auto causal_section = encode_checkpoint_causal(text_causal);
     auto deferred_section = encode_checkpoint_deferred(
         {}, text_context, text_causal.version);
+    auto coverage_section = encode_checkpoint_coverage({});
     QVERIFY(context_section);
     QVERIFY(causal_section);
     QVERIFY(deferred_section);
+    QVERIFY(coverage_section);
     auto sections = shared_sections();
     sections[0] = context_section.value();
     sections[1] = text_payload.value();
     sections[2] = causal_section.value();
     sections[3] = deferred_section.value();
+    sections[4] = coverage_section.value();
     auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
     auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
@@ -309,14 +315,17 @@ private slots:
     causal_section = encode_checkpoint_causal(list_causal);
     deferred_section = encode_checkpoint_deferred(
         {}, list_context, list_causal.version);
+    coverage_section = encode_checkpoint_coverage({});
     QVERIFY(context_section);
     QVERIFY(causal_section);
     QVERIFY(deferred_section);
+    QVERIFY(coverage_section);
     sections = shared_sections();
     sections[0] = context_section.value();
     sections[1] = list_payload.value();
     sections[2] = causal_section.value();
     sections[3] = deferred_section.value();
+    sections[4] = coverage_section.value();
     framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
     artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
@@ -410,6 +419,52 @@ private slots:
     QVERIFY(list_decoded);
     QCOMPARE(list_decoded.value(),
              (std::vector<CheckpointShareableCore::DeferredRecord>{list_waiting}));
+  }
+
+  void coverageSectionBindsExactMembershipFrontiers() {
+    const auto actor_a = CollabText::Test::actor(1);
+    const auto actor_b = CollabText::Test::actor(2);
+    CheckpointShareableCore::Coverage coverage{
+        {{actor_a, 7}, {actor_b, 0}}, {{actor_a, 11}, {actor_b, 0}}};
+    auto encoded = encode_checkpoint_coverage(coverage);
+    QVERIFY(encoded);
+    auto decoded = decode_checkpoint_coverage(encoded.value());
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value(), coverage);
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_coverage(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    auto duplicate_actor = encoded.value();
+    std::copy(duplicate_actor.bytes.begin() + 4,
+              duplicate_actor.bytes.begin() + 20,
+              duplicate_actor.bytes.begin() + 28);
+    QVERIFY(!decode_checkpoint_coverage(duplicate_actor));
+
+    MembershipDescriptor descriptor;
+    descriptor.epoch = 1;
+    descriptor.members = {actor_a, actor_b};
+    descriptor.base_checkpoint_hash = std::string(64, 'a');
+    descriptor.translation_manifest_hash = std::string(64, 'b');
+    descriptor.base_frontiers = {{"main", coverage.operation, coverage.delivery}};
+    descriptor.supported_token_versions = {1};
+    auto sealed = seal_membership_descriptor(descriptor);
+    QVERIFY(sealed);
+    CheckpointContext context{"doc", "main", 1, "",
+                              CheckpointEngineKind::Text};
+    QVERIFY(validate_checkpoint_coverage(context, coverage, sealed.value()));
+
+    auto mismatch = coverage;
+    mismatch.delivery[actor_a]++;
+    QVERIFY(!validate_checkpoint_coverage(context, mismatch, sealed.value()));
+    context.epoch = 2;
+    const auto wrong_epoch = validate_checkpoint_coverage(
+        context, coverage, sealed.value());
+    QVERIFY(!wrong_epoch);
+    QCOMPARE(wrong_epoch.error().code(), ErrorCode::wrong_epoch);
   }
 
   void rejectsEveryTruncation() {

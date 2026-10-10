@@ -72,5 +72,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         CollabText::Storage::CheckpointContext{"fuzz", "main", 1, "",
             CollabText::Storage::CheckpointEngineKind::Text},
         CollabText::Crdt::Global{});
+    (void)CollabText::Storage::decode_checkpoint_coverage({5, 1, std::string(bytes)});
     return 0;
 }

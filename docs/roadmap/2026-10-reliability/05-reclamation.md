@@ -117,6 +117,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_gc_certificate|tst_transport_commit_co
 **Files / scope:**
 
 - `libs/collabtext/src/storage/CheckpointCodec.cpp`
+- `libs/collabtext/src/storage/CheckpointCoverageCodec.cpp`
 - `libs/collabtext/src/storage/CheckpointCodec.h`
 - `libs/collabtext/src/storage/CheckpointDeferredCodec.cpp`
 - `libs/collabtext/src/storage/CheckpointEngineCodec.cpp`

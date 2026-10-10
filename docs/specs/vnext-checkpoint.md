@@ -117,6 +117,16 @@ the payload cannot decode; quarantined input never advances applied coverage.
 Operation bytes are limited to 16 MiB each, reasons to 2048 bytes, and total
 section size to the artifact bound. Complete consumption is required.
 
+The Coverage section contains two sparse producer frontiers, each encoded as
+`u32 count` followed by that many `(16-byte actor ID, u64 frontier)` pairs:
+first operation frontiers, then delivery frontiers. The stream and epoch come
+from Context. Actor IDs are valid and strictly ordered, zero frontiers are
+preserved, and the combined maps contain at most 262,144 cells. Complete section
+consumption is required. Membership validation compares both maps exactly to
+the context stream's base frontier in the named epoch and parent descriptor.
+Operation coverage cannot exceed the causal vector; a deferred or quarantined
+delivery sequence must be beyond its producer's committed delivery frontier.
+
 The Engine section starts with `u16 engine_kind` and `u32 entry_count`, with a
 maximum of 1,000,000 entries. Every identity uses the 24-byte encoding above.
 Each entry then stores its origin identity and a placement link: a parent
@@ -138,12 +148,14 @@ derived. Import rebuilds them from logical entries and UndoMap state, then
 checks visible text/count, fragment ranges, identities, links, and summaries
 before exposing the engine. Serialized visibility is never authoritative.
 
-The core artifact decoder parses Context, Engine, Causal, and Deferred input
-together. It rejects engine-kind disagreement and any engine link, deletion,
-item range, or UndoMap identity not covered by the causal version vector. It
-also requires every deferred delivery to match the context and remain causally
-unapplied. Primitive restore then performs its additional state and
-owner-allocator checks before swapping live state.
+The core artifact decoder parses Context, Engine, Causal, Deferred input, and
+Coverage together. It rejects engine-kind disagreement and any engine link,
+deletion, item range, or UndoMap identity not covered by the causal version
+vector. It also requires every deferred delivery to match the context and
+remain causally unapplied, and checks operation/delivery frontiers against the
+state they describe. The caller binds Coverage exactly to the membership
+descriptor before accepting the checkpoint. Primitive restore then performs
+its additional state and owner-allocator checks before swapping live state.
 
 Deferred records retain the original operation bytes and delivery token. They
 are not included in applied operation coverage. Quarantined records remain
