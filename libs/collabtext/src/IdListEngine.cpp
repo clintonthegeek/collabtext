@@ -118,11 +118,35 @@ void IdListEngine::set_on_change(ChangeCallback cb) {
 std::optional<Crdt::IdListOperation> IdListEngine::undo() { return m_impl->list.undo(); }
 std::optional<Crdt::IdListOperation> IdListEngine::redo() { return m_impl->list.redo(); }
 size_t IdListEngine::undo_depth() const { return m_impl->list.undo_depth(); }
+Crdt::LocalHistorySnapshot IdListEngine::local_history_snapshot() const {
+    return m_impl->list.local_history_snapshot();
+}
+Result<void> IdListEngine::restore_local_history(
+    const Crdt::LocalHistorySnapshot &snapshot) {
+    return m_impl->list.restore_local_history(snapshot);
+}
+std::optional<Crdt::LocalUndoEntrySnapshot>
+IdListEngine::next_undo_group() const {
+    return m_impl->list.next_undo_group();
+}
+std::optional<Crdt::LocalUndoEntrySnapshot>
+IdListEngine::next_redo_group() const {
+    return m_impl->list.next_redo_group();
+}
 bool IdListEngine::coalesce_last_undo() { return m_impl->list.coalesce_last_undo(); }
 void IdListEngine::set_max_undo_depth(size_t depth) {
     m_impl->list.set_max_undo_depth(depth);
 }
 size_t IdListEngine::max_undo_depth() const { return m_impl->list.max_undo_depth(); }
+void IdListEngine::set_max_undo_bytes(size_t bytes) {
+    m_impl->list.set_max_undo_bytes(bytes);
+}
+size_t IdListEngine::max_undo_bytes() const {
+    return m_impl->list.max_undo_bytes();
+}
+size_t IdListEngine::undo_history_bytes() const {
+    return m_impl->list.undo_history_bytes();
+}
 
 void IdListEngine::local_clear() noexcept {
     m_impl->list.local_clear();

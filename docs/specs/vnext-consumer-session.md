@@ -65,5 +65,7 @@ that metadata. `coalesce_last_undo()` checkpoints the boundary before reporting
 success. Consumers can correlate those identities with their own event log,
 while undo remains a new compensating event. The consumer owns engine and
 session lifetime and may instead construct its own headless document seam
-around public primitives and a custom `OpStream`; persistence of a consumer's
-IdList history and multi-block group policy remain consumer work.
+around public primitives and a custom `OpStream`. `IdListEngine` exposes an
+identity-only history snapshot/restore API for consumer-owned persistence. The
+consumer controls when that snapshot is checkpointed beside canonical events
+and owns any multi-block group policy.

@@ -107,6 +107,48 @@ private slots:
     QCOMPARE(replayed.ids(), std::vector<uint64_t>{42});
   }
 
+  void idlist_history_checkpoint_round_trips_through_local_log() {
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto path = std::filesystem::path(temp.path().toStdString()) / "list.log";
+    const auto owner = Test::actor(11);
+    IdList original(Test::test_counter(11));
+    auto insert = original.try_insert_after(Anchor::min(), 42);
+    QVERIFY(insert.ok());
+    auto remove = original.try_remove_at(Anchor{idlist_op_identity(insert.value())});
+    QVERIFY(remove.ok());
+    const auto expected = original.local_history_snapshot();
+    {
+      auto opened = Storage::LocalHistoryLog::open(path, owner);
+      QVERIFY(opened.ok());
+      auto log = std::move(opened).value();
+      QVERIFY(log.store_snapshot(expected).ok());
+      QVERIFY(log.close().ok());
+    }
+
+    auto reopened_log = Storage::LocalHistoryLog::open(path, owner);
+    QVERIFY(reopened_log.ok());
+    auto log = std::move(reopened_log).value();
+    auto recovered = log.recover();
+    QVERIFY(recovered.ok());
+    QVERIFY(recovered.value().has_value());
+    IdList replayed(Test::test_counter(11, 100));
+    const auto outcomes = replayed.apply_ops({insert.value(), remove.value()});
+    QCOMPARE(outcomes.size(), size_t(2));
+    QVERIFY(replayed.restore_local_history(*recovered.value()).ok());
+    auto group = replayed.next_undo_group();
+    QVERIFY(group.has_value());
+    QCOMPARE(group->operation_ids,
+             expected.entries.back().operation_ids);
+    QVERIFY(replayed.try_undo().value().has_value());
+    QCOMPARE(replayed.ids(), std::vector<uint64_t>{42});
+    QVERIFY(replayed.try_undo().value().has_value());
+    QCOMPARE(replayed.size(), uint32_t(0));
+    QVERIFY(replayed.try_redo().value().has_value());
+    QCOMPARE(replayed.ids(), std::vector<uint64_t>{42});
+    QVERIFY(log.close().ok());
+  }
+
   void idlist_history_obeys_retained_byte_budget() {
     IdList list(Test::test_counter(9));
     list.set_max_undo_bytes(2 * (sizeof(uint64_t) + sizeof(UndoMapKey)));

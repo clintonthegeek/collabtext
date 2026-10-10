@@ -45,6 +45,7 @@
 #include <collabtext/ApplyOutcome.h>
 #include <collabtext/Engine.h>
 #include <collabtext/IdListOperations.h>
+#include <collabtext/LocalHistory.h>
 
 #include <cstdint>
 #include <functional>
@@ -122,9 +123,8 @@ public:
 
     // ---- undo ----
     //
-    // Undo is actor-local and in-memory. It does **not** survive a reopen: a
-    // persistent undo/redo policy is L06's, and the capability manifest records
-    // this as unavailable rather than letting a consumer assume otherwise.
+    // Undo is actor-local. Consumers that own persistence can store the
+    // identity-only snapshot beside their canonical operation history.
 
     /// Undo the last local mutation. nullopt when there is nothing to undo, or
     /// when identity allocation was refused.
@@ -132,11 +132,21 @@ public:
     /// Redo the last undone mutation, with the same nullopt cases.
     [[nodiscard]] std::optional<Crdt::IdListOperation> redo();
     [[nodiscard]] size_t undo_depth() const;
+    [[nodiscard]] Crdt::LocalHistorySnapshot local_history_snapshot() const;
+    [[nodiscard]] Result<void> restore_local_history(
+        const Crdt::LocalHistorySnapshot &snapshot);
+    [[nodiscard]] std::optional<Crdt::LocalUndoEntrySnapshot>
+    next_undo_group() const;
+    [[nodiscard]] std::optional<Crdt::LocalUndoEntrySnapshot>
+    next_redo_group() const;
     /// Merge the newest undo entry into the one before it, so consecutive
     /// insertions become one step. Purely local; mutates no CRDT state.
     bool coalesce_last_undo();
     void set_max_undo_depth(size_t depth);
     [[nodiscard]] size_t max_undo_depth() const;
+    void set_max_undo_bytes(size_t bytes);
+    [[nodiscard]] size_t max_undo_bytes() const;
+    [[nodiscard]] size_t undo_history_bytes() const;
 
     // ---- reset ----
 

@@ -2,6 +2,7 @@
 
 #include "crdt/Clock.h"
 #include "crdt/SumTree.h"
+#include <collabtext/LocalHistory.h>
 #include <cstdint>
 
 namespace CollabText::Crdt {
@@ -20,22 +21,6 @@ struct UndoMapKey {
 
     auto operator<=>(const UndoMapKey &) const = default;
     bool operator==(const UndoMapKey &) const = default;
-};
-
-/// Actor-local undo state persisted alongside replayable operation history.
-/// Document/list contents are rebuilt by replay; snapshots keep only identity
-/// references and the step/byte charges for their local history.
-struct LocalUndoEntrySnapshot {
-    Identity group_id;
-    std::vector<Identity> operation_ids;
-    std::vector<Identity> inserted_items;
-    std::vector<Identity> deletion_operations;
-    size_t retained_bytes = 0;
-};
-
-struct LocalHistorySnapshot {
-    std::vector<LocalUndoEntrySnapshot> entries;
-    size_t cursor = 0;
 };
 
 // ============================================================================

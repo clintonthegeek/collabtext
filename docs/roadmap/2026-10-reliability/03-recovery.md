@@ -184,6 +184,12 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 - `libs/collabtext/src/storage/LocalHistoryLog.h`
 - `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/tests/tst_persistent_undo.cpp`
+- `libs/collabtext/include/collabtext/LocalHistory.h`
+- `libs/collabtext/include/collabtext/IdListEngine.h`
+- `libs/collabtext/src/IdListEngine.cpp`
+- `libs/collabtext/tests/tst_idlist_undo.cpp`
+- `libs/collabtext/tests/public-headers/only_LocalHistory_h.cpp`
+- `docs/specs/vnext-public-api.md`
 - `libs/collabtext/include/collabtext/DocumentSession.h`
 - `libs/collabtext/src/DocumentSession.cpp`
 - `libs/collabtext/tests/tst_session_recovery.cpp`

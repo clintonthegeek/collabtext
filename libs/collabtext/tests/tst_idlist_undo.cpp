@@ -1,4 +1,5 @@
 #include <QTest>
+#include <collabtext/IdListEngine.h>
 #include "crdt/IdList.h"
 #include "TestActor.h"
 
@@ -65,6 +66,29 @@ private slots:
         list.set_max_undo_depth(3);
         for (int i = 0; i < 5; ++i) list.insert_after(Anchor::min(), static_cast<uint64_t>(i));
         QCOMPARE(list.undo_depth(), size_t{3});
+    }
+
+    void public_engine_restores_snapshot_after_owner_operation_replay() {
+        CollabText::IdListEngine original(CollabText::Test::test_counter(7));
+        auto insert = original.try_insert_after(Anchor::min(), 42);
+        QVERIFY(insert.ok());
+        const auto saved = original.local_history_snapshot();
+        const auto group = original.next_undo_group();
+        QVERIFY(group.has_value());
+        QCOMPARE(group->operation_ids.size(), size_t(1));
+        QCOMPARE(group->group_id, idlist_op_identity(insert.value()));
+
+        CollabText::IdListEngine replayed(
+            CollabText::Test::test_counter(7, 100));
+        const auto outcomes = replayed.apply_ops({insert.value()});
+        QCOMPARE(outcomes.size(), size_t(1));
+        QVERIFY(replayed.restore_local_history(saved).ok());
+        QCOMPARE(replayed.local_history_snapshot().cursor, size_t(1));
+        replayed.set_max_undo_bytes(512);
+        QCOMPARE(replayed.max_undo_bytes(), size_t(512));
+        QVERIFY(replayed.undo_history_bytes() <= replayed.max_undo_bytes());
+        QVERIFY(replayed.undo().has_value());
+        QCOMPARE(replayed.size(), uint32_t(0));
     }
 };
 
