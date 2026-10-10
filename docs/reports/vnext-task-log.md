@@ -2848,6 +2848,7 @@ Continuation — 2026-10-10
 
 Task: L06
 Status: in progress (retirement budget implemented; runtime verification pending)
+Commit: 81e1cfa feat(undo): bound pending retirement history (L06)
 Scope: Bound combined active/pending history to 100,000 groups and pending
   retirement snapshots to 8 MiB of estimated metadata. Local edits check the
   projected retirement queue before allocating operation identities; limit
