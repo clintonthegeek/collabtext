@@ -115,6 +115,12 @@ void IdListEngine::set_on_change(ChangeCallback cb) {
     m_impl->list.set_on_change(std::move(cb));
 }
 
+Result<std::optional<Crdt::IdListOperation>> IdListEngine::try_undo() {
+    return m_impl->list.try_undo();
+}
+Result<std::optional<Crdt::IdListOperation>> IdListEngine::try_redo() {
+    return m_impl->list.try_redo();
+}
 std::optional<Crdt::IdListOperation> IdListEngine::undo() { return m_impl->list.undo(); }
 std::optional<Crdt::IdListOperation> IdListEngine::redo() { return m_impl->list.redo(); }
 size_t IdListEngine::undo_depth() const { return m_impl->list.undo_depth(); }

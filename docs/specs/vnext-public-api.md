@@ -318,6 +318,12 @@ history. After a consumer durably publishes a pending retirement, it may call
 the retirement remains available for idempotent retry. This does not replace the
 consumer's canonical event log or make a multi-block transaction.
 
+`IdListEngine::try_undo()` and `try_redo()` return
+`Result<std::optional<IdListOperation>>`: an empty optional means the relevant
+history stack is empty, and an error reports a refused identity reservation.
+The legacy `undo()` and `redo()` wrappers remain available and return an empty
+optional for either condition.
+
 Two consequences worth stating:
 
 - `undo`/`redo` return `Result`, because after C3 they persist: failing to record

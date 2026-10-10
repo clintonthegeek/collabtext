@@ -2828,3 +2828,16 @@ Verification:
   - validate-plan.py passed for all 72 tasks.
   - Durable position pins and collector enforcement remain assigned to S05/G08.
 ```
+
+```text
+Task: L06
+Status: in progress (partial implementation committed locally)
+Scope update: IdListEngine now exposes try_undo()/try_redo() with
+  Result<std::optional<IdListOperation>>, forwarding allocator errors while
+  preserving the legacy optional-return methods. The public API guide records
+  the empty-history versus refused-reservation distinction.
+Verification: Debug public-header and filetransport targets compiled. Runtime
+  suites were not run in this turn.
+Remaining: pending retirement memory budgeting and consumer-owned event policy
+  remain open under L06.
+```

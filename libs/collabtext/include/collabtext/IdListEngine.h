@@ -126,10 +126,16 @@ public:
     // Undo is actor-local. Consumers that own persistence can store the
     // identity-only snapshot beside their canonical operation history.
 
-    /// Undo the last local mutation. nullopt when there is nothing to undo, or
-    /// when identity allocation was refused.
+    /// Undo the last local mutation. Returns an error if identity allocation
+    /// fails; an empty optional means there is no local mutation to undo.
+    [[nodiscard]] Result<std::optional<Crdt::IdListOperation>> try_undo();
+    /// Redo the last undone mutation. Returns an error if identity allocation
+    /// fails; an empty optional means there is nothing to redo.
+    [[nodiscard]] Result<std::optional<Crdt::IdListOperation>> try_redo();
+    /// Compatibility wrapper; returns nullopt for empty history or a refused
+    /// identity reservation. Prefer try_undo() to distinguish them.
     [[nodiscard]] std::optional<Crdt::IdListOperation> undo();
-    /// Redo the last undone mutation, with the same nullopt cases.
+    /// Compatibility wrapper; prefer try_redo() to distinguish refusal.
     [[nodiscard]] std::optional<Crdt::IdListOperation> redo();
     [[nodiscard]] size_t undo_depth() const;
     [[nodiscard]] Crdt::LocalHistorySnapshot local_history_snapshot() const;
