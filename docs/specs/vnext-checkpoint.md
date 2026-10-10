@@ -173,7 +173,10 @@ ASan/UBSan with the same allocation and byte budgets as production.
 
 ## 6. Implementation boundary
 
-This specification closes G04 step 1 only. The format becomes evidence only
-after `CheckpointCodec`, text and IdList snapshot/restore adapters, failure
-atomicity tests, and bounded sanitizer campaigns pass. Atomic durable files,
-checkpoint selection, cursor publication, and replay fallback remain G05.
+The bounded framing codec and in-memory text/IdList logical snapshot and
+failure-atomic restore adapters now exist, with focused Debug, Release, and
+ASan/UBSan regressions. Section payload serialization is still incomplete, as
+are provider-owned coverage/pin/translation records, original deferred envelope
+bytes and tokens, and validation of those fields against membership evidence.
+The format is not yet a complete durable checkpoint. Atomic files, checkpoint
+selection, cursor publication, and replay fallback remain G05.

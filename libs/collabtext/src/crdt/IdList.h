@@ -94,6 +94,16 @@ struct IdListEntry {
 
 using IdListTree = SumTree<IdListEntry, IDLIST_TREE_B>;
 
+/// Logical IdList state used by checkpoint adapters. Visibility and cached
+/// tree summaries are rebuilt from deletion records and UndoMap state.
+struct IdListCheckpointState {
+    Global version;
+    std::vector<IdListEntry> entries;
+    std::vector<UndoMapEntry> undo_entries;
+    std::vector<IdListOpEntry> deferred;
+    std::vector<QuarantinedIdListOp> quarantined;
+};
+
 class IdList {
 public:
     /// Takes the allocator this list mints identities from. There is
@@ -188,6 +198,9 @@ public:
     size_t compact(const Global& watermark);
 
     std::vector<IdListEntry> entries() const;
+    [[nodiscard]] IdListCheckpointState checkpoint_state() const;
+    [[nodiscard]] Result<void>
+    restore_checkpoint_state(const IdListCheckpointState &snapshot);
     size_t tombstone_count() const;
     size_t entry_count() const;
 

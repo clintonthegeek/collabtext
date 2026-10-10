@@ -82,6 +82,167 @@ std::vector<Fragment> Buffer::fragments() const {
     return get_fragments();
 }
 
+BufferCheckpointState Buffer::checkpoint_state() const {
+    BufferCheckpointState snapshot;
+    snapshot.version = m_version;
+    snapshot.fragments = get_fragments();
+    snapshot.undo_entries = m_undo_map.entries();
+    snapshot.deferred = m_deferred_queue.items();
+    snapshot.quarantined = m_quarantined;
+    return snapshot;
+}
+
+Result<void> Buffer::restore_checkpoint_state(
+    const BufferCheckpointState &snapshot) {
+    if (snapshot.version.get(actor_id()) >= m_allocator->peek())
+        return Error(ErrorCode::counter_regression,
+                     "checkpoint exceeds the owner's durable identity reservation",
+                     "checkpoint.owner_writer");
+    if (snapshot.deferred.size() > m_deferred_budget.max_operations ||
+        snapshot.quarantined.size() > m_quarantine_budget.max_operations)
+        return Error(ErrorCode::limit_exceeded,
+                     "checkpoint deferred or quarantine record count exceeds configured budget",
+                     "checkpoint.deferred");
+    Buffer rebuilt(m_allocator);
+    rebuilt.m_deferred_budget = m_deferred_budget;
+    rebuilt.m_quarantine_budget = m_quarantine_budget;
+    rebuilt.m_max_undo_depth = m_max_undo_depth;
+    rebuilt.m_max_undo_bytes = m_max_undo_bytes;
+
+    auto valid_identity = [](const Identity &id) {
+        return id.actor.valid() && id.counter != 0;
+    };
+    auto observed_identity = [&](const Identity &id) {
+        return valid_identity(id) && snapshot.version.observed(id);
+    };
+    auto map_restore = rebuilt.m_undo_map.restore_entries(snapshot.undo_entries);
+    if (!map_restore) return map_restore.error();
+    for (const auto &entry : snapshot.undo_entries) {
+        if (!observed_identity(entry.key.edit_id) ||
+            !observed_identity(entry.key.undo_id))
+            return Error(ErrorCode::malformed,
+                         "checkpoint UndoMap references an identity outside its causal state",
+                         "checkpoint.causal.undo_map");
+    }
+
+    std::map<ActorId, std::vector<std::pair<uint64_t, uint64_t>>> ranges;
+    for (const auto &fragment : snapshot.fragments) {
+        size_t scalar_count = 0;
+        if (!fragment.origin.actor.valid() || fragment.origin.counter == 0 ||
+            fragment.length == 0 ||
+            fragment.length > UINT64_MAX - fragment.origin.counter ||
+            fragment.byte_length != fragment.text.size() ||
+            !Codec::utf8_length(fragment.text, scalar_count).ok() ||
+            scalar_count != fragment.length)
+            return Error(ErrorCode::malformed,
+                         "checkpoint fragment identity or UTF-8 lengths are invalid",
+                         "checkpoint.engine.text");
+        const uint64_t end = fragment.origin.counter + fragment.length;
+        ranges[fragment.origin.actor].emplace_back(fragment.origin.counter, end);
+        if (!observed_identity(Identity(fragment.origin.actor, end - 1)))
+            return Error(ErrorCode::malformed,
+                         "checkpoint fragment is outside its causal state",
+                         "checkpoint.engine.text");
+        if (fragment.link.side != Side::Left && fragment.link.side != Side::Right)
+            return Error(ErrorCode::malformed,
+                         "checkpoint fragment has an invalid placement side",
+                         "checkpoint.engine.text");
+        if ((fragment.link.parent && !observed_identity(*fragment.link.parent)) ||
+            (fragment.link.right_origin &&
+             !observed_identity(*fragment.link.right_origin)))
+            return Error(ErrorCode::malformed,
+                         "checkpoint fragment link is outside its causal state",
+                         "checkpoint.engine.text");
+        std::set<Identity> deletions;
+        for (const auto &deletion : fragment.deletions) {
+            if (!observed_identity(deletion) ||
+                !deletions.insert(deletion).second)
+                return Error(ErrorCode::malformed,
+                             "checkpoint fragment deletion identity is invalid or repeated",
+                             "checkpoint.engine.text");
+        }
+    }
+    for (auto &[actor, actor_ranges] : ranges) {
+        (void)actor;
+        std::sort(actor_ranges.begin(), actor_ranges.end());
+        for (size_t i = 1; i < actor_ranges.size(); ++i)
+            if (actor_ranges[i - 1].second > actor_ranges[i].first)
+                return Error(ErrorCode::malformed,
+                             "checkpoint fragment identity intervals overlap",
+                             "checkpoint.engine.text");
+    }
+    if (const auto issue = SequenceOrder::check_consistency(snapshot.fragments))
+        return Error(ErrorCode::malformed, *issue, "checkpoint.engine.text.links");
+    rebuilt.m_version = snapshot.version;
+    auto fragments = snapshot.fragments;
+    rebuilt.set_fragments(std::move(fragments));
+
+    size_t deferred_bytes = 0;
+    std::optional<Identity> previous_deferred;
+    std::set<Identity> deferred_and_quarantined_ids;
+    for (const auto &entry : snapshot.deferred) {
+        const auto timestamp = get_op_timestamp(entry.op);
+        if (timestamp != entry.timestamp || !valid_identity(timestamp) ||
+            snapshot.version.observed(timestamp) ||
+            (previous_deferred && !(*previous_deferred < timestamp)) ||
+            !deferred_and_quarantined_ids.insert(timestamp).second)
+            return Error(ErrorCode::malformed,
+                         "checkpoint deferred operations have invalid or duplicate identities",
+                         "checkpoint.deferred");
+        const auto verdict = validate_operation(entry.op, snapshot.version);
+        if (verdict.verdict == ValidationVerdict::rejected)
+            return verdict.error.with_context("checkpoint.deferred");
+        const auto bytes = estimate_operation_bytes(entry.op);
+        if (bytes > SIZE_MAX - deferred_bytes ||
+            bytes > m_deferred_budget.max_bytes -
+                        std::min(deferred_bytes, m_deferred_budget.max_bytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "checkpoint deferred input exceeds configured byte budget",
+                         "checkpoint.deferred");
+        deferred_bytes += bytes;
+        rebuilt.m_deferred_queue.push_item(entry);
+        rebuilt.m_deferred_actors.insert(timestamp.actor);
+        previous_deferred = timestamp;
+    }
+    if (deferred_bytes > m_deferred_budget.max_bytes)
+        return Error(ErrorCode::limit_exceeded,
+                     "checkpoint deferred input exceeds configured budget",
+                     "checkpoint.deferred");
+    rebuilt.m_deferred_count = snapshot.deferred.size();
+    rebuilt.m_deferred_bytes = deferred_bytes;
+
+    size_t quarantine_bytes = 0;
+    for (const auto &entry : snapshot.quarantined) {
+        const auto timestamp = get_op_timestamp(entry.op);
+        if (!valid_identity(timestamp) || snapshot.version.observed(timestamp) ||
+            entry.reason.empty() ||
+            !deferred_and_quarantined_ids.insert(timestamp).second)
+            return Error(ErrorCode::malformed,
+                         "checkpoint quarantine record is invalid",
+                         "checkpoint.quarantine");
+        const auto bytes = estimate_operation_bytes(entry.op);
+        if (bytes > SIZE_MAX - quarantine_bytes ||
+            bytes > m_quarantine_budget.max_bytes -
+                        std::min(quarantine_bytes, m_quarantine_budget.max_bytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "checkpoint quarantine exceeds configured byte budget",
+                         "checkpoint.quarantine");
+        quarantine_bytes += bytes;
+    }
+    if (quarantine_bytes > m_quarantine_budget.max_bytes)
+        return Error(ErrorCode::limit_exceeded,
+                     "checkpoint quarantine exceeds configured budget",
+                     "checkpoint.quarantine");
+    rebuilt.m_quarantined = snapshot.quarantined;
+    rebuilt.m_quarantined_bytes = quarantine_bytes;
+
+    auto history = rebuilt.restore_local_history(local_history_snapshot());
+    if (!history) return history.error().with_context("checkpoint.owner_history");
+    rebuilt.m_on_change = m_on_change;
+    *this = std::move(rebuilt);
+    return Result<void>::success();
+}
+
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------

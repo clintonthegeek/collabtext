@@ -29,6 +29,17 @@ static constexpr std::size_t FRAG_TREE_B = 6;
 
 using FragmentTree = SumTree<Fragment, FRAG_TREE_B>;
 
+/// Logical Buffer state used by checkpoint adapters. Visibility and all tree
+/// summaries are deliberately excluded; restore derives them from deletions,
+/// UndoMap, and the logical run sequence.
+struct BufferCheckpointState {
+    Global version;
+    std::vector<Fragment> fragments;
+    std::vector<UndoMapEntry> undo_entries;
+    std::vector<OperationEntry> deferred;
+    std::vector<QuarantinedBufferOp> quarantined;
+};
+
 /// Describes a change in the visible text between two versions.
 /// In the OLD visible text, the range [old_start, old_end) was replaced
 /// by new_text. An insertion has old_start == old_end. A deletion has
@@ -204,6 +215,13 @@ public:
 
     /// For testing: access the internal fragment list.
     std::vector<Fragment> fragments() const;
+
+    /// Capture or replace shareable logical state. Replacement builds and
+    /// validates a temporary Buffer first, preserving this instance's private
+    /// actor history, allocator, budgets, and callback on success.
+    [[nodiscard]] BufferCheckpointState checkpoint_state() const;
+    [[nodiscard]] Result<void>
+    restore_checkpoint_state(const BufferCheckpointState &snapshot);
 
     /// For testing: visible text byte length.
     uint32_t visible_rope_len() const;

@@ -20,6 +20,95 @@ private slots:
         QCOMPARE(buf.text(), std::string("hello"));
     }
 
+    void checkpoint_state_rebuilds_and_rejects_atomically() {
+        Buffer source(CollabText::Test::test_counter(1));
+        QVERIFY(source.try_apply_local_edit({{0, 0}}, {"A\xf0\x9f\x99\x82" "B"}));
+        QVERIFY(source.try_apply_local_edit({{1, 5}}, {""}));
+        QCOMPARE(source.text(), std::string("AB"));
+        QVERIFY(source.tombstone_count() > 0);
+
+        const auto checkpoint = source.checkpoint_state();
+        Buffer owner_restore(CollabText::Test::test_counter(1, 1000));
+        QVERIFY(owner_restore.restore_checkpoint_state(checkpoint));
+        QVERIFY(owner_restore.restore_local_history(source.local_history_snapshot()));
+        QCOMPARE(owner_restore.undo_depth(), source.undo_depth());
+        QVERIFY(owner_restore.undo().has_value());
+        QCOMPARE(owner_restore.text(), std::string("A\xf0\x9f\x99\x82" "B"));
+
+        Buffer restored(CollabText::Test::test_counter(2));
+        QVERIFY(restored.restore_checkpoint_state(checkpoint));
+        QCOMPARE(restored.text(), source.text());
+        QCOMPARE(restored.fragments().size(), source.fragments().size());
+        QCOMPARE(restored.version(), source.version());
+        QCOMPARE(restored.actor_id(), actor(2));
+        QVERIFY(!restored.undo().has_value()); // shared state excludes actor 1 history
+        for (uint32_t offset : {0u, 1u, 2u}) {
+            const auto anchor = source.anchor_at(offset);
+            QCOMPARE(restored.resolve_anchor(anchor), source.resolve_anchor(anchor));
+        }
+
+        const auto before_bad_restore = restored.checkpoint_state();
+        auto malformed = checkpoint;
+        malformed.fragments.front().byte_length++;
+        const auto failed = restored.restore_checkpoint_state(malformed);
+        QVERIFY(!failed);
+        QCOMPARE(restored.text(), std::string("AB"));
+        QCOMPARE(restored.version(), before_bad_restore.version);
+        QCOMPARE(restored.fragments().size(), before_bad_restore.fragments.size());
+
+        Buffer owner_with_history(CollabText::Test::test_counter(4));
+        QVERIFY(owner_with_history.try_apply_local_edit({{0, 0}}, {"private"}));
+        const auto owner_text = owner_with_history.text();
+        const auto owner_depth = owner_with_history.undo_depth();
+        QVERIFY(!owner_with_history.restore_checkpoint_state(checkpoint));
+        QCOMPARE(owner_with_history.text(), owner_text);
+        QCOMPARE(owner_with_history.undo_depth(), owner_depth);
+
+        Buffer stale_owner(CollabText::Test::test_counter(1));
+        const auto stale_text = stale_owner.text();
+        const auto stale_restore = stale_owner.restore_checkpoint_state(checkpoint);
+        QVERIFY(!stale_restore);
+        QCOMPARE(stale_restore.error().code(), CollabText::ErrorCode::counter_regression);
+        QCOMPARE(stale_owner.text(), stale_text);
+
+        auto new_local = restored.try_apply_local_edit({{2, 2}}, {"!"});
+        QVERIFY(new_local);
+        QCOMPARE(get_op_timestamp(new_local.value()).actor, actor(2));
+        source.apply_ops({new_local.value()});
+        QCOMPARE(source.text(), restored.text());
+    }
+
+    void checkpoint_restores_deferred_operation_for_retry() {
+        Buffer producer(CollabText::Test::test_counter(1));
+        auto first = producer.try_apply_local_edit({{0, 0}}, {"A"});
+        QVERIFY(first);
+        auto second = producer.try_apply_local_edit({{1, 1}}, {"B"});
+        QVERIFY(second);
+
+        Buffer receiver(CollabText::Test::test_counter(2));
+        const auto delayed = receiver.apply_ops({second.value()});
+        QCOMPARE(delayed.front().kind(), CollabText::ApplyOutcomeKind::deferred);
+        QCOMPARE(receiver.deferred_count(), size_t{1});
+
+        for (const DeferredBudget budget : {DeferredBudget{0, 8u << 20},
+                                            DeferredBudget{1, 0}}) {
+            Buffer constrained(CollabText::Test::test_counter(4));
+            constrained.set_deferred_budget(budget);
+            const auto refused = constrained.restore_checkpoint_state(
+                receiver.checkpoint_state());
+            QVERIFY(!refused);
+            QCOMPARE(refused.error().code(), CollabText::ErrorCode::limit_exceeded);
+            QVERIFY(constrained.text().empty());
+        }
+
+        Buffer restored(CollabText::Test::test_counter(3));
+        QVERIFY(restored.restore_checkpoint_state(receiver.checkpoint_state()));
+        QCOMPARE(restored.deferred_count(), size_t{1});
+        restored.apply_ops({first.value()});
+        QCOMPARE(restored.text(), std::string("AB"));
+        QCOMPARE(restored.deferred_count(), size_t{0});
+    }
+
     void insert_at_end() {
         Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});

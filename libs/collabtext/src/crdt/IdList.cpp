@@ -706,6 +706,139 @@ std::vector<IdListEntry> IdList::entries() const {
     return m_entry_tree.items();
 }
 
+IdListCheckpointState IdList::checkpoint_state() const {
+    IdListCheckpointState snapshot;
+    snapshot.version = m_version;
+    snapshot.entries = get_entries();
+    snapshot.undo_entries = m_undo_map.entries();
+    snapshot.deferred = m_deferred_queue.items();
+    snapshot.quarantined = m_quarantined;
+    return snapshot;
+}
+
+Result<void> IdList::restore_checkpoint_state(
+    const IdListCheckpointState &snapshot) {
+    if (snapshot.version.get(actor_id()) >= m_allocator->peek())
+        return Error(ErrorCode::counter_regression,
+                     "checkpoint exceeds the owner's durable identity reservation",
+                     "checkpoint.owner_writer");
+    if (snapshot.deferred.size() > m_deferred_budget.max_operations ||
+        snapshot.quarantined.size() > m_quarantine_budget.max_operations)
+        return Error(ErrorCode::limit_exceeded,
+                     "checkpoint deferred or quarantine record count exceeds configured budget",
+                     "checkpoint.deferred");
+    IdList rebuilt(m_allocator);
+    rebuilt.m_deferred_budget = m_deferred_budget;
+    rebuilt.m_quarantine_budget = m_quarantine_budget;
+    rebuilt.m_max_undo_depth = m_max_undo_depth;
+    rebuilt.m_max_undo_bytes = m_max_undo_bytes;
+
+    auto valid_identity = [](const Identity &id) {
+        return id.actor.valid() && id.counter != 0 && id.counter != UINT64_MAX;
+    };
+    auto observed_identity = [&](const Identity &id) {
+        return valid_identity(id) && snapshot.version.observed(id);
+    };
+    auto map_restore = rebuilt.m_undo_map.restore_entries(snapshot.undo_entries);
+    if (!map_restore) return map_restore.error();
+    for (const auto &entry : snapshot.undo_entries) {
+        if (!observed_identity(entry.key.edit_id) ||
+            !observed_identity(entry.key.undo_id))
+            return Error(ErrorCode::malformed,
+                         "checkpoint UndoMap references an identity outside its causal state",
+                         "checkpoint.causal.undo_map");
+    }
+
+    std::set<Identity> item_identities;
+    for (const auto &entry : snapshot.entries) {
+        if (!observed_identity(entry.origin) || !item_identities.insert(entry.origin).second)
+            return Error(ErrorCode::malformed,
+                         "checkpoint list entry identity is invalid or duplicated",
+                         "checkpoint.engine.id_list");
+        if (entry.link.side != Side::Left && entry.link.side != Side::Right)
+            return Error(ErrorCode::malformed,
+                         "checkpoint list entry has an invalid placement side",
+                         "checkpoint.engine.id_list");
+        if ((entry.link.parent && !observed_identity(*entry.link.parent)) ||
+            (entry.link.right_origin && !observed_identity(*entry.link.right_origin)))
+            return Error(ErrorCode::malformed,
+                         "checkpoint list link is outside its causal state",
+                         "checkpoint.engine.id_list");
+        std::set<Identity> deletions;
+        for (const auto &deletion : entry.deletions)
+            if (!observed_identity(deletion) || !deletions.insert(deletion).second)
+                return Error(ErrorCode::malformed,
+                             "checkpoint list deletion identity is invalid or repeated",
+                             "checkpoint.engine.id_list");
+    }
+    if (const auto issue = SequenceOrder::check_consistency(snapshot.entries))
+        return Error(ErrorCode::malformed, *issue, "checkpoint.engine.id_list.links");
+    rebuilt.m_version = snapshot.version;
+    auto entries = snapshot.entries;
+    rebuilt.set_entries(std::move(entries));
+
+    size_t deferred_bytes = 0;
+    std::set<Identity> deferred_identities;
+    for (const auto &entry : snapshot.deferred) {
+        const auto timestamp = get_idlist_op_identity(entry.op);
+        if (timestamp != entry.timestamp || !valid_identity(timestamp) ||
+            snapshot.version.observed(timestamp) ||
+            !deferred_identities.insert(timestamp).second)
+            return Error(ErrorCode::malformed,
+                         "checkpoint deferred list operations have invalid or duplicate identities",
+                         "checkpoint.deferred");
+        const auto verdict = validate_idlist_operation(entry.op, snapshot.version);
+        if (verdict.verdict == ValidationVerdict::rejected)
+            return verdict.error.with_context("checkpoint.deferred");
+        const auto bytes = estimate_operation_bytes(entry.op);
+        if (bytes > SIZE_MAX - deferred_bytes ||
+            bytes > m_deferred_budget.max_bytes -
+                        std::min(deferred_bytes, m_deferred_budget.max_bytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "checkpoint deferred input exceeds configured byte budget",
+                         "checkpoint.deferred");
+        deferred_bytes += bytes;
+        rebuilt.m_deferred_queue.push_item(entry);
+    }
+    if (deferred_bytes > m_deferred_budget.max_bytes)
+        return Error(ErrorCode::limit_exceeded,
+                     "checkpoint deferred input exceeds configured budget",
+                     "checkpoint.deferred");
+    rebuilt.m_deferred_count = snapshot.deferred.size();
+    rebuilt.m_deferred_bytes = deferred_bytes;
+
+    size_t quarantine_bytes = 0;
+    for (const auto &entry : snapshot.quarantined) {
+        const auto timestamp = get_idlist_op_identity(entry.op);
+        if (!valid_identity(timestamp) || snapshot.version.observed(timestamp) ||
+            entry.reason.empty() || !deferred_identities.insert(timestamp).second)
+            return Error(ErrorCode::malformed,
+                         "checkpoint quarantine record is invalid",
+                         "checkpoint.quarantine");
+        const auto bytes = estimate_operation_bytes(entry.op);
+        if (bytes > SIZE_MAX - quarantine_bytes ||
+            bytes > m_quarantine_budget.max_bytes -
+                        std::min(quarantine_bytes, m_quarantine_budget.max_bytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "checkpoint quarantine exceeds configured byte budget",
+                         "checkpoint.quarantine");
+        quarantine_bytes += bytes;
+    }
+    if (quarantine_bytes > m_quarantine_budget.max_bytes)
+        return Error(ErrorCode::limit_exceeded,
+                     "checkpoint quarantine exceeds configured budget",
+                     "checkpoint.quarantine");
+    rebuilt.m_quarantined = snapshot.quarantined;
+    rebuilt.m_quarantined_bytes = quarantine_bytes;
+
+    auto history = rebuilt.restore_local_history(local_history_snapshot());
+    if (!history) return history.error().with_context("checkpoint.owner_history");
+    rebuilt.m_on_change = m_on_change;
+    rebuilt.m_on_local_op = m_on_local_op;
+    *this = std::move(rebuilt);
+    return Result<void>::success();
+}
+
 size_t IdList::tombstone_count() const {
     size_t n = 0;
     m_entry_tree.for_each([&](const IdListEntry& e) { if (!e.visible) ++n; });
