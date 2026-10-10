@@ -9,6 +9,8 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <algorithm>
+#include <stdexcept>
 
 using namespace CollabText;
 using namespace CollabText::Storage;
@@ -19,6 +21,31 @@ ActorId actor(uint8_t seed) {
   bytes[0] = seed;
   bytes[15] = static_cast<uint8_t>(seed + 1);
   return ActorId::from_bytes(bytes);
+}
+
+MembershipDescriptor fixture_descriptor(uint64_t epoch,
+                                        std::vector<ActorId> members) {
+  std::sort(members.begin(), members.end());
+  MembershipDescriptor descriptor;
+  descriptor.epoch = epoch;
+  if (epoch > 1) {
+    descriptor.parent_hash = sha256_hex("fixture-parent-" + std::to_string(epoch));
+    descriptor.transition_event_hash = sha256_hex("fixture-event-" + std::to_string(epoch));
+  }
+  descriptor.base_checkpoint_hash = sha256_hex("fixture-checkpoint-" + std::to_string(epoch));
+  descriptor.members = std::move(members);
+  MembershipDescriptor::StreamFrontier frontier;
+  frontier.stream = "text";
+  for (const auto &member : descriptor.members) {
+    frontier.operation.emplace(member, 0);
+    frontier.delivery.emplace(member, 0);
+  }
+  descriptor.base_frontiers.push_back(std::move(frontier));
+  descriptor.supported_token_versions = {1};
+  descriptor.translation_manifest_hash = sha256_hex("fixture-token-manifest");
+  auto sealed = seal_membership_descriptor(std::move(descriptor));
+  if (!sealed.ok()) throw std::runtime_error(std::string(sealed.error().message()));
+  return std::move(sealed.value());
 }
 
 std::string simulated_ack(const ActorId &who, std::string_view digest) {
@@ -36,6 +63,63 @@ std::string membership_record(const ActorId &producer, uint64_t sequence,
 class TestMembership final : public QObject {
   Q_OBJECT
 private slots:
+  void descriptorHashBindsAllEpochContents() {
+    const auto current = fixture_descriptor(3, {actor(2), actor(1)});
+    QVERIFY(validate_membership_descriptor(current).ok());
+    QVERIFY(std::is_sorted(current.members.begin(), current.members.end()));
+    auto reordered = current;
+    std::reverse(reordered.members.begin(), reordered.members.end());
+    auto resealed = seal_membership_descriptor(reordered);
+    QVERIFY(resealed.ok()); QCOMPARE(resealed.value().hash, current.hash);
+    auto historical = current;
+    historical.base_frontiers.front().operation.emplace(actor(9), 7);
+    historical.base_frontiers.front().delivery.emplace(actor(9), 5);
+    auto historical_sealed = seal_membership_descriptor(historical);
+    QVERIFY(historical_sealed.ok());
+    QVERIFY(validate_membership_descriptor(historical_sealed.value()).ok());
+    QVERIFY(historical_sealed.value().hash != current.hash);
+
+    auto changed = current;
+    changed.base_checkpoint_hash = sha256_hex("different-checkpoint");
+    QVERIFY(!validate_membership_descriptor(changed).ok());
+    changed = current;
+    changed.transition_event_hash = sha256_hex("different-event");
+    QVERIFY(!validate_membership_descriptor(changed).ok());
+    changed = current;
+    changed.parent_hash = sha256_hex("different-parent");
+    QVERIFY(!validate_membership_descriptor(changed).ok());
+    changed = current;
+    const auto removed_member = changed.members.back();
+    changed.members.back() = actor(3);
+    changed.base_frontiers.front().operation.erase(removed_member);
+    changed.base_frontiers.front().delivery.erase(removed_member);
+    changed.base_frontiers.front().operation.emplace(actor(3), 0);
+    changed.base_frontiers.front().delivery.emplace(actor(3), 0);
+    QVERIFY(!validate_membership_descriptor(changed).ok());
+    changed = current;
+    ++changed.base_frontiers.front().operation.begin()->second;
+    QVERIFY(!validate_membership_descriptor(changed).ok());
+    changed = current;
+    changed.base_frontiers.front().delivery.erase(changed.members.front());
+    QVERIFY(!validate_membership_descriptor(changed).ok());
+    changed = current;
+    changed.supported_token_versions.push_back(2);
+    QVERIFY(!validate_membership_descriptor(changed).ok());
+    changed = current;
+    changed.translation_manifest_hash = sha256_hex("different-manifest");
+    QVERIFY(!validate_membership_descriptor(changed).ok());
+
+    changed = current;
+    changed.hash = sha256_hex("forged-descriptor-hash");
+    auto rejected = preview_enrollment(changed, actor(3));
+    QVERIFY(!rejected.ok()); QCOMPARE(rejected.error().code(), ErrorCode::corrupt_record);
+
+    auto oversized = current;
+    oversized.base_frontiers.resize(4097);
+    auto too_large = seal_membership_descriptor(std::move(oversized));
+    QVERIFY(!too_large.ok()); QCOMPARE(too_large.error().code(), ErrorCode::limit_exceeded);
+  }
+
   void persistsExplicitProducerEvents() {
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -177,7 +261,7 @@ private slots:
     QTemporaryDir dir; QVERIFY(dir.isValid());
     const auto producer = actor(14), retiring = actor(15);
     const auto member_a = actor(16), member_b = actor(17);
-    const MembershipDescriptor descriptor{5, "epoch-five", {retiring, member_a, member_b}};
+    const auto descriptor = fixture_descriptor(5, {retiring, member_a, member_b});
     const std::vector<RetirementImpact> impacts{
         {"doc", "text", 5, 1, 0, "branch"}};
     auto preview = preview_retirement(descriptor, retiring, impacts); QVERIFY(preview.ok());
@@ -226,7 +310,7 @@ private slots:
     const auto producer=actor(10), retiring=actor(11), member_a=actor(12), member_b=actor(13);
     auto opened=MembershipStore::open(path,producer); QVERIFY(opened.ok());
     auto store=std::move(opened.value());
-    MembershipDescriptor descriptor{7,"epoch-seven-hash",{retiring,member_b,member_a}};
+    auto descriptor=fixture_descriptor(7,{retiring,member_b,member_a});
     std::vector<RetirementImpact> impacts{{"doc-one","text",7,4,2,"branch-hash-1"},
                                           {"doc-one","comments",7,0,0,"branch-hash-2"}};
     auto preview=preview_retirement(descriptor,retiring,impacts); QVERIFY(preview.ok());
@@ -296,7 +380,7 @@ private slots:
         std::filesystem::path(dir.path().toStdString())/"enrollment.log",actor(30));
     QVERIFY(opened.ok()); auto store=std::move(opened.value());
     const auto member_a=actor(31), member_b=actor(32), joining=actor(33);
-    MembershipDescriptor descriptor{4,"epoch-four-hash",{member_b,member_a}};
+    auto descriptor=fixture_descriptor(4,{member_b,member_a});
     auto preview=preview_enrollment(descriptor,joining); QVERIFY(preview.ok());
     QCOMPARE(preview.value().next_epoch,uint64_t(5));
     QCOMPARE(preview.value().required_acknowledgers.size(),size_t(3));
@@ -338,7 +422,7 @@ private slots:
   void transitionMustExtendLatestJournalEpoch() {
     QTemporaryDir dir; QVERIFY(dir.isValid());
     const auto producer=actor(40), retiring=actor(41), remaining=actor(42), joining=actor(43);
-    const MembershipDescriptor current{8,"epoch-eight-hash",{retiring,remaining}};
+    const auto current=fixture_descriptor(8,{retiring,remaining});
     const auto verifier=[](const ActorId &,std::string_view,std::string_view)->Result<void> {
       return {};
     };
@@ -368,13 +452,13 @@ private slots:
 
   void cannotRetireTheLastMemberOrCommitWithoutConfirmation() {
     const auto lone=actor(20);
-    MembershipDescriptor one_member{1,"epoch-one",{lone}};
+    auto one_member=fixture_descriptor(1,{lone});
     QVERIFY(!preview_retirement(one_member,lone,{}).ok());
     QTemporaryDir dir; QVERIFY(dir.isValid());
     auto opened=MembershipStore::open(std::filesystem::path(dir.path().toStdString())/"m.log",actor(21));
     QVERIFY(opened.ok());
     auto store=std::move(opened.value());
-    MembershipDescriptor two_members{1,"epoch-one",{actor(22),actor(23)}};
+    auto two_members=fixture_descriptor(1,{actor(22),actor(23)});
     std::vector<RetirementImpact> impacts{{"doc","text",1,0,0,"branch"}};
     auto preview=preview_retirement(two_members,actor(22),impacts); QVERIFY(preview.ok());
     DurableAcknowledgementVerifier verifier=[](const ActorId&,std::string_view,std::string_view)->Result<void>{return {};};
@@ -389,7 +473,7 @@ private slots:
     const auto producer=actor(90);
     auto opened=MembershipStore::open(path,producer); QVERIFY(opened.ok());
     std::optional<MembershipStore> store(std::move(opened.value()));
-    MembershipDescriptor current{1,"descriptor-1",{actor(1),actor(2)}};
+    auto current=fixture_descriptor(1,{actor(1),actor(2)});
     uint64_t random=UINT64_C(0x9e3779b97f4a7c15);
     auto next_random=[&]() {
       random^=random<<13; random^=random>>7; random^=random<<17;
@@ -430,6 +514,7 @@ private slots:
         auto result=store->commit_enrollment(preview.value(),current,acks,verifier);
         QVERIFY(result.ok()); committed=std::move(result.value());
         current.members.push_back(joining);
+        std::sort(current.members.begin(),current.members.end());
       } else {
         const auto index=static_cast<size_t>(next_random()%current.members.size());
         const auto retiring=current.members[index];
@@ -461,9 +546,7 @@ private slots:
       }
       QCOMPARE(committed.sequence,static_cast<uint64_t>(i+1));
       QCOMPARE(committed.epoch,current.epoch+1);
-      current.epoch=committed.epoch;
-      current.hash="descriptor-"+std::to_string(current.epoch)+"-"+
-                   std::to_string(current.members.size())+"-"+std::to_string(i);
+      current=fixture_descriptor(committed.epoch,std::move(current.members));
 
       // A process restart must recover the just-committed sequence and event.
       store.reset();

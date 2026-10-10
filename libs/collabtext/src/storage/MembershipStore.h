@@ -4,8 +4,10 @@
 
 #include <collabtext/ActorId.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -27,9 +29,33 @@ struct MembershipEvent {
 
 struct MembershipDescriptor {
   uint64_t epoch = 0;
+  /// Empty only for the genesis descriptor; otherwise the exact parent hash.
+  std::string parent_hash;
+  /// Empty only for genesis; otherwise the hash of the transition record.
+  std::string transition_event_hash;
+  std::string base_checkpoint_hash;
+  /// SHA-256 of the canonical encoding of every field below and above.
   std::string hash;
   std::vector<ActorId> members;
+  /// Sorted by stream; maps include every member and may retain historical
+  /// producer frontiers for actors no longer enrolled.
+  struct StreamFrontier {
+    std::string stream;
+    std::map<ActorId, uint64_t> operation;
+    std::map<ActorId, uint64_t> delivery;
+    auto operator<=>(const StreamFrontier &) const = default;
+  };
+  std::vector<StreamFrontier> base_frontiers;
+  std::vector<uint32_t> supported_token_versions;
+  std::string translation_manifest_hash;
 };
+
+/// Canonicalize a descriptor's sorted fields and compute its content hash.
+/// Epoch one is the only descriptor without parent/event hashes.
+[[nodiscard]] Result<MembershipDescriptor> seal_membership_descriptor(
+    MembershipDescriptor descriptor);
+[[nodiscard]] Result<void> validate_membership_descriptor(
+    const MembershipDescriptor &descriptor);
 
 /// Consequences of removing a device from the next epoch. Counts and branch
 /// hashes are captured by the caller from durable document/session state.

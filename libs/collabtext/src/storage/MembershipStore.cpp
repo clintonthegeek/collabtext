@@ -12,6 +12,7 @@ namespace CollabText::Storage {
 namespace {
 constexpr size_t kMaxLogBytes = 64 * 1024 * 1024;
 constexpr size_t kMaxEvidenceBytes = 1024 * 1024;
+constexpr size_t kMaxDescriptorFrontierCells = 262144;
 
 std::string hex(std::string_view input) {
   static constexpr char digits[] = "0123456789abcdef";
@@ -57,6 +58,110 @@ void add_field(std::string &out, std::string_view value) {
   out += std::to_string(value.size());
   out += ':';
   out.append(value);
+}
+
+bool is_hash(std::string_view value) {
+  return value.size() == 64 &&
+      std::all_of(value.begin(), value.end(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      });
+}
+
+std::string descriptor_material(const MembershipDescriptor &descriptor) {
+  std::string out;
+  add_field(out, "membership-descriptor-v1");
+  add_field(out, std::to_string(descriptor.epoch));
+  add_field(out, descriptor.parent_hash);
+  add_field(out, std::to_string(descriptor.members.size()));
+  for (const auto &member : descriptor.members)
+    add_field(out, member.to_string());
+  add_field(out, descriptor.transition_event_hash);
+  add_field(out, descriptor.base_checkpoint_hash);
+  add_field(out, std::to_string(descriptor.base_frontiers.size()));
+  for (const auto &frontier : descriptor.base_frontiers) {
+    add_field(out, frontier.stream);
+    add_field(out, std::to_string(frontier.operation.size()));
+    for (const auto &[actor, sequence] : frontier.operation) {
+      add_field(out, actor.to_string());
+      add_field(out, std::to_string(sequence));
+    }
+    add_field(out, std::to_string(frontier.delivery.size()));
+    for (const auto &[actor, sequence] : frontier.delivery) {
+      add_field(out, actor.to_string());
+      add_field(out, std::to_string(sequence));
+    }
+  }
+  add_field(out, std::to_string(descriptor.supported_token_versions.size()));
+  for (const auto version : descriptor.supported_token_versions)
+    add_field(out, std::to_string(version));
+  add_field(out, descriptor.translation_manifest_hash);
+  return out;
+}
+
+Result<void> validate_descriptor_fields(const MembershipDescriptor &d) {
+  if (d.epoch == 0 || d.members.empty() || d.members.size() > 4096 ||
+      !is_hash(d.base_checkpoint_hash) ||
+      !is_hash(d.translation_manifest_hash) || d.base_frontiers.empty() ||
+      d.base_frontiers.size() > 4096 || d.supported_token_versions.empty() ||
+      d.supported_token_versions.size() > 64)
+    return Error(ErrorCode::malformed, "membership descriptor fields are incomplete");
+  if ((d.epoch == 1 && (!d.parent_hash.empty() || !d.transition_event_hash.empty())) ||
+      (d.epoch > 1 && (!is_hash(d.parent_hash) ||
+                       !is_hash(d.transition_event_hash))))
+    return Error(ErrorCode::malformed,
+                 "membership descriptor parent or transition hash is invalid");
+  if (!std::all_of(d.members.begin(), d.members.end(),
+                   [](const ActorId &id) { return id.valid(); }) ||
+      !std::is_sorted(d.members.begin(), d.members.end()) ||
+      std::adjacent_find(d.members.begin(), d.members.end()) != d.members.end())
+    return Error(ErrorCode::malformed,
+                 "membership descriptor members must be sorted and unique");
+  if (!std::is_sorted(d.base_frontiers.begin(), d.base_frontiers.end(),
+       [](const auto &a, const auto &b) { return a.stream < b.stream; }))
+    return Error(ErrorCode::malformed,
+                 "membership descriptor frontiers must be sorted by stream");
+  size_t frontier_cells = 0;
+  for (size_t i = 0; i < d.base_frontiers.size(); ++i) {
+    const auto &frontier = d.base_frontiers[i];
+    if (frontier.stream.empty() || frontier.stream.size() > 128 ||
+        frontier.stream.find('\0') != std::string::npos ||
+        (i && d.base_frontiers[i - 1].stream == frontier.stream) ||
+        frontier.operation.size() < d.members.size() ||
+        frontier.delivery.size() < d.members.size())
+      return Error(ErrorCode::malformed,
+                   "membership descriptor base frontier is incomplete or duplicated");
+    for (const auto &member : d.members)
+      if (!frontier.operation.contains(member) || !frontier.delivery.contains(member))
+        return Error(ErrorCode::malformed,
+                     "membership descriptor base frontier omits an enrolled producer");
+    if (frontier.operation.size() > kMaxDescriptorFrontierCells - frontier_cells)
+      return Error(ErrorCode::limit_exceeded,
+                   "membership descriptor frontier matrix exceeds its size limit");
+    frontier_cells += frontier.operation.size();
+    if (frontier.delivery.size() > kMaxDescriptorFrontierCells - frontier_cells)
+      return Error(ErrorCode::limit_exceeded,
+                   "membership descriptor frontier matrix exceeds its size limit");
+    frontier_cells += frontier.delivery.size();
+    for (const auto &[actor, _] : frontier.operation)
+      if (!actor.valid())
+        return Error(ErrorCode::malformed,
+                     "membership descriptor operation frontier has an invalid actor");
+    for (const auto &[actor, _] : frontier.delivery)
+      if (!actor.valid())
+        return Error(ErrorCode::malformed,
+                     "membership descriptor delivery frontier has an invalid actor");
+  }
+  if (!std::is_sorted(d.supported_token_versions.begin(),
+                      d.supported_token_versions.end()) ||
+      std::adjacent_find(d.supported_token_versions.begin(),
+                         d.supported_token_versions.end()) !=
+          d.supported_token_versions.end() ||
+      std::any_of(d.supported_token_versions.begin(),
+                  d.supported_token_versions.end(),
+                  [](uint32_t version) { return version == 0; }))
+    return Error(ErrorCode::malformed,
+                 "membership descriptor token versions must be sorted and nonzero");
+  return {};
 }
 
 std::string preview_material(const RetirementPreview &preview) {
@@ -160,9 +265,55 @@ Result<MembershipEvent> parse_line(std::string_view line,
 }
 } // namespace
 
+Result<MembershipDescriptor> seal_membership_descriptor(
+    MembershipDescriptor descriptor) {
+  if (descriptor.members.empty() || descriptor.base_frontiers.empty())
+    return Error(ErrorCode::malformed,
+                 "membership descriptor requires members and base frontiers");
+  if (descriptor.members.size() > 4096 ||
+      descriptor.base_frontiers.size() > 4096 ||
+      descriptor.supported_token_versions.size() > 64)
+    return Error(ErrorCode::limit_exceeded,
+                 "membership descriptor exceeds its structural size limit");
+  size_t frontier_cells = 0;
+  for (const auto &frontier : descriptor.base_frontiers) {
+    if (frontier.operation.size() > kMaxDescriptorFrontierCells - frontier_cells)
+      return Error(ErrorCode::limit_exceeded,
+                   "membership descriptor frontier matrix exceeds its size limit");
+    frontier_cells += frontier.operation.size();
+    if (frontier.delivery.size() > kMaxDescriptorFrontierCells - frontier_cells)
+      return Error(ErrorCode::limit_exceeded,
+                   "membership descriptor frontier matrix exceeds its size limit");
+    frontier_cells += frontier.delivery.size();
+  }
+  std::sort(descriptor.members.begin(), descriptor.members.end());
+  std::sort(descriptor.base_frontiers.begin(), descriptor.base_frontiers.end(),
+      [](const auto &a, const auto &b) { return a.stream < b.stream; });
+  std::sort(descriptor.supported_token_versions.begin(),
+            descriptor.supported_token_versions.end());
+  descriptor.hash.clear();
+  auto valid = validate_descriptor_fields(descriptor);
+  if (!valid.ok()) return valid.error();
+  descriptor.hash = sha256_hex(descriptor_material(descriptor));
+  return descriptor;
+}
+
+Result<void> validate_membership_descriptor(
+    const MembershipDescriptor &descriptor) {
+  auto valid = validate_descriptor_fields(descriptor);
+  if (!valid.ok()) return valid.error();
+  if (!is_hash(descriptor.hash) ||
+      descriptor.hash != sha256_hex(descriptor_material(descriptor)))
+    return Error(ErrorCode::corrupt_record,
+                 "membership descriptor content hash does not match its fields");
+  return {};
+}
+
 Result<RetirementPreview> preview_retirement(
     const MembershipDescriptor &current, const ActorId &device,
     std::vector<RetirementImpact> impacts) {
+  auto descriptor_valid = validate_membership_descriptor(current);
+  if (!descriptor_valid.ok()) return descriptor_valid.error();
   if (current.epoch == 0 || current.epoch == UINT64_MAX ||
       current.hash.empty() || current.hash.size() > 4096 ||
       !device.valid() || current.members.size() < 2 ||
@@ -201,6 +352,8 @@ Result<RetirementPreview> preview_retirement(
 
 Result<EnrollmentPreview> preview_enrollment(
     const MembershipDescriptor &current, const ActorId &device) {
+  auto descriptor_valid = validate_membership_descriptor(current);
+  if (!descriptor_valid.ok()) return descriptor_valid.error();
   if (current.epoch == 0 || current.epoch == UINT64_MAX ||
       current.hash.empty() || current.hash.size() > 4096 ||
       !device.valid() || current.members.empty() ||
@@ -321,6 +474,9 @@ Result<MembershipEvent> MembershipStore::commit_retirement(
     const std::vector<MembershipAcknowledgement> &acknowledgements,
     std::string_view explicit_confirmation,
     const DurableAcknowledgementVerifier &verify_acknowledgement) {
+  if (preview.parent_descriptor_hash != current.hash)
+    return Error(ErrorCode::wrong_epoch,
+                 "retirement preview does not name the supplied parent descriptor");
   auto fresh = preview_retirement(current, preview.device, current_impacts);
   if (!fresh.ok()) return fresh.error();
   if (!same_preview(preview, fresh.value()))
@@ -381,6 +537,9 @@ Result<MembershipEvent> MembershipStore::commit_enrollment(
     const EnrollmentPreview &preview, const MembershipDescriptor &current,
     const std::vector<MembershipAcknowledgement> &acknowledgements,
     const DurableAcknowledgementVerifier &verify_acknowledgement) {
+  if (preview.parent_descriptor_hash != current.hash)
+    return Error(ErrorCode::wrong_epoch,
+                 "enrollment preview does not name the supplied parent descriptor");
   auto fresh = preview_enrollment(current, preview.device);
   if (!fresh.ok()) return fresh.error();
   if (!same_preview(preview, fresh.value()))
