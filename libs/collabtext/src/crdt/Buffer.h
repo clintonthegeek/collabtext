@@ -170,6 +170,8 @@ public:
     next_undo_group() const;
     [[nodiscard]] std::optional<LocalUndoEntrySnapshot>
     next_redo_group() const;
+    [[nodiscard]] Result<void> acknowledge_undo_retirements(
+        const std::vector<Identity> &group_ids);
     [[nodiscard]] Result<void>
     restore_local_history(const LocalHistorySnapshot &snapshot);
 
@@ -371,7 +373,10 @@ private:
         std::vector<Identity> deletion_ids;
         size_t retained_bytes = 0;
     };
+    [[nodiscard]] LocalUndoEntrySnapshot
+    snapshot_undo_entry(const UndoEntry &) const;
     std::vector<UndoEntry> m_undo_stack;
+    std::vector<LocalUndoEntrySnapshot> m_retired_undo_entries;
     size_t m_undo_cursor = 0;  // Points past the last undoable entry
     size_t m_max_undo_depth = 1000;
     size_t m_undo_bytes = 0;

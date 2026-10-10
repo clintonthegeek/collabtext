@@ -23,6 +23,9 @@ struct LocalUndoEntrySnapshot {
 /// replay; the engine rejects references outside the owner's replayed history.
 struct LocalHistorySnapshot {
     std::vector<LocalUndoEntrySnapshot> entries;
+    /// Trimmed or redo-truncated groups awaiting durable retirement publication.
+    /// Consumers acknowledge these only after publishing each group durably.
+    std::vector<LocalUndoEntrySnapshot> retired_entries;
     std::size_t cursor = 0;
 };
 

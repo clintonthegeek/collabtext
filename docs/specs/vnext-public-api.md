@@ -310,10 +310,13 @@ public:
 The installed `IdListEngine` facade also exposes `local_history_snapshot()` and
 `restore_local_history(snapshot)`, plus next-undo/redo group inspection and
 step/retained-byte limits. The snapshot contains only actor-local identity
-references and the undo cursor; a consumer persists it beside its canonical
-operation events, replays those events, then restores the snapshot. Restore
-rejects references not covered by the replayed owner history. It does not
-replace the consumer's canonical event log or make a multi-block transaction.
+references, the undo cursor, and pending group retirements. A consumer persists
+it beside its canonical operation events, replays those events, then restores
+the snapshot. Restore rejects references not covered by the replayed owner
+history. After a consumer durably publishes a pending retirement, it may call
+`acknowledge_undo_retirements()` and persist the resulting snapshot; until then,
+the retirement remains available for idempotent retry. This does not replace the
+consumer's canonical event log or make a multi-block transaction.
 
 Two consequences worth stating:
 

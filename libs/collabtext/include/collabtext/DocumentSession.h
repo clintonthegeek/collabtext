@@ -9,6 +9,7 @@
 #include <collabtext/Engine.h>
 #include <collabtext/OpStream.h>
 #include <collabtext/Operations.h>
+#include <collabtext/LocalHistory.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -77,6 +78,12 @@ public:
   [[nodiscard]] Result<bool> coalesce_last_undo();
   [[nodiscard]] std::optional<LocalUndoGroupMetadata> next_undo_group() const;
   [[nodiscard]] std::optional<LocalUndoGroupMetadata> next_redo_group() const;
+  [[nodiscard]] std::vector<Crdt::LocalUndoEntrySnapshot>
+  pending_undo_retirements() const;
+  /// Call only after the consumer's retirement event is durable. A failed
+  /// checkpoint keeps the retirement pending so publication can be retried.
+  [[nodiscard]] Result<void> acknowledge_undo_retirements(
+      const std::vector<Crdt::Identity> &group_ids);
   [[nodiscard]] Result<PollReport> poll(PollBudget budget = {});
   [[nodiscard]] Result<void> save();
   [[nodiscard]] Result<void> close();

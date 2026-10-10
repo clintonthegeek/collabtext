@@ -40,7 +40,7 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
                                           const ActorId &owner) {
   std::istringstream in{std::string(line)};
   std::string magic, actor_text;
-  if (!(in >> magic >> actor_text) || magic != "CLH3")
+  if (!(in >> magic >> actor_text) || magic != "CLH4")
     return Error(ErrorCode::corrupt_record, "unknown local history record format");
   auto actor = ActorId::parse(actor_text);
   if (!actor.ok() || actor.value() != owner)
@@ -48,15 +48,19 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
                  "local history log belongs to another actor");
   auto cursor = number(in, "cursor");
   auto count = number(in, "entry count");
+  auto retired_count = number(in, "retired group count");
   if (!cursor.ok()) return cursor.error();
   if (!count.ok()) return count.error();
-  if (count.value() > kMaxHistoryEntries || cursor.value() > count.value())
+  if (!retired_count.ok()) return retired_count.error();
+  if (count.value() > kMaxHistoryEntries ||
+      retired_count.value() > kMaxHistoryEntries ||
+      count.value() + retired_count.value() > kMaxHistoryEntries ||
+      cursor.value() > count.value())
     return Error(ErrorCode::corrupt_record, "local history bounds are invalid");
 
   Crdt::LocalHistorySnapshot snapshot;
   snapshot.cursor = static_cast<size_t>(cursor.value());
-  snapshot.entries.reserve(static_cast<size_t>(count.value()));
-  for (uint64_t i = 0; i < count.value(); ++i) {
+  auto read_entry = [&]() -> Result<Crdt::LocalUndoEntrySnapshot> {
     Crdt::LocalUndoEntrySnapshot entry;
     auto group = identity(in, owner);
     if (!group.ok()) return group.error();
@@ -97,7 +101,19 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
       return Error(ErrorCode::corrupt_record,
                    "local history retained-byte count exceeds the limit");
     entry.retained_bytes = static_cast<size_t>(retained.value());
-    snapshot.entries.push_back(std::move(entry));
+    return entry;
+  };
+  snapshot.entries.reserve(static_cast<size_t>(count.value()));
+  for (uint64_t i = 0; i < count.value(); ++i) {
+    auto entry = read_entry();
+    if (!entry.ok()) return entry.error();
+    snapshot.entries.push_back(std::move(entry).value());
+  }
+  snapshot.retired_entries.reserve(static_cast<size_t>(retired_count.value()));
+  for (uint64_t i = 0; i < retired_count.value(); ++i) {
+    auto entry = read_entry();
+    if (!entry.ok()) return entry.error();
+    snapshot.retired_entries.push_back(std::move(entry).value());
   }
   std::string trailing;
   if (in >> trailing)
@@ -108,20 +124,22 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
 std::string encode(const Crdt::LocalHistorySnapshot &snapshot,
                    const ActorId &owner) {
   std::ostringstream out;
-  out << "CLH3 " << owner.to_string() << ' ' << snapshot.cursor << ' '
-      << snapshot.entries.size();
+  out << "CLH4 " << owner.to_string() << ' ' << snapshot.cursor << ' '
+      << snapshot.entries.size() << ' ' << snapshot.retired_entries.size();
   auto write_ids = [&](const std::vector<Crdt::Identity> &ids) {
     out << ' ' << ids.size();
     for (const auto &id : ids)
       out << ' ' << id.actor.to_string() << ' ' << id.counter;
   };
-  for (const auto &entry : snapshot.entries) {
+  auto write_entry = [&](const auto &entry) {
     out << ' ' << entry.group_id.actor.to_string() << ' ' << entry.group_id.counter;
     write_ids(entry.operation_ids);
     write_ids(entry.inserted_items);
     write_ids(entry.deletion_operations);
     out << ' ' << entry.retained_bytes;
-  }
+  };
+  for (const auto &entry : snapshot.entries) write_entry(entry);
+  for (const auto &entry : snapshot.retired_entries) write_entry(entry);
   out << '\n';
   return out.str();
 }
@@ -158,7 +176,7 @@ Result<std::string> unhex(std::string_view text) {
 
 bool belongs_to(const Crdt::LocalHistorySnapshot &snapshot,
                 const ActorId &owner) {
-  for (const auto &entry : snapshot.entries) {
+  auto valid_entry = [&](const auto &entry) {
     if (entry.group_id.actor != owner || entry.group_id.counter == 0 ||
         entry.operation_ids.empty()) return false;
     for (const auto &id : entry.operation_ids)
@@ -167,7 +185,12 @@ bool belongs_to(const Crdt::LocalHistorySnapshot &snapshot,
       if (id.actor != owner || id.counter == 0) return false;
     for (const auto &id : entry.deletion_operations)
       if (id.actor != owner || id.counter == 0) return false;
-  }
+    return true;
+  };
+  for (const auto &entry : snapshot.entries)
+    if (!valid_entry(entry)) return false;
+  for (const auto &entry : snapshot.retired_entries)
+    if (!valid_entry(entry)) return false;
   return true;
 }
 } // namespace
@@ -252,6 +275,8 @@ LocalHistoryLog::recover_pending() const {
 Result<void>
 LocalHistoryLog::store_snapshot(const Crdt::LocalHistorySnapshot &snapshot) {
   if (snapshot.entries.size() > kMaxHistoryEntries ||
+      snapshot.retired_entries.size() > kMaxHistoryEntries ||
+      snapshot.entries.size() + snapshot.retired_entries.size() > kMaxHistoryEntries ||
       snapshot.cursor > snapshot.entries.size())
     return Error(ErrorCode::limit_exceeded, "local history snapshot exceeds bounds");
   if (!belongs_to(snapshot, m_owner))
@@ -267,6 +292,9 @@ Result<void> LocalHistoryLog::store_pending(
     const PendingLocalHistoryCommit &pending) {
   if (pending.sequence == 0 || pending.operation.empty() ||
       pending.snapshot.entries.size() > kMaxHistoryEntries ||
+      pending.snapshot.retired_entries.size() > kMaxHistoryEntries ||
+      pending.snapshot.entries.size() + pending.snapshot.retired_entries.size() >
+          kMaxHistoryEntries ||
       pending.snapshot.cursor > pending.snapshot.entries.size() ||
       !belongs_to(pending.snapshot, m_owner))
     return Error(ErrorCode::history_unavailable,

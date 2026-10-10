@@ -90,6 +90,34 @@ private slots:
         QVERIFY(replayed.undo().has_value());
         QCOMPARE(replayed.size(), uint32_t(0));
     }
+
+    void public_engine_persists_trim_retirement_intents() {
+        CollabText::IdListEngine original(CollabText::Test::test_counter(8));
+        original.set_max_undo_depth(1);
+        auto first = original.try_insert_after(Anchor::min(), 1);
+        auto second = original.try_insert_after(Anchor::min(), 2);
+        QVERIFY(first.ok());
+        QVERIFY(second.ok());
+        const auto saved = original.local_history_snapshot();
+        QCOMPARE(saved.entries.size(), size_t(1));
+        QCOMPARE(saved.retired_entries.size(), size_t(1));
+        QCOMPARE(saved.retired_entries[0].group_id,
+                 idlist_op_identity(first.value()));
+
+        CollabText::IdListEngine replayed(
+            CollabText::Test::test_counter(8, 100));
+        replayed.set_max_undo_depth(1);
+        QCOMPARE(replayed.apply_ops({first.value(), second.value()}).size(),
+                 size_t(2));
+        QVERIFY(replayed.restore_local_history(saved).ok());
+        QVERIFY(replayed.acknowledge_undo_retirements(
+            {saved.retired_entries[0].group_id}).ok());
+        QCOMPARE(replayed.local_history_snapshot().retired_entries.size(),
+                 size_t(0));
+        QVERIFY(replayed.undo().has_value());
+        QCOMPARE(replayed.ids(), std::vector<uint64_t>{1});
+        QVERIFY(!replayed.undo().has_value());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIdListUndo)

@@ -259,6 +259,62 @@ private slots:
     QVERIFY(session->close().ok());
   }
 
+  void session_replays_pending_retirement_until_consumer_acknowledges_it() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "doc-retirement", "text-retirement", 1};
+    config.max_undo_steps = 1;
+    const auto retirement_log = root / "consumer" / "retirements.log";
+    Crdt::Identity retired_group;
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QVERIFY(session->apply_local({{0, 0}}, {"a"}).ok());
+      const auto original_group = session->next_undo_group();
+      QVERIFY(original_group.has_value());
+      retired_group = original_group->id;
+      QVERIFY(session->apply_local({{1, 1}}, {"b"}).ok());
+      const auto pending = session->pending_undo_retirements();
+      QCOMPARE(pending.size(), size_t(1));
+      QCOMPARE(pending[0].group_id, retired_group);
+      QVERIFY(append_durable_line(
+                  retirement_log, "retired:" + retired_group.actor.to_string() +
+                                      "/" + std::to_string(retired_group.counter))
+                  .ok());
+      // Simulate restart after external publication but before local ack.
+      QVERIFY(session->close().ok());
+    }
+    {
+      auto reopened = DocumentSession::open(config);
+      QVERIFY(reopened.ok());
+      auto session = std::move(reopened).value();
+      const auto retry = session->pending_undo_retirements();
+      QCOMPARE(retry.size(), size_t(1));
+      QCOMPARE(retry[0].group_id, retired_group);
+      std::ifstream events(retirement_log);
+      std::string row;
+      QVERIFY(static_cast<bool>(std::getline(events, row)));
+      QVERIFY(session->acknowledge_undo_retirements({retired_group}).ok());
+      QVERIFY(session->pending_undo_retirements().empty());
+      QVERIFY(session->close().ok());
+    }
+    auto reopened = DocumentSession::open(config);
+    QVERIFY(reopened.ok());
+    auto session = std::move(reopened).value();
+    QVERIFY(session->pending_undo_retirements().empty());
+    QVERIFY(session->undo().ok());
+    QCOMPARE(session->text(), std::string("a"));
+    QVERIFY(!session->undo().ok());
+    QVERIFY(session->close().ok());
+    std::ifstream events(retirement_log);
+    std::string row, extra;
+    QVERIFY(static_cast<bool>(std::getline(events, row)));
+    QVERIFY(!static_cast<bool>(std::getline(events, extra)));
+  }
+
   void session_recovers_pending_intent_after_transport_sync_failure() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());

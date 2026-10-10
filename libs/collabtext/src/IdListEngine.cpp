@@ -133,6 +133,10 @@ std::optional<Crdt::LocalUndoEntrySnapshot>
 IdListEngine::next_redo_group() const {
     return m_impl->list.next_redo_group();
 }
+Result<void> IdListEngine::acknowledge_undo_retirements(
+    const std::vector<Crdt::Identity> &group_ids) {
+    return m_impl->list.acknowledge_undo_retirements(group_ids);
+}
 bool IdListEngine::coalesce_last_undo() { return m_impl->list.coalesce_last_undo(); }
 void IdListEngine::set_max_undo_depth(size_t depth) {
     m_impl->list.set_max_undo_depth(depth);

@@ -139,6 +139,10 @@ public:
     next_undo_group() const;
     [[nodiscard]] std::optional<Crdt::LocalUndoEntrySnapshot>
     next_redo_group() const;
+    /// Remove pending retirement records only after the consumer's durable
+    /// retirement event is committed; persist the resulting snapshot afterward.
+    [[nodiscard]] Result<void> acknowledge_undo_retirements(
+        const std::vector<Crdt::Identity> &group_ids);
     /// Merge the newest undo entry into the one before it, so consecutive
     /// insertions become one step. Purely local; mutates no CRDT state.
     bool coalesce_last_undo();

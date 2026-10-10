@@ -404,6 +404,29 @@ DocumentSession::next_redo_group() const {
   return LocalUndoGroupMetadata{entry->group_id, std::move(entry->operation_ids)};
 }
 
+std::vector<Crdt::LocalUndoEntrySnapshot>
+DocumentSession::pending_undo_retirements() const {
+  if (!m_impl || !m_impl->buffer) return {};
+  return m_impl->buffer->local_history_snapshot().retired_entries;
+}
+
+Result<void> DocumentSession::acknowledge_undo_retirements(
+    const std::vector<Crdt::Identity> &group_ids) {
+  if (!m_impl || !m_impl->ready())
+    return Error(ErrorCode::awaiting_state,
+                 "session recovery is incomplete; undo retirement is disabled");
+  auto acknowledged = m_impl->buffer->acknowledge_undo_retirements(group_ids);
+  if (!acknowledged.ok()) return acknowledged.error();
+  auto checkpoint = m_impl->local_history->store_snapshot(
+      m_impl->buffer->local_history_snapshot());
+  if (!checkpoint.ok()) {
+    m_impl->poisoned = true;
+    return checkpoint.error().with_context(
+        "undo retirement acknowledged in memory but checkpoint failed; reopen to retry");
+  }
+  return Result<void>::success();
+}
+
 Result<bool> DocumentSession::coalesce_last_undo() {
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,

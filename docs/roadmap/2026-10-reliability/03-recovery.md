@@ -170,7 +170,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 **Coverage:** F1, F2, R10  
 **Design/decision gate:** Q3 resolved: persistent actor-local undo AND redo, bounded by step and byte limits.  
 
-**Implementation progress:** Buffer history now persists stable group identities and ordered member operation identities through coalescing and CLH3 checkpoints. `DocumentSession` exposes the next undo/redo group metadata for W5 correlation. The consumer-owned event-log integration, IdList history persistence, and explicit retirement events remain open; see TASKS.json for current verification evidence.
+**Implementation progress:** Actor-local history persists stable group identities, ordered member operation identities, and pending trim/redo-branch retirement records through CLH4 checkpoints. `DocumentSession` exposes group correlation and retirement publication/acknowledgment APIs; `IdListEngine` exposes replayable history snapshots and byte/step limits for consumer-owned persistence. See TASKS.json for current verification evidence and the remaining policy/memory-accounting limits.
 
 **Files / scope:**
 

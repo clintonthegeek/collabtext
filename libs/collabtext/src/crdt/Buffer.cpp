@@ -45,11 +45,13 @@ Result<std::vector<CollabText::detail::PositionItem>> Buffer::position_items() c
 void Buffer::local_clear() noexcept {
     auto allocator = m_allocator;
     auto version = m_version;
+    auto retired = std::move(m_retired_undo_entries);
     const auto undo_limit = max_undo_depth();
     const auto undo_byte_limit = max_undo_bytes();
     auto changed = std::move(m_on_change);
     *this = Buffer(std::move(allocator));
     m_version = std::move(version);
+    m_retired_undo_entries = std::move(retired);
     m_on_change = std::move(changed);
     set_max_undo_depth(undo_limit);
     set_max_undo_bytes(undo_byte_limit);
@@ -146,6 +148,8 @@ void Buffer::trim_undo_stack() {
     while (!m_undo_stack.empty() &&
            (m_undo_stack.size() > m_max_undo_depth ||
             m_undo_bytes > m_max_undo_bytes)) {
+        m_retired_undo_entries.push_back(
+            snapshot_undo_entry(m_undo_stack.front()));
         m_undo_stack.erase(m_undo_stack.begin());
         if (m_undo_cursor != 0) --m_undo_cursor;
         recalculate_undo_bytes();
@@ -681,6 +685,8 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     // ---- Undo entry ----
     if (had_deletions)
         undo_entry.deletion_ids.push_back(op_identity);
+    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i)
+        m_retired_undo_entries.push_back(snapshot_undo_entry(m_undo_stack[i]));
     m_undo_stack.resize(m_undo_cursor);
     m_undo_stack.push_back(std::move(undo_entry));
     m_undo_cursor = m_undo_stack.size();
@@ -1060,21 +1066,25 @@ bool Buffer::coalesce_last_undo() {
     return true;
 }
 
+LocalUndoEntrySnapshot Buffer::snapshot_undo_entry(const UndoEntry &entry) const {
+    LocalUndoEntrySnapshot saved;
+    saved.group_id = entry.group_id;
+    saved.operation_ids = entry.operation_ids;
+    saved.inserted_items.reserve(entry.inserted_keys.size());
+    for (const auto &key : entry.inserted_keys)
+        saved.inserted_items.push_back(key.position);
+    saved.deletion_operations = entry.deletion_ids;
+    saved.retained_bytes = entry.retained_bytes;
+    return saved;
+}
+
 LocalHistorySnapshot Buffer::local_history_snapshot() const {
     LocalHistorySnapshot snapshot;
     snapshot.cursor = m_undo_cursor;
+    snapshot.retired_entries = m_retired_undo_entries;
     snapshot.entries.reserve(m_undo_stack.size());
-    for (const auto &entry : m_undo_stack) {
-        LocalUndoEntrySnapshot saved;
-        saved.group_id = entry.group_id;
-        saved.operation_ids = entry.operation_ids;
-        saved.inserted_items.reserve(entry.inserted_keys.size());
-        for (const auto &key : entry.inserted_keys)
-            saved.inserted_items.push_back(key.position);
-        saved.deletion_operations = entry.deletion_ids;
-        saved.retained_bytes = entry.retained_bytes;
-        snapshot.entries.push_back(std::move(saved));
-    }
+    for (const auto &entry : m_undo_stack)
+        snapshot.entries.push_back(snapshot_undo_entry(entry));
     return snapshot;
 }
 
@@ -1088,6 +1098,25 @@ std::optional<LocalUndoEntrySnapshot> Buffer::next_redo_group() const {
     return local_history_snapshot().entries[m_undo_cursor];
 }
 
+Result<void> Buffer::acknowledge_undo_retirements(
+    const std::vector<Identity> &group_ids) {
+    std::set<Identity> unique;
+    for (const auto &id : group_ids) {
+        if (!unique.insert(id).second)
+            return Error(ErrorCode::malformed,
+                         "undo retirement acknowledgement repeats a group");
+        if (std::none_of(m_retired_undo_entries.begin(),
+                         m_retired_undo_entries.end(),
+                         [&](const auto &entry) { return entry.group_id == id; }))
+            return Error(ErrorCode::not_found,
+                         "undo retirement group is not pending");
+    }
+    std::erase_if(m_retired_undo_entries, [&](const auto &entry) {
+        return unique.contains(entry.group_id);
+    });
+    return Result<void>::success();
+}
+
 Result<void>
 Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
     if (snapshot.cursor > snapshot.entries.size() ||
@@ -1098,6 +1127,8 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
     const auto &owner = actor_id();
     std::vector<UndoEntry> restored;
     restored.reserve(snapshot.entries.size());
+    std::vector<LocalUndoEntrySnapshot> retired;
+    retired.reserve(snapshot.retired_entries.size());
     size_t restored_bytes = 0;
     auto valid_local_identity = [&](const Identity &id) {
         return id.actor == owner && id.counter != 0 &&
@@ -1136,7 +1167,26 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
         entry.retained_bytes = saved.retained_bytes;
         restored.push_back(std::move(entry));
     }
+    for (const auto &saved : snapshot.retired_entries) {
+        if (!valid_local_identity(saved.group_id) || saved.operation_ids.empty())
+            return Error(ErrorCode::history_unavailable,
+                         "retired undo group metadata is absent from owner history");
+        for (const auto &id : saved.operation_ids)
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "retired undo member is absent from owner history");
+        for (const auto &id : saved.inserted_items)
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "retired undo item is absent from owner history");
+        for (const auto &id : saved.deletion_operations)
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "retired undo deletion is absent from owner history");
+        retired.push_back(saved);
+    }
     m_undo_stack = std::move(restored);
+    m_retired_undo_entries = std::move(retired);
     m_undo_cursor = snapshot.cursor;
     m_undo_bytes = restored_bytes;
     return Result<void>::success();

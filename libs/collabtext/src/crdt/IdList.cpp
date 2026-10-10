@@ -2,6 +2,7 @@
 #include "crdt/SequenceOrder.h"
 #include <algorithm>
 #include <cassert>
+#include <set>
 
 namespace CollabText::Crdt {
 
@@ -103,6 +104,8 @@ Result<IdListOperation> IdList::insert_after_resolved(const Anchor& after, uint6
     set_entries(std::move(entries));
 
     // k. Push undo entry
+    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i)
+        m_retired_undo_entries.push_back(snapshot_undo_entry(m_undo_stack[i]));
     m_undo_stack.resize(m_undo_cursor);  // truncate redo tail
     m_undo_stack.push_back(UndoEntry{
         origin, {origin}, {UndoMapKey(origin)}, {},
@@ -176,6 +179,8 @@ Result<IdListOperation> IdList::remove_at_resolved(const Anchor& target) {
     set_entries(std::move(entries));
 
     // j. Push undo entry: empty inserted_keys, del_id in deletion_ids
+    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i)
+        m_retired_undo_entries.push_back(snapshot_undo_entry(m_undo_stack[i]));
     m_undo_stack.resize(m_undo_cursor);
     m_undo_stack.push_back(UndoEntry{
         del_id, {del_id}, {}, {del_id},
@@ -314,6 +319,18 @@ bool IdList::coalesce_last_undo() {
     return true;
 }
 
+LocalUndoEntrySnapshot IdList::snapshot_undo_entry(const UndoEntry &entry) const {
+    LocalUndoEntrySnapshot saved;
+    saved.group_id = entry.group_id;
+    saved.operation_ids = entry.operation_ids;
+    saved.inserted_items.reserve(entry.inserted_keys.size());
+    for (const auto &key : entry.inserted_keys)
+        saved.inserted_items.push_back(key.position);
+    saved.deletion_operations = entry.deletion_ids;
+    saved.retained_bytes = entry.retained_bytes;
+    return saved;
+}
+
 void IdList::set_max_undo_depth(size_t depth) {
     m_max_undo_depth = depth;
     trim_undo_stack();
@@ -340,6 +357,8 @@ void IdList::trim_undo_stack() {
     while (!m_undo_stack.empty() &&
            (m_undo_stack.size() > m_max_undo_depth ||
             m_undo_bytes > m_max_undo_bytes)) {
+        m_retired_undo_entries.push_back(
+            snapshot_undo_entry(m_undo_stack.front()));
         m_undo_stack.erase(m_undo_stack.begin());
         if (m_undo_cursor != 0) --m_undo_cursor;
         recalculate_undo_bytes();
@@ -349,18 +368,10 @@ void IdList::trim_undo_stack() {
 LocalHistorySnapshot IdList::local_history_snapshot() const {
     LocalHistorySnapshot snapshot;
     snapshot.cursor = m_undo_cursor;
+    snapshot.retired_entries = m_retired_undo_entries;
     snapshot.entries.reserve(m_undo_stack.size());
-    for (const auto &entry : m_undo_stack) {
-        LocalUndoEntrySnapshot saved;
-        saved.group_id = entry.group_id;
-        saved.operation_ids = entry.operation_ids;
-        saved.inserted_items.reserve(entry.inserted_keys.size());
-        for (const auto &key : entry.inserted_keys)
-            saved.inserted_items.push_back(key.position);
-        saved.deletion_operations = entry.deletion_ids;
-        saved.retained_bytes = entry.retained_bytes;
-        snapshot.entries.push_back(std::move(saved));
-    }
+    for (const auto &entry : m_undo_stack)
+        snapshot.entries.push_back(snapshot_undo_entry(entry));
     return snapshot;
 }
 
@@ -374,6 +385,25 @@ std::optional<LocalUndoEntrySnapshot> IdList::next_redo_group() const {
     return local_history_snapshot().entries[m_undo_cursor];
 }
 
+Result<void> IdList::acknowledge_undo_retirements(
+    const std::vector<Identity> &group_ids) {
+    std::set<Identity> unique;
+    for (const auto &id : group_ids) {
+        if (!unique.insert(id).second)
+            return Error(ErrorCode::malformed,
+                         "undo retirement acknowledgement repeats a group");
+        if (std::none_of(m_retired_undo_entries.begin(),
+                         m_retired_undo_entries.end(),
+                         [&](const auto &entry) { return entry.group_id == id; }))
+            return Error(ErrorCode::not_found,
+                         "undo retirement group is not pending");
+    }
+    std::erase_if(m_retired_undo_entries, [&](const auto &entry) {
+        return unique.contains(entry.group_id);
+    });
+    return Result<void>::success();
+}
+
 Result<void> IdList::restore_local_history(const LocalHistorySnapshot &snapshot) {
     if (snapshot.cursor > snapshot.entries.size() ||
         snapshot.entries.size() > m_max_undo_depth)
@@ -383,6 +413,8 @@ Result<void> IdList::restore_local_history(const LocalHistorySnapshot &snapshot)
     size_t restored_bytes = 0;
     std::vector<UndoEntry> restored;
     restored.reserve(snapshot.entries.size());
+    std::vector<LocalUndoEntrySnapshot> retired;
+    retired.reserve(snapshot.retired_entries.size());
     auto valid_local_id = [&](const Identity &id) {
         return id.actor == owner && id.counter != 0 &&
                id.counter <= m_version.get(owner);
@@ -420,7 +452,26 @@ Result<void> IdList::restore_local_history(const LocalHistorySnapshot &snapshot)
         entry.retained_bytes = saved.retained_bytes;
         restored.push_back(std::move(entry));
     }
+    for (const auto &saved : snapshot.retired_entries) {
+        if (!valid_local_id(saved.group_id) || saved.operation_ids.empty())
+            return Error(ErrorCode::history_unavailable,
+                         "retired IdList group is absent from owner history");
+        for (const auto &id : saved.operation_ids)
+            if (!valid_local_id(id))
+                return Error(ErrorCode::history_unavailable,
+                             "retired IdList member is absent from owner history");
+        for (const auto &id : saved.inserted_items)
+            if (!valid_local_id(id))
+                return Error(ErrorCode::history_unavailable,
+                             "retired IdList item is absent from owner history");
+        for (const auto &id : saved.deletion_operations)
+            if (!valid_local_id(id))
+                return Error(ErrorCode::history_unavailable,
+                             "retired IdList deletion is absent from owner history");
+        retired.push_back(saved);
+    }
     m_undo_stack = std::move(restored);
+    m_retired_undo_entries = std::move(retired);
     m_undo_cursor = snapshot.cursor;
     m_undo_bytes = restored_bytes;
     return Result<void>::success();

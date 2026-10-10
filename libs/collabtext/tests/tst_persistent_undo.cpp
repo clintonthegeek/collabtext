@@ -88,6 +88,74 @@ private slots:
     QCOMPARE(restored->operation_ids, group->operation_ids);
   }
 
+  void trimmed_group_retirement_round_trips_and_can_be_acknowledged() {
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto path = std::filesystem::path(temp.path().toStdString()) / "trim.log";
+    const auto owner = Test::actor(12);
+    Buffer original(Test::test_counter(12));
+    original.set_max_undo_depth(1);
+    auto first = original.try_apply_local_edit({{0, 0}}, {"a"});
+    auto second = original.try_apply_local_edit({{1, 1}}, {"b"});
+    QVERIFY(first.ok());
+    QVERIFY(second.ok());
+    const auto saved = original.local_history_snapshot();
+    QCOMPARE(saved.entries.size(), size_t(1));
+    QCOMPARE(saved.retired_entries.size(), size_t(1));
+    QCOMPARE(saved.retired_entries[0].operation_ids,
+             (std::vector<Identity>{op_identity(first.value())}));
+
+    {
+      auto opened = Storage::LocalHistoryLog::open(path, owner);
+      QVERIFY(opened.ok());
+      auto log = std::move(opened).value();
+      QVERIFY(log.store_snapshot(saved).ok());
+    }
+    auto opened = Storage::LocalHistoryLog::open(path, owner);
+    QVERIFY(opened.ok());
+    auto log = std::move(opened).value();
+    auto recovered = log.recover();
+    QVERIFY(recovered.ok() && recovered.value());
+    QCOMPARE(recovered.value()->retired_entries.size(), size_t(1));
+
+    Buffer replayed(Test::test_counter(12, 100));
+    QCOMPARE(replayed.apply_ops({first.value(), second.value()}).size(), size_t(2));
+    QVERIFY(replayed.restore_local_history(*recovered.value()).ok());
+    const auto retired_id = recovered.value()->retired_entries[0].group_id;
+    QVERIFY(replayed.acknowledge_undo_retirements({retired_id}).ok());
+    QCOMPARE(replayed.local_history_snapshot().retired_entries.size(), size_t(0));
+    QVERIFY(!replayed.acknowledge_undo_retirements({retired_id}).ok());
+    QVERIFY(replayed.undo().has_value());
+    QCOMPARE(replayed.text(), std::string("a"));
+    QVERIFY(!replayed.undo().has_value());
+  }
+
+  void editing_after_undo_records_redo_branch_retirement() {
+    Buffer original(Test::test_counter(13));
+    auto first = original.try_apply_local_edit({{0, 0}}, {"a"});
+    auto second = original.try_apply_local_edit({{1, 1}}, {"b"});
+    QVERIFY(first.ok());
+    QVERIFY(second.ok());
+    const auto abandoned = original.next_undo_group()->group_id;
+    auto undo = original.try_undo();
+    QVERIFY(undo.ok() && undo.value());
+    auto replacement = original.try_apply_local_edit({{1, 1}}, {"c"});
+    QVERIFY(replacement.ok());
+    QCOMPARE(original.text(), std::string("ac"));
+
+    const auto snapshot = original.local_history_snapshot();
+    QCOMPARE(snapshot.retired_entries.size(), size_t(1));
+    QCOMPARE(snapshot.retired_entries[0].group_id, abandoned);
+    Buffer replayed(Test::test_counter(13, 100));
+    QCOMPARE(replayed.apply_ops(
+                 {first.value(), second.value(), *undo.value(), replacement.value()})
+                 .size(), size_t(4));
+    QVERIFY(replayed.restore_local_history(snapshot).ok());
+    const auto restored = replayed.local_history_snapshot();
+    QCOMPARE(restored.retired_entries[0].group_id, abandoned);
+    QVERIFY(!replayed.next_redo_group().has_value());
+  }
+
   void idlist_snapshot_restores_undo_and_redo_after_replay() {
     IdList original(Test::test_counter(9));
     auto insert = original.try_insert_after(Anchor::min(), 42);
@@ -113,6 +181,7 @@ private slots:
     const auto path = std::filesystem::path(temp.path().toStdString()) / "list.log";
     const auto owner = Test::actor(11);
     IdList original(Test::test_counter(11));
+    original.set_max_undo_depth(1);
     auto insert = original.try_insert_after(Anchor::min(), 42);
     QVERIFY(insert.ok());
     auto remove = original.try_remove_at(Anchor{idlist_op_identity(insert.value())});
@@ -132,6 +201,9 @@ private slots:
     auto recovered = log.recover();
     QVERIFY(recovered.ok());
     QVERIFY(recovered.value().has_value());
+    QCOMPARE(recovered.value()->retired_entries.size(), size_t(1));
+    QCOMPARE(recovered.value()->retired_entries[0].group_id,
+             idlist_op_identity(insert.value()));
     IdList replayed(Test::test_counter(11, 100));
     const auto outcomes = replayed.apply_ops({insert.value(), remove.value()});
     QCOMPARE(outcomes.size(), size_t(2));
@@ -142,10 +214,9 @@ private slots:
              expected.entries.back().operation_ids);
     QVERIFY(replayed.try_undo().value().has_value());
     QCOMPARE(replayed.ids(), std::vector<uint64_t>{42});
-    QVERIFY(replayed.try_undo().value().has_value());
-    QCOMPARE(replayed.size(), uint32_t(0));
+    QVERIFY(!replayed.try_undo().value().has_value());
     QVERIFY(replayed.try_redo().value().has_value());
-    QCOMPARE(replayed.ids(), std::vector<uint64_t>{42});
+    QCOMPARE(replayed.size(), uint32_t(0));
     QVERIFY(log.close().ok());
   }
 

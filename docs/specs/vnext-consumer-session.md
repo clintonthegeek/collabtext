@@ -65,7 +65,12 @@ that metadata. `coalesce_last_undo()` checkpoints the boundary before reporting
 success. Consumers can correlate those identities with their own event log,
 while undo remains a new compensating event. The consumer owns engine and
 session lifetime and may instead construct its own headless document seam
-around public primitives and a custom `OpStream`. `IdListEngine` exposes an
-identity-only history snapshot/restore API for consumer-owned persistence. The
-consumer controls when that snapshot is checkpointed beside canonical events
-and owns any multi-block group policy.
+around public primitives and a custom `OpStream`. `pending_undo_retirements()`
+exposes groups removed by history trimming or redo-branch truncation. Publish
+each retirement idempotently under its stable group ID, then call
+`acknowledge_undo_retirements()`; that call checkpoints the acknowledgment. A
+crash before the acknowledgment leaves the intent available for retry.
+`IdListEngine` exposes an identity-only history snapshot/restore API, including
+pending retirements, for consumer-owned persistence. The consumer controls when
+that snapshot is checkpointed beside canonical events and owns any multi-block
+group policy.
