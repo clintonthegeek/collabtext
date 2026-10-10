@@ -2881,3 +2881,26 @@ Remaining: runtime backpressure coverage; byte charges estimate object and
   identity-array storage; Markoff/Wave own their event encodings and
   multi-block transaction policy.
 ```
+
+
+```text
+Task: S04
+Status: complete
+Candidate: 733097c4d042a4c257939e07f7f85b114ff6b48a
+Scope: Added durable original-token recovery through FileOpStream and fresh
+  scoped replicas, including the repaired WP6 `abcXYZ` passage order. Hardened
+  the token codec test's byte mutation helper to use checked string indexing.
+  Recorded exact named cases, CTPT/1 fixture digest, verification modes and
+  remaining retention limits in docs/reports/vnext-boundary-certification.md.
+Verification: Seven local position/recovery suites passed in Debug, Release and
+  ASan/UBSan. Installed strict live-position gates passed Debug, Release and
+  ASan/UBSan at the candidate revision: Wave 16/16 strict cases, Markdown 4/4.
+  LeakSanitizer is unavailable under this runner's ptrace setup; sanitizer
+  evidence disables leak detection. WP8 durable pins remain unsupported and
+  remain assigned to S05/G-series.
+Evidence: Debug build-roadmap-debug/verification/20261010T060612Z-2; Release
+  build-roadmap-release/verification/20261010T060623Z-2; ASan/UBSan
+  build-roadmap-asan/verification/20261010T060640Z-2; installed gates
+  build-consumer-verify/{debug,release,asan}-live-20261010T060707Z-2,
+  20261010T060729Z-2, and 20261010T060739Z-2 respectively.
+```

@@ -2612,14 +2612,38 @@
         "R13"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "consumer_requirements": [
         "W1",
         "W2",
         "W6"
       ],
       "baseline_revision": "3529cce",
-      "notes": "Started after L08 completion. Initial task review pending: need inspect S04b supported token fixtures/readers, S03 repaired-order exact named probes, and L08 durable session seams before defining final test additions."
+      "notes": "S04 completed. Added actual FileOpStream close/replay tests that resolve the exact original CTPT bytes on equivalent fresh replicas and prove repaired WP6 whole-paste order after durable replay. Checked the malformed-token helper bounds, ran seven local position/recovery suites in Debug/Release/ASan/UBSan, and reran the installed strict live-position gate in all three modes at candidate 733097c. See docs/reports/vnext-boundary-certification.md. CTPT/1 remains supported; pins/GC remain later work and WP8 stays unsupported.",
+      "progress": "Complete: supported CTPT/1 bytes minted before concurrent edits survive durable FileOpStream close/replay and resolve identically on two fresh equivalent replicas. Whole-passage WP6 `abcXYZ` ordering is verified after durable replay, and original scoped empty-boundary tokens resolve to 0/6. The named affinity, scope, deletion/collapse, wrong-context/version, and list lookup cases have strict installed consumer evidence. Debug/Release/ASan/UBSan local suites and the installed strict live gate pass in all modes; WP8 durable pins remain unsupported and GC remains disabled.",
+      "verification_results": {
+        "debug": "PASS: tst_anchor_codec, tst_anchor, tst_idlist_anchor, tst_positions, tst_sequence_semantics, tst_session_recovery, tst_evaluation_regressions; 7/7; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261010T060612Z-2.",
+        "release": "PASS: same seven position/recovery suites; 7/7; GCC 16.2.1 Release; build-roadmap-release/verification/20261010T060623Z-2.",
+        "asan_ubsan": "PASS: same seven suites; 7/7 with ASAN_OPTIONS=detect_leaks=0; build-roadmap-asan/verification/20261010T060640Z-2.",
+        "installed_live_debug": "PASS: Wave 16/16 strict, Markdown 4/4, isolated relocated Core consumer and negative component test; candidate 733097c; build-consumer-verify/debug-live-20261010T060707Z-2.",
+        "installed_live_release": "PASS: Wave 16/16 strict, Markdown 4/4; candidate 733097c; build-consumer-verify/release-live-20261010T060729Z-2.",
+        "installed_live_asan_ubsan": "PASS: Wave 16/16 strict, Markdown 4/4 with ASAN_OPTIONS=detect_leaks=0; candidate 733097c; build-consumer-verify/asan-live-20261010T060739Z-2.",
+        "durable_replay": "PASS: external_token_roundtrip_reopen and repaired WP6 whole-paste tokens resolve after FileOpStream replay; included in all seven-suite runs."
+      },
+      "artifacts": [
+        "docs/reports/vnext-boundary-certification.md",
+        "build-roadmap-debug/verification/20261010T060612Z-2/",
+        "build-roadmap-release/verification/20261010T060623Z-2/",
+        "build-roadmap-asan/verification/20261010T060640Z-2/",
+        "build-consumer-verify/debug-live-20261010T060707Z-2/",
+        "build-consumer-verify/release-live-20261010T060729Z-2/",
+        "build-consumer-verify/asan-live-20261010T060739Z-2/"
+      ],
+      "remaining_gap": "Durable pins, checkpoint/GC translation and reclamation remain S05/G-series work; the installed WP8 durable-pin probe remains unsupported. The gate is filesystem/process recovery evidence, not live cloud-provider or physical power-loss certification. LeakSanitizer is unavailable in this runner; ASan/UBSan passed with leak detection disabled.",
+      "implementation_commits": [
+        "10f4b79",
+        "733097c"
+      ]
     },
     {
       "id": "S05",
