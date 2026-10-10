@@ -141,6 +141,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_transport_commit_contract|tst_opstream
 - `libs/collabtext/src/identity/ReplicaAllocator.h`
 - `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/tests/tst_session_recovery.cpp`
+- `libs/collabtext/src/DocumentSessionTestAccess.h`
 - `docs/specs/vnext-external-position-contract.md`
 - `docs/specs/vnext-consumer-session.md`
 

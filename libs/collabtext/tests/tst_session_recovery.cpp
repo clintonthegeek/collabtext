@@ -8,6 +8,7 @@
 #include "storage/LocalHistoryLog.h"
 #include "transport/StreamSync.h"
 #include <collabtext/DocumentSession.h>
+#include "DocumentSessionTestAccess.h"
 #include <collabtext/Serialization.h>
 #include "VolatileCounter.h"
 
@@ -253,6 +254,50 @@ private slots:
     QVERIFY(group.has_value());
     QCOMPARE(group->id, stable_group_id);
     QCOMPARE(group->operations, members);
+    QVERIFY(session->undo().ok());
+    QCOMPARE(session->text(), std::string{});
+    QVERIFY(session->close().ok());
+  }
+
+  void session_recovers_pending_intent_after_transport_sync_failure() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const DocumentSessionConfig config{root / "shared", root / "device",
+                                       "doc-push-failure", "text-push-failure", 1};
+    bool fail_segment_sync = true;
+    Storage::StepHook hook;
+    hook.fail = [&](Storage::Step step, const std::filesystem::path &path)
+        -> std::optional<Error> {
+      if (fail_segment_sync && step == Storage::Step::FileSync &&
+          path.extension() == ".open") {
+        fail_segment_sync = false;
+        return Error(ErrorCode::io_error, "injected segment sync failure");
+      }
+      return std::nullopt;
+    };
+    Crdt::WriterConfig writer_config;
+    writer_config.step_hook = &hook;
+    {
+      auto opened = DocumentSessionTestAccess::open(config, writer_config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QVERIFY(session->ready());
+      auto failed = session->apply_local({{0, 0}}, {"survives"});
+      QVERIFY(!failed.ok());
+      QCOMPARE(failed.error().code(), ErrorCode::io_error);
+      QVERIFY(!session->ready());
+    }
+
+    auto reopened = DocumentSession::open(config);
+    QVERIFY(reopened.ok());
+    auto session = std::move(reopened).value();
+    QVERIFY(session->ready());
+    QCOMPARE(session->text(), std::string("survives"));
+    QCOMPARE(session->recovery_report().applied, size_t(1));
+    auto group = session->next_undo_group();
+    QVERIFY(group.has_value());
+    QCOMPARE(group->operations.size(), size_t(1));
     QVERIFY(session->undo().ok());
     QCOMPARE(session->text(), std::string{});
     QVERIFY(session->close().ok());

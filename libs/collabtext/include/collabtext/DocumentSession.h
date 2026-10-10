@@ -21,6 +21,10 @@
 
 namespace CollabText {
 
+#ifdef COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS
+namespace Crdt { struct WriterConfig; }
+#endif
+
 struct DocumentSessionConfig {
   std::filesystem::path shared_store;
   std::filesystem::path private_state;
@@ -86,8 +90,15 @@ public:
   [[nodiscard]] bool ready() const noexcept;
 
 private:
+#ifdef COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS
+  friend class DocumentSessionTestAccess;
+#endif
   struct Impl;
   explicit DocumentSession(std::unique_ptr<Impl>);
+#ifdef COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS
+  [[nodiscard]] static Result<std::unique_ptr<DocumentSession>>
+  open_with_writer_config(DocumentSessionConfig, const Crdt::WriterConfig &);
+#endif
   std::unique_ptr<Impl> m_impl;
 };
 

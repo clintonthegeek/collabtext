@@ -2317,7 +2317,8 @@
         "libs/collabtext/src/identity/ReplicaAllocator.h",
         "libs/collabtext/tests/tst_session_recovery.cpp",
         "docs/specs/vnext-external-position-contract.md",
-        "docs/specs/vnext-consumer-session.md"
+        "docs/specs/vnext-consumer-session.md",
+        "libs/collabtext/src/DocumentSessionTestAccess.h"
       ],
       "steps": [
         "Own the engines, producer lease, log, and transport binding in one single-thread owner. Opening loads seed/context, replays ALL own and remote durable logs, and drains dependencies; do not use previously persisted incremental cursors to bootstrap empty state. This is an optional reference composition: direct headless Buffer/IdList operations, codecs and custom OpStream ownership remain public; a Wave/Markoff consumer is not required to route through this file-backed session.",
@@ -2338,20 +2339,22 @@
       ],
       "gate": null,
       "status": "in_progress",
-      "progress": "Partial: implemented the optional single-text DocumentSession over ReplicaState, Buffer, and FileOpStream. Startup full-replays own and remote envelopes irrespective of prior receipts, restores the local operation allocator through replay, reports causal incompleteness, gates edits until dependencies arrive, exposes logical text deltas and explicit save/close results. Added restart, duplicate, mixed-peer, copied-partial-store, missing-causal-arrival, durable pending-outbox reconciliation, append-only accepted-event retention, no-mint historical-projection, and typed invalid-store tests. The consumer seam guidance is documented. Added consumer_commit_pin_crash_matrix_rebuilds_projection_before_gc: four modeled crash prefixes preserve pending/canonical records and require projection plus pin reconstruction before the fixture opens its GC gate; durable pin/GC integration remains owned by S05/G08.",
+      "progress": "Partial: implemented the optional single-text DocumentSession over ReplicaState, Buffer, and FileOpStream. Startup full-replays own and remote envelopes irrespective of prior receipts, restores the local operation allocator through replay, reports causal incompleteness, gates edits until dependencies arrive, exposes logical text deltas and explicit save/close results. Added restart, duplicate, mixed-peer, copied-partial-store, missing-causal-arrival, durable pending-outbox reconciliation, append-only accepted-event retention, no-mint historical-projection, and typed invalid-store tests. The consumer seam guidance is documented. Added consumer_commit_pin_crash_matrix_rebuilds_projection_before_gc: four modeled crash prefixes preserve pending/canonical records and require projection plus pin reconstruction before the fixture opens its GC gate; durable pin/GC integration remains owned by S05/G08. Added a source-private DocumentSession test accessor that injects the existing SegmentWriter filesystem hook without exposing transport controls in the installed API. A FileSync failure during durable push now proves the pending intent survives and reopens into exactly one applied operation with restored undo history.",
       "verification_results": {
         "session_debug": "PASS: tst_session_recovery, tst_evaluation_regressions, tst_opstream_replay; 3/3 in required selection, 5/5 in combined transport/session sweep; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T214213Z-12",
         "session_scenarios": "PASS: own-only restart twice with continued edit, mixed-peer convergence after prior receipt, duplicate operation replay, copied partial store remains incomplete until causal log arrives, typed invalid-store error; W5 fixture recovers pending bytes after restart, preserves accepted event rows after rejection, and replays history with an allocator that rejects minting",
-        "consumer_commit_pin_crash_matrix": "PASS: four consumer journal crash prefixes; accepted history and pending outbox retained, missing projection/pin rebuilt before simulated collection gate; Debug GCC 16.2.1 in build-roadmap-debug/verification/20261006T214356Z-2"
+        "consumer_commit_pin_crash_matrix": "PASS: four consumer journal crash prefixes; accepted history and pending outbox retained, missing projection/pin rebuilt before simulated collection gate; Debug GCC 16.2.1 in build-roadmap-debug/verification/20261006T214356Z-2",
+        "session_transport_sync_failure": "PASS: injected SegmentWriter FileSync failure during DocumentSession local publication returns an error and poisons the session; reopen reconciles the intent, applies one operation, restores undo history, and successfully undoes it. Required Debug selection passed 3/3; GCC 16.2.1; build-roadmap-debug/verification/20261010T035139Z-2."
       },
       "artifacts": [
-        "build-roadmap-debug/verification/20261006T214356Z-2/"
+        "build-roadmap-debug/verification/20261010T035139Z-2/"
       ],
-      "remaining_gap": "The consumer commit/pin crash-prefix fixture is a modeled ordering hook; durable pin lifecycle, crash recovery, and collector enforcement remain shared with S05/G08. Session-specific uncertain local publication injection remains to be covered; the lower file transport proves restart-and-retry reconciliation after a tail-sync failure.",
+      "remaining_gap": "Durable position pin lifecycle and collector enforcement are owned by S05/G08; the W5 consumer crash-prefix case here remains a modeled fixture rather than a production Wave/Markoff integration.",
       "consumer_requirements": [
         "W3",
         "W5"
-      ]
+      ],
+      "baseline_revision": "2ac0510"
     },
     {
       "id": "L06",

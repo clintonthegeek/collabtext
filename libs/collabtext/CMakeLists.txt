@@ -143,6 +143,8 @@ if(COLLABTEXT_BUILD_FILE_TRANSPORT)
     target_link_libraries(collabtext_filetransport
         PUBLIC  collabtext_core
         PRIVATE ${COLLABTEXT_ZSTD_TARGET})
+    target_compile_definitions(collabtext_filetransport
+        PRIVATE COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS)
     # The transport has no advertised public header yet: StreamSync's header
     # names SegmentWriter/SegmentReader, which reach zstd, so it lives under
     # src/transport and is not exported. A06a owns the exported form.
@@ -435,6 +437,8 @@ add_crdt_test(tst_opstream_convergence_idlist)
 add_crdt_test(tst_opstream_convergence_mixed)
 add_crdt_test(tst_opstream_replay)
 add_crdt_test(tst_session_recovery)
+target_compile_definitions(tst_session_recovery
+    PRIVATE COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS)
 add_crdt_test(tst_opstream_idempotent)
 add_crdt_test(tst_idlist)
 add_crdt_test(tst_idlist_anchor)

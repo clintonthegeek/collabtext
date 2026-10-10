@@ -206,6 +206,12 @@ DocumentSession::~DocumentSession() {
 
 Result<std::unique_ptr<DocumentSession>>
 DocumentSession::open(DocumentSessionConfig config) {
+  return open_with_writer_config(std::move(config), Crdt::WriterConfig{});
+}
+
+Result<std::unique_ptr<DocumentSession>>
+DocumentSession::open_with_writer_config(
+    DocumentSessionConfig config, const Crdt::WriterConfig &writer_config) {
   if (config.shared_store.empty() || config.private_state.empty() ||
       config.document.empty() || config.stream.empty() || config.epoch == 0)
     return Error(ErrorCode::malformed, "session requires store, private state, "
@@ -233,7 +239,7 @@ DocumentSession::open(DocumentSessionConfig config) {
     impl->local_history = std::make_unique<Storage::LocalHistoryLog>(
         std::move(local_history).value());
     impl->transport = std::make_unique<Crdt::FileOpStream>(
-        impl->config.shared_store, impl->replica->actor());
+        impl->config.shared_store, impl->replica->actor(), writer_config);
     if (auto started = impl->transport->start(); !started.ok())
       return started.error();
     const StreamScope scope{impl->config.stream, impl->config.epoch};
