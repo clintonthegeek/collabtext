@@ -15,6 +15,10 @@ ActorId actor(uint8_t seed) {
   bytes[15] = static_cast<uint8_t>(seed + 1);
   return ActorId::from_bytes(bytes);
 }
+
+std::string simulated_ack(const ActorId &who, std::string_view digest) {
+  return "simulated-durable-ack:" + who.to_string() + ":" + std::string(digest);
+}
 }
 
 class TestMembership final : public QObject {
@@ -223,6 +227,100 @@ private slots:
     auto result=store.commit_retirement(preview.value(),two_members,impacts,
         {{actor(23),"ack"}},"",verifier);
     QVERIFY(!result.ok()); QCOMPARE(store.last_sequence(),uint64_t(0));
+  }
+
+  void deterministicMembershipChurnSurvivesAdversarialCallsAndRestart() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto path=std::filesystem::path(dir.path().toStdString())/"churn.log";
+    const auto producer=actor(90);
+    auto opened=MembershipStore::open(path,producer); QVERIFY(opened.ok());
+    auto store=std::move(opened.value());
+    MembershipDescriptor current{1,"descriptor-1",{actor(1),actor(2)}};
+    uint64_t random=UINT64_C(0x9e3779b97f4a7c15);
+    auto next_random=[&]() {
+      random^=random<<13; random^=random>>7; random^=random<<17;
+      return random;
+    };
+    DurableAcknowledgementVerifier verifier=[](
+        const ActorId &who,std::string_view digest,
+        std::string_view signature)->Result<void> {
+      if(signature!=simulated_ack(who,digest))
+        return Error(ErrorCode::corrupt_record,"simulated durable acknowledgement mismatch");
+      return {};
+    };
+
+    constexpr size_t transitions=48;
+    for(size_t i=0;i<transitions;++i) {
+      const bool enroll=current.members.size()<2 ||
+          (current.members.size()<12 && next_random()%3==0);
+      MembershipEvent committed;
+      if(enroll) {
+        const auto joining=actor(static_cast<uint8_t>(40+i));
+        auto preview=preview_enrollment(current,joining); QVERIFY(preview.ok());
+        std::vector<MembershipAcknowledgement> acks;
+        for(const auto &who:preview.value().required_acknowledgers)
+          acks.push_back({who,simulated_ack(who,preview.value().digest)});
+        auto incomplete=acks; incomplete.pop_back();
+        auto refused=store.commit_enrollment(preview.value(),current,incomplete,verifier);
+        QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::awaiting_state);
+        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
+        auto corrupted=acks;
+        corrupted.front().signature="corrupted-ack";
+        refused=store.commit_enrollment(preview.value(),current,corrupted,verifier);
+        QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::corrupt_record);
+        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
+        auto fork=current; fork.hash+="-fork";
+        refused=store.commit_enrollment(preview.value(),fork,acks,verifier);
+        QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::wrong_epoch);
+        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
+        auto result=store.commit_enrollment(preview.value(),current,acks,verifier);
+        QVERIFY(result.ok()); committed=std::move(result.value());
+        current.members.push_back(joining);
+      } else {
+        const auto index=static_cast<size_t>(next_random()%current.members.size());
+        const auto retiring=current.members[index];
+        std::vector<RetirementImpact> impacts;
+        for(size_t doc=0;doc<3;++doc) {
+          const auto doc_id="sim-doc-"+std::to_string(doc);
+          impacts.push_back({doc_id,"text",current.epoch,
+              next_random()%20,next_random()%8,
+              "branch-"+std::to_string(i)+"-"+doc_id});
+        }
+        auto preview=preview_retirement(current,retiring,impacts); QVERIFY(preview.ok());
+        std::vector<MembershipAcknowledgement> acks;
+        for(const auto &who:preview.value().required_acknowledgers)
+          acks.push_back({who,simulated_ack(who,preview.value().digest)});
+        auto incomplete=acks; incomplete.pop_back();
+        auto refused=store.commit_retirement(preview.value(),current,impacts,
+            incomplete,"simulated-user-confirmation",verifier);
+        QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::awaiting_state);
+        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
+        auto fork=current; fork.hash+="-fork";
+        refused=store.commit_retirement(preview.value(),fork,impacts,acks,
+            "simulated-user-confirmation",verifier);
+        QVERIFY(!refused.ok()); QCOMPARE(refused.error().code(),ErrorCode::wrong_epoch);
+        QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i));
+        auto result=store.commit_retirement(preview.value(),current,impacts,acks,
+            "simulated-user-confirmation",verifier);
+        QVERIFY(result.ok()); committed=std::move(result.value());
+        current.members.erase(current.members.begin()+static_cast<std::ptrdiff_t>(index));
+      }
+      QCOMPARE(committed.sequence,static_cast<uint64_t>(i+1));
+      QCOMPARE(committed.epoch,current.epoch+1);
+      current.epoch=committed.epoch;
+      current.hash="descriptor-"+std::to_string(current.epoch)+"-"+
+                   std::to_string(current.members.size())+"-"+std::to_string(i);
+
+      // A process restart must recover the just-committed sequence and event.
+      auto reopened=MembershipStore::open(path,producer); QVERIFY(reopened.ok());
+      store=std::move(reopened.value());
+      QCOMPARE(store.last_sequence(),static_cast<uint64_t>(i+1));
+      auto recovered=store.recover(); QVERIFY(recovered.ok());
+      QCOMPARE(recovered.value().size(),i+1);
+      QCOMPARE(recovered.value().back().epoch,current.epoch);
+      QCOMPARE(recovered.value().back().kind,committed.kind);
+      QCOMPARE(recovered.value().back().subject,committed.subject);
+    }
   }
 };
 
