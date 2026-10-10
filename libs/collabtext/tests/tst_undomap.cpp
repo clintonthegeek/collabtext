@@ -111,6 +111,40 @@ private slots:
         QVERIFY(!map.is_undone(editB));
     }
 
+    void checkpoint_entries_rebuild_and_reject_atomically() {
+        UndoMap original;
+        const Identity edit_a(actor(1), 10);
+        const Identity edit_b(actor(1), 20);
+        original.insert({{edit_a, Identity(actor(2), 30)}, 1});
+        original.insert({{edit_a, Identity(actor(3), 40)}, 2});
+        original.insert({{edit_b, Identity(actor(2), 50)}, 1});
+
+        const auto snapshot = original.entries();
+        UndoMap restored;
+        QVERIFY(restored.restore_entries(snapshot));
+        QCOMPARE(restored.entries().size(), snapshot.size());
+        QCOMPARE(restored.entries()[0].key, snapshot[0].key);
+        QCOMPARE(restored.entries()[1].undo_count, snapshot[1].undo_count);
+        QCOMPARE(restored.entries()[2].key, snapshot[2].key);
+        QCOMPARE(restored.is_undone(edit_a), original.is_undone(edit_a));
+        QCOMPARE(restored.is_undone(edit_b), original.is_undone(edit_b));
+
+        auto malformed = snapshot;
+        malformed[1].key = malformed[0].key;
+        const auto failed = restored.restore_entries(malformed);
+        QVERIFY(!failed);
+        QCOMPARE(failed.error().code(), CollabText::ErrorCode::malformed);
+        QCOMPARE(restored.entries().size(), snapshot.size());
+        QCOMPARE(restored.entries()[0].key, snapshot[0].key);
+        QCOMPARE(restored.entries()[2].key, snapshot[2].key);
+        QCOMPARE(restored.is_undone(edit_a), original.is_undone(edit_a));
+
+        malformed = snapshot;
+        malformed[0].undo_count = 0;
+        QVERIFY(!restored.restore_entries(malformed));
+        QCOMPARE(restored.entries().size(), snapshot.size());
+    }
+
     void undo_map_cursor_seek() {
         UndoMap map;
         Identity undo_ts(actor(99), 1);

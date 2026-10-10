@@ -4,6 +4,8 @@
 #include "crdt/SumTree.h"
 #include <collabtext/LocalHistory.h>
 #include <cstdint>
+#include <optional>
+#include <vector>
 
 namespace CollabText::Crdt {
 
@@ -79,6 +81,12 @@ public:
 
     size_t size() const;
     void clear();
+
+    /// Stable logical entries for checkpointing. The tree nodes and summaries
+    /// are derived and are rebuilt by restore_entries().
+    [[nodiscard]] std::vector<UndoMapEntry> entries() const;
+    [[nodiscard]] Result<void>
+    restore_entries(const std::vector<UndoMapEntry> &entries);
 
 private:
     SumTree<UndoMapEntry, UNDO_MAP_B> m_tree;

@@ -59,6 +59,33 @@ size_t UndoMap::size() const {
     return count;
 }
 
+std::vector<UndoMapEntry> UndoMap::entries() const {
+    return m_tree.items();
+}
+
+Result<void> UndoMap::restore_entries(
+    const std::vector<UndoMapEntry> &entries) {
+    UndoMap rebuilt;
+    std::optional<UndoTreeKey> previous;
+    for (const auto &entry : entries) {
+        const auto &edit = entry.key.edit_id;
+        const auto &undo = entry.key.undo_id;
+        if (!edit.actor.valid() || edit.counter == 0 ||
+            !undo.actor.valid() || undo.counter == 0 || entry.undo_count == 0)
+            return Error(ErrorCode::malformed,
+                         "checkpoint UndoMap entry has an invalid identity or count",
+                         "checkpoint.causal.undo_map");
+        if (previous && !(*previous < entry.key))
+            return Error(ErrorCode::malformed,
+                         "checkpoint UndoMap entries are duplicated or unordered",
+                         "checkpoint.causal.undo_map");
+        rebuilt.insert(entry);
+        previous = entry.key;
+    }
+    m_tree = std::move(rebuilt.m_tree);
+    return Result<void>::success();
+}
+
 void UndoMap::clear() {
     m_tree = {};
 }
