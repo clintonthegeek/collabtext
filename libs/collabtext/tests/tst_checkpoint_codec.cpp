@@ -779,8 +779,13 @@ private slots:
     artifact.kind = CheckpointKind::Local;
     artifact.sections = {owner_section.value(), history_section.value(),
                          writer_section.value()};
-    auto local = decode_checkpoint_local_core(artifact, actor, checkpoint_hash,
-                                              context);
+    auto local_frame = encode_checkpoint(CheckpointKind::Local, artifact.sections);
+    QVERIFY(local_frame);
+    auto decoded_local_artifact = decode_checkpoint(
+        local_frame.value(), CheckpointKind::Local);
+    QVERIFY(decoded_local_artifact);
+    auto local = decode_checkpoint_local_core(decoded_local_artifact.value(), actor,
+                                              checkpoint_hash, context);
     QVERIFY(local);
     QCOMPARE(local.value().owner, owner);
     QCOMPARE(local.value().writer, writer);
