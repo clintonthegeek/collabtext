@@ -54,6 +54,49 @@ private slots:
     }
   }
 
+  void contextSectionRoundTripsAndValidates() {
+    CheckpointContext context{"doc-雪", "comments", 12,
+                              std::string(64, 'a'),
+                              CheckpointEngineKind::IdList};
+    auto encoded = encode_checkpoint_context(context);
+    QVERIFY(encoded);
+    QCOMPARE(encoded.value().id, uint16_t{1});
+    QCOMPARE(encoded.value().version, uint16_t{1});
+    auto decoded = decode_checkpoint_context(encoded.value());
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value(), context);
+
+    auto invalid = context;
+    invalid.document.clear();
+    QVERIFY(!encode_checkpoint_context(invalid));
+    invalid = context;
+    invalid.stream = std::string("bad\0stream", 10);
+    QVERIFY(!encode_checkpoint_context(invalid));
+    invalid = context;
+    invalid.epoch = 0;
+    QVERIFY(!encode_checkpoint_context(invalid));
+    invalid = context;
+    invalid.engine = static_cast<CheckpointEngineKind>(7);
+    QVERIFY(!encode_checkpoint_context(invalid));
+    invalid = context;
+    invalid.parent_descriptor_hash = std::string(64, 'A');
+    QVERIFY(!encode_checkpoint_context(invalid));
+
+    auto bad_utf8 = encoded.value();
+    bad_utf8.bytes[4] = static_cast<char>(0xff);
+    auto failed = decode_checkpoint_context(bad_utf8);
+    QVERIFY(!failed);
+
+    auto bad_parent_flag = encoded.value();
+    const size_t flag_at = 14 + context.document.size() + context.stream.size();
+    bad_parent_flag.bytes[flag_at] = 2;
+    QVERIFY(!decode_checkpoint_context(bad_parent_flag));
+
+    auto trailing = encoded.value();
+    trailing.bytes.push_back('x');
+    QVERIFY(!decode_checkpoint_context(trailing));
+  }
+
   void rejectsEveryTruncation() {
     auto encoded = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
     QVERIFY(encoded);

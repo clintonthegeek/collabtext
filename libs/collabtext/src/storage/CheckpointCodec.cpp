@@ -1,6 +1,7 @@
 #include "storage/CheckpointCodec.h"
 
 #include "core/Sha256.h"
+#include "codec/Utf.h"
 
 #include <algorithm>
 #include <array>
@@ -58,6 +59,57 @@ std::string raw_digest(std::string_view input) {
   for (size_t i = 0; i < hex.size(); i += 2)
     out.push_back(static_cast<char>((nibble(hex[i]) << 4) | nibble(hex[i + 1])));
   return out;
+}
+
+bool valid_hash(std::string_view hash) {
+  if (hash.size() != 64) return false;
+  return std::all_of(hash.begin(), hash.end(), [](char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+  });
+}
+
+uint8_t hex_nibble(char c) {
+  return static_cast<uint8_t>(c <= '9' ? c - '0' : c - 'a' + 10);
+}
+
+std::string hex_digest(std::string_view raw) {
+  constexpr char digits[] = "0123456789abcdef";
+  std::string out;
+  out.reserve(raw.size() * 2);
+  for (const unsigned char byte : raw) {
+    out.push_back(digits[byte >> 4]);
+    out.push_back(digits[byte & 0x0f]);
+  }
+  return out;
+}
+
+bool valid_context_string(std::string_view value) {
+  return !value.empty() && value.size() <= 256 &&
+         value.find('\0') == std::string_view::npos &&
+         Codec::is_valid_utf8(value);
+}
+
+Result<void> validate_context(const CheckpointContext &context) {
+  if (!valid_context_string(context.document) ||
+      !valid_context_string(context.stream))
+    return Error(ErrorCode::malformed,
+                 "checkpoint document and stream must be valid nonempty UTF-8 identifiers of at most 256 bytes",
+                 "checkpoint.context");
+  if (context.epoch == 0)
+    return Error(ErrorCode::malformed,
+                 "checkpoint context epoch must be nonzero",
+                 "checkpoint.context");
+  if (context.engine != CheckpointEngineKind::Text &&
+      context.engine != CheckpointEngineKind::IdList)
+    return Error(ErrorCode::malformed,
+                 "checkpoint context engine kind is invalid",
+                 "checkpoint.context");
+  if (!context.parent_descriptor_hash.empty() &&
+      !valid_hash(context.parent_descriptor_hash))
+    return Error(ErrorCode::malformed,
+                 "checkpoint parent descriptor hash must be 64 lowercase hexadecimal digits",
+                 "checkpoint.context");
+  return Result<void>::success();
 }
 
 Error malformed(std::string message) {
@@ -175,6 +227,85 @@ Result<CheckpointArtifact> decode_checkpoint(std::string_view bytes,
   if (auto valid = validate_sections(expected_kind, artifact.sections); !valid)
     return valid.error();
   return artifact;
+}
+
+Result<CheckpointSection> encode_checkpoint_context(
+    const CheckpointContext &context) {
+  if (auto valid = validate_context(context); !valid) return valid.error();
+  std::string payload;
+  payload.reserve(2 + 2 + context.document.size() + 2 + context.stream.size() +
+                  8 + 1 + (context.parent_descriptor_hash.empty() ? 0 : 32));
+  append_u16(payload, static_cast<uint16_t>(context.engine));
+  append_u16(payload, static_cast<uint16_t>(context.document.size()));
+  payload.append(context.document);
+  append_u16(payload, static_cast<uint16_t>(context.stream.size()));
+  payload.append(context.stream);
+  append_u64(payload, context.epoch);
+  payload.push_back(context.parent_descriptor_hash.empty() ? '\0' : '\1');
+  if (!context.parent_descriptor_hash.empty()) {
+    for (size_t i = 0; i < context.parent_descriptor_hash.size(); i += 2)
+      payload.push_back(static_cast<char>(
+          (hex_nibble(context.parent_descriptor_hash[i]) << 4) |
+          hex_nibble(context.parent_descriptor_hash[i + 1])));
+  }
+  return CheckpointSection{1, 1, std::move(payload)};
+}
+
+Result<CheckpointContext> decode_checkpoint_context(
+    const CheckpointSection &section) {
+  if (section.id != 1)
+    return Error(ErrorCode::malformed,
+                 "checkpoint context must be section 1",
+                 "checkpoint.context");
+  if (section.version != 1)
+    return Error(ErrorCode::unsupported_version,
+                 "checkpoint context section version is unsupported",
+                 "checkpoint.context");
+  const std::string_view bytes(section.bytes);
+  size_t cursor = 0;
+  auto need = [&](size_t count) {
+    return cursor <= bytes.size() && count <= bytes.size() - cursor;
+  };
+  if (!need(2)) return malformed("checkpoint context engine kind is truncated");
+  CheckpointContext context;
+  const auto engine = read_u16(bytes, cursor);
+  cursor += 2;
+  if (engine != static_cast<uint16_t>(CheckpointEngineKind::Text) &&
+      engine != static_cast<uint16_t>(CheckpointEngineKind::IdList))
+    return malformed("checkpoint context engine kind is invalid");
+  context.engine = static_cast<CheckpointEngineKind>(engine);
+
+  if (!need(2)) return malformed("checkpoint context document length is truncated");
+  const auto document_length = read_u16(bytes, cursor);
+  cursor += 2;
+  if (document_length > 256 || !need(document_length))
+    return malformed("checkpoint context document is truncated or too long");
+  context.document.assign(bytes.substr(cursor, document_length));
+  cursor += document_length;
+
+  if (!need(2)) return malformed("checkpoint context stream length is truncated");
+  const auto stream_length = read_u16(bytes, cursor);
+  cursor += 2;
+  if (stream_length > 256 || !need(stream_length))
+    return malformed("checkpoint context stream is truncated or too long");
+  context.stream.assign(bytes.substr(cursor, stream_length));
+  cursor += stream_length;
+
+  if (!need(9)) return malformed("checkpoint context epoch or parent flag is truncated");
+  context.epoch = read_u64(bytes, cursor);
+  cursor += 8;
+  const auto has_parent = static_cast<uint8_t>(bytes[cursor++]);
+  if (has_parent > 1)
+    return malformed("checkpoint context parent hash flag is invalid");
+  if (has_parent) {
+    if (!need(32)) return malformed("checkpoint context parent hash is truncated");
+    context.parent_descriptor_hash = hex_digest(bytes.substr(cursor, 32));
+    cursor += 32;
+  }
+  if (cursor != bytes.size())
+    return malformed("checkpoint context has trailing bytes");
+  if (auto valid = validate_context(context); !valid) return valid.error();
+  return context;
 }
 
 }  // namespace CollabText::Storage

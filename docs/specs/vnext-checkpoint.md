@@ -1,7 +1,8 @@
 # vNext Engine Checkpoint Format
 
-**Status:** format contract for G04; bounded frame codec is implemented, while
-section payload codecs and engine snapshot adapters are still in progress.
+**Status:** format contract for G04; bounded framing, Context section encoding,
+and in-memory engine snapshot adapters are implemented. Remaining section
+payload codecs and provider/session integrations are in progress.
 
 This format defines a validated shareable snapshot and a separately bound
 actor-local companion. It is not a replacement for the retained operation log
@@ -66,6 +67,24 @@ descriptor contains the checkpoint digest, so embedding it would create a hash
 cycle. A membership transition verifier compares the checkpoint's document,
 stream, epoch, parent descriptor, represented coverage, pin projection, and
 translation metadata to the child descriptor and the durable proposal.
+
+The Context section payload is exactly:
+
+```text
+u16 engine_kind                 # 1=text, 2=id-list
+u16 document_byte_length
+document_byte_length UTF-8 bytes
+u16 stream_byte_length
+stream_byte_length UTF-8 bytes
+u64 epoch                       # nonzero
+u8  has_parent_descriptor_hash  # 0 or 1
+[32 bytes raw SHA-256]           # present iff flag is 1
+```
+
+Document and stream are nonempty, valid UTF-8, contain no NUL byte, and are at
+most 256 bytes each. A non-genesis parent hash is exactly 32 raw digest bytes;
+the public typed value renders it as 64 lowercase hexadecimal digits. Complete
+section consumption is required.
 
 Visibility flags, summary-tree nodes, lookup tables, and other indexes are
 derived. Import rebuilds them from logical entries and UndoMap state, then

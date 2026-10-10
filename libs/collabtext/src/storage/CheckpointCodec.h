@@ -3,6 +3,7 @@
 #include <collabtext/ActorId.h>
 
 #include <cstddef>
+#include <compare>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -11,6 +12,7 @@
 namespace CollabText::Storage {
 
 enum class CheckpointKind { Shareable, Local };
+enum class CheckpointEngineKind : uint16_t { Text = 1, IdList = 2 };
 
 struct CheckpointSection {
   uint16_t id = 0;
@@ -22,6 +24,16 @@ struct CheckpointSection {
 struct CheckpointArtifact {
   CheckpointKind kind = CheckpointKind::Shareable;
   std::vector<CheckpointSection> sections;
+};
+
+struct CheckpointContext {
+  DocumentId document;
+  StreamId stream;
+  uint64_t epoch = 0;
+  /// Empty only at genesis; otherwise 64 lowercase hex SHA-256 digits.
+  std::string parent_descriptor_hash;
+  CheckpointEngineKind engine = CheckpointEngineKind::Text;
+  auto operator<=>(const CheckpointContext &) const = default;
 };
 
 inline constexpr size_t kCheckpointMaxBytes = 256u * 1024u * 1024u;
@@ -38,5 +50,11 @@ inline constexpr uint16_t kCheckpointLocalSectionCount = 3;
 /// sections fail closed; bytes are never silently skipped.
 [[nodiscard]] Result<CheckpointArtifact> decode_checkpoint(
     std::string_view bytes, CheckpointKind expected_kind);
+
+/// Canonical section 1 payload codec for both artifact kinds.
+[[nodiscard]] Result<CheckpointSection>
+encode_checkpoint_context(const CheckpointContext &context);
+[[nodiscard]] Result<CheckpointContext>
+decode_checkpoint_context(const CheckpointSection &section);
 
 }  // namespace CollabText::Storage
