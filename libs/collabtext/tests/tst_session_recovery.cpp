@@ -9,6 +9,7 @@
 #include "identity/ReplicaAllocator.h"
 #include "storage/DurableFile.h"
 #include "storage/LocalHistoryLog.h"
+#include "storage/RetentionState.h"
 #include "transport/StreamSync.h"
 #include <collabtext/DocumentSession.h>
 #include "DocumentSessionTestAccess.h"
@@ -520,6 +521,90 @@ private slots:
     std::string row, extra;
     QVERIFY(static_cast<bool>(std::getline(events, row)));
     QVERIFY(!static_cast<bool>(std::getline(events, extra)));
+  }
+
+  void retentionPublicationAndSessionHistoryRecoverAcrossUncertainSync() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "doc-retention-integration", "text", 1};
+    config.max_undo_steps = 1;
+    const auto retention_path = root / "device" / "retention.log";
+    Crdt::Identity group;
+    unsigned sync_failures_remaining = 2;
+    Storage::StepHook hook;
+    hook.fail = [&](Storage::Step step, const std::filesystem::path &)
+        -> std::optional<Error> {
+      if (step == Storage::Step::FileSync && sync_failures_remaining > 0) {
+        --sync_failures_remaining;
+        return Error(ErrorCode::io_error, "injected retention publication sync failure");
+      }
+      return std::nullopt;
+    };
+
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QVERIFY(session->apply_local({{0, 0}}, {"a"}).ok());
+      const auto undo_group = session->next_undo_group();
+      QVERIFY(undo_group.has_value());
+      group = undo_group->id;
+      QVERIFY(session->apply_local({{1, 1}}, {"b"}).ok());
+      QCOMPARE(session->pending_undo_retirements().size(), size_t(1));
+
+      auto retention_open = Storage::RetentionState::open(
+          retention_path, session->actor(), &hook);
+      QVERIFY(retention_open.ok());
+      auto retention = std::move(retention_open).value();
+      auto uncertain = retention.publish_after_durable_trim(
+          config.stream, {group}, [&]() { return session->save(); });
+      QVERIFY(!uncertain.ok());
+      // The journal recovered the complete line, but the failed durability
+      // barrier means session history must keep advertising the retirement.
+      QVERIFY(retention.is_retired(config.stream, group));
+      QCOMPARE(session->pending_undo_retirements().size(), size_t(1));
+      QVERIFY(session->close().ok());
+    }
+
+    {
+      auto reopened = DocumentSession::open(config);
+      QVERIFY(reopened.ok());
+      auto session = std::move(reopened).value();
+      const auto pending = session->pending_undo_retirements();
+      QCOMPARE(pending.size(), size_t(1));
+      QCOMPARE(pending[0].group_id, group);
+
+      auto retention_open = Storage::RetentionState::open(
+          retention_path, session->actor(), &hook);
+      QVERIFY(retention_open.ok());
+      auto retention = std::move(retention_open).value();
+      QVERIFY(retention.is_retired(config.stream, group));
+      // Retry must establish a fresh sync barrier even though recovery found
+      // the complete line. A second injected failure must leave local history
+      // pending; only a later successful retry can acknowledge it.
+      auto retry = retention.publish_after_durable_trim(
+          config.stream, {group}, [&]() { return session->save(); });
+      QVERIFY(!retry.ok());
+      QCOMPARE(session->pending_undo_retirements().size(), size_t(1));
+      QVERIFY(retention.publish_after_durable_trim(
+          config.stream, {group}, [&]() { return session->save(); }).ok());
+      QVERIFY(session->acknowledge_undo_retirements({group}).ok());
+      QVERIFY(session->pending_undo_retirements().empty());
+      QVERIFY(session->close().ok());
+    }
+
+    auto reopened = DocumentSession::open(config);
+    QVERIFY(reopened.ok());
+    auto session = std::move(reopened).value();
+    QVERIFY(session->pending_undo_retirements().empty());
+    QVERIFY(session->undo().ok());
+    QCOMPARE(session->text(), std::string("a"));
+    QVERIFY(session->close().ok());
+    auto retention = Storage::RetentionState::open(retention_path, session->actor());
+    QVERIFY(retention.ok());
+    QVERIFY(retention.value().is_retired(config.stream, group));
   }
 
   void session_recovers_pending_intent_after_transport_sync_failure() {

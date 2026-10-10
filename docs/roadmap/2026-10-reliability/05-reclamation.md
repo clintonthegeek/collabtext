@@ -52,6 +52,7 @@ Run GcModel against all F1/F2/F3 histories and adversarial membership traces; pu
 - `libs/collabtext/src/storage/RetentionState.h`
 - `libs/collabtext/tests/tst_membership.cpp`
 - `libs/collabtext/tests/tst_undo_retirement.cpp`
+- `libs/collabtext/tests/tst_session_recovery.cpp`
 - `libs/collabtext/CMakeLists.txt`
 
 **Steps:**
@@ -67,9 +68,9 @@ Run GcModel against all F1/F2/F3 histories and adversarial membership traces; pu
 
 **Verification:**
 
-Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_persistent_undo'`; inject crashes before/after each publication point.
+Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_persistent_undo|tst_session_recovery'`; inject crashes before/after each publication point.
 
-**Current implementation note:** Producer-scoped checksummed membership journals and per-stream monotonic undo-retirement journals are implemented with restart, torn-tail, and uncertain-fsync reconciliation tests. Typed enrollment and retirement preview/commit APIs bind the current parent descriptor; enrollment requires all current members plus the joining device, while retirement binds consequence data, requires explicit confirmation, and requires all remaining members. A caller-supplied verifier validates durable acknowledgement evidence. Debug, Release, and ASan/UBSan focused gates pass. G02 remains open for full journal transition validation against G01, session/history integration, and returning-peer export; see G02 in `TASKS.json`.
+**Current implementation note:** Producer-scoped checksummed membership journals and per-stream monotonic undo-retirement journals hold process writer leases and have restart, torn-tail, cross-process contention, and uncertain-fsync tests. Typed enrollment and retirement preview/commit APIs bind the current parent descriptor; enrollment requires all current members plus the joining device, while retirement binds consequence data, requires explicit confirmation, and requires all remaining members. A caller-supplied verifier validates durable acknowledgement evidence. A deterministic 48-epoch churn test exercises membership changes and restarts. Session/history integration now has a crash regression: the session saves pending trim metadata before publication, retains its obligation through two failed sync barriers, and clears it only after an idempotent retry confirms durability. `tst_membership`, `tst_undo_retirement`, and `tst_session_recovery` have targeted Debug, Release, and ASan/UBSan evidence; see G02 in `TASKS.json` for run records. G02 remains open for full descriptor/event/checkpoint validation against G01, a production orchestration API, and returning-peer export/reconciliation.
 
 ## G03 — Implement per-stream durable coverage and certificate construction
 

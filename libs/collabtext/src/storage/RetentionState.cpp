@@ -1,6 +1,7 @@
 #include "storage/RetentionState.h"
 #include "core/Sha256.h"
 
+#include <algorithm>
 #include <charconv>
 #include <fstream>
 #include <sstream>
@@ -87,6 +88,17 @@ Result<void> RetentionState::publish_after_durable_trim(
   for(const auto &id:groups) if(!id.actor.valid() || id.counter==0 || !unique.insert(id).second) return Error(ErrorCode::malformed, "retention group list has invalid or repeated identity");
   auto committed=commit_trim(); if(!committed.ok()) return committed.error();
   auto &retired=m_retired[std::string(stream)];
+  // A prior append may have reached the file but returned an error from its
+  // durability barrier. Recovered membership in m_retired is not enough to
+  // acknowledge it: force the existing journal through a fresh barrier first.
+  const bool has_existing = std::any_of(unique.begin(), unique.end(),
+      [&](const auto &id) { return retired.contains(id); });
+  if (has_existing) {
+    auto log = DurableAppendFile::open(m_path, m_hook);
+    if (!log.ok()) return log.error();
+    auto synced = log.value().sync();
+    if (!synced.ok()) return synced.error();
+  }
   for(const auto &id:unique) {
     if(retired.contains(id)) continue;
     if(m_sequence==UINT64_MAX) return Error(ErrorCode::limit_exceeded, "retention sequence is exhausted");
