@@ -268,6 +268,46 @@ private slots:
     QCOMPARE(limited.text(), std::string{});
   }
 
+  void pending_retirement_budget_refuses_oversized_edit_before_reserving_ids() {
+    auto allocator = std::make_shared<ToggleAllocator>(Test::actor(12));
+    Buffer buffer(allocator);
+    QVERIFY((buffer.set_max_undo_depth(0)).ok());
+
+    // The inserted identity array alone exceeds the independent 8 MiB
+    // retirement queue ceiling. With depth zero, accepting this edit would
+    // immediately retire its undo group, so it must fail before reservation.
+    const auto next_identity = allocator->peek();
+    auto refused = buffer.try_apply_local_edit(
+        {{0, 0}}, {std::string(500'000, 'x')});
+    QVERIFY(!refused.ok());
+    QCOMPARE(refused.error().code(), ErrorCode::limit_exceeded);
+    QCOMPARE(allocator->peek(), next_identity);
+    QCOMPARE(buffer.text(), std::string{});
+    QCOMPARE(buffer.undo_depth(), size_t(0));
+    QVERIFY(buffer.local_history_snapshot().retired_entries.empty());
+  }
+
+  void restore_rejects_pending_retirement_over_budget_for_both_engines() {
+    LocalHistorySnapshot oversized;
+    LocalUndoEntrySnapshot retired;
+    retired.group_id = Test::id(13, 1);
+    retired.operation_ids.push_back(Test::id(13, 1));
+    retired.inserted_items.resize(500'000, Test::id(13, 2));
+    oversized.retired_entries.push_back(std::move(retired));
+
+    Buffer buffer(Test::test_counter(13));
+    auto buffer_result = buffer.restore_local_history(oversized);
+    QVERIFY(!buffer_result.ok());
+    QCOMPARE(buffer_result.error().code(), ErrorCode::limit_exceeded);
+    QVERIFY(buffer.local_history_snapshot().retired_entries.empty());
+
+    IdList list(Test::test_counter(14));
+    auto list_result = list.restore_local_history(oversized);
+    QVERIFY(!list_result.ok());
+    QCOMPARE(list_result.error().code(), ErrorCode::limit_exceeded);
+    QVERIFY(list.local_history_snapshot().retired_entries.empty());
+  }
+
   void checked_undo_redo_preserve_reservation_errors_and_cursor() {
     auto buffer_allocator = std::make_shared<ToggleAllocator>(Test::actor(9));
     Buffer buffer(buffer_allocator);
