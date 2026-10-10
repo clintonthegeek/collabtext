@@ -87,6 +87,12 @@ it must never fabricate an end sentinel that another API treats as an element.
 
 ## W3 — External pins, compaction, and epoch changes
 
+The implementation-level pin journal, idempotency, release, orphan and
+recovery rules are specified in
+[`vnext-anchor-retention.md`](vnext-anchor-retention.md). That contract makes
+reference IDs immutable (release is terminal; a restored reference gets a new
+ID) and requires a contiguous consumer projection frontier before collection.
+
 Storing bytes in an external log is **not** notification that the engine must
 retain their referents. S05 provides explicit durable pin registration, lookup,
 and release using stable consumer reference IDs. Pins belong to the lifetime of

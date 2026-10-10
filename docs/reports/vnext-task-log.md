@@ -2904,3 +2904,19 @@ Evidence: Debug build-roadmap-debug/verification/20261010T060612Z-2; Release
   build-consumer-verify/{debug,release,asan}-live-20261010T060707Z-2,
   20261010T060729Z-2, and 20261010T060739Z-2 respectively.
 ```
+
+Task: S05
+Status: in progress (retention contract specified; implementation pending)
+Scope: Added `docs/specs/vnext-anchor-retention.md` and linked its lifecycle
+rules from W3. Reference IDs are immutable, release is terminal and
+idempotent, incomplete consumer projections and unreconciled orphans block
+collection, and history queries below the retained floor must report
+`history_unavailable`. Current-state reconstruction and isolated historical
+playback have separate obligations.
+Remaining: The public API has no token scope inspection or durable pin
+projection/persistence hooks. `DocumentSession::edits_since` has no typed
+history-floor result, and legacy comment/chat anchors lack document/epoch
+scope. These are implementation gaps, not supported features; GC remains
+inert. Add the public API and crash/recovery tests before marking S05 complete.
+Verification: `python3 docs/roadmap/2026-10-reliability/validate-plan.py` passed
+(72 tasks, acyclic graph and coverage checks); `git diff --check` passed.

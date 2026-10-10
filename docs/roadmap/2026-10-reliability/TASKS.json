@@ -2680,12 +2680,14 @@
         "R10"
       ],
       "gate": null,
-      "status": "not_started",
+      "status": "in_progress",
       "consumer_requirements": [
         "W1",
         "W3",
         "W5"
-      ]
+      ],
+      "baseline_revision": "0eb0579",
+      "notes": "W3 lifecycle contract drafted in docs/specs/vnext-anchor-retention.md: immutable reference IDs, terminal idempotent release, contiguous consumer projection frontier, conservative orphan retention, typed history floor, and separate historical projection. Implementation remains open: public engines have no token-scope inspection API or durable pin projection/hooks; DocumentSession has no typed edits_since/history-floor result; legacy Comment/ChatMessage anchors carry no document/epoch scope. No GC is enabled. Requires public API, recovery, and consumer-adapter implementation plus runtime tests before completion."
     },
     {
       "id": "S06",
