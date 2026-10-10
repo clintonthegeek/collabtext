@@ -242,6 +242,37 @@ private slots:
     QCOMPARE(recovered.value().size(),size_t(1));
   }
 
+  void transitionMustExtendLatestJournalEpoch() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto producer=actor(40), retiring=actor(41), remaining=actor(42), joining=actor(43);
+    const MembershipDescriptor current{8,"epoch-eight-hash",{retiring,remaining}};
+    const auto verifier=[](const ActorId &,std::string_view,std::string_view)->Result<void> {
+      return {};
+    };
+
+    auto enrollment_open=MembershipStore::open(
+        std::filesystem::path(dir.path().toStdString())/"enrollment-gap.log",producer);
+    QVERIFY(enrollment_open.ok()); auto enrollment_store=std::move(enrollment_open.value());
+    QVERIFY(enrollment_store.append({1,7,remaining,MembershipEvent::Kind::Retired,"previous"}).ok());
+    auto enrollment=preview_enrollment(current,joining); QVERIFY(enrollment.ok());
+    auto enrollment_result=enrollment_store.commit_enrollment(enrollment.value(),current,
+        {{retiring,"ack"},{remaining,"ack"},{joining,"ack"}},verifier);
+    QVERIFY(!enrollment_result.ok());
+    QCOMPARE(enrollment_result.error().code(),ErrorCode::wrong_epoch);
+    QCOMPARE(enrollment_store.last_sequence(),uint64_t(1));
+
+    auto retirement_open=MembershipStore::open(
+        std::filesystem::path(dir.path().toStdString())/"retirement-gap.log",producer);
+    QVERIFY(retirement_open.ok()); auto retirement_store=std::move(retirement_open.value());
+    QVERIFY(retirement_store.append({1,7,joining,MembershipEvent::Kind::Enrolled,"previous"}).ok());
+    auto retirement=preview_retirement(current,retiring,{}); QVERIFY(retirement.ok());
+    auto retirement_result=retirement_store.commit_retirement(retirement.value(),current,{},
+        {{remaining,"ack"}},"confirm",verifier);
+    QVERIFY(!retirement_result.ok());
+    QCOMPARE(retirement_result.error().code(),ErrorCode::wrong_epoch);
+    QCOMPARE(retirement_store.last_sequence(),uint64_t(1));
+  }
+
   void cannotRetireTheLastMemberOrCommitWithoutConfirmation() {
     const auto lone=actor(20);
     MembershipDescriptor one_member{1,"epoch-one",{lone}};

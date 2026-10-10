@@ -304,9 +304,9 @@ Result<MembershipEvent> MembershipStore::commit_retirement(
   auto persisted_events = recover();
   if (!persisted_events.ok()) return persisted_events.error();
   if (!persisted_events.value().empty() &&
-      persisted_events.value().back().epoch >= preview.next_epoch)
+      persisted_events.value().back().epoch != current.epoch)
     return Error(ErrorCode::wrong_epoch,
-                 "retirement transition epoch is already present in the journal");
+                 "retirement parent epoch does not match the latest journal transition");
   if (explicit_confirmation.empty() || explicit_confirmation.size() > 4096 ||
       !verify_acknowledgement)
     return Error(ErrorCode::malformed,
@@ -357,9 +357,9 @@ Result<MembershipEvent> MembershipStore::commit_enrollment(
   auto persisted_events = recover();
   if (!persisted_events.ok()) return persisted_events.error();
   if (!persisted_events.value().empty() &&
-      persisted_events.value().back().epoch >= preview.next_epoch)
+      persisted_events.value().back().epoch != current.epoch)
     return Error(ErrorCode::wrong_epoch,
-                 "enrollment transition epoch is already present in the journal");
+                 "enrollment parent epoch does not match the latest journal transition");
   if (!verify_acknowledgement)
     return Error(ErrorCode::malformed,
                  "enrollment requires an acknowledgement verifier");
