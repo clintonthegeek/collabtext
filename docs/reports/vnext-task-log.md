@@ -2968,3 +2968,25 @@ Limits: Exhaustive only for the stated 13,520 small insertion histories and
 listed fixture states/orders; deletion undo/redo has a focused synthetic
 regression, not an exhaustive delete-history matrix. This is bounded
 evidence, not a proof for arbitrary histories.
+
+Task: S07
+Status: in progress
+Commit: pending
+Scope so far: Removed the dead first-pass accumulator and redundant resets in
+`Buffer::edits_since`, leaving one old-position walk and one changed-text
+accumulator. Added a regression that splits a mixed-Unicode fragment, inserts
+at scalar boundaries, deletes a neighbor, undoes that deletion, and proves the
+reported byte edits reconstruct exact current text. The production ordering
+implementation remains on the shared whole-vector route; no shortcut has been
+re-enabled before the fast/slow equivalence harness exists.
+Verification so far: Debug focused model, Buffer/IdList fuzz and delta tests
+passed 4/4 (20261010T074553Z-2); production ordering also passed with the S06
+Debug gate. The delta test passed independently in Debug
+(20261010T074536Z-2). Release delta/production sequence tests passed 2/2
+(20261010T074659Z-2). Release benchmark target built after enabling the
+opt-in benchmark option; its measurement-format smoke passed with the Qt
+offscreen platform and no speed assertion. The focused delta test passed
+ASan/UBSan with LeakSanitizer disabled (20261010T074713Z-2).
+Remaining: Build a differential fast-path harness with fragment split,
+concurrency, Unicode, undo-visibility and globally retained retired-origin
+cases; choose and prove a safe optimization; record fast/fallback counters.

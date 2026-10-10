@@ -2791,7 +2791,8 @@
       "files": [
         "libs/collabtext/src/crdt/Buffer.cpp",
         "libs/collabtext/src/crdt/IdList.cpp",
-        "libs/collabtext/tests/tst_sequence_fast_paths.cpp"
+        "libs/collabtext/tests/tst_sequence_fast_paths.cpp",
+        "libs/collabtext/tests/tst_edits_since.cpp"
       ],
       "steps": [
         "Re-enable one fast path per small change only when its preconditions are written next to the code. Keep the slow production path and model available for differential testing. Remove the obsolete first attempt and redundant accumulators in edits_since; split ordering/delta transformations into named helpers with explicit preconditions and update stale extract/rebuild comments. Reuse shared policy helpers where semantics match, keeping Buffer and IdList storage distinct.",
@@ -2808,7 +2809,9 @@
         "R6"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "in_progress",
+      "baseline_revision": "185e813",
+      "notes": "Started after S06 completion. Removed the obsolete first-pass accumulator and duplicate state reset from Buffer::edits_since; added split-fragment mixed-Unicode undo reconstruction coverage. Auditing the current shared SequenceOrder path and fuzz/model harness before enabling any shortcut; no safe candidate selected yet."
     },
     {
       "id": "G01",

@@ -292,38 +292,14 @@ std::vector<TextEdit> Buffer::edits_since(const Global &since) const {
 
     // Walk every fragment. Track two running byte offsets:
     // old_pos: position in the visible text as of `since`
-    // new_pos: position in the current visible text
     uint32_t old_pos = 0;
-    uint32_t new_pos = 0;
 
-    // Accumulator for merging adjacent edits into single TextEdits
-    // (e.g., a deleted fragment immediately followed by an inserted one
-    // is one replacement, not two separate edits)
+    // Merge adjacent changed fragments into one replacement. Accumulate the
+    // new text during this same tree walk; unchanged visible fragments are the
+    // only boundaries that flush a pending edit.
     bool in_edit = false;
     uint32_t edit_old_start = 0;
     uint32_t edit_old_end = 0;
-    uint32_t edit_new_start = 0;
-
-    auto flush_edit = [&]() {
-        if (!in_edit) return;
-        uint32_t edit_new_end = new_pos;
-        if (edit_old_start != edit_old_end || edit_new_start != edit_new_end) {
-            TextEdit e;
-            e.old_start = edit_old_start;
-            e.old_end = edit_old_end;
-            // Extract the new text from the current visible text
-            // by walking the tree again... OR we can accumulate it.
-            // For efficiency, we'll collect new text during the walk.
-        }
-        in_edit = false;
-    };
-
-    // Better approach: two-pass is complex. Single pass that accumulates
-    // new_text as we go.
-    edits.clear();
-    old_pos = 0;
-    new_pos = 0;
-    in_edit = false;
     std::string edit_new_text;
 
     auto flush = [&]() {
@@ -343,7 +319,6 @@ std::vector<TextEdit> Buffer::edits_since(const Global &since) const {
             // Unchanged visible fragment — flush any pending edit, advance both
             flush();
             old_pos += f.byte_length;
-            new_pos += f.byte_length;
         } else if (was_vis && !is_vis) {
             // Was visible, now invisible — DELETION
             if (!in_edit) {
@@ -363,7 +338,6 @@ std::vector<TextEdit> Buffer::edits_since(const Global &since) const {
                 edit_new_text.clear();
             }
             edit_new_text += f.text;
-            new_pos += f.byte_length;
         } else {
             // Invisible in both versions — skip, but don't flush
             // (could be a tombstone between two changed fragments
