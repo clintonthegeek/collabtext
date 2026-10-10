@@ -2847,25 +2847,24 @@ Remaining: pending retirement memory budgeting and consumer-owned event policy
 Continuation — 2026-10-10
 
 Task: L08
-Status: in progress (separate-tree arrival regression and evidence report added)
+Status: complete
 Baseline: d1a7b28
-Scope: Added `tst_store_lifecycle`, which syncs sealed files between physically
-  separate temporary roots, checks gap and corruption reporting before visitor
-  delivery, repairs the missing/corrupt older segment, and verifies replay in a
-  fresh receiver process. Added `docs/reports/vnext-recovery-milestone.md` with
-  fixture hashes and verification evidence.
-Verification: Required Debug 3/3, Release 3/3, ASan/UBSan 3/3 with
-  `ASAN_OPTIONS=detect_leaks=0`; bounded `tst_store_fault_harness` passed under
-  ASan/UBSan. LeakSanitizer itself is unsupported in this environment and
-  failed after successful Qt cases with its ptrace diagnostic.
-Remaining: full physical arrival matrix for both Buffer and IdList encodings;
-  editor manifest-before-seed arrival integration. L08 stays open; GC stays
-  disabled.
-
-L08 continuation: Added real Buffer and IdList codec round-trips across copied
-  producer/receiver replica trees and verified producer writer-lease contention.
-  Re-ran final-source Debug 3/3, Release 3/3, ASan/UBSan 3/3 and the bounded
-  ASan/UBSan store fault corpus; see the milestone report for evidence paths.
+Scope: Added separate-tree transfer tests for real Buffer and IdList operation
+  codecs, newest-before-oldest delivery, incomplete coverage, exact replay after
+  arrival, corruption refusal and repair, restart, and competing writer lease.
+  Added editor manifest-before-seed integration coverage. Existing OpStream,
+  segment-writer, session, transport-contract and fault-harness suites complete
+  callback, durable commit, restart, history, seal and bounded fault coverage.
+  GC remains disabled. See `docs/reports/vnext-recovery-milestone.md` for fixture
+  hashes and matrix details.
+Verification: Six recovery suites passed 6/6 in Debug, Release and ASan/UBSan;
+  the bounded `tst_store_fault_harness` passed under ASan/UBSan. LeakSanitizer
+  cannot run in this environment and exits after the Qt cases with its ptrace
+  diagnostic, so ASan/UBSan was run with `ASAN_OPTIONS=detect_leaks=0`.
+Evidence: Debug `build-roadmap-debug/verification/20261010T055202Z-2`, Release
+  `build-roadmap-release/verification/20261010T055215Z-2`, ASan/UBSan
+  `build-roadmap-asan/verification/20261010T055234Z-2`, bounded fault corpus
+  `build-roadmap-asan/verification/20261010T055317Z-2`.
 
 Task: L06
 Status: in progress (retirement budget implemented; runtime verification pending)

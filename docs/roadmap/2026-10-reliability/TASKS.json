@@ -2524,7 +2524,8 @@
       "files": [
         "libs/collabtext/tests/tst_store_lifecycle.cpp",
         "libs/collabtext/tests/tst_transport_commit_contract.cpp",
-        "docs/reports/vnext-recovery-milestone.md"
+        "docs/reports/vnext-recovery-milestone.md",
+        "libs/collabtext/tests/tst_editor_recovery.cpp"
       ],
       "steps": [
         "Enumerate sender restart, receiver restart, both restart, missing older segment, repaired corruption, blocked callback, failed durable commit, open\u2192seal transition, and two competing writers for both operation kinds.",
@@ -2535,7 +2536,7 @@
         "All committed edits eventually appear exactly logically once after full recovery; unsupported/corrupt stores remain visibly incomplete rather than silently losing records.",
         "The recovery report cites seed/fixture hashes and Debug/Release/sanitizer results."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_store_lifecycle|tst_session_recovery|tst_transport_commit_contract'`, Release equivalents, and the bounded fault corpus under ASan.",
+      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_store_lifecycle|tst_session_recovery|tst_transport_commit_contract|tst_editor_recovery|tst_opstream_replay|tst_segment_writer'`, Release equivalents, and the bounded fault corpus under ASan.",
       "addresses": [
         "F4",
         "F5",
@@ -2544,9 +2545,29 @@
         "R4"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "d1a7b28",
-      "notes": "Partial L08 evidence: physically separate-root tests now transfer and apply real Buffer and IdList codec operations; a controlled newest-before-oldest/corruption/repair sequence checks replay incompleteness, and writer lease contention is checked. Debug/Release/ASan selected suites and bounded fault corpus pass; see docs/reports/vnext-recovery-milestone.md. Remaining: run the full missing/corrupt arrival matrix against both engine operation encodings, and add editor manifest-before-seed arrival integration. GC stays disabled."
+      "notes": "Recovery milestone matrix implemented and verified. The milestone report documents real Buffer and IdList transfers across independent roots, newest-before-oldest missing-segment arrival, corruption refusal and repair, manifest-before-seed arrival, restart/callback/durable-commit/seal/lease coverage, fixture hashes, and remaining environment limits. GC remains disabled.",
+      "progress": "Complete: independently rooted device stores transfer real Buffer and IdList operation encodings; both report incomplete coverage with only newest segments present and apply every operation once when the older segments arrive. Corrupt segment arrival is refused before delivery and repaired arrival replays correctly. Editor open with manifest-before-seed stays outside collaboration until the matching seed arrives. Existing session, OpStream, segment-writer and store fault suites cover restart, callback retry, uncertain durable commit, open-to-seal, history ownership, writer lease and bounded storage fault cases. No data-loss defect was observed; GC remains disabled.",
+      "verification_results": {
+        "debug": "PASS: tst_store_lifecycle, tst_session_recovery, tst_transport_commit_contract, tst_editor_recovery, tst_opstream_replay, tst_segment_writer; 6/6; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261010T055202Z-2.",
+        "release": "PASS: same six recovery suites; 6/6; GCC 16.2.1 Release; build-roadmap-release/verification/20261010T055215Z-2.",
+        "asan_ubsan": "PASS: same six recovery suites; 6/6 with ASAN_OPTIONS=detect_leaks=0; build-roadmap-asan/verification/20261010T055234Z-2.",
+        "bounded_fault_corpus": "PASS: tst_store_fault_harness under ASan/UBSan with ASAN_OPTIONS=detect_leaks=0; build-roadmap-asan/verification/20261010T055317Z-2.",
+        "plan_and_diff": "PASS: validate-plan.py valid 72-task acyclic graph; git diff --check clean."
+      },
+      "artifacts": [
+        "docs/reports/vnext-recovery-milestone.md",
+        "build-roadmap-debug/verification/20261010T055202Z-2/",
+        "build-roadmap-release/verification/20261010T055215Z-2/",
+        "build-roadmap-asan/verification/20261010T055234Z-2/",
+        "build-roadmap-asan/verification/20261010T055317Z-2/"
+      ],
+      "remaining_gap": "No observed recovery defect in the tested matrix. This milestone does not claim live Syncthing/cloud-provider behavior or physical power-loss evidence. LeakSanitizer is unavailable in this runner; ASan/UBSan passed with leak detection disabled. Garbage collection remains disabled and is owned by later tasks.",
+      "implementation_commits": [
+        "5d42719",
+        "7f1b31b"
+      ]
     },
     {
       "id": "S04",

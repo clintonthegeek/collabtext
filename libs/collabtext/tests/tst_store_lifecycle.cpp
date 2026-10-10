@@ -33,6 +33,15 @@ void copy_tree(const fs::path &from, const fs::path &to) {
   }
 }
 
+std::vector<fs::path> sealed_segments(const fs::path &dir) {
+  std::vector<fs::path> files;
+  for (const auto &entry : fs::directory_iterator(dir))
+    if (entry.is_regular_file() && entry.path().filename().string().ends_with(".seg.zst"))
+      files.push_back(entry.path());
+  std::sort(files.begin(), files.end());
+  return files;
+}
+
 fs::path stream_path(const fs::path &root, const ActorId &actor,
                      const std::string &stream, uint64_t epoch) {
   std::string escaped;
@@ -48,6 +57,135 @@ fs::path stream_path(const fs::path &root, const ActorId &actor,
 class TestStoreLifecycle final : public QObject {
   Q_OBJECT
 private slots:
+  void buffer_and_idlist_partial_arrival_is_incomplete_until_older_segments_arrive() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const fs::path base = tmp.path().toStdString();
+    const fs::path producer_root = base / "producer";
+    const fs::path receiver_root = base / "receiver";
+    const auto producer = CollabText::Test::actor(95);
+    const StreamScope text_scope{"matrix:text", 1};
+    const StreamScope list_scope{"matrix:list", 1};
+
+    Crdt::Buffer source_text(CollabText::Test::test_counter(95));
+    auto text_first = source_text.try_apply_local_edit({{0, 0}}, {"seed"});
+    QVERIFY(text_first.ok());
+    auto text_first_bytes = Crdt::encode_operation(text_first.value());
+    QVERIFY(text_first_bytes.ok());
+    Crdt::IdList source_list(CollabText::Test::test_counter(95));
+    auto list_first = source_list.try_insert_after(Crdt::Anchor::min(), 101);
+    QVERIFY(list_first.ok());
+    auto list_first_bytes = Crdt::encode_idlist_operation(list_first.value());
+    QVERIFY(list_first_bytes.ok());
+
+    {
+      FileOpStream writer(producer_root, producer);
+      QVERIFY(writer.start().ok());
+      QVERIFY(writer.register_stream(text_scope).ok());
+      QVERIFY(writer.register_stream(list_scope).ok());
+      QVERIFY(writer.push({{text_scope.stream, text_scope.epoch, producer, 1},
+                           text_first_bytes.value()}, PushDurability::durable).ok());
+      QVERIFY(writer.push({{list_scope.stream, list_scope.epoch, producer, 1},
+                           list_first_bytes.value()}, PushDurability::durable).ok());
+      QVERIFY(writer.close().ok());
+    }
+
+    auto text_second = source_text.try_apply_local_edit({{4, 4}}, {"!"});
+    QVERIFY(text_second.ok());
+    auto text_second_bytes = Crdt::encode_operation(text_second.value());
+    QVERIFY(text_second_bytes.ok());
+    auto list_second = source_list.try_insert_after(source_list.anchor_at_index(0), 202);
+    QVERIFY(list_second.ok());
+    auto list_second_bytes = Crdt::encode_idlist_operation(list_second.value());
+    QVERIFY(list_second_bytes.ok());
+    {
+      FileOpStream writer(producer_root, producer);
+      QVERIFY(writer.start().ok());
+      QVERIFY(writer.register_stream(text_scope).ok());
+      QVERIFY(writer.register_stream(list_scope).ok());
+      QVERIFY(writer.push({{text_scope.stream, text_scope.epoch, producer, 2},
+                           text_second_bytes.value()}, PushDurability::durable).ok());
+      QVERIFY(writer.push({{list_scope.stream, list_scope.epoch, producer, 2},
+                           list_second_bytes.value()}, PushDurability::durable).ok());
+      QVERIFY(writer.close().ok());
+    }
+
+    const auto text_segments = sealed_segments(stream_path(
+        producer_root, producer, text_scope.stream, text_scope.epoch));
+    const auto list_segments = sealed_segments(stream_path(
+        producer_root, producer, list_scope.stream, list_scope.epoch));
+    QCOMPARE(text_segments.size(), size_t(2));
+    QCOMPARE(list_segments.size(), size_t(2));
+    const auto text_dest = stream_path(receiver_root, producer,
+                                       text_scope.stream, text_scope.epoch);
+    const auto list_dest = stream_path(receiver_root, producer,
+                                       list_scope.stream, list_scope.epoch);
+    fs::create_directories(text_dest);
+    fs::create_directories(list_dest);
+    fs::copy_file(text_segments.back(), text_dest / text_segments.back().filename());
+    fs::copy_file(list_segments.back(), list_dest / list_segments.back().filename());
+
+    FileOpStream receiver(receiver_root, CollabText::Test::actor(96));
+    QVERIFY(receiver.start().ok());
+    QVERIFY(receiver.register_stream(text_scope).ok());
+    QVERIFY(receiver.register_stream(list_scope).ok());
+    size_t premature_text_callbacks = 0;
+    auto text_gap = receiver.replay_all(text_scope, [&](const InboundDelivery &d) -> Result<void> {
+      ++premature_text_callbacks;
+      auto op = Crdt::decode_operation(d.payload);
+      if (!op.ok()) return op.error();
+      return {};
+    });
+    QVERIFY(!text_gap.ok());
+    QCOMPARE(premature_text_callbacks, size_t(0));
+    size_t premature_list_callbacks = 0;
+    auto list_gap = receiver.replay_all(list_scope, [&](const InboundDelivery &d) -> Result<void> {
+      ++premature_list_callbacks;
+      auto op = Crdt::decode_idlist_operation(d.payload);
+      if (!op.ok()) return op.error();
+      return {};
+    });
+    QVERIFY(!list_gap.ok());
+    QCOMPARE(premature_list_callbacks, size_t(0));
+
+    fs::copy_file(text_segments.front(), text_dest / text_segments.front().filename());
+    fs::copy_file(list_segments.front(), list_dest / list_segments.front().filename());
+    Crdt::Buffer recovered_text(CollabText::Test::test_counter(97));
+    size_t recovered_text_count = 0;
+    auto text_replay = receiver.replay_all(text_scope, [&](const InboundDelivery &d) -> Result<void> {
+      auto op = Crdt::decode_operation(d.payload);
+      if (!op.ok()) return op.error();
+      auto outcomes = recovered_text.apply_ops({op.value()});
+      if (outcomes.size() != 1 || outcomes.front().kind() != ApplyOutcomeKind::applied)
+        return Error(ErrorCode::malformed, "Buffer matrix operation did not apply");
+      ++recovered_text_count;
+      return {};
+    });
+    QVERIFY(text_replay.ok());
+    QCOMPARE(recovered_text_count, size_t(2));
+    QCOMPARE(recovered_text.text(), std::string("seed!"));
+    Crdt::IdList recovered_list(CollabText::Test::test_counter(98));
+    size_t recovered_list_count = 0;
+    auto list_replay = receiver.replay_all(list_scope, [&](const InboundDelivery &d) -> Result<void> {
+      auto op = Crdt::decode_idlist_operation(d.payload);
+      if (!op.ok()) return op.error();
+      auto outcomes = recovered_list.apply_ops({op.value()});
+      if (outcomes.size() != 1 || outcomes.front().kind() != ApplyOutcomeKind::applied)
+        return Error(ErrorCode::malformed, "IdList matrix operation did not apply");
+      ++recovered_list_count;
+      return {};
+    });
+    QVERIFY(list_replay.ok());
+    QCOMPARE(recovered_list_count, size_t(2));
+    const auto recovered_ids = recovered_list.ids();
+    QCOMPARE(recovered_ids.size(), size_t(2));
+    QVERIFY(std::find(recovered_ids.begin(), recovered_ids.end(), 101)
+            != recovered_ids.end());
+    QVERIFY(std::find(recovered_ids.begin(), recovered_ids.end(), 202)
+            != recovered_ids.end());
+    QVERIFY(receiver.close().ok());
+  }
+
   void buffer_and_idlist_operations_recover_from_copied_replica_tree() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());

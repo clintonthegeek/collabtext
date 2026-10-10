@@ -22,11 +22,29 @@ receiver root, decodes and applies each operation, then compares visible text
 and list IDs. A second writer for the same producer actor is refused while the
 first lease is held.
 
+`tst_store_lifecycle::buffer_and_idlist_partial_arrival_is_incomplete_until_older_segments_arrive`
+creates two operations and two sealed segments for each engine. It copies only
+the newest segment to the receiver first. Both full replays report incomplete
+coverage and call no visitor. After the older segments arrive, replay applies
+each operation exactly once in order: Buffer recovers `seed!`; IdList recovers
+IDs 101 and 202. The separate corruption test exercises the sealed segment
+integrity path before any records are delivered to the visitor.
+
+`tst_editor_recovery::manifest_arriving_before_seed_stays_incomplete_then_opens`
+places a valid manifest in the sidecar while withholding its declared seed.
+Opening reports the missing seed and does not enter collaborative mode. After
+the matching seed file arrives, retrying open succeeds with the expected seed
+text.
+
 Fixture input (one UTF-8 payload per delivery): `first\nsecond\n`.
 
 - SHA-256 of fixture input: `dbea9325179efe46ea2add94f7b6b745ca983fabb208dc6d34aa064623d7ee23`
 - SHA-256 of lifecycle test source at this evidence revision:
-  `f40c6cfe18f946153e592594b8209ee529042b17c502b44063e6deace44f1320`
+  `b366d8f41f6ff67e9f8a7790e1c64f8ac9465a84f39e783b3538c0a434673b47`
+- SHA-256 of editor arrival test source:
+  `3090cf177a77a05ddc77548de3032236b4d4c6a6109af5255f852cfce042d29e`
+- SHA-256 of the editor seed fixture `arriving seed`:
+  `1b2529df1dc185756721e439da38092391ea1d36230b521f6960defa6700b977`
 - Actor bytes are deterministic test actors 81, 82, and 83; stream is
   `lifecycle:text`, epoch 4.
 
@@ -43,30 +61,35 @@ edit. Garbage collection remains disabled.
 
 Compiler: GCC 16.2.1. Selected suites:
 
-- Debug: `./tools/verify-roadmap.sh debug 'tst_store_lifecycle|tst_session_recovery|tst_transport_commit_contract'` — 3/3 passed;
-  evidence `build-roadmap-debug/verification/20261010T054745Z-2`.
-- Release: `./tools/verify-roadmap.sh release 'tst_store_lifecycle|tst_session_recovery|tst_transport_commit_contract'` — 3/3 passed;
-  evidence `build-roadmap-release/verification/20261010T054755Z-2`.
-- ASan/UBSan: `ASAN_OPTIONS=detect_leaks=0 ./tools/verify-roadmap.sh asan 'tst_store_lifecycle|tst_session_recovery|tst_transport_commit_contract'` — 3/3 passed;
-  evidence `build-roadmap-asan/verification/20261010T054810Z-2`.
+- Debug: `./tools/verify-roadmap.sh debug 'tst_store_lifecycle|tst_session_recovery|tst_transport_commit_contract|tst_editor_recovery|tst_opstream_replay|tst_segment_writer'` — 6/6 passed;
+  evidence `build-roadmap-debug/verification/20261010T055202Z-2`.
+- Release: same six-suite selection — 6/6 passed;
+  evidence `build-roadmap-release/verification/20261010T055215Z-2`.
+- ASan/UBSan: same six-suite selection with `ASAN_OPTIONS=detect_leaks=0` — 6/6 passed;
+  evidence `build-roadmap-asan/verification/20261010T055234Z-2`.
 - Bounded store fault corpus: `ASAN_OPTIONS=detect_leaks=0 ./tools/verify-roadmap.sh asan 'tst_store_fault_harness'` — passed;
-  evidence `build-roadmap-asan/verification/20261010T054823Z-2`.
+  evidence `build-roadmap-asan/verification/20261010T055317Z-2`.
 
 The initial sanitizer invocation with leak detection enabled ran all Qt cases
 successfully, then LeakSanitizer exited with “does not work under ptrace” in
 this environment. The successful sanitizer evidence therefore excludes leak
 detection.
 
-## Remaining matrix work
+## Coverage boundary and defects
 
-This report does not claim the complete L08 acceptance matrix. The controlled
-missing/corrupt-segment sequence currently uses opaque payloads; the Buffer and
-IdList cases cover intact copied-store recovery but do not yet run through each
-partial-arrival and repair state. The editor manifest-before-seed arrival path
-also lacks an integration regression that creates the two files in separate
-arrival steps. Keep L08 open until those cases are executable and the complete
-matrix is reviewed.
+The restart cases in `tst_opstream_replay` cover sender restart, receiver
+restart, retry after missing/throwing callbacks, and uncertain durable append.
+`tst_segment_writer` covers open-tail to sealed-segment transitions, failed
+seal recovery, and subprocess interruption. `tst_session_recovery` covers
+restart replay, durable local intent, deduplication, peer-preserving undo, and
+logical state after missing causal data arrives. `tst_store_fault_harness`
+covers exclusive leases and bounded write, sync, rename, cursor, checkpoint,
+corruption, repair, disk-full, and process-termination faults. Together with the
+separate-tree tests above, the required arrival/restart matrix is executable for
+both operation codecs.
 
-These are coverage gaps rather than observed data loss. Corrupt or incomplete
-storage is reported as an error in the tested `replay_all` path. Segment
-reclamation is still disabled.
+No data-loss or exactly-once defect was observed in these cases. This is a
+filesystem simulation, not a live Syncthing/cloud-provider test or a physical
+power-loss test. LeakSanitizer is unavailable in this runner, so sanitizer
+evidence uses ASan/UBSan with leak detection disabled. Segment reclamation and
+GC remain disabled.

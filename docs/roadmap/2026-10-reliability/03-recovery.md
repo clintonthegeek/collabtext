@@ -258,6 +258,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_editor_recovery|tst_scroll_stability|t
 
 - `libs/collabtext/tests/tst_store_lifecycle.cpp`
 - `libs/collabtext/tests/tst_transport_commit_contract.cpp`
+- `libs/collabtext/tests/tst_editor_recovery.cpp`
 - `docs/reports/vnext-recovery-milestone.md`
 
 **Steps:**
@@ -273,4 +274,4 @@ Run `./tools/verify-roadmap.sh debug 'tst_editor_recovery|tst_scroll_stability|t
 
 **Verification:**
 
-Run `./tools/verify-roadmap.sh debug 'tst_store_lifecycle|tst_session_recovery|tst_transport_commit_contract'`, Release equivalents, and the bounded fault corpus under ASan.
+Run `./tools/verify-roadmap.sh debug 'tst_store_lifecycle|tst_session_recovery|tst_transport_commit_contract|tst_editor_recovery|tst_opstream_replay|tst_segment_writer'`, Release equivalents, and the bounded fault corpus under ASan.

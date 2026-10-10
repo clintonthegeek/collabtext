@@ -16,6 +16,51 @@ using namespace CollabText;
 class TestEditorRecovery : public QObject {
   Q_OBJECT
 private slots:
+  void manifest_arriving_before_seed_stays_incomplete_then_opens() {
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto root = std::filesystem::path(temp.path().toStdString());
+    const QString file_path = QString::fromStdString((root / "note.txt").string());
+    const std::string seed = "arriving seed";
+    {
+      QFile file(file_path);
+      QVERIFY(file.open(QIODevice::WriteOnly));
+      QCOMPARE(file.write(seed.data(), static_cast<qint64>(seed.size())),
+               static_cast<qint64>(seed.size()));
+    }
+    const auto sidecar = std::filesystem::path(file_path.toStdString() + ".collab");
+    std::filesystem::create_directories(sidecar);
+    Crdt::SidecarManifest manifest;
+    manifest.doc_id = "arrival-order-document";
+    manifest.enrolled_at = "2026-10-10T00:00:00Z";
+    manifest.original_filename = "note.txt";
+    manifest.seed_sha256 = sha256_hex(seed);
+    Crdt::write_manifest(sidecar / "manifest.json", manifest);
+
+    Identity::Identity identity;
+    identity.identity_id = "arrival-order-user";
+    identity.display_name = "Arrival Order";
+    identity.color = "#336699";
+    CollabEdit::Document document(identity, "arrival-order-device", nullptr,
+                                  root / "private" / "replica-state");
+    const auto missing_seed = document.open(file_path);
+    QVERIFY(missing_seed.contains(QStringLiteral("missing seed.txt")));
+    QVERIFY(!document.isCollab());
+
+    // The later seed arrival repairs the sidecar; retrying open must rebuild
+    // from that seed and become editable only after the recovery input exists.
+    std::ofstream seed_file(sidecar / "seed.txt", std::ios::binary);
+    seed_file.write(seed.data(), static_cast<std::streamsize>(seed.size()));
+    seed_file.close();
+    QVERIFY(seed_file.good());
+    QVERIFY(document.open(file_path).isEmpty());
+    QVERIFY(document.isCollab());
+    auto *edit = document.widget()->findChild<QPlainTextEdit *>();
+    QVERIFY(edit);
+    QCOMPARE(edit->toPlainText(), QString::fromStdString(seed));
+    QVERIFY(document.closeDoc().isEmpty());
+  }
+
   void editor_reopens_with_local_undo_redo_and_remote_edits() {
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
