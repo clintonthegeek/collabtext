@@ -185,6 +185,83 @@ private slots:
     }
   }
 
+  void wp6_split_pastes_survive_durable_replay_with_original_tokens() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const std::string document = "wp6-durable-boundary-document";
+    const StreamScope stream{"text", 1};
+    const PositionScope position_scope{document, stream.stream, Primitive::text, stream.epoch};
+    const auto actor_a = Test::actor(105);
+    const auto actor_b = Test::actor(106);
+    std::string left_bytes, right_bytes;
+
+    {
+      auto created = CrdtEngine::create(Test::test_counter(105), position_scope);
+      QVERIFY(created.ok());
+      auto engine = std::move(created).value();
+      auto left = engine->boundary_at(0, Affinity::left);
+      auto right = engine->boundary_at(0, Affinity::right);
+      QVERIFY(left.ok()); QVERIFY(right.ok());
+      left_bytes = checked_codec(encode_position(left.value()));
+      right_bytes = checked_codec(encode_position(right.value()));
+    }
+
+    auto persist_paste = [&](ActorId actor, uint8_t actor_index,
+                             const std::string &passage) -> Result<void> {
+      auto created = CrdtEngine::create(Test::test_counter(actor_index), position_scope);
+      if (!created.ok()) return created.error();
+      auto engine = std::move(created).value();
+      Crdt::FileOpStream writer(root, actor);
+      auto started = writer.start(); if (!started.ok()) return started.error();
+      auto registered = writer.register_stream(stream);
+      if (!registered.ok()) return registered.error();
+      std::optional<Error> write_error;
+      engine->setOnLocalOp([&](const Crdt::Operation &op) {
+        auto encoded = Crdt::encode_operation(op);
+        if (!encoded.ok()) { write_error = encoded.error(); return; }
+        OutboundDelivery delivery{{stream.stream, stream.epoch, actor, 1}, encoded.value()};
+        auto pushed = writer.push(delivery, PushDurability::durable);
+        if (!pushed.ok()) write_error = pushed.error();
+      });
+      engine->insert(0, passage);
+      if (write_error) return *write_error;
+      return writer.close();
+    };
+    auto persisted_a = persist_paste(actor_a, 105, "abc");
+    auto persisted_b = persist_paste(actor_b, 106, "XYZ");
+    QVERIFY(persisted_a.ok()); QVERIFY(persisted_b.ok());
+
+    auto created = CrdtEngine::create(Test::test_counter(107), position_scope);
+    QVERIFY(created.ok());
+    auto recovered = std::move(created).value();
+    Crdt::FileOpStream reader(root, Test::actor(107));
+    QVERIFY(reader.start().ok());
+    QVERIFY(reader.register_stream(stream).ok());
+    size_t applied = 0;
+    auto replayed = reader.replay_all(stream, [&](const InboundDelivery &delivery) -> Result<void> {
+      auto op = Crdt::decode_operation(delivery.payload);
+      if (!op.ok()) return op.error();
+      if (!recovered->applyRemoteOp(op.value()))
+        return Error(ErrorCode::malformed, "WP6 durable passage operation was not integrated");
+      ++applied;
+      return {};
+    });
+    QVERIFY(replayed.ok());
+    QCOMPARE(applied, size_t(2));
+    QCOMPARE(recovered->text(), std::string("abcXYZ"));
+    QVERIFY(reader.close().ok());
+
+    auto left = decode_position_as<TextBoundary>(left_bytes);
+    auto right = decode_position_as<TextBoundary>(right_bytes);
+    QVERIFY(left.ok()); QVERIFY(right.ok());
+    auto left_result = recovered->resolve(left.value());
+    auto right_result = recovered->resolve(right.value());
+    QVERIFY(left_result.ok()); QVERIFY(right_result.ok());
+    QCOMPARE(left_result.value().byte_offset, uint32_t(0));
+    QCOMPARE(right_result.value().byte_offset, uint32_t(6));
+  }
+
   void own_log_replays_and_counter_continues_after_two_reopens() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
