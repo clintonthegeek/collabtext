@@ -8,6 +8,7 @@
 #include "crdt/SegmentReader.h"
 #include "crdt/StreamSerialization.h"
 #include "crdt/ZstdUtil.h"
+#include "storage/CheckpointCodec.h"
 #include "transport/StreamSync.h"
 
 #include <algorithm>
@@ -44,5 +45,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     (void)decode_sealed_segment(bytes);
     (void)base64_decode(bytes);
     (void)zstd_decompress(bytes, kMaxDecompressedBytes);
+    // Checkpoint parsing accepts at most 256 MiB in production. Keep libFuzzer
+    // inputs much smaller while exercising both independent artifact magics.
+    (void)CollabText::Storage::decode_checkpoint(
+        bytes, CollabText::Storage::CheckpointKind::Shareable);
+    (void)CollabText::Storage::decode_checkpoint(
+        bytes, CollabText::Storage::CheckpointKind::Local);
     return 0;
 }

@@ -19,7 +19,7 @@ using namespace Crdt;
 struct DocumentSession::Impl {
   DocumentSessionConfig config;
   std::optional<ReplicaState> replica;
-  std::shared_ptr<Identity::ReplicaAllocator> allocator;
+  std::shared_ptr<CollabText::Identity::ReplicaAllocator> allocator;
   std::unique_ptr<Crdt::Buffer> buffer;
   std::unique_ptr<Crdt::FileOpStream> transport;
   std::unique_ptr<Storage::LocalHistoryLog> local_history;
@@ -248,7 +248,7 @@ DocumentSession::open_with_writer_config(
                                                impl->config.stream);
     if (!lease.ok())
       return lease.error();
-    impl->allocator = std::make_shared<Identity::ReplicaAllocator>(
+    impl->allocator = std::make_shared<CollabText::Identity::ReplicaAllocator>(
         &*impl->replica, impl->config.document, impl->config.stream,
         impl->config.epoch);
     impl->buffer = std::make_unique<Crdt::Buffer>(impl->allocator);
