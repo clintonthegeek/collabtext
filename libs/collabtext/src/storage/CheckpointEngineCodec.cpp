@@ -221,6 +221,8 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
   if (section.id != 2) return malformed("checkpoint engine state must be section 2");
   if (section.version != 1)
     return Error(ErrorCode::unsupported_version, "checkpoint engine section version is unsupported", "checkpoint.engine");
+  if (section.bytes.size() > kCheckpointMaxBytes - kSectionHeaderBytes)
+    return Error(ErrorCode::limit_exceeded, "checkpoint engine section exceeds byte limit", "checkpoint.engine");
   Reader reader{section.bytes};
   if (!reader.need(6)) return malformed("checkpoint engine header is truncated");
   const auto kind = reader.u16();
@@ -233,6 +235,9 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
   if (count > kMaxEntries)
     return Error(ErrorCode::limit_exceeded, "checkpoint engine exceeds entry limit", "checkpoint.engine");
   if (state.kind == CheckpointEngineKind::Text) {
+    constexpr size_t kMinFragmentBytes = 24 + 3 + 4 + 8 + 1;
+    if (count > (reader.bytes.size() - reader.cursor) / kMinFragmentBytes)
+      return malformed("checkpoint fragment array is truncated");
     state.fragments.reserve(count);
     std::map<ActorId, std::vector<std::pair<uint64_t, uint64_t>>> by_actor;
     for (uint32_t i = 0; i < count; ++i) {
@@ -266,6 +271,9 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
     if (const auto issue = Crdt::SequenceOrder::check_consistency(state.fragments))
       return malformed(*issue);
   } else {
+    constexpr size_t kMinEntryBytes = 24 + 3 + 8 + 4;
+    if (count > (reader.bytes.size() - reader.cursor) / kMinEntryBytes)
+      return malformed("checkpoint IdList array is truncated");
     state.entries.reserve(count);
     std::set<Crdt::Identity> unique_origins;
     for (uint32_t i = 0; i < count; ++i) {

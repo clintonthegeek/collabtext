@@ -222,6 +222,8 @@ private slots:
     auto trailing = list_section.value();
     trailing.bytes.push_back('\0');
     QVERIFY(!decode_checkpoint_engine(trailing));
+    CheckpointSection huge_count{2, 1, std::string("\0\1\0\x0f\x42\x40", 6)};
+    QVERIFY(!decode_checkpoint_engine(huge_count));
     text.entries.push_back(list.entries[0]);
     QVERIFY(!encode_checkpoint_engine(text));
   }
