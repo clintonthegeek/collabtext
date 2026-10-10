@@ -260,9 +260,9 @@ private slots:
     auto sealed = seal_membership_descriptor(descriptor);
     QVERIFY(sealed);
     QVERIFY(validate_checkpoint_core_membership(
-        core.value(), sealed.value(), descriptor.base_checkpoint_hash));
+        core.value(), sealed.value(), frame.value()));
     QVERIFY(!validate_checkpoint_core_membership(
-        core.value(), sealed.value(), sha256_hex("another checkpoint")));
+        core.value(), sealed.value(), "another checkpoint"));
 
     auto wrong_frontier = descriptor;
     wrong_frontier.base_frontiers[0].delivery[actor] = 1;
@@ -271,7 +271,7 @@ private slots:
     QVERIFY(sealed_wrong_frontier);
     QVERIFY(!validate_checkpoint_core_membership(
         core.value(), sealed_wrong_frontier.value(),
-        descriptor.base_checkpoint_hash));
+        frame.value()));
 
     auto wrong_manifest = descriptor;
     wrong_manifest.translation_manifest_hash = sha256_hex("another manifest");
@@ -280,7 +280,7 @@ private slots:
     QVERIFY(sealed_wrong_manifest);
     QVERIFY(!validate_checkpoint_core_membership(
         core.value(), sealed_wrong_manifest.value(),
-        descriptor.base_checkpoint_hash));
+        frame.value()));
   }
 
   void engineSectionRoundTripsTextAndIdList() {
