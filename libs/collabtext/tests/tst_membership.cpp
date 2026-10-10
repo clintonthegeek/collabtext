@@ -250,32 +250,71 @@ private slots:
     child.hash.clear();
     auto sealed = seal_membership_descriptor(child); QVERIFY(sealed.ok());
     QVERIFY(store.validate_transition_link(parent, sealed.value()).ok());
-    auto no_checkpoint_verifier = store.validate_transition(parent, sealed.value(), {});
-    QVERIFY(!no_checkpoint_verifier.ok());
-    QCOMPARE(no_checkpoint_verifier.error().code(), ErrorCode::awaiting_state);
-    bool checkpoint_seen = false;
-    auto fully_validated = store.validate_transition(
-        parent, sealed.value(), [&](const MembershipDescriptor &verified_parent,
-                                    const MembershipDescriptor &verified_child) {
-          checkpoint_seen = verified_parent.hash == parent.hash &&
-              verified_child.base_checkpoint_hash == child.base_checkpoint_hash;
-          return checkpoint_seen
-              ? Result<void>{}
-              : Result<void>{Error(ErrorCode::corrupt_record,
-                                   "checkpoint verifier received an unexpected descriptor")};
+    auto no_evidence_verifier = store.validate_transition(
+        parent, sealed.value(), {}, [](const MembershipDescriptor &,
+                                       const MembershipDescriptor &) {
+          return Result<void>{};
         });
+    QVERIFY(!no_evidence_verifier.ok());
+    QCOMPARE(no_evidence_verifier.error().code(), ErrorCode::awaiting_state);
+    bool evidence_seen = false;
+    auto verify_evidence = [&](const MembershipDescriptor &verified_parent,
+                               const MembershipDescriptor &verified_child,
+                               const MembershipEvent &verified_event,
+                               const ActorId &verified_producer) -> Result<void> {
+      evidence_seen = verified_parent.hash == parent.hash &&
+          verified_child.hash == sealed.value().hash &&
+          verified_event.evidence == event.evidence && verified_producer == producer;
+      if (!evidence_seen)
+        return Error(ErrorCode::corrupt_record,
+                     "evidence verifier received unexpected transition inputs");
+      return {};
+    };
+    bool checkpoint_seen = false;
+    auto verify_checkpoint = [&](const MembershipDescriptor &verified_parent,
+                                 const MembershipDescriptor &verified_child) {
+      checkpoint_seen = verified_parent.hash == parent.hash &&
+          verified_child.base_checkpoint_hash == child.base_checkpoint_hash;
+      return checkpoint_seen
+          ? Result<void>{}
+          : Result<void>{Error(ErrorCode::corrupt_record,
+                               "checkpoint verifier received an unexpected descriptor")};
+    };
+    auto fully_validated = store.validate_transition(
+        parent, sealed.value(), verify_evidence, verify_checkpoint);
     QVERIFY(fully_validated.ok());
+    QVERIFY(evidence_seen);
     QVERIFY(checkpoint_seen);
-    auto corrupt_checkpoint = store.validate_transition(
+    checkpoint_seen = false;
+    auto corrupt_evidence = store.validate_transition(
         parent, sealed.value(), [](const MembershipDescriptor &,
-                                   const MembershipDescriptor &) -> Result<void> {
+                                   const MembershipDescriptor &,
+                                   const MembershipEvent &,
+                                   const ActorId &) -> Result<void> {
+          return Error(ErrorCode::corrupt_record, "simulated invalid acknowledgements");
+        }, verify_checkpoint);
+    QVERIFY(!corrupt_evidence.ok());
+    QCOMPARE(corrupt_evidence.error().code(), ErrorCode::corrupt_record);
+    QVERIFY(!checkpoint_seen);
+    auto throwing_evidence = store.validate_transition(
+        parent, sealed.value(), [](const MembershipDescriptor &,
+                                   const MembershipDescriptor &,
+                                   const MembershipEvent &,
+                                   const ActorId &) -> Result<void> {
+          throw std::runtime_error("simulated evidence verifier exception");
+        }, verify_checkpoint);
+    QVERIFY(!throwing_evidence.ok());
+    QCOMPARE(throwing_evidence.error().code(), ErrorCode::io_error);
+    auto corrupt_checkpoint = store.validate_transition(
+        parent, sealed.value(), verify_evidence,
+        [](const MembershipDescriptor &, const MembershipDescriptor &) -> Result<void> {
           return Error(ErrorCode::corrupt_record, "simulated corrupt checkpoint");
         });
     QVERIFY(!corrupt_checkpoint.ok());
     QCOMPARE(corrupt_checkpoint.error().code(), ErrorCode::corrupt_record);
     auto throwing_checkpoint = store.validate_transition(
-        parent, sealed.value(), [](const MembershipDescriptor &,
-                                   const MembershipDescriptor &) -> Result<void> {
+        parent, sealed.value(), verify_evidence,
+        [](const MembershipDescriptor &, const MembershipDescriptor &) -> Result<void> {
           throw std::runtime_error("simulated checkpoint reader exception");
         });
     QVERIFY(!throwing_checkpoint.ok());

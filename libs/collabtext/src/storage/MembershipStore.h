@@ -72,6 +72,15 @@ using MembershipCheckpointVerifier = std::function<Result<void>(
     const MembershipDescriptor &parent,
     const MembershipDescriptor &next)>;
 
+/// Revalidate the stored transition evidence after recovery. The caller checks
+/// the exact proposal/acknowledger set and durable acknowledgement proofs;
+/// commit-time verification alone is not enough for later eligibility checks.
+using MembershipTransitionEvidenceVerifier = std::function<Result<void>(
+    const MembershipDescriptor &parent,
+    const MembershipDescriptor &next,
+    const MembershipEvent &event,
+    const ActorId &producer)>;
+
 /// Consequences of removing a device from the next epoch. Counts and branch
 /// hashes are captured by the caller from durable document/session state.
 struct RetirementImpact {
@@ -142,12 +151,14 @@ public:
   [[nodiscard]] Result<void> validate_transition_link(
       const MembershipDescriptor &parent,
       const MembershipDescriptor &next) const;
-  /// Full transition validation fails closed without a checkpoint verifier.
-  /// The event-link check runs first, then the caller verifies durable base
-  /// checkpoint bytes and their relationship to the child descriptor.
+  /// Full transition validation fails closed without evidence and checkpoint
+  /// verifiers.
+  /// The event-link check runs first, then the caller revalidates durable
+  /// transition evidence and base checkpoint bytes.
   [[nodiscard]] Result<void> validate_transition(
       const MembershipDescriptor &parent,
       const MembershipDescriptor &next,
+      const MembershipTransitionEvidenceVerifier &verify_evidence,
       const MembershipCheckpointVerifier &verify_checkpoint) const;
   /// Commits only if the preview still matches current descriptor/impact data,
   /// explicit user confirmation is present, and every remaining member has a

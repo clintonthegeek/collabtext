@@ -276,6 +276,27 @@ Result<MembershipEvent> parse_line(std::string_view line,
     return Error(ErrorCode::corrupt_record, "membership evidence is invalid");
   return event;
 }
+
+Result<MembershipEvent> find_transition_event(
+    const std::vector<MembershipEvent> &events,
+    const MembershipDescriptor &next, const ActorId &producer) {
+  const MembershipEvent *match = nullptr;
+  for (const auto &event : events) {
+    if (membership_event_hash(event, producer) == next.transition_event_hash) {
+      if (match)
+        return Error(ErrorCode::corrupt_record,
+                     "membership journal contains duplicate transition hashes");
+      match = &event;
+    }
+  }
+  if (!match)
+    return Error(ErrorCode::awaiting_state,
+                 "descriptor transition event is missing from the producer journal");
+  if (match->parent_descriptor_hash.empty())
+    return Error(ErrorCode::corrupt_record,
+                 "legacy membership event has no bound parent descriptor");
+  return *match;
+}
 } // namespace
 
 Result<MembershipDescriptor> seal_membership_descriptor(
@@ -527,32 +548,37 @@ Result<void> MembershipStore::validate_transition_link(
     const MembershipDescriptor &parent, const MembershipDescriptor &next) const {
   auto events = recover();
   if (!events.ok()) return events.error();
-  const MembershipEvent *match = nullptr;
-  for (const auto &event : events.value()) {
-    if (membership_event_hash(event, m_producer) == next.transition_event_hash) {
-      if (match)
-        return Error(ErrorCode::corrupt_record,
-                     "membership journal contains duplicate transition hashes");
-      match = &event;
-    }
-  }
-  if (!match)
-    return Error(ErrorCode::awaiting_state,
-                 "descriptor transition event is missing from the producer journal");
-  if (match->parent_descriptor_hash.empty())
-    return Error(ErrorCode::corrupt_record,
-                 "legacy membership event has no bound parent descriptor");
-  return validate_membership_transition_link(parent, next, *match, m_producer);
+  auto event = find_transition_event(events.value(), next, m_producer);
+  if (!event.ok()) return event.error();
+  return validate_membership_transition_link(parent, next, event.value(), m_producer);
 }
 
 Result<void> MembershipStore::validate_transition(
     const MembershipDescriptor &parent, const MembershipDescriptor &next,
+    const MembershipTransitionEvidenceVerifier &verify_evidence,
     const MembershipCheckpointVerifier &verify_checkpoint) const {
-  if (!verify_checkpoint)
+  if (!verify_evidence || !verify_checkpoint)
     return Error(ErrorCode::awaiting_state,
-                 "full membership transition validation requires a durable checkpoint verifier");
-  auto event_link = validate_transition_link(parent, next);
+                 "full membership transition validation requires evidence and checkpoint verifiers");
+  auto events = recover();
+  if (!events.ok()) return events.error();
+  auto matched_event = find_transition_event(events.value(), next, m_producer);
+  if (!matched_event.ok()) return matched_event.error();
+  auto event_link = validate_membership_transition_link(
+      parent, next, matched_event.value(), m_producer);
   if (!event_link.ok()) return event_link.error();
+  try {
+    auto evidence = verify_evidence(parent, next, matched_event.value(), m_producer);
+    if (!evidence.ok())
+      return evidence.error().with_context(
+          "validating persisted membership transition evidence");
+  } catch (const std::exception &error) {
+    return Error(ErrorCode::io_error, error.what(),
+                 "validating persisted membership transition evidence");
+  } catch (...) {
+    return Error(ErrorCode::io_error,
+                 "membership evidence verifier threw an unknown exception");
+  }
   try {
     auto checkpoint = verify_checkpoint(parent, next);
     if (!checkpoint.ok())
