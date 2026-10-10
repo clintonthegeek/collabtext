@@ -48,10 +48,10 @@ bool parse_u64(std::string_view s, uint64_t &v) {
 }
 
 std::string body(const MembershipEvent &e, const ActorId &producer) {
-  return "CME1 " + producer.to_string() + " " + std::to_string(e.sequence) + " " +
+  return "CME2 " + producer.to_string() + " " + std::to_string(e.sequence) + " " +
          std::to_string(e.epoch) + " " + e.subject.to_string() + " " +
          (e.kind == MembershipEvent::Kind::Enrolled ? "E" : "R") + " " +
-         hex(e.evidence);
+         e.parent_descriptor_hash + " " + hex(e.evidence);
 }
 
 void add_field(std::string &out, std::string_view value) {
@@ -221,9 +221,10 @@ bool same_preview(const EnrollmentPreview &a, const EnrollmentPreview &b) {
 
 bool same_transition(const MembershipEvent &stored, uint64_t epoch,
                      const ActorId &subject, MembershipEvent::Kind kind,
-                     std::string_view evidence) {
+                     std::string_view parent_hash, std::string_view evidence) {
   return stored.epoch == epoch && stored.subject == subject &&
-         stored.kind == kind && stored.evidence == evidence;
+         stored.kind == kind && stored.parent_descriptor_hash == parent_hash &&
+         stored.evidence == evidence;
 }
 
 Result<void> resync_journal(const std::filesystem::path &path,
@@ -241,9 +242,19 @@ Result<MembershipEvent> parse_line(std::string_view line,
       sha256_hex(line.substr(0, checksum_pos)) != line.substr(checksum_pos + 1))
     return Error(ErrorCode::corrupt_record, "membership record checksum mismatch");
   std::istringstream in(std::string(line.substr(0, checksum_pos)));
-  std::string magic, producer_s, seq_s, epoch_s, actor_s, kind_s, evidence_s, extra;
-  if (!(in >> magic >> producer_s >> seq_s >> epoch_s >> actor_s >> kind_s >> evidence_s) ||
-      (in >> extra) || magic != "CME1")
+  std::string magic, producer_s, seq_s, epoch_s, actor_s, kind_s, parent_s, evidence_s, extra;
+  if (!(in >> magic >> producer_s >> seq_s >> epoch_s >> actor_s >> kind_s))
+    return Error(ErrorCode::corrupt_record, "membership record has invalid fields");
+  if (magic == "CME2") {
+    if (!(in >> parent_s >> evidence_s) || !is_hash(parent_s))
+      return Error(ErrorCode::corrupt_record, "membership parent descriptor hash is invalid");
+  } else if (magic == "CME1") {
+    if (!(in >> evidence_s))
+      return Error(ErrorCode::corrupt_record, "legacy membership record is incomplete");
+  } else {
+    return Error(ErrorCode::corrupt_record, "membership record version is unsupported");
+  }
+  if (in >> extra)
     return Error(ErrorCode::corrupt_record, "membership record has invalid fields");
   auto record_producer = ActorId::parse(producer_s);
   if (!record_producer.ok() || record_producer.value() != producer)
@@ -256,6 +267,7 @@ Result<MembershipEvent> parse_line(std::string_view line,
   if (!actor.ok() || !actor.value().valid())
     return Error(ErrorCode::corrupt_record, "membership subject is invalid");
   event.subject = actor.value();
+  event.parent_descriptor_hash = parent_s;
   if (kind_s == "E") event.kind = MembershipEvent::Kind::Enrolled;
   else if (kind_s == "R") event.kind = MembershipEvent::Kind::Retired;
   else return Error(ErrorCode::corrupt_record, "membership event kind is invalid");
@@ -306,6 +318,47 @@ Result<void> validate_membership_descriptor(
       descriptor.hash != sha256_hex(descriptor_material(descriptor)))
     return Error(ErrorCode::corrupt_record,
                  "membership descriptor content hash does not match its fields");
+  return {};
+}
+
+std::string membership_event_hash(const MembershipEvent &event,
+                                  const ActorId &producer) {
+  const auto canonical = body(event, producer);
+  return sha256_hex(canonical + " " + sha256_hex(canonical));
+}
+
+Result<void> validate_membership_transition_link(
+    const MembershipDescriptor &parent, const MembershipDescriptor &next,
+    const MembershipEvent &event, const ActorId &producer) {
+  auto parent_valid = validate_membership_descriptor(parent);
+  if (!parent_valid.ok()) return parent_valid.error();
+  auto next_valid = validate_membership_descriptor(next);
+  if (!next_valid.ok()) return next_valid.error();
+  if (!producer.valid() || parent.epoch == UINT64_MAX ||
+      next.epoch != parent.epoch + 1 || next.parent_hash != parent.hash ||
+      next.transition_event_hash != membership_event_hash(event, producer) ||
+      event.parent_descriptor_hash != parent.hash || event.epoch != next.epoch ||
+      event.sequence == 0 || !event.subject.valid() || event.evidence.empty() ||
+      event.evidence.size() > kMaxEvidenceBytes)
+    return Error(ErrorCode::wrong_epoch,
+                 "membership event does not link the supplied descriptors");
+  auto expected = parent.members;
+  if (event.kind == MembershipEvent::Kind::Enrolled) {
+    if (std::binary_search(expected.begin(), expected.end(), event.subject))
+      return Error(ErrorCode::malformed, "enrollment subject is already a member");
+    expected.push_back(event.subject);
+    std::sort(expected.begin(), expected.end());
+  } else if (event.kind == MembershipEvent::Kind::Retired) {
+    auto found = std::lower_bound(expected.begin(), expected.end(), event.subject);
+    if (found == expected.end() || *found != event.subject || expected.size() < 2)
+      return Error(ErrorCode::malformed, "retirement subject cannot be removed");
+    expected.erase(found);
+  } else {
+    return Error(ErrorCode::malformed, "membership event kind is invalid");
+  }
+  if (next.members != expected)
+    return Error(ErrorCode::wrong_epoch,
+                 "child descriptor membership does not match its transition event");
   return {};
 }
 
@@ -445,7 +498,8 @@ Result<void> MembershipStore::append(const MembershipEvent &event) {
       event.epoch == 0 || !event.subject.valid() ||
       (event.kind != MembershipEvent::Kind::Enrolled &&
        event.kind != MembershipEvent::Kind::Retired) ||
-      event.evidence.empty() || event.evidence.size() > kMaxEvidenceBytes ||
+      !is_hash(event.parent_descriptor_hash) || event.evidence.empty() ||
+      event.evidence.size() > kMaxEvidenceBytes ||
       m_last_sequence == UINT64_MAX ||
       (m_last_epoch != 0 &&
        (m_last_epoch == UINT64_MAX || event.epoch != m_last_epoch + 1)))
@@ -466,6 +520,28 @@ Result<void> MembershipStore::append(const MembershipEvent &event) {
   m_last_sequence = event.sequence;
   m_last_epoch = event.epoch;
   return {};
+}
+
+Result<void> MembershipStore::validate_transition_link(
+    const MembershipDescriptor &parent, const MembershipDescriptor &next) const {
+  auto events = recover();
+  if (!events.ok()) return events.error();
+  const MembershipEvent *match = nullptr;
+  for (const auto &event : events.value()) {
+    if (membership_event_hash(event, m_producer) == next.transition_event_hash) {
+      if (match)
+        return Error(ErrorCode::corrupt_record,
+                     "membership journal contains duplicate transition hashes");
+      match = &event;
+    }
+  }
+  if (!match)
+    return Error(ErrorCode::awaiting_state,
+                 "descriptor transition event is missing from the producer journal");
+  if (match->parent_descriptor_hash.empty())
+    return Error(ErrorCode::corrupt_record,
+                 "legacy membership event has no bound parent descriptor");
+  return validate_membership_transition_link(parent, next, *match, m_producer);
 }
 
 Result<MembershipEvent> MembershipStore::commit_retirement(
@@ -519,7 +595,7 @@ Result<MembershipEvent> MembershipStore::commit_retirement(
       persisted_events.value().back().epoch != current.epoch) {
     const auto &stored = persisted_events.value().back();
     if (!same_transition(stored, preview.next_epoch, preview.device,
-                         MembershipEvent::Kind::Retired, evidence))
+                         MembershipEvent::Kind::Retired, current.hash, evidence))
       return Error(ErrorCode::wrong_epoch,
                    "retirement parent epoch does not match the latest journal transition");
     auto durable = resync_journal(m_path, m_hook);
@@ -527,7 +603,7 @@ Result<MembershipEvent> MembershipStore::commit_retirement(
     return stored;
   }
   MembershipEvent event{m_last_sequence + 1, preview.next_epoch, preview.device,
-                        MembershipEvent::Kind::Retired, std::move(evidence)};
+                        MembershipEvent::Kind::Retired, current.hash, std::move(evidence)};
   auto persisted = append(event);
   if (!persisted.ok()) return persisted.error();
   return event;
@@ -582,7 +658,7 @@ Result<MembershipEvent> MembershipStore::commit_enrollment(
       persisted_events.value().back().epoch != current.epoch) {
     const auto &stored = persisted_events.value().back();
     if (!same_transition(stored, preview.next_epoch, preview.device,
-                         MembershipEvent::Kind::Enrolled, evidence))
+                         MembershipEvent::Kind::Enrolled, current.hash, evidence))
       return Error(ErrorCode::wrong_epoch,
                    "enrollment parent epoch does not match the latest journal transition");
     auto durable = resync_journal(m_path, m_hook);
@@ -590,7 +666,7 @@ Result<MembershipEvent> MembershipStore::commit_enrollment(
     return stored;
   }
   MembershipEvent event{m_last_sequence + 1, preview.next_epoch, preview.device,
-                        MembershipEvent::Kind::Enrolled, std::move(evidence)};
+                        MembershipEvent::Kind::Enrolled, current.hash, std::move(evidence)};
   auto persisted = append(event);
   if (!persisted.ok()) return persisted.error();
   return event;

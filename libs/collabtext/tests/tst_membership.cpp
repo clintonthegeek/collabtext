@@ -54,8 +54,9 @@ std::string simulated_ack(const ActorId &who, std::string_view digest) {
 
 std::string membership_record(const ActorId &producer, uint64_t sequence,
                               uint64_t epoch, const ActorId &subject) {
-  auto body = "CME1 " + producer.to_string() + " " + std::to_string(sequence) +
-      " " + std::to_string(epoch) + " " + subject.to_string() + " E 6161";
+  auto body = "CME2 " + producer.to_string() + " " + std::to_string(sequence) +
+      " " + std::to_string(epoch) + " " + subject.to_string() + " E " +
+      sha256_hex("fixture-parent") + " 6161";
   return body + " " + sha256_hex(body) + "\n";
 }
 }
@@ -133,11 +134,11 @@ private slots:
       QVERIFY(!competing.ok());
       QCOMPARE(competing.error().code(), ErrorCode::writer_conflict);
       const auto invalid_kind = static_cast<MembershipEvent::Kind>(99);
-      QVERIFY(!store.append({1, 1, peer, invalid_kind, "proof"}).ok());
+      QVERIFY(!store.append({1, 1, peer, invalid_kind, sha256_hex("parent"), "proof"}).ok());
       QCOMPARE(store.last_sequence(), uint64_t(0));
-      QVERIFY(store.append({1, 1, peer, MembershipEvent::Kind::Enrolled, "signed\nproof"}).ok());
-      QVERIFY(store.append({2, 2, peer, MembershipEvent::Kind::Retired, "confirmed"}).ok());
-      QVERIFY(!store.append({4, 3, peer, MembershipEvent::Kind::Enrolled, {}}).ok());
+      QVERIFY(store.append({1, 1, peer, MembershipEvent::Kind::Enrolled, sha256_hex("parent"), "signed\nproof"}).ok());
+      QVERIFY(store.append({2, 2, peer, MembershipEvent::Kind::Retired, sha256_hex("parent"), "confirmed"}).ok());
+      QVERIFY(!store.append({4, 3, peer, MembershipEvent::Kind::Enrolled, sha256_hex("parent"), {}}).ok());
     }
     {
       auto reopened = MembershipStore::open(path, producer);
@@ -160,17 +161,17 @@ private slots:
     {
       auto opened = MembershipStore::open(path, producer); QVERIFY(opened.ok());
       auto store = std::move(opened.value());
-      QVERIFY(store.append({1, 9, peer, MembershipEvent::Kind::Enrolled, "base"}).ok());
-      QVERIFY(!store.append({2, 11, peer, MembershipEvent::Kind::Retired, "skip"}).ok());
-      QVERIFY(!store.append({2, 9, peer, MembershipEvent::Kind::Retired, "repeat"}).ok());
+      QVERIFY(store.append({1, 9, peer, MembershipEvent::Kind::Enrolled, sha256_hex("parent"), "base"}).ok());
+      QVERIFY(!store.append({2, 11, peer, MembershipEvent::Kind::Retired, sha256_hex("parent"), "skip"}).ok());
+      QVERIFY(!store.append({2, 9, peer, MembershipEvent::Kind::Retired, sha256_hex("parent"), "repeat"}).ok());
       QCOMPARE(store.last_sequence(), uint64_t(1));
-      QVERIFY(store.append({2, 10, peer, MembershipEvent::Kind::Retired, "next"}).ok());
+      QVERIFY(store.append({2, 10, peer, MembershipEvent::Kind::Retired, sha256_hex("parent"), "next"}).ok());
     }
     {
       auto opened = MembershipStore::open(path, producer); QVERIFY(opened.ok());
       auto store = std::move(opened.value());
-      QVERIFY(!store.append({3, 12, peer, MembershipEvent::Kind::Enrolled, "skip"}).ok());
-      QVERIFY(store.append({3, 11, peer, MembershipEvent::Kind::Enrolled, "next"}).ok());
+      QVERIFY(!store.append({3, 12, peer, MembershipEvent::Kind::Enrolled, sha256_hex("parent"), "skip"}).ok());
+      QVERIFY(store.append({3, 11, peer, MembershipEvent::Kind::Enrolled, sha256_hex("parent"), "next"}).ok());
       auto events = store.recover(); QVERIFY(events.ok());
       QCOMPARE(events.value().back().epoch, uint64_t(11));
     }
@@ -189,6 +190,88 @@ private slots:
     auto opened = MembershipStore::open(path, producer);
     QVERIFY(!opened.ok());
     QCOMPARE(opened.error().code(), ErrorCode::corrupt_record);
+  }
+
+  void recoveryReadsLegacyEventsButTheyCannotProveTransitions() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto producer = actor(35), subject = actor(36);
+    const auto path = std::filesystem::path(dir.path().toStdString()) / "legacy.log";
+    const auto legacy_body = "CME1 " + producer.to_string() + " 1 7 " +
+        subject.to_string() + " E 6161";
+    {
+      std::ofstream out(path, std::ios::binary);
+      out << legacy_body << " " << sha256_hex(legacy_body) << "\n";
+    }
+    auto opened = MembershipStore::open(path, producer); QVERIFY(opened.ok());
+    auto events = opened.value().recover(); QVERIFY(events.ok());
+    QCOMPARE(events.value().size(), size_t(1));
+    QVERIFY(events.value().front().parent_descriptor_hash.empty());
+    QVERIFY(events.value().front().evidence == "aa");
+
+    auto parent = fixture_descriptor(6, {actor(37)});
+    auto child = parent;
+    child.epoch = 7;
+    child.parent_hash = parent.hash;
+    child.members.push_back(subject);
+    std::sort(child.members.begin(), child.members.end());
+    for (auto &frontier : child.base_frontiers) {
+      frontier.operation.emplace(subject, 0);
+      frontier.delivery.emplace(subject, 0);
+    }
+    child.transition_event_hash = sha256_hex(
+        legacy_body + " " + sha256_hex(legacy_body));
+    child.base_checkpoint_hash = sha256_hex("legacy-child-checkpoint");
+    child.hash.clear();
+    auto sealed = seal_membership_descriptor(child); QVERIFY(sealed.ok());
+    QVERIFY(!opened.value().validate_transition_link(parent, sealed.value()).ok());
+  }
+
+  void descriptorTransitionMustMatchDurableJournalEvent() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto producer = actor(30), joining = actor(31), existing = actor(32);
+    const auto parent = fixture_descriptor(3, {existing});
+    const auto path = std::filesystem::path(dir.path().toStdString()) / "linked.log";
+    auto opened = MembershipStore::open(path, producer); QVERIFY(opened.ok());
+    auto store = std::move(opened.value());
+    MembershipEvent event{1, 4, joining, MembershipEvent::Kind::Enrolled,
+                          parent.hash, "durable enrollment evidence"};
+    QVERIFY(store.append(event).ok());
+
+    auto child = parent;
+    child.epoch = 4;
+    child.parent_hash = parent.hash;
+    child.transition_event_hash = membership_event_hash(event, producer);
+    child.members.push_back(joining);
+    for (auto &frontier : child.base_frontiers) {
+      frontier.operation.emplace(joining, 0);
+      frontier.delivery.emplace(joining, 0);
+    }
+    child.base_checkpoint_hash = sha256_hex("child-checkpoint");
+    child.hash.clear();
+    auto sealed = seal_membership_descriptor(child); QVERIFY(sealed.ok());
+    QVERIFY(store.validate_transition_link(parent, sealed.value()).ok());
+
+    auto wrong_event = event;
+    wrong_event.subject = actor(33);
+    auto wrong_child = child;
+    wrong_child.transition_event_hash = membership_event_hash(wrong_event, producer);
+    auto wrong_sealed = seal_membership_descriptor(wrong_child); QVERIFY(wrong_sealed.ok());
+    QVERIFY(!store.validate_transition_link(parent, wrong_sealed.value()).ok());
+
+    auto wrong_delta = child;
+    wrong_delta.members = parent.members;
+    wrong_delta.base_frontiers.front().operation.erase(joining);
+    wrong_delta.base_frontiers.front().delivery.erase(joining);
+    wrong_delta.hash.clear();
+    auto delta_sealed = seal_membership_descriptor(wrong_delta); QVERIFY(delta_sealed.ok());
+    QVERIFY(!store.validate_transition_link(parent, delta_sealed.value()).ok());
+
+    auto missing_parent_link = child;
+    missing_parent_link.parent_hash = sha256_hex("unrelated-parent");
+    missing_parent_link.hash.clear();
+    auto missing_parent_sealed = seal_membership_descriptor(missing_parent_link);
+    QVERIFY(missing_parent_sealed.ok());
+    QVERIFY(!store.validate_transition_link(parent, missing_parent_sealed.value()).ok());
   }
 
   void writerLeaseExcludesASecondProcess() {
@@ -221,7 +304,7 @@ private slots:
       auto opened = MembershipStore::open(path, producer);
       QVERIFY(opened.ok());
       auto store = std::move(opened.value());
-      QVERIFY(store.append({1, 1, peer, MembershipEvent::Kind::Enrolled, "ack"}).ok());
+      QVERIFY(store.append({1, 1, peer, MembershipEvent::Kind::Enrolled, sha256_hex("parent"), "ack"}).ok());
     }
     {
       std::ofstream out(path, std::ios::binary | std::ios::app);
@@ -247,12 +330,12 @@ private slots:
     };
     auto opened=MembershipStore::open(path,producer,&hook); QVERIFY(opened.ok());
     auto store=std::move(opened.value());
-    auto result=store.append({1,1,peer,MembershipEvent::Kind::Enrolled,"ack"});
+    auto result=store.append({1,1,peer,MembershipEvent::Kind::Enrolled,sha256_hex("parent"),"ack"});
     QVERIFY(!result.ok());
     // The append reached the file before fsync failed. The store has reconciled
     // its sequence from that complete record, so retry cannot reuse sequence 1.
     QCOMPARE(store.last_sequence(),uint64_t(1));
-    QVERIFY(store.append({2,2,peer,MembershipEvent::Kind::Retired,"confirmed"}).ok());
+    QVERIFY(store.append({2,2,peer,MembershipEvent::Kind::Retired,sha256_hex("parent"),"confirmed"}).ok());
     auto recovered=store.recover(); QVERIFY(recovered.ok());
     QCOMPARE(recovered.value().size(),size_t(2));
   }
@@ -430,7 +513,7 @@ private slots:
     auto enrollment_open=MembershipStore::open(
         std::filesystem::path(dir.path().toStdString())/"enrollment-gap.log",producer);
     QVERIFY(enrollment_open.ok()); auto enrollment_store=std::move(enrollment_open.value());
-    QVERIFY(enrollment_store.append({1,7,remaining,MembershipEvent::Kind::Retired,"previous"}).ok());
+    QVERIFY(enrollment_store.append({1,7,remaining,MembershipEvent::Kind::Retired,sha256_hex("parent"),"previous"}).ok());
     auto enrollment=preview_enrollment(current,joining); QVERIFY(enrollment.ok());
     auto enrollment_result=enrollment_store.commit_enrollment(enrollment.value(),current,
         {{retiring,"ack"},{remaining,"ack"},{joining,"ack"}},verifier);
@@ -441,7 +524,7 @@ private slots:
     auto retirement_open=MembershipStore::open(
         std::filesystem::path(dir.path().toStdString())/"retirement-gap.log",producer);
     QVERIFY(retirement_open.ok()); auto retirement_store=std::move(retirement_open.value());
-    QVERIFY(retirement_store.append({1,7,joining,MembershipEvent::Kind::Enrolled,"previous"}).ok());
+    QVERIFY(retirement_store.append({1,7,joining,MembershipEvent::Kind::Enrolled,sha256_hex("parent"),"previous"}).ok());
     auto retirement=preview_retirement(current,retiring,{}); QVERIFY(retirement.ok());
     auto retirement_result=retirement_store.commit_retirement(retirement.value(),current,{},
         {{remaining,"ack"}},"confirm",verifier);

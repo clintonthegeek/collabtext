@@ -24,6 +24,7 @@ struct MembershipEvent {
   uint64_t epoch = 0;
   ActorId subject;
   Kind kind = Kind::Enrolled;
+  std::string parent_descriptor_hash;
   std::string evidence;
 };
 
@@ -56,6 +57,13 @@ struct MembershipDescriptor {
     MembershipDescriptor descriptor);
 [[nodiscard]] Result<void> validate_membership_descriptor(
     const MembershipDescriptor &descriptor);
+[[nodiscard]] std::string membership_event_hash(
+    const MembershipEvent &event, const ActorId &producer);
+[[nodiscard]] Result<void> validate_membership_transition_link(
+    const MembershipDescriptor &parent,
+    const MembershipDescriptor &next,
+    const MembershipEvent &event,
+    const ActorId &producer);
 
 /// Consequences of removing a device from the next epoch. Counts and branch
 /// hashes are captured by the caller from durable document/session state.
@@ -122,6 +130,11 @@ public:
 
   [[nodiscard]] Result<std::vector<MembershipEvent>> recover() const;
   [[nodiscard]] Result<void> append(const MembershipEvent &event);
+  /// Confirm that `next` names a transition event actually present in this
+  /// durable producer journal and that the event extends `parent` membership.
+  [[nodiscard]] Result<void> validate_transition_link(
+      const MembershipDescriptor &parent,
+      const MembershipDescriptor &next) const;
   /// Commits only if the preview still matches current descriptor/impact data,
   /// explicit user confirmation is present, and every remaining member has a
   /// verified acknowledgement from durable caller-owned state.
