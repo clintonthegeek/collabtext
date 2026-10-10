@@ -26,6 +26,8 @@ struct UndoMapKey {
 /// Document/list contents are rebuilt by replay; snapshots keep only identity
 /// references and the step/byte charges for their local history.
 struct LocalUndoEntrySnapshot {
+    Identity group_id;
+    std::vector<Identity> operation_ids;
     std::vector<Identity> inserted_items;
     std::vector<Identity> deletion_operations;
     size_t retained_bytes = 0;

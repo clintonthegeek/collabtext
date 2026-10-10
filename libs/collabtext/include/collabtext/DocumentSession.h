@@ -47,6 +47,12 @@ struct SessionTextEdit {
   std::string new_text;
 };
 
+/// Stable actor-local grouping metadata for correlating undo with consumer events.
+struct LocalUndoGroupMetadata {
+  Crdt::Identity id;
+  std::vector<Crdt::Identity> operations;
+};
+
 class DocumentSession {
 public:
   [[nodiscard]] static Result<std::unique_ptr<DocumentSession>>
@@ -63,6 +69,8 @@ public:
   [[nodiscard]] Result<Crdt::Operation> undo();
   /// Publish a compensating local operation and persist the updated redo cursor.
   [[nodiscard]] Result<Crdt::Operation> redo();
+  [[nodiscard]] std::optional<LocalUndoGroupMetadata> next_undo_group() const;
+  [[nodiscard]] std::optional<LocalUndoGroupMetadata> next_redo_group() const;
   [[nodiscard]] Result<PollReport> poll(PollBudget budget = {});
   [[nodiscard]] Result<void> save();
   [[nodiscard]] Result<void> close();

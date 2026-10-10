@@ -154,6 +154,10 @@ public:
     void set_max_undo_bytes(size_t bytes);
     size_t undo_history_bytes() const { return m_undo_bytes; }
     [[nodiscard]] LocalHistorySnapshot local_history_snapshot() const;
+    [[nodiscard]] std::optional<LocalUndoEntrySnapshot>
+    next_undo_group() const;
+    [[nodiscard]] std::optional<LocalUndoEntrySnapshot>
+    next_redo_group() const;
     [[nodiscard]] Result<void>
     restore_local_history(const LocalHistorySnapshot &snapshot);
 
@@ -231,6 +235,8 @@ private:
     IdListTree m_entry_tree;
 
     struct UndoEntry {
+        Identity group_id;
+        std::vector<Identity> operation_ids;
         std::vector<UndoMapKey> inserted_keys;
         std::vector<Identity> deletion_ids;
         size_t retained_bytes = 0;

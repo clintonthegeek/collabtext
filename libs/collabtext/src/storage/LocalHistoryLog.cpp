@@ -40,7 +40,7 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
                                           const ActorId &owner) {
   std::istringstream in{std::string(line)};
   std::string magic, actor_text;
-  if (!(in >> magic >> actor_text) || magic != "CLH2")
+  if (!(in >> magic >> actor_text) || magic != "CLH3")
     return Error(ErrorCode::corrupt_record, "unknown local history record format");
   auto actor = ActorId::parse(actor_text);
   if (!actor.ok() || actor.value() != owner)
@@ -58,6 +58,19 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
   snapshot.entries.reserve(static_cast<size_t>(count.value()));
   for (uint64_t i = 0; i < count.value(); ++i) {
     Crdt::LocalUndoEntrySnapshot entry;
+    auto group = identity(in, owner);
+    if (!group.ok()) return group.error();
+    entry.group_id = group.value();
+    auto operations = number(in, "group operation count");
+    if (!operations.ok()) return operations.error();
+    if (operations.value() == 0 || operations.value() > kMaxHistoryEntries)
+      return Error(ErrorCode::corrupt_record, "local history group size is invalid");
+    entry.operation_ids.reserve(static_cast<size_t>(operations.value()));
+    for (uint64_t j = 0; j < operations.value(); ++j) {
+      auto id = identity(in, owner);
+      if (!id.ok()) return id.error();
+      entry.operation_ids.push_back(id.value());
+    }
     auto inserted = number(in, "inserted item count");
     if (!inserted.ok()) return inserted.error();
     if (inserted.value() > kMaxHistoryEntries)
@@ -95,7 +108,7 @@ Result<Crdt::LocalHistorySnapshot> decode(std::string_view line,
 std::string encode(const Crdt::LocalHistorySnapshot &snapshot,
                    const ActorId &owner) {
   std::ostringstream out;
-  out << "CLH2 " << owner.to_string() << ' ' << snapshot.cursor << ' '
+  out << "CLH3 " << owner.to_string() << ' ' << snapshot.cursor << ' '
       << snapshot.entries.size();
   auto write_ids = [&](const std::vector<Crdt::Identity> &ids) {
     out << ' ' << ids.size();
@@ -103,6 +116,8 @@ std::string encode(const Crdt::LocalHistorySnapshot &snapshot,
       out << ' ' << id.actor.to_string() << ' ' << id.counter;
   };
   for (const auto &entry : snapshot.entries) {
+    out << ' ' << entry.group_id.actor.to_string() << ' ' << entry.group_id.counter;
+    write_ids(entry.operation_ids);
     write_ids(entry.inserted_items);
     write_ids(entry.deletion_operations);
     out << ' ' << entry.retained_bytes;
@@ -144,6 +159,10 @@ Result<std::string> unhex(std::string_view text) {
 bool belongs_to(const Crdt::LocalHistorySnapshot &snapshot,
                 const ActorId &owner) {
   for (const auto &entry : snapshot.entries) {
+    if (entry.group_id.actor != owner || entry.group_id.counter == 0 ||
+        entry.operation_ids.empty()) return false;
+    for (const auto &id : entry.operation_ids)
+      if (id.actor != owner || id.counter == 0) return false;
     for (const auto &id : entry.inserted_items)
       if (id.actor != owner || id.counter == 0) return false;
     for (const auto &id : entry.deletion_operations)

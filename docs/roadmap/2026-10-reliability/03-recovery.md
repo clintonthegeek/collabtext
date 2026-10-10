@@ -169,6 +169,8 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 **Coverage:** F1, F2, R10  
 **Design/decision gate:** Q3 resolved: persistent actor-local undo AND redo, bounded by step and byte limits.  
 
+**Implementation progress:** Buffer history now persists stable group identities and ordered member operation identities through coalescing and CLH3 checkpoints. `DocumentSession` exposes the next undo/redo group metadata for W5 correlation. The consumer-owned event-log integration, IdList history persistence, and explicit retirement events remain open; see TASKS.json for current verification evidence.
+
 **Files / scope:**
 
 - `libs/collabtext/src/storage/LocalHistoryLog.cpp`
@@ -185,6 +187,8 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 - `libs/collabtext/src/DocumentSession.cpp`
 - `libs/collabtext/tests/tst_session_recovery.cpp`
 - `docs/specs/vnext-external-position-contract.md`
+- `docs/roadmap/2026-10-reliability/03-recovery.md`
+- `docs/specs/vnext-consumer-session.md`
 
 **Steps:**
 

@@ -166,6 +166,10 @@ public:
     /// Copy the local undo/redo stack for persistence. Restore only after the
     /// corresponding operation history has been replayed into this buffer.
     [[nodiscard]] LocalHistorySnapshot local_history_snapshot() const;
+    [[nodiscard]] std::optional<LocalUndoEntrySnapshot>
+    next_undo_group() const;
+    [[nodiscard]] std::optional<LocalUndoEntrySnapshot>
+    next_redo_group() const;
     [[nodiscard]] Result<void>
     restore_local_history(const LocalHistorySnapshot &snapshot);
 
@@ -361,6 +365,8 @@ private:
     /// (created by `coalesce_last_undo`) may carry several so that one
     /// Ctrl+Z reverses every grouped local edit at once.
     struct UndoEntry {
+        Identity group_id;
+        std::vector<Identity> operation_ids;
         std::vector<UndoMapKey> inserted_keys;
         std::vector<Identity> deletion_ids;
         size_t retained_bytes = 0;

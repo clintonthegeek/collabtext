@@ -570,6 +570,8 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     op.new_text = new_text;
     op.version = m_version;
     UndoEntry undo_entry;
+    undo_entry.group_id = op_identity;
+    undo_entry.operation_ids.push_back(op_identity);
     undo_entry.retained_bytes = retained_bytes;
     bool had_deletions = false;
 
@@ -1044,6 +1046,9 @@ bool Buffer::coalesce_last_undo() {
     previous.deletion_ids.insert(previous.deletion_ids.end(),
                                  latest.deletion_ids.begin(),
                                  latest.deletion_ids.end());
+    previous.operation_ids.insert(previous.operation_ids.end(),
+                                  latest.operation_ids.begin(),
+                                  latest.operation_ids.end());
     previous.retained_bytes = latest.retained_bytes > SIZE_MAX - previous.retained_bytes
                                   ? SIZE_MAX
                                   : previous.retained_bytes + latest.retained_bytes;
@@ -1061,6 +1066,8 @@ LocalHistorySnapshot Buffer::local_history_snapshot() const {
     snapshot.entries.reserve(m_undo_stack.size());
     for (const auto &entry : m_undo_stack) {
         LocalUndoEntrySnapshot saved;
+        saved.group_id = entry.group_id;
+        saved.operation_ids = entry.operation_ids;
         saved.inserted_items.reserve(entry.inserted_keys.size());
         for (const auto &key : entry.inserted_keys)
             saved.inserted_items.push_back(key.position);
@@ -1069,6 +1076,16 @@ LocalHistorySnapshot Buffer::local_history_snapshot() const {
         snapshot.entries.push_back(std::move(saved));
     }
     return snapshot;
+}
+
+std::optional<LocalUndoEntrySnapshot> Buffer::next_undo_group() const {
+    if (m_undo_cursor == 0) return std::nullopt;
+    return local_history_snapshot().entries[m_undo_cursor - 1];
+}
+
+std::optional<LocalUndoEntrySnapshot> Buffer::next_redo_group() const {
+    if (m_undo_cursor >= m_undo_stack.size()) return std::nullopt;
+    return local_history_snapshot().entries[m_undo_cursor];
 }
 
 Result<void>
@@ -1093,6 +1110,16 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
                          "local history exceeds configured byte bound");
         restored_bytes += saved.retained_bytes;
         UndoEntry entry;
+        if (!valid_local_identity(saved.group_id) || saved.operation_ids.empty())
+            return Error(ErrorCode::history_unavailable,
+                         "local undo group metadata is absent from owner history");
+        entry.group_id = saved.group_id;
+        for (const auto &id : saved.operation_ids) {
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "local undo group member is absent from owner history");
+            entry.operation_ids.push_back(id);
+        }
         entry.inserted_keys.reserve(saved.inserted_items.size());
         for (const auto &id : saved.inserted_items) {
             if (!valid_local_identity(id))

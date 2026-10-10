@@ -105,7 +105,8 @@ Result<IdListOperation> IdList::insert_after_resolved(const Anchor& after, uint6
     // k. Push undo entry
     m_undo_stack.resize(m_undo_cursor);  // truncate redo tail
     m_undo_stack.push_back(UndoEntry{
-        {UndoMapKey(origin)}, {}, sizeof(uint64_t) + sizeof(UndoMapKey)});
+        origin, {origin}, {UndoMapKey(origin)}, {},
+        sizeof(uint64_t) + sizeof(UndoMapKey)});
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
 
@@ -177,7 +178,8 @@ Result<IdListOperation> IdList::remove_at_resolved(const Anchor& target) {
     // j. Push undo entry: empty inserted_keys, del_id in deletion_ids
     m_undo_stack.resize(m_undo_cursor);
     m_undo_stack.push_back(UndoEntry{
-        {}, {del_id}, sizeof(uint64_t) + sizeof(Identity)});
+        del_id, {del_id}, {}, {del_id},
+        sizeof(uint64_t) + sizeof(Identity)});
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
 
@@ -299,6 +301,9 @@ bool IdList::coalesce_last_undo() {
     previous.deletion_ids.insert(previous.deletion_ids.end(),
                                  latest.deletion_ids.begin(),
                                  latest.deletion_ids.end());
+    previous.operation_ids.insert(previous.operation_ids.end(),
+                                  latest.operation_ids.begin(),
+                                  latest.operation_ids.end());
     previous.retained_bytes = latest.retained_bytes > SIZE_MAX - previous.retained_bytes
                                   ? SIZE_MAX
                                   : previous.retained_bytes + latest.retained_bytes;
@@ -347,6 +352,8 @@ LocalHistorySnapshot IdList::local_history_snapshot() const {
     snapshot.entries.reserve(m_undo_stack.size());
     for (const auto &entry : m_undo_stack) {
         LocalUndoEntrySnapshot saved;
+        saved.group_id = entry.group_id;
+        saved.operation_ids = entry.operation_ids;
         saved.inserted_items.reserve(entry.inserted_keys.size());
         for (const auto &key : entry.inserted_keys)
             saved.inserted_items.push_back(key.position);
@@ -355,6 +362,16 @@ LocalHistorySnapshot IdList::local_history_snapshot() const {
         snapshot.entries.push_back(std::move(saved));
     }
     return snapshot;
+}
+
+std::optional<LocalUndoEntrySnapshot> IdList::next_undo_group() const {
+    if (m_undo_cursor == 0) return std::nullopt;
+    return local_history_snapshot().entries[m_undo_cursor - 1];
+}
+
+std::optional<LocalUndoEntrySnapshot> IdList::next_redo_group() const {
+    if (m_undo_cursor >= m_undo_stack.size()) return std::nullopt;
+    return local_history_snapshot().entries[m_undo_cursor];
 }
 
 Result<void> IdList::restore_local_history(const LocalHistorySnapshot &snapshot) {
@@ -377,6 +394,16 @@ Result<void> IdList::restore_local_history(const LocalHistorySnapshot &snapshot)
                          "IdList history exceeds configured byte bound");
         restored_bytes += saved.retained_bytes;
         UndoEntry entry;
+        if (!valid_local_id(saved.group_id) || saved.operation_ids.empty())
+            return Error(ErrorCode::history_unavailable,
+                         "IdList undo group metadata is absent from owner history");
+        entry.group_id = saved.group_id;
+        for (const auto &id : saved.operation_ids) {
+            if (!valid_local_id(id))
+                return Error(ErrorCode::history_unavailable,
+                             "IdList undo group member is absent from owner history");
+            entry.operation_ids.push_back(id);
+        }
         entry.inserted_keys.reserve(saved.inserted_items.size());
         for (const auto &id : saved.inserted_items) {
             if (!valid_local_id(id))

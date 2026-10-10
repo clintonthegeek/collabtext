@@ -63,6 +63,31 @@ private slots:
     QCOMPARE(replayed.text(), std::string("abc"));
   }
 
+  void coalesced_group_metadata_is_stable_and_round_trips() {
+    Buffer original(Test::test_counter(9));
+    auto first = original.try_apply_local_edit({{0, 0}}, {"a"});
+    const auto group_id = original.next_undo_group()->group_id;
+    auto second = original.try_apply_local_edit({{1, 1}}, {"b"});
+    QVERIFY(first.ok());
+    QVERIFY(second.ok());
+    QVERIFY(original.coalesce_last_undo());
+    auto group = original.next_undo_group();
+    QVERIFY(group.has_value());
+    QCOMPARE(group->group_id, group_id);
+    QCOMPARE(group->operation_ids,
+             (std::vector<Identity>{op_identity(first.value()), op_identity(second.value())}));
+
+    const auto snapshot = original.local_history_snapshot();
+    Buffer replayed(Test::test_counter(9, 100));
+    const auto applied = replayed.apply_ops({first.value(), second.value()});
+    QCOMPARE(applied.size(), size_t(2));
+    QVERIFY(replayed.restore_local_history(snapshot).ok());
+    const auto restored = replayed.next_undo_group();
+    QVERIFY(restored.has_value());
+    QCOMPARE(restored->group_id, group_id);
+    QCOMPARE(restored->operation_ids, group->operation_ids);
+  }
+
   void idlist_snapshot_restores_undo_and_redo_after_replay() {
     IdList original(Test::test_counter(9));
     auto insert = original.try_insert_after(Anchor::min(), 42);
@@ -98,6 +123,8 @@ private slots:
     LocalHistorySnapshot forged;
     forged.cursor = 1;
     LocalUndoEntrySnapshot entry;
+    entry.group_id = Test::id(9, 1);
+    entry.operation_ids.push_back(Test::id(9, 1));
     entry.inserted_items.push_back(Test::id(9, 1));
     forged.entries.push_back(entry);
     const auto result = buffer.restore_local_history(forged);
@@ -174,6 +201,8 @@ private slots:
     Crdt::LocalHistorySnapshot saved;
     saved.cursor = 1;
     Crdt::LocalUndoEntrySnapshot entry;
+    entry.group_id = Test::id(9, 1);
+    entry.operation_ids.push_back(Test::id(9, 1));
     entry.inserted_items.push_back(Test::id(9, 1));
     saved.entries.push_back(entry);
     {

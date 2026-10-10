@@ -382,6 +382,22 @@ Result<Operation> DocumentSession::redo() {
   return m_impl->publish_local(std::move(*operation.value()));
 }
 
+std::optional<LocalUndoGroupMetadata>
+DocumentSession::next_undo_group() const {
+  if (!m_impl || !m_impl->buffer) return std::nullopt;
+  auto entry = m_impl->buffer->next_undo_group();
+  if (!entry) return std::nullopt;
+  return LocalUndoGroupMetadata{entry->group_id, std::move(entry->operation_ids)};
+}
+
+std::optional<LocalUndoGroupMetadata>
+DocumentSession::next_redo_group() const {
+  if (!m_impl || !m_impl->buffer) return std::nullopt;
+  auto entry = m_impl->buffer->next_redo_group();
+  if (!entry) return std::nullopt;
+  return LocalUndoGroupMetadata{entry->group_id, std::move(entry->operation_ids)};
+}
+
 Result<PollReport> DocumentSession::poll(PollBudget budget) {
   if (!m_impl || m_impl->closed)
     return Error(ErrorCode::writer_conflict, "session is closed");

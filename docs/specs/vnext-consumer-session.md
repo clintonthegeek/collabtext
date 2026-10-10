@@ -56,7 +56,13 @@ the session becomes unusable for further local edits and reports that the
 caller must reopen to reconcile. Save flushes the operation log and private
 identity state. Close is explicit so write failures can be returned.
 
-The reference session currently supports a single text stream. It does not
-persist local undo/redo stacks; that policy belongs to L06. The consumer owns
-the engine and session lifetime and may instead construct its own headless
-document seam around public primitives and a custom `OpStream`.
+The reference session currently supports a single text stream and persists the
+owning actor's bounded Buffer undo/redo history alongside operation commits.
+`next_undo_group()` and `next_redo_group()` expose a stable group identity and
+the local operation identities represented by that group. Coalescing keeps the
+older group's identity and appends the newer operations; reopening preserves
+that metadata. Consumers can correlate those identities with their own event
+log, while undo remains a new compensating event. The consumer owns engine and
+session lifetime and may instead construct its own headless document seam
+around public primitives and a custom `OpStream`; persistence of a consumer's
+IdList history and multi-block group policy remain consumer work.

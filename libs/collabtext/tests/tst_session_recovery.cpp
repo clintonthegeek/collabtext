@@ -148,21 +148,35 @@ private slots:
     const std::filesystem::path root = tmp.path().toStdString();
     const DocumentSessionConfig config{root / "shared", root / "device",
                                        "doc-undo", "text-undo", 1};
+    Crdt::Identity stable_group_id;
+    std::vector<Crdt::Identity> stable_operations;
     {
       auto opened = DocumentSession::open(config);
       QVERIFY(opened.ok());
       auto session = std::move(opened).value();
       QVERIFY(session->apply_local({{0, 0}}, {"local"}).ok());
       QCOMPARE(session->text(), std::string("local"));
+      const auto group = session->next_undo_group();
+      QVERIFY(group.has_value());
+      QCOMPARE(group->operations.size(), size_t(1));
+      stable_group_id = group->id;
+      stable_operations = group->operations;
       QVERIFY(session->close().ok());
     }
     {
-      auto opened = DocumentSession::open(config);
-      QVERIFY(opened.ok());
-      auto session = std::move(opened).value();
+      auto reopened = DocumentSession::open(config);
+      QVERIFY(reopened.ok());
+      auto session = std::move(reopened).value();
       QCOMPARE(session->text(), std::string("local"));
+      const auto recovered_group = session->next_undo_group();
+      QVERIFY(recovered_group.has_value());
+      QCOMPARE(recovered_group->id, stable_group_id);
+      QCOMPARE(recovered_group->operations, stable_operations);
       QVERIFY(session->undo().ok());
       QCOMPARE(session->text(), std::string{});
+      const auto redo_group = session->next_redo_group();
+      QVERIFY(redo_group.has_value());
+      QCOMPARE(redo_group->id, stable_group_id);
       QVERIFY(session->close().ok());
     }
     {
