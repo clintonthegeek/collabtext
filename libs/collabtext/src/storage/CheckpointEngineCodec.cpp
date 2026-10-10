@@ -316,6 +316,10 @@ Result<CheckpointShareableCore> decode_checkpoint_core(
   auto causal = decode_checkpoint_causal(artifact.sections[2]);
   if (!causal) return causal.error().with_context("checkpoint.core");
   core.causal = std::move(causal.value());
+  auto deferred = decode_checkpoint_deferred(
+      artifact.sections[3], core.context, core.causal.version);
+  if (!deferred) return deferred.error().with_context("checkpoint.core");
+  core.deferred = std::move(deferred.value());
 
   auto covered = [&](const Crdt::Identity &id) {
     return valid_identity(id) && core.causal.version.observed(id);

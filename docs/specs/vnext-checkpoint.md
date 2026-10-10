@@ -1,9 +1,10 @@
 # vNext Engine Checkpoint Format
 
-**Status:** format contract for G04; bounded framing, Context, Engine, and
-Causal section codecs, plus in-memory engine snapshot adapters, are implemented.
-Remaining section payload codecs and provider/session integrations are in
-progress.
+**Status:** format contract for G04; bounded framing and Context, Engine,
+Causal, and Deferred section codecs are implemented, along with the combined
+core validator and in-memory engine snapshot adapters. Coverage, pins, anchor
+translation, private companion payloads, and provider/session integrations are
+in progress.
 
 This format defines a validated shareable snapshot and a separately bound
 actor-local companion. It is not a replacement for the retained operation log
@@ -103,6 +104,19 @@ Each count is limited to 1,000,000, and complete section consumption is
 required. Restore rebuilds the UndoMap and rejects invalid identities, duplicate
 or unordered keys, and zero counts.
 
+The Deferred input section begins with a u32 record count (at most 4096). The
+stream and epoch are inherited from Context; each record stores a 16-byte
+producer, u64 delivery sequence, u8 disposition (`0=deferred`, `1=quarantined`),
+u32 original operation byte length and bytes, then a u16 reason byte length and
+UTF-8 reason bytes. Records are strictly ordered by producer ID and delivery
+sequence, which also forbids duplicate tokens. Delivery sequences are nonzero
+and cannot be exhausted. Deferred operation bytes must decode as the Context's
+engine kind, name the token producer, remain outside applied state, and still
+be causally deferred. Quarantined bytes and their reason are retained even when
+the payload cannot decode; quarantined input never advances applied coverage.
+Operation bytes are limited to 16 MiB each, reasons to 2048 bytes, and total
+section size to the artifact bound. Complete consumption is required.
+
 The Engine section starts with `u16 engine_kind` and `u32 entry_count`, with a
 maximum of 1,000,000 entries. Every identity uses the 24-byte encoding above.
 Each entry then stores its origin identity and a placement link: a parent
@@ -124,11 +138,12 @@ derived. Import rebuilds them from logical entries and UndoMap state, then
 checks visible text/count, fragment ranges, identities, links, and summaries
 before exposing the engine. Serialized visibility is never authoritative.
 
-The core artifact decoder parses Context, Engine, and Causal together. It rejects
-engine-kind disagreement and any engine link, deletion, item range, or UndoMap
-identity not covered by the causal version vector. Primitive restore then
-performs its additional state and owner-allocator checks before swapping live
-state.
+The core artifact decoder parses Context, Engine, Causal, and Deferred input
+together. It rejects engine-kind disagreement and any engine link, deletion,
+item range, or UndoMap identity not covered by the causal version vector. It
+also requires every deferred delivery to match the context and remain causally
+unapplied. Primitive restore then performs its additional state and
+owner-allocator checks before swapping live state.
 
 Deferred records retain the original operation bytes and delivery token. They
 are not included in applied operation coverage. Quarantined records remain

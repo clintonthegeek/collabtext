@@ -2,6 +2,7 @@
 #include "crdt/Buffer.h"
 #include "crdt/IdList.h"
 #include "TestActor.h"
+#include <collabtext/Serialization.h>
 
 #include "core/Sha256.h"
 
@@ -158,14 +159,17 @@ private slots:
     auto context_section = encode_checkpoint_context(context);
     auto engine_section = encode_checkpoint_engine(CheckpointEngineState{});
     auto causal_section = encode_checkpoint_causal(causal);
+    auto deferred_section = encode_checkpoint_deferred({}, context, causal.version);
     QVERIFY(context_section);
     QVERIFY(engine_section);
     QVERIFY(causal_section);
+    QVERIFY(deferred_section);
 
     auto sections = shared_sections();
     sections[0] = context_section.value();
     sections[1] = engine_section.value();
     sections[2] = causal_section.value();
+    sections[3] = deferred_section.value();
     const auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
     const auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
@@ -260,12 +264,16 @@ private slots:
                                       text_snapshot.undo_entries};
     auto context_section = encode_checkpoint_context(text_context);
     auto causal_section = encode_checkpoint_causal(text_causal);
+    auto deferred_section = encode_checkpoint_deferred(
+        {}, text_context, text_causal.version);
     QVERIFY(context_section);
     QVERIFY(causal_section);
+    QVERIFY(deferred_section);
     auto sections = shared_sections();
     sections[0] = context_section.value();
     sections[1] = text_payload.value();
     sections[2] = causal_section.value();
+    sections[3] = deferred_section.value();
     auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
     auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
@@ -299,12 +307,16 @@ private slots:
                                       list_snapshot.undo_entries};
     context_section = encode_checkpoint_context(list_context);
     causal_section = encode_checkpoint_causal(list_causal);
+    deferred_section = encode_checkpoint_deferred(
+        {}, list_context, list_causal.version);
     QVERIFY(context_section);
     QVERIFY(causal_section);
+    QVERIFY(deferred_section);
     sections = shared_sections();
     sections[0] = context_section.value();
     sections[1] = list_payload.value();
     sections[2] = causal_section.value();
+    sections[3] = deferred_section.value();
     framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
     artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
@@ -320,6 +332,84 @@ private slots:
     QCOMPARE(restored_list.entries().size(), source_list.entries().size());
     QCOMPARE(restored_list.resolve_anchor(source_list.anchor_of(20)),
              source_list.resolve_anchor(source_list.anchor_of(20)));
+  }
+
+  void deferredSectionPreservesDeliveryAndOpaqueQuarantine() {
+    Crdt::Buffer producer(CollabText::Test::test_counter(1));
+    auto first = producer.try_apply_local_edit({{0, 0}}, {"A"});
+    QVERIFY(first);
+    auto second = producer.try_apply_local_edit({{1, 1}}, {"B"});
+    QVERIFY(second);
+    const auto first_bytes_result = Crdt::encode_operation(first.value());
+    const auto second_bytes_result = Crdt::encode_operation(second.value());
+    QVERIFY(first_bytes_result);
+    QVERIFY(second_bytes_result);
+    const auto first_bytes = first_bytes_result.value();
+    const auto second_bytes = second_bytes_result.value();
+    CheckpointContext context{"doc", "main", 9, "",
+                              CheckpointEngineKind::Text};
+    CheckpointShareableCore::DeferredRecord waiting{
+        DeliveryToken{"main", 9, CollabText::Test::actor(1), 2},
+        second_bytes, false, {}};
+    CheckpointShareableCore::DeferredRecord rejected{
+        DeliveryToken{"main", 9, CollabText::Test::actor(2), 4},
+        "opaque rejected envelope", true, "invalid payload"};
+    const std::vector<CheckpointShareableCore::DeferredRecord> records{
+        waiting, rejected};
+    Crdt::Global applied;
+    auto encoded = encode_checkpoint_deferred(records, context, applied);
+    QVERIFY(encoded);
+    auto decoded = decode_checkpoint_deferred(encoded.value(), context, applied);
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value().size(), size_t{2});
+    QCOMPARE(decoded.value()[0], waiting);
+    QCOMPARE(decoded.value()[1], rejected);
+    QVERIFY(decoded.value()[0].operation_bytes == second_bytes);
+    QVERIFY(decoded.value()[0].operation_bytes != first_bytes);
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_deferred(truncated, context, applied),
+               qPrintable(QString::number(length)));
+    }
+
+    auto wrong_producer = waiting;
+    wrong_producer.token.producer = CollabText::Test::actor(3);
+    QVERIFY(!encode_checkpoint_deferred({wrong_producer}, context, applied));
+    auto duplicate_token = std::vector<CheckpointShareableCore::DeferredRecord>{waiting,
+                                                                                waiting};
+    QVERIFY(!encode_checkpoint_deferred(duplicate_token, context, applied));
+    auto missing_reason = rejected;
+    missing_reason.reason.clear();
+    QVERIFY(!encode_checkpoint_deferred({missing_reason}, context, applied));
+    auto malformed = encoded.value();
+    malformed.bytes.push_back('\0');
+    QVERIFY(!decode_checkpoint_deferred(malformed, context, applied));
+    auto already_applied = applied;
+    already_applied.observe(Crdt::get_op_timestamp(second.value()));
+    QVERIFY(!decode_checkpoint_deferred(encoded.value(), context, already_applied));
+
+    Crdt::IdList list_producer(CollabText::Test::test_counter(5));
+    auto list_first = list_producer.try_insert_after(Crdt::Anchor::min(), 10);
+    QVERIFY(list_first);
+    auto list_second = list_producer.try_insert_after(
+        list_producer.anchor_of(10), 20);
+    QVERIFY(list_second);
+    auto list_bytes = Crdt::encode_idlist_operation(list_second.value());
+    QVERIFY(list_bytes);
+    CheckpointContext list_context{"doc", "main", 9, "",
+                                  CheckpointEngineKind::IdList};
+    CheckpointShareableCore::DeferredRecord list_waiting{
+        DeliveryToken{"main", 9, CollabText::Test::actor(5), 8},
+        list_bytes.value(), false, {}};
+    auto list_encoded = encode_checkpoint_deferred({list_waiting}, list_context,
+                                                   Crdt::Global{});
+    QVERIFY(list_encoded);
+    auto list_decoded = decode_checkpoint_deferred(
+        list_encoded.value(), list_context, Crdt::Global{});
+    QVERIFY(list_decoded);
+    QCOMPARE(list_decoded.value(),
+             (std::vector<CheckpointShareableCore::DeferredRecord>{list_waiting}));
   }
 
   void rejectsEveryTruncation() {

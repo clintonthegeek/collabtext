@@ -1,6 +1,7 @@
 #pragma once
 
 #include <collabtext/ActorId.h>
+#include <collabtext/OpStream.h>
 #include "crdt/Fragment.h"
 #include "crdt/IdList.h"
 #include "crdt/UndoMap.h"
@@ -54,6 +55,14 @@ struct CheckpointShareableCore {
   CheckpointContext context;
   CheckpointEngineState engine;
   CheckpointCausalState causal;
+  struct DeferredRecord {
+    DeliveryToken token;
+    std::string operation_bytes;
+    bool quarantined = false;
+    std::string reason;
+    bool operator==(const DeferredRecord &) const = default;
+  };
+  std::vector<DeferredRecord> deferred;
 };
 
 inline constexpr size_t kCheckpointMaxBytes = 256u * 1024u * 1024u;
@@ -86,5 +95,14 @@ encode_checkpoint_engine(const CheckpointEngineState &state);
 decode_checkpoint_engine(const CheckpointSection &section);
 [[nodiscard]] Result<CheckpointShareableCore>
 decode_checkpoint_core(const CheckpointArtifact &artifact);
+[[nodiscard]] Result<CheckpointSection>
+encode_checkpoint_deferred(
+    const std::vector<CheckpointShareableCore::DeferredRecord> &records,
+    const CheckpointContext &context,
+    const Crdt::Global &applied_version);
+[[nodiscard]] Result<std::vector<CheckpointShareableCore::DeferredRecord>>
+decode_checkpoint_deferred(const CheckpointSection &section,
+                           const CheckpointContext &context,
+                           const Crdt::Global &applied_version);
 
 }  // namespace CollabText::Storage
