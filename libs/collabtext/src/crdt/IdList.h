@@ -144,6 +144,8 @@ public:
 
     std::optional<IdListOperation> undo();
     std::optional<IdListOperation> redo();
+    [[nodiscard]] Result<std::optional<IdListOperation>> try_undo();
+    [[nodiscard]] Result<std::optional<IdListOperation>> try_redo();
     size_t undo_depth() const { return m_undo_cursor; }
     bool coalesce_last_undo();
     size_t max_undo_depth() const { return m_max_undo_depth; }

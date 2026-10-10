@@ -202,14 +202,20 @@ std::vector<ApplyOutcome> IdList::apply_ops(const std::vector<IdListOperation>& 
 }
 
 std::optional<IdListOperation> IdList::undo() {
-    if (m_undo_cursor == 0) return std::nullopt;
+    auto result = try_undo();
+    if (!result.ok()) return std::nullopt;
+    return std::move(result).value();
+}
 
-    if (auto usable = check_allocator(); !usable.ok()) return std::nullopt;
+Result<std::optional<IdListOperation>> IdList::try_undo() {
+    if (m_undo_cursor == 0) return std::optional<IdListOperation>{};
+
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
 
     // Reserved before the cursor moves: a refused undo that had already
     // decremented m_undo_cursor would silently drop an entry from the history.
     auto reserved = m_allocator->reserve_run(1);
-    if (!reserved.ok()) return std::nullopt;
+    if (!reserved.ok()) return reserved.error();
 
     m_undo_cursor--;
     auto& entry = m_undo_stack[m_undo_cursor];
@@ -236,17 +242,24 @@ std::optional<IdListOperation> IdList::undo() {
     m_version.observe(op.timestamp);
     if (m_on_change) m_on_change();
     emit_local_op(op);
-    return op;
+    return std::optional<IdListOperation>(std::move(op));
 }
 
 std::optional<IdListOperation> IdList::redo() {
-    if (m_undo_cursor >= m_undo_stack.size()) return std::nullopt;
+    auto result = try_redo();
+    if (!result.ok()) return std::nullopt;
+    return std::move(result).value();
+}
 
-    if (auto usable = check_allocator(); !usable.ok()) return std::nullopt;
+Result<std::optional<IdListOperation>> IdList::try_redo() {
+    if (m_undo_cursor >= m_undo_stack.size())
+        return std::optional<IdListOperation>{};
+
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
 
     // Reserved before the cursor moves; see undo().
     auto reserved = m_allocator->reserve_run(1);
-    if (!reserved.ok()) return std::nullopt;
+    if (!reserved.ok()) return reserved.error();
 
     auto& entry = m_undo_stack[m_undo_cursor];
     m_undo_cursor++;
@@ -273,7 +286,7 @@ std::optional<IdListOperation> IdList::redo() {
     m_version.observe(op.timestamp);
     if (m_on_change) m_on_change();
     emit_local_op(op);
-    return op;
+    return std::optional<IdListOperation>(std::move(op));
 }
 
 bool IdList::coalesce_last_undo() {

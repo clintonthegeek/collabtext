@@ -364,22 +364,22 @@ Result<Operation> DocumentSession::undo() {
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; undo is disabled");
-  auto operation = m_impl->buffer->undo();
-  if (!operation)
-    return Error(ErrorCode::not_found,
-                 "no undo operation is available or its identity reservation failed");
-  return m_impl->publish_local(std::move(*operation));
+  auto operation = m_impl->buffer->try_undo();
+  if (!operation.ok()) return operation.error();
+  if (!operation.value())
+    return Error(ErrorCode::not_found, "no undo operation is available");
+  return m_impl->publish_local(std::move(*operation.value()));
 }
 
 Result<Operation> DocumentSession::redo() {
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; redo is disabled");
-  auto operation = m_impl->buffer->redo();
-  if (!operation)
-    return Error(ErrorCode::not_found,
-                 "no redo operation is available or its identity reservation failed");
-  return m_impl->publish_local(std::move(*operation));
+  auto operation = m_impl->buffer->try_redo();
+  if (!operation.ok()) return operation.error();
+  if (!operation.value())
+    return Error(ErrorCode::not_found, "no redo operation is available");
+  return m_impl->publish_local(std::move(*operation.value()));
 }
 
 Result<PollReport> DocumentSession::poll(PollBudget budget) {

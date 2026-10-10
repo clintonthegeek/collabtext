@@ -1116,21 +1116,27 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
 }
 
 std::optional<Operation> Buffer::undo() {
+    auto result = try_undo();
+    if (!result.ok()) return std::nullopt;
+    return std::move(result).value();
+}
+
+Result<std::optional<Operation>> Buffer::try_undo() {
     if (m_undo_cursor == 0)
-        return std::nullopt;
+        return std::optional<Operation>{};
 
     // An undo inserts no items, so it reserves exactly one value: its own
     // identity (§3.2 with n == 0). The identities it targets are item
     // identities from a different domain, which is why no undo-map entry can be
     // confused with the operation that produced it (§3.3).
     //
-    if (auto usable = check_allocator(); !usable.ok()) return std::nullopt;
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
 
     // Reserved *before* the cursor moves: a refused undo that had already
     // decremented m_undo_cursor would silently drop an entry from the undo
     // history.
     auto reserved = m_allocator->reserve_run(1);
-    if (!reserved.ok()) return std::nullopt;
+    if (!reserved.ok()) return reserved.error();
 
     m_undo_cursor--;
     auto &entry = m_undo_stack[m_undo_cursor];
@@ -1158,12 +1164,23 @@ std::optional<Operation> Buffer::undo() {
     });
 
     m_version.observe(op.timestamp);
-    return op;
+    return std::optional<Operation>(std::move(op));
 }
 
 std::optional<Operation> Buffer::redo() {
+    auto result = try_redo();
+    if (!result.ok()) return std::nullopt;
+    return std::move(result).value();
+}
+
+Result<std::optional<Operation>> Buffer::try_redo() {
     if (m_undo_cursor >= m_undo_stack.size())
-        return std::nullopt;
+        return std::optional<Operation>{};
+
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
+
+    auto reserved = m_allocator->reserve_run(1);
+    if (!reserved.ok()) return reserved.error();
 
     auto &entry = m_undo_stack[m_undo_cursor];
     m_undo_cursor++;
@@ -1172,9 +1189,6 @@ std::optional<Operation> Buffer::redo() {
     // identity (§3.2 with n == 0). The identities it targets are item
     // identities from a different domain, which is why no undo-map entry can be
     // confused with the operation that produced it (§3.3).
-    auto reserved = m_allocator->reserve_run(1);
-    if (!reserved.ok()) return std::nullopt;
-
     UndoOperation op;
     op.version = m_version;
     op.timestamp = Identity(m_allocator->actor(), reserved.value());
@@ -1198,7 +1212,7 @@ std::optional<Operation> Buffer::redo() {
     });
 
     m_version.observe(op.timestamp);
-    return op;
+    return std::optional<Operation>(std::move(op));
 }
 
 } // namespace CollabText::Crdt

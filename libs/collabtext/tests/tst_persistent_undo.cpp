@@ -13,6 +13,32 @@
 using namespace CollabText;
 using namespace CollabText::Crdt;
 
+namespace {
+class ToggleAllocator final : public IdentityAllocator {
+public:
+  explicit ToggleAllocator(ActorId owner) : m_owner(std::move(owner)) {}
+  Result<uint64_t> reserve_run(uint64_t count) override {
+    if (fail_reservations)
+      return Error(ErrorCode::counter_exhausted, "injected identity exhaustion");
+    if (count > UINT64_MAX - m_next)
+      return Error(ErrorCode::counter_exhausted, "identity counter exhausted");
+    const auto base = m_next;
+    m_next += count;
+    return base;
+  }
+  void observe(uint64_t counter) override {
+    if (counter >= m_next && counter != UINT64_MAX) m_next = counter + 1;
+  }
+  uint64_t peek() const noexcept override { return m_next; }
+  const ActorId &actor() const noexcept override { return m_owner; }
+  bool fail_reservations = false;
+
+private:
+  ActorId m_owner;
+  uint64_t m_next = 1;
+};
+} // namespace
+
 class TestPersistentUndo : public QObject {
   Q_OBJECT
 private slots:
@@ -100,6 +126,44 @@ private slots:
     QVERIFY(!refused.ok());
     QCOMPARE(refused.error().code(), ErrorCode::limit_exceeded);
     QCOMPARE(limited.text(), std::string{});
+  }
+
+  void checked_undo_redo_preserve_reservation_errors_and_cursor() {
+    auto buffer_allocator = std::make_shared<ToggleAllocator>(Test::actor(9));
+    Buffer buffer(buffer_allocator);
+    QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {"x"}).ok());
+    buffer_allocator->fail_reservations = true;
+    auto buffer_undo = buffer.try_undo();
+    QVERIFY(!buffer_undo.ok());
+    QCOMPARE(buffer_undo.error().code(), ErrorCode::counter_exhausted);
+    QCOMPARE(buffer.undo_depth(), size_t(1));
+    QCOMPARE(buffer.text(), std::string("x"));
+    buffer_allocator->fail_reservations = false;
+    QVERIFY(buffer.try_undo().value().has_value());
+    buffer_allocator->fail_reservations = true;
+    auto buffer_redo = buffer.try_redo();
+    QVERIFY(!buffer_redo.ok());
+    QCOMPARE(buffer_redo.error().code(), ErrorCode::counter_exhausted);
+    QCOMPARE(buffer.undo_depth(), size_t(0));
+    QCOMPARE(buffer.text(), std::string{});
+
+    auto list_allocator = std::make_shared<ToggleAllocator>(Test::actor(10));
+    IdList list(list_allocator);
+    QVERIFY(list.try_insert_after(Anchor::min(), 99).ok());
+    list_allocator->fail_reservations = true;
+    auto list_undo = list.try_undo();
+    QVERIFY(!list_undo.ok());
+    QCOMPARE(list_undo.error().code(), ErrorCode::counter_exhausted);
+    QCOMPARE(list.undo_depth(), size_t(1));
+    QCOMPARE(list.ids(), std::vector<uint64_t>{99});
+    list_allocator->fail_reservations = false;
+    QVERIFY(list.try_undo().value().has_value());
+    list_allocator->fail_reservations = true;
+    auto list_redo = list.try_redo();
+    QVERIFY(!list_redo.ok());
+    QCOMPARE(list_redo.error().code(), ErrorCode::counter_exhausted);
+    QCOMPARE(list.undo_depth(), size_t(0));
+    QCOMPARE(list.size(), uint32_t(0));
   }
 
   void durable_history_log_recovers_latest_complete_snapshot() {
