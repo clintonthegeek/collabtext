@@ -151,6 +151,10 @@ private slots:
     QCOMPARE(committed.value().epoch,uint64_t(8));
     QVERIFY(committed.value().evidence.find("retirement-v1 ")==0);
     QVERIFY(committed.value().evidence.find(preview.value().digest)==std::string::npos);
+    auto replay=store.commit_retirement(preview.value(),descriptor,impacts,
+        {{member_a,"durable-ack"},{member_b,"durable-ack"}},"user-confirmation",verifier);
+    QVERIFY(!replay.ok()); QCOMPARE(replay.error().code(),ErrorCode::wrong_epoch);
+    QCOMPARE(store.last_sequence(),uint64_t(1));
     auto recovered=store.recover(); QVERIFY(recovered.ok());
     QCOMPARE(recovered.value().size(),size_t(1));
     QCOMPARE(recovered.value()[0].subject,retiring);
@@ -193,6 +197,10 @@ private slots:
     QCOMPARE(committed.value().kind,MembershipEvent::Kind::Enrolled);
     QCOMPARE(committed.value().epoch,uint64_t(5));
     QCOMPARE(committed.value().subject,joining);
+    auto replay=store.commit_enrollment(preview.value(),descriptor,
+        {{member_a,"durable-ack"},{member_b,"durable-ack"},{joining,"durable-ack"}},verifier);
+    QVERIFY(!replay.ok()); QCOMPARE(replay.error().code(),ErrorCode::wrong_epoch);
+    QCOMPARE(store.last_sequence(),uint64_t(1));
     auto recovered=store.recover(); QVERIFY(recovered.ok());
     QCOMPARE(recovered.value().size(),size_t(1));
   }

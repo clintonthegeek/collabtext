@@ -294,6 +294,12 @@ Result<MembershipEvent> MembershipStore::commit_retirement(
   if (!same_preview(preview, fresh.value()))
     return Error(ErrorCode::wrong_epoch,
                  "retirement preview is stale; review current consequences again");
+  auto persisted_events = recover();
+  if (!persisted_events.ok()) return persisted_events.error();
+  if (!persisted_events.value().empty() &&
+      persisted_events.value().back().epoch >= preview.next_epoch)
+    return Error(ErrorCode::wrong_epoch,
+                 "retirement transition epoch is already present in the journal");
   if (explicit_confirmation.empty() || explicit_confirmation.size() > 4096 ||
       !verify_acknowledgement)
     return Error(ErrorCode::malformed,
@@ -341,6 +347,12 @@ Result<MembershipEvent> MembershipStore::commit_enrollment(
   if (!same_preview(preview, fresh.value()))
     return Error(ErrorCode::wrong_epoch,
                  "enrollment preview is stale; review current membership again");
+  auto persisted_events = recover();
+  if (!persisted_events.ok()) return persisted_events.error();
+  if (!persisted_events.value().empty() &&
+      persisted_events.value().back().epoch >= preview.next_epoch)
+    return Error(ErrorCode::wrong_epoch,
+                 "enrollment transition epoch is already present in the journal");
   if (!verify_acknowledgement)
     return Error(ErrorCode::malformed,
                  "enrollment requires an acknowledgement verifier");
