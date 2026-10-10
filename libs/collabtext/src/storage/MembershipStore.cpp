@@ -264,6 +264,8 @@ Result<std::vector<MembershipEvent>> MembershipStore::recover() const {
 Result<void> MembershipStore::append(const MembershipEvent &event) {
   if (event.sequence != m_last_sequence + 1 || event.sequence == 0 ||
       event.epoch == 0 || !event.subject.valid() ||
+      (event.kind != MembershipEvent::Kind::Enrolled &&
+       event.kind != MembershipEvent::Kind::Retired) ||
       event.evidence.empty() || event.evidence.size() > kMaxEvidenceBytes ||
       m_last_sequence == UINT64_MAX)
     return Error(ErrorCode::malformed, "membership event is invalid or out of sequence");

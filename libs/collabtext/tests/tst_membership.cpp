@@ -29,6 +29,9 @@ private slots:
       auto opened = MembershipStore::open(path, producer);
       QVERIFY(opened.ok());
       auto store = std::move(opened.value());
+      const auto invalid_kind = static_cast<MembershipEvent::Kind>(99);
+      QVERIFY(!store.append({1, 1, peer, invalid_kind, "proof"}).ok());
+      QCOMPARE(store.last_sequence(), uint64_t(0));
       QVERIFY(store.append({1, 1, peer, MembershipEvent::Kind::Enrolled, "signed\nproof"}).ok());
       QVERIFY(store.append({2, 2, peer, MembershipEvent::Kind::Retired, "confirmed"}).ok());
       QVERIFY(!store.append({4, 3, peer, MembershipEvent::Kind::Enrolled, {}}).ok());
