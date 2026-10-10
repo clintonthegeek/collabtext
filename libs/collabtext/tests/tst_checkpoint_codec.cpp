@@ -259,28 +259,49 @@ private slots:
     descriptor.translation_manifest_hash = core.value().translations.manifest_hash;
     auto sealed = seal_membership_descriptor(descriptor);
     QVERIFY(sealed);
-    QVERIFY(validate_checkpoint_core_membership(
-        core.value(), sealed.value(), frame.value()));
-    QVERIFY(!validate_checkpoint_core_membership(
-        core.value(), sealed.value(), "another checkpoint"));
+    QVERIFY(validate_checkpoint_artifact_membership(frame.value(), sealed.value()));
+    QVERIFY(!validate_checkpoint_artifact_membership("another checkpoint", sealed.value()));
 
     auto wrong_frontier = descriptor;
     wrong_frontier.base_frontiers[0].delivery[actor] = 1;
     auto sealed_wrong_frontier =
         seal_membership_descriptor(std::move(wrong_frontier));
     QVERIFY(sealed_wrong_frontier);
-    QVERIFY(!validate_checkpoint_core_membership(
-        core.value(), sealed_wrong_frontier.value(),
-        frame.value()));
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        frame.value(), sealed_wrong_frontier.value()));
 
     auto wrong_manifest = descriptor;
     wrong_manifest.translation_manifest_hash = sha256_hex("another manifest");
     auto sealed_wrong_manifest =
         seal_membership_descriptor(std::move(wrong_manifest));
     QVERIFY(sealed_wrong_manifest);
-    QVERIFY(!validate_checkpoint_core_membership(
-        core.value(), sealed_wrong_manifest.value(),
-        frame.value()));
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        frame.value(), sealed_wrong_manifest.value()));
+
+    auto wrong_versions = descriptor;
+    wrong_versions.supported_token_versions = {1, 2};
+    auto sealed_wrong_versions = seal_membership_descriptor(wrong_versions);
+    QVERIFY(sealed_wrong_versions);
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        frame.value(), sealed_wrong_versions.value()));
+
+    auto wrong_epoch = descriptor;
+    wrong_epoch.epoch = 2;
+    wrong_epoch.parent_hash = sha256_hex("parent descriptor");
+    wrong_epoch.transition_event_hash = sha256_hex("transition event");
+    auto sealed_wrong_epoch = seal_membership_descriptor(wrong_epoch);
+    QVERIFY(sealed_wrong_epoch);
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        frame.value(), sealed_wrong_epoch.value()));
+
+    auto corrupted_frame = frame.value();
+    corrupted_frame[0] ^= 1;
+    auto corrupted_descriptor = descriptor;
+    corrupted_descriptor.base_checkpoint_hash = sha256_hex(corrupted_frame);
+    auto sealed_corrupted = seal_membership_descriptor(corrupted_descriptor);
+    QVERIFY(sealed_corrupted);
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        corrupted_frame, sealed_corrupted.value()));
   }
 
   void engineSectionRoundTripsTextAndIdList() {

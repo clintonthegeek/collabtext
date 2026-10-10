@@ -164,10 +164,9 @@ validate_checkpoint_coverage(const CheckpointContext &context,
                              const CheckpointShareableCore::Coverage &coverage,
                              const MembershipDescriptor &descriptor);
 [[nodiscard]] Result<void>
-validate_checkpoint_core_membership(
-    const CheckpointShareableCore &core,
-    const MembershipDescriptor &descriptor,
-    std::string_view checkpoint_artifact_bytes);
+validate_checkpoint_artifact_membership(
+    std::string_view checkpoint_artifact_bytes,
+    const MembershipDescriptor &descriptor);
 [[nodiscard]] Result<CheckpointSection>
 encode_checkpoint_pins(const CheckpointShareableCore::Pins &pins,
                        const CheckpointContext &context);
