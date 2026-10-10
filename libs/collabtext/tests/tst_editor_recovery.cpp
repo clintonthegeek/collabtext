@@ -108,9 +108,14 @@ private slots:
     QTextCursor cursor = edit->textCursor();
     cursor.movePosition(QTextCursor::End);
     edit->setTextCursor(cursor);
-    QTest::keyClicks(edit, QStringLiteral(" one"));
+    // Send each phrase as one editor change. Keystroke-by-keystroke grouping
+    // is time-window based and can split under sanitizer scheduling load;
+    // group merging has lower-level coverage. This test checks that editor
+    // undo history survives close/reopen deterministically.
+    edit->insertPlainText(QStringLiteral(" one"));
     QTest::qWait(600);
-    QTest::keyClicks(edit, QStringLiteral(" two"));
+    edit->insertPlainText(QStringLiteral(" "));
+    edit->insertPlainText(QStringLiteral("two"));
     QCOMPARE(edit->toPlainText(), QStringLiteral("seed! one two"));
     QVERIFY(document.isModified());
 

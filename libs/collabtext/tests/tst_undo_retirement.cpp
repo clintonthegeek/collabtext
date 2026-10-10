@@ -55,6 +55,40 @@ private slots:
     { std::ofstream out(path,std::ios::binary|std::ios::app); out<<"CRS1 torn"; }
     QVERIFY(!RetentionState::open(path,actor(4)).ok());
   }
+
+  void reconcilesRetirementWrittenBeforeSyncFailure() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto path=std::filesystem::path(dir.path().toStdString())/"uncertain.log";
+    bool fail_sync=true;
+    StepHook hook;
+    hook.fail=[&](Step step,const fs::path&) -> std::optional<Error> {
+      if(step==Step::FileSync && fail_sync) {
+        fail_sync=false;
+        return Error(ErrorCode::io_error,"injected retention sync failure");
+      }
+      return std::nullopt;
+    };
+    const Crdt::Identity first{actor(6),21}, second{actor(7),22};
+    {
+      auto opened=RetentionState::open(path,actor(5),&hook); QVERIFY(opened.ok());
+      auto state=std::move(opened.value());
+      bool trim_committed=false;
+      auto uncertain=state.publish_after_durable_trim("doc",{first},[&]() -> Result<void> {
+        trim_committed=true; return {};
+      });
+      QVERIFY(trim_committed); QVERIFY(!uncertain.ok());
+      // The complete line reached disk before sync failed, so reopening the
+      // journal must recover it and the next record must use sequence two.
+      QVERIFY(state.is_retired("doc",first));
+      auto next=state.publish_after_durable_trim("doc",{second},[]() -> Result<void> { return {}; });
+      QVERIFY(next.ok());
+      QVERIFY(state.is_retired("doc",first));
+      QVERIFY(state.is_retired("doc",second));
+    }
+    auto reopened=RetentionState::open(path,actor(5)); QVERIFY(reopened.ok());
+    QVERIFY(reopened.value().is_retired("doc",first));
+    QVERIFY(reopened.value().is_retired("doc",second));
+  }
 };
 
 QTEST_GUILESS_MAIN(TestUndoRetirement)
