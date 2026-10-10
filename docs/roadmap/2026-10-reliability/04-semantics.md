@@ -252,7 +252,7 @@ Run ./tools/verify-changed.sh --target "^tst_(anchor|anchor_codec|positions|idli
 
 **Verification:**
 
-Run ./tools/verify-roadmap.sh debug "tst_anchor_codec|tst_anchor|tst_idlist_anchor|tst_sequence_semantics|tst_session_recovery|tst_evaluation_regressions" plus Release and bounded ASan restart/differential cases; rerun installed strict live-position and repaired-order probes. Record named evidence and supported-token hashes in the certification report.
+Run `./tools/verify-roadmap.sh debug "tst_anchor_codec|tst_anchor|tst_idlist_anchor|tst_positions|tst_sequence_semantics|tst_session_recovery|tst_evaluation_regressions"` plus Release and bounded ASan restart/differential cases; rerun installed strict live-position and repaired-order probes. Record named evidence and supported-token hashes in the certification report.
 
 ## S05 — Define and implement retained external anchors and history policy
 

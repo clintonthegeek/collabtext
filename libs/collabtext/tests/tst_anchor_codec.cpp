@@ -12,7 +12,7 @@ template<class T> ErrorCode refused_code(const Result<T>& result) {
     if (result.ok()) qFatal("expected typed refusal, received a successful value");
     return result.error().code();
 }
-std::string replace_byte(std::string bytes,size_t index,uint8_t value) { bytes[index]=static_cast<char>(value); return bytes; }
+std::string replace_byte(std::string bytes,size_t index,uint8_t value) { bytes.at(index)=static_cast<char>(value); return bytes; }
 }
 class TestAnchorCodec : public QObject {
     Q_OBJECT

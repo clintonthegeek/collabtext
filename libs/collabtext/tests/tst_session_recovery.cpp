@@ -1,7 +1,10 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <collabtext/Anchor.h>
+#include <collabtext/CrdtEngine.h>
 #include "crdt/Buffer.h"
+#include "crdt/SeedOp.h"
 #include "core/Sha256.h"
 #include "identity/ReplicaAllocator.h"
 #include "storage/DurableFile.h"
@@ -9,6 +12,8 @@
 #include "transport/StreamSync.h"
 #include <collabtext/DocumentSession.h>
 #include "DocumentSessionTestAccess.h"
+#include "CodecTest.h"
+#include "TestActor.h"
 #include <collabtext/Serialization.h>
 #include "VolatileCounter.h"
 
@@ -79,6 +84,107 @@ private:
 class TestSessionRecovery : public QObject {
   Q_OBJECT
 private slots:
+  void external_token_roundtrip_reopen_durable_file_replay() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const std::string document = "durable-position-document";
+    const StreamScope stream{"text", 1};
+    const PositionScope position_scope{document, stream.stream, Primitive::text, stream.epoch};
+    const auto seed_op = Crdt::op_for_seed("ab");
+    const auto actor_a = Test::actor(101);
+    const auto actor_b = Test::actor(102);
+
+    std::string left_bytes, right_bytes;
+    {
+      auto opened_engine = CrdtEngine::create(Test::test_counter(101), position_scope);
+      QVERIFY(opened_engine.ok());
+      auto engine = std::move(opened_engine).value();
+      QVERIFY(engine->applyRemoteOp(seed_op));
+      auto left = engine->boundary_at(1, Affinity::left);
+      auto right = engine->boundary_at(1, Affinity::right);
+      QVERIFY(left.ok()); QVERIFY(right.ok());
+      left_bytes = checked_codec(encode_position(left.value()));
+      right_bytes = checked_codec(encode_position(right.value()));
+
+      Crdt::FileOpStream writer(root, actor_a);
+      QVERIFY(writer.start().ok());
+      QVERIFY(writer.register_stream(stream).ok());
+      uint64_t sequence = 1;
+      std::optional<Error> write_error;
+      engine->setOnLocalOp([&](const Crdt::Operation &op) {
+        auto encoded = Crdt::encode_operation(op);
+        if (!encoded.ok()) { write_error = encoded.error(); return; }
+        OutboundDelivery delivery{{stream.stream, stream.epoch, actor_a, sequence++},
+                                  encoded.value()};
+        auto pushed = writer.push(delivery, PushDurability::durable);
+        if (!pushed.ok()) write_error = pushed.error();
+      });
+      engine->insert(1, "X");
+      QVERIFY(!write_error.has_value());
+      QVERIFY(writer.close().ok());
+    }
+    {
+      auto opened_engine = CrdtEngine::create(Test::test_counter(102), position_scope);
+      QVERIFY(opened_engine.ok());
+      auto engine = std::move(opened_engine).value();
+      QVERIFY(engine->applyRemoteOp(seed_op));
+      Crdt::FileOpStream writer(root, actor_b);
+      QVERIFY(writer.start().ok());
+      QVERIFY(writer.register_stream(stream).ok());
+      std::optional<Error> write_error;
+      engine->setOnLocalOp([&](const Crdt::Operation &op) {
+        auto encoded = Crdt::encode_operation(op);
+        if (!encoded.ok()) { write_error = encoded.error(); return; }
+        OutboundDelivery delivery{{stream.stream, stream.epoch, actor_b, 1},
+                                  encoded.value()};
+        auto pushed = writer.push(delivery, PushDurability::durable);
+        if (!pushed.ok()) write_error = pushed.error();
+      });
+      engine->insert(1, "Y");
+      QVERIFY(!write_error.has_value());
+      QVERIFY(writer.close().ok());
+    }
+
+    auto recover_replica = [&](uint8_t local_actor) -> Result<std::unique_ptr<CrdtEngine>> {
+      auto engine = CrdtEngine::create(Test::test_counter(local_actor), position_scope);
+      if (!engine.ok()) return engine.error();
+      if (!engine.value()->applyRemoteOp(seed_op))
+        return Error(ErrorCode::malformed, "deterministic seed was not accepted");
+      Crdt::FileOpStream reader(root, Test::actor(local_actor));
+      auto started = reader.start(); if (!started.ok()) return started.error();
+      auto registered = reader.register_stream(stream); if (!registered.ok()) return registered.error();
+      auto replayed = reader.replay_all(stream, [&](const InboundDelivery &delivery) -> Result<void> {
+        auto op = Crdt::decode_operation(delivery.payload);
+        if (!op.ok()) return op.error();
+        if (!engine.value()->applyRemoteOp(op.value()))
+          return Error(ErrorCode::malformed, "durable operation replay failed");
+        return {};
+      });
+      if (!replayed.ok()) return replayed.error();
+      auto closed = reader.close(); if (!closed.ok()) return closed.error();
+      return std::move(engine).value();
+    };
+
+    auto recovered_a = recover_replica(103);
+    auto recovered_b = recover_replica(104);
+    QVERIFY(recovered_a.ok()); QVERIFY(recovered_b.ok());
+    QCOMPARE(recovered_a.value()->text(), std::string("aXYb"));
+    QCOMPARE(recovered_b.value()->text(), recovered_a.value()->text());
+    for (const auto *recovered : {recovered_a.value().get(), recovered_b.value().get()}) {
+      auto left = decode_position_as<TextBoundary>(left_bytes);
+      auto right = decode_position_as<TextBoundary>(right_bytes);
+      QVERIFY(left.ok()); QVERIFY(right.ok());
+      auto left_result = recovered->resolve(left.value());
+      auto right_result = recovered->resolve(right.value());
+      QVERIFY(left_result.ok()); QVERIFY(right_result.ok());
+      QCOMPARE(left_result.value().byte_offset, uint32_t(1));
+      QCOMPARE(right_result.value().byte_offset, uint32_t(3));
+      QCOMPARE(left_result.value().collapsed(), false);
+      QCOMPARE(right_result.value().collapsed(), false);
+    }
+  }
+
   void own_log_replays_and_counter_continues_after_two_reopens() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
