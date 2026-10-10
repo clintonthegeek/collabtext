@@ -136,6 +136,31 @@ private slots:
     QVERIFY(!decode_checkpoint_causal(bad_identity));
   }
 
+  void typedSectionsRoundTripInsideCompleteArtifact() {
+    CheckpointContext context{"project", "main", 7, "",
+                              CheckpointEngineKind::Text};
+    CheckpointCausalState causal;
+    auto context_section = encode_checkpoint_context(context);
+    auto causal_section = encode_checkpoint_causal(causal);
+    QVERIFY(context_section);
+    QVERIFY(causal_section);
+
+    auto sections = shared_sections();
+    sections[0] = context_section.value();
+    sections[2] = causal_section.value();
+    const auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
+    QVERIFY(framed);
+    const auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
+    QVERIFY(artifact);
+    const auto decoded_context = decode_checkpoint_context(artifact.value().sections[0]);
+    const auto decoded_causal = decode_checkpoint_causal(artifact.value().sections[2]);
+    QVERIFY(decoded_context);
+    QVERIFY(decoded_causal);
+    QCOMPARE(decoded_context.value(), context);
+    QCOMPARE(decoded_causal.value().version, causal.version);
+    QVERIFY(decoded_causal.value().undo_entries.empty());
+  }
+
   void rejectsEveryTruncation() {
     auto encoded = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
     QVERIFY(encoded);
