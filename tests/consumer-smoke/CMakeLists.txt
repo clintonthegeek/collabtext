@@ -105,6 +105,7 @@ add_test(NAME consumer_main COMMAND consumer_main)
 
 if(CONSUMER_WANT_TRANSPORT)
     target_link_libraries(consumer_main PRIVATE CollabText::FileTransport)
+    target_compile_definitions(consumer_main PRIVATE CONSUMER_WANT_TRANSPORT=1)
 endif()
 if(CONSUMER_WANT_QT)
     target_link_libraries(consumer_main PRIVATE CollabText::Widgets Qt6::Widgets)

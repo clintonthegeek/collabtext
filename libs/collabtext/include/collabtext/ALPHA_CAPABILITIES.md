@@ -1,6 +1,6 @@
 # collabtext alpha capability manifest
 
-**Version:** 10
+**Version:** 11
 **Introduced by:** roadmap task A02a
 **Package version at this manifest revision:** `0.2.0-alpha.2`
 **Branch:** `feat/fuguemax-placement` (the workstream label "v2" is not a
@@ -13,11 +13,15 @@ not been given. `0.2.0-alpha.2` is a SemVer **prerelease**. CMake's
 cannot name the prerelease label — ask for no version or for `0.2.0`, and read
 `COLLABTEXT_VERSION_STRING` from the config file for the full label.
 
-**What changed at version 10:** `CrdtEngine` now exposes typed single and batch
-remote-apply outcomes, checked undo/redo results, and configurable undo history
-limits. The installed consumer also implements `OpStream` using only stable
-public types. `CTPT/1` position tokens remain supported for consumer persistence;
-see the serialized-format section for the exact obligation.
+**What changed at version 11:** `DocumentSession` can stream its local
+producer's durable operation deliveries in their original document, stream, and
+epoch, including a durable pending operation when transport publication failed.
+The export preserves delivery tokens and opaque payload bytes; it does not rebase
+or replay operations into a newer epoch. Version 10 added typed remote-apply
+outcomes, checked undo/redo results, configurable undo history limits, and an
+installed consumer implementation of `OpStream`. `CTPT/1` position tokens
+remain supported for consumer persistence; see the serialized-format section
+for the exact obligation.
 
 This manifest exists because an alpha surface that does not say what it cannot do
 is worse than no alpha surface. Every line below is a fact about *this* branch,
@@ -65,8 +69,10 @@ These are stated so a consumer designs around them rather than discovering them.
 | **Typed outcome on the text facade.** `CrdtEngine::apply_remote` returns `ApplyOutcome`; `apply_ops` returns one outcome per offered operation. | **available** | `tst_crdtengine_op_api`, `tst_operation_validation`, installed `consumer_main`; duplicate, deferred/drained, rejected, and batch-order cases are covered. |
 | **Persistent bounded undo/redo.** Buffer persists actor-local undo/redo through `DocumentSession`; `IdListEngine` exposes replayable history snapshots for consumer-owned persistence. | **available** | `tst_persistent_undo`, `tst_idlist_undo`, `tst_session_recovery`, `tst_editor_recovery` reopen/undo/redo cases. |
 | **Crash recovery.** `DocumentSession` full-replays one text stream and recovers its local undo state; the broader sender/receiver arrival and fault matrix is pending. | **partial** | `tst_session_recovery`, `tst_editor_recovery`; L08 owns the cross-transport recovery milestone. |
+| **Returning-device local branch export.** `DocumentSession::export_local_branch()` streams only the local producer's retained deliveries for the original document/stream/epoch, preserving tokens and payload bytes and including a recoverable pending commit. | **available** | `tst_session_recovery::localBranchExportKeepsOriginalScopeAndExcludesPeerOperations`, pending-commit export and duplicate reconciliation cases; relocated FileTransport package consumer calls the installed API. Consumers must stage output and publish it only after success; they remain responsible for explicit validation and reconciliation before a newer epoch can use the branch. |
 | **Durable identity for consumers.** A `ReplicaAllocator` exists in the source tree but is not exported or installed. | **partial** | Not part of the installed public surface. A consumer supplies its own `IdentityAllocator` and is responsible for durability. Making `ReplicaAllocator` public is a separate decision, because it means committing to its persistence format. |
 | **Epoch / document / stream on the operation.** An operation carries no epoch, so a receiver cannot check one. | **not implemented** | P07 owns the envelope; L04 owns its persistence. |
+| **Automatic old-epoch authorization or branch rebase.** Export preserves the original epoch context and does not authorize mutation or replay under a newer descriptor. | **not implemented** | G01/G02 own transition validation and explicit reconciliation; arbitrary old-epoch edits are not promised to merge losslessly. |
 | **GC, pins, checkpoints, reclamation.** | **not implemented, and inert** | G01–G08. `collect_garbage()` and `compact()` return zero and retain everything. **Do not call them expecting reclamation.** |
 | **Formatting / annotation layer.** | **not planned** | Deliberately out of scope. A consumer's document layer owns it over character CRDTs. |
 | **Qt widget layer** | **available, not part of Core** | `CollabText::Widgets`. The alpha's headless path is Core alone. |

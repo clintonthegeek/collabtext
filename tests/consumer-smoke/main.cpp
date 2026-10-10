@@ -27,6 +27,9 @@
 #include <collabtext/ActorId.h>
 #include <collabtext/ApplyOutcome.h>
 #include <collabtext/CrdtEngine.h>
+#ifdef CONSUMER_WANT_TRANSPORT
+#include <collabtext/DocumentSession.h>
+#endif
 #include <collabtext/Engine.h>
 #include <collabtext/IdListEngine.h>
 #include <collabtext/IdListOperations.h>
@@ -38,10 +41,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+#include <chrono>
 
 namespace {
 // Test/consumer assertion, active in Release too. Never erases a failed codec.
@@ -57,6 +62,45 @@ template<class T> T checked_codec(CollabText::Result<T> result) {
 
 
 int failures = 0;
+void check(bool condition, const char *what);
+
+#ifdef CONSUMER_WANT_TRANSPORT
+void check_installed_branch_export() {
+    using namespace CollabText;
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto root = std::filesystem::temp_directory_path() /
+                      ("collabtext-export-consumer-" + std::to_string(unique));
+    DocumentSessionConfig config{root / "shared", root / "private",
+                                 "consumer-export-doc", "text", 4};
+    auto opened = DocumentSession::open(config);
+    check(opened.ok(), "installed file-transport consumer opens a DocumentSession");
+    if (!opened.ok()) return;
+    auto session = std::move(opened).value();
+    auto edit = session->apply_local({{0, 0}}, {"branch"});
+    check(edit.ok(), "installed session accepts a local branch edit");
+    LocalBranchExport metadata;
+    size_t deliveries = 0;
+    const auto exported = session->export_local_branch(
+        metadata, [&](const OutboundDelivery& delivery) -> Result<void> {
+            ++deliveries;
+            check(delivery.token.stream == config.stream &&
+                      delivery.token.epoch == config.epoch &&
+                      delivery.token.producer == session->actor() &&
+                      delivery.token.sequence == 1,
+                  "branch export preserves its installed delivery token");
+            return {};
+        });
+    check(exported.ok(), "installed session exports its local branch");
+    check(metadata.document == config.document &&
+              metadata.scope.stream == config.stream &&
+              metadata.scope.epoch == config.epoch &&
+              metadata.producer == session->actor() && deliveries == 1,
+          "installed branch export reports exact document and original scope");
+    check(session->close().ok(), "installed branch export session closes cleanly");
+    std::error_code ignored;
+    std::filesystem::remove_all(root, ignored);
+}
+#endif
 
 void check(bool condition, const char *what) {
     if (condition) return;
@@ -300,6 +344,10 @@ int main() {
             }
         }
     }
+
+#ifdef CONSUMER_WANT_TRANSPORT
+    check_installed_branch_export();
+#endif
 
     if (failures == 0)
         std::printf("consumer: ok (text=%zu bytes, list=%zu ids)\n",

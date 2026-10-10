@@ -477,6 +477,93 @@ Result<void> DocumentSession::save() {
   return m_impl->replica->flush();
 }
 
+Result<void> DocumentSession::export_local_branch(
+    LocalBranchExport& metadata,
+    const std::function<Result<void>(const OutboundDelivery&)>& visitor) {
+  if (!m_impl || m_impl->closed)
+    return Error(ErrorCode::writer_conflict, "session is closed");
+  if (!visitor)
+    return Error(ErrorCode::malformed, "local branch export visitor is empty");
+
+  const ActorId producer = m_impl->replica->actor();
+  const StreamScope scope{m_impl->config.stream, m_impl->config.epoch};
+  std::optional<OutboundDelivery> pending_delivery;
+  auto pending = m_impl->local_history->recover_pending();
+  if (!pending.ok()) return pending.error();
+  if (pending.value()) {
+    const auto& commit = *pending.value();
+    if (commit.sequence == 0 || commit.sequence == UINT64_MAX)
+      return Error(ErrorCode::corrupt_record,
+                   "pending local branch delivery sequence is invalid");
+    auto operation = decode_operation(commit.operation);
+    if (!operation.ok())
+      return operation.error().with_context("decoding pending branch operation");
+    if (op_identity(operation.value()).actor != producer)
+      return Error(ErrorCode::actor_conflict,
+                   "pending branch operation belongs to another producer");
+    pending_delivery.emplace(OutboundDelivery{
+        DeliveryToken{scope.stream, scope.epoch, producer, commit.sequence},
+        commit.operation});
+  }
+
+  metadata = LocalBranchExport{m_impl->config.document, scope, producer};
+  uint64_t expected = 1;
+  bool pending_seen_in_log = false;
+  const auto validate_delivery = [&](const OutboundDelivery& delivery) -> Result<void> {
+    if (delivery.token.stream != scope.stream || delivery.token.epoch != scope.epoch
+        || delivery.token.producer != producer || delivery.token.sequence == 0
+        || delivery.token.sequence == UINT64_MAX)
+      return Error(ErrorCode::corrupt_record,
+                   "local branch contains a delivery outside its original scope");
+    auto operation = decode_operation(delivery.payload);
+    if (!operation.ok())
+      return operation.error().with_context("decoding local branch operation");
+    if (op_identity(operation.value()).actor != producer)
+      return Error(ErrorCode::actor_conflict,
+                   "local branch operation identity differs from its producer");
+    return {};
+  };
+
+  try {
+    auto replayed = m_impl->transport->replay_producer(
+        scope, producer, [&](const InboundDelivery& delivery) -> Result<void> {
+          OutboundDelivery local{delivery.token, delivery.payload};
+          auto valid = validate_delivery(local);
+          if (!valid.ok()) return valid.error();
+          if (local.token.sequence != expected)
+            return Result<void>(Error(ErrorCode::corrupt_record,
+                                      "local branch delivery sequence has a gap"));
+          ++expected;
+          if (pending_delivery &&
+              local.token.sequence == pending_delivery->token.sequence) {
+            if (local.payload != pending_delivery->payload)
+              return Result<void>(Error(
+                  ErrorCode::actor_conflict,
+                  "pending local branch conflicts with retained delivery bytes"));
+            pending_seen_in_log = true;
+          } else if (pending_delivery &&
+                     local.token.sequence > pending_delivery->token.sequence) {
+            return Result<void>(Error(
+                ErrorCode::corrupt_record,
+                "pending local branch delivery is missing before retained history"));
+          }
+          return visitor(local);
+        });
+    if (!replayed.ok()) return replayed.error();
+
+    if (pending_delivery && !pending_seen_in_log) {
+      if (pending_delivery->token.sequence != expected)
+        return Error(ErrorCode::corrupt_record,
+                     "pending local branch delivery does not extend retained history");
+      auto delivered = visitor(*pending_delivery);
+      if (!delivered.ok()) return delivered.error();
+    }
+  } catch (const std::filesystem::filesystem_error& error) {
+    return Error(ErrorCode::io_error, error.what(), "exporting local branch");
+  }
+  return {};
+}
+
 Result<void> DocumentSession::close() {
   if (!m_impl || m_impl->closed)
     return {};

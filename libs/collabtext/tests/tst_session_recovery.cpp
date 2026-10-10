@@ -328,6 +328,108 @@ private slots:
     }
   }
 
+  void localBranchExportKeepsOriginalScopeAndExcludesPeerOperations() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const auto root = std::filesystem::path(tmp.path().toStdString());
+    DocumentSessionConfig local_config{root / "shared", root / "local",
+                                       "doc-branch", "text", 3};
+    local_config.initial_text = "seed";
+    DocumentSessionConfig peer_config{root / "shared", root / "peer",
+                                      "doc-branch", "text", 3};
+    peer_config.initial_text = "seed";
+
+    auto local_opened = DocumentSession::open(local_config);
+    QVERIFY(local_opened.ok());
+    auto local = std::move(local_opened).value();
+    const auto local_actor = local->actor();
+    auto local_edit = local->apply_local({{4, 4}}, {" local"});
+    QVERIFY(local_edit.ok());
+
+    auto peer_opened = DocumentSession::open(peer_config);
+    QVERIFY(peer_opened.ok());
+    auto peer = std::move(peer_opened).value();
+    QCOMPARE(peer->text(), std::string("seed local"));
+    auto peer_edit = peer->apply_local({{10, 10}}, {" peer"});
+    QVERIFY(peer_edit.ok());
+    QVERIFY(peer->close().ok());
+    auto polled = local->poll();
+    QVERIFY(polled.ok());
+    QCOMPARE(local->text(), std::string("seed local peer"));
+
+    LocalBranchExport export_metadata;
+    std::vector<OutboundDelivery> exported_deliveries;
+    auto exported = local->export_local_branch(export_metadata,
+        [&](const OutboundDelivery& delivery) -> Result<void> {
+          exported_deliveries.push_back(delivery);
+          return {};
+        });
+    QVERIFY(exported.ok());
+    QCOMPARE(export_metadata.document, local_config.document);
+    QCOMPARE(export_metadata.scope.stream, local_config.stream);
+    QCOMPARE(export_metadata.scope.epoch, uint64_t(3));
+    QCOMPARE(export_metadata.producer, local_actor);
+    QCOMPARE(exported_deliveries.size(), size_t(1));
+    const auto& delivery = exported_deliveries[0];
+    QCOMPARE(delivery.token.stream, local_config.stream);
+    QCOMPARE(delivery.token.epoch, uint64_t(3));
+    QCOMPARE(delivery.token.producer, local_actor);
+    QCOMPARE(delivery.token.sequence, uint64_t(1));
+    QCOMPARE(delivery.payload, Crdt::encode_operation(local_edit.value()).value());
+    auto decoded = Crdt::decode_operation(delivery.payload);
+    QVERIFY(decoded.ok());
+    QCOMPARE(Crdt::op_identity(decoded.value()).actor, local_actor);
+    QVERIFY(local->close().ok());
+  }
+
+  void localBranchExportIncludesPendingIntentWithoutWrittenSegment() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const auto root = std::filesystem::path(tmp.path().toStdString());
+    const DocumentSessionConfig config{root / "shared", root / "device",
+                                       "doc-pending-branch", "text", 2};
+    bool failed_write = false;
+    Storage::StepHook hook;
+    hook.fail = [&](Storage::Step step, const std::filesystem::path &path)
+        -> std::optional<Error> {
+      if (!failed_write && step == Storage::Step::Write &&
+          path.extension() == ".open") {
+        failed_write = true;
+        return Error(ErrorCode::io_error, "injected branch segment write failure");
+      }
+      return std::nullopt;
+    };
+    Crdt::WriterConfig writer_config;
+    writer_config.step_hook = &hook;
+    auto opened = DocumentSessionTestAccess::open(config, writer_config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    const auto local_actor = session->actor();
+    auto failed = session->apply_local({{0, 0}}, {"pending"});
+    QVERIFY(!failed.ok());
+    QVERIFY(failed_write);
+
+    LocalBranchExport metadata;
+    std::vector<OutboundDelivery> deliveries;
+    auto exported = session->export_local_branch(metadata,
+        [&](const OutboundDelivery &delivery) -> Result<void> {
+          deliveries.push_back(delivery);
+          return {};
+        });
+    QVERIFY(exported.ok());
+    QCOMPARE(metadata.document, config.document);
+    QCOMPARE(metadata.scope.epoch, config.epoch);
+    QCOMPARE(metadata.producer, local_actor);
+    QCOMPARE(deliveries.size(), size_t(1));
+    QCOMPARE(deliveries[0].token.producer, local_actor);
+    QCOMPARE(deliveries[0].token.sequence, uint64_t(1));
+    auto decoded = Crdt::decode_operation(deliveries[0].payload);
+    QVERIFY(decoded.ok());
+    QCOMPARE(Crdt::op_identity(decoded.value()).actor, local_actor);
+    // The injected segment writer failure leaves this session poisoned; the
+    // exported operation is recoverable from its durable local intent.
+  }
+
   void edits_since_reports_history_floor_and_future_frontier() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
@@ -635,6 +737,17 @@ private slots:
       QVERIFY(!failed.ok());
       QCOMPARE(failed.error().code(), ErrorCode::io_error);
       QVERIFY(!session->ready());
+      LocalBranchExport metadata;
+      std::vector<OutboundDelivery> deliveries;
+      auto exported = session->export_local_branch(metadata,
+          [&](const OutboundDelivery& delivery) -> Result<void> {
+            deliveries.push_back(delivery);
+            return {};
+          });
+      QVERIFY2(exported.ok(), exported.ok() ? "" : exported.error().message().data());
+      QCOMPARE(deliveries.size(), size_t(1));
+      QCOMPARE(deliveries[0].token.producer, session->actor());
+      QCOMPARE(deliveries[0].token.sequence, uint64_t(1));
     }
 
     auto reopened = DocumentSession::open(config);

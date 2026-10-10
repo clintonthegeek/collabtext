@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -36,6 +37,16 @@ struct DocumentSessionConfig {
   size_t max_undo_bytes = 16 * 1024 * 1024;
   /// Deterministic baseline content reconstructed locally before log replay.
   std::string initial_text;
+};
+
+/// Local producer deliveries retained for one original document epoch.
+/// Payloads and delivery tokens are preserved verbatim for explicit export or
+/// reconciliation; consumers must not replay these into a newer epoch without
+/// validating the required transition and dependencies.
+struct LocalBranchExport {
+  DocumentId document;
+  StreamScope scope;
+  ActorId producer;
 };
 
 struct SessionRecoveryReport {
@@ -88,6 +99,13 @@ public:
       const std::vector<Crdt::Identity> &group_ids);
   [[nodiscard]] Result<PollReport> poll(PollBudget budget = {});
   [[nodiscard]] Result<void> save();
+  /// Stream this actor's durable operations in their original scope, including
+  /// a durable pending local commit if its log append failed. The visitor may
+  /// receive a prefix before an error; stage output and publish it only on
+  /// success. The metadata output is valid only when this returns success.
+  [[nodiscard]] Result<void> export_local_branch(
+      LocalBranchExport &metadata,
+      const std::function<Result<void>(const OutboundDelivery &)> &visitor);
   [[nodiscard]] Result<void> close();
 
   [[nodiscard]] std::string text() const;

@@ -163,6 +163,61 @@ Result<void> FileOpStream::replay_all(
     return {};
 }
 
+Result<void> FileOpStream::replay_producer(
+    const StreamScope& scope, const ActorId& producer,
+    const std::function<Result<void>(const InboundDelivery&)>& visitor) const {
+    if (!m_scopes.contains(scope_key(scope)))
+        return Error(ErrorCode::unknown_stream, "stream scope is not registered");
+    if (!producer.valid() || !visitor)
+        return Error(ErrorCode::malformed, "producer replay requires a valid actor and visitor");
+
+    const auto peer = m_shared_folder / "replicas" / producer.to_string();
+    const auto dir = peer / "log" / "streams" / stream_dir_name(scope.stream)
+                   / std::to_string(scope.epoch);
+    if (!fs::exists(dir)) return {};
+
+    // No checkpoint is supplied, and commit() below only advances this reader
+    // in memory. Export scans therefore never consume a receiver cursor.
+    SegmentReader reader(dir, {});
+    reader.start();
+    uint64_t expected = 1;
+    std::string last_payload;
+    for (;;) {
+        auto batch = reader.read_new();
+        if (batch.gap) return batch.gap->with_context("producer branch export");
+        for (const auto& raw : batch.records) {
+            auto delivery = decode_delivery(raw);
+            if (!delivery || delivery->token.stream != scope.stream
+                || delivery->token.epoch != scope.epoch
+                || delivery->token.producer != producer)
+                return Error(ErrorCode::corrupt_record,
+                             "invalid or misplaced producer delivery in branch export",
+                             peer.string());
+            const auto sequence = delivery->token.sequence;
+            if (sequence == UINT64_MAX)
+                return Error(ErrorCode::counter_exhausted,
+                             "producer branch delivery sequence is exhausted",
+                             peer.string());
+            if (sequence == expected) {
+                ++expected;
+                last_payload = delivery->payload;
+                auto visited = visitor(*delivery);
+                if (!visited.ok()) return visited.error();
+            } else if (sequence == expected - 1 && delivery->payload == last_payload) {
+                // An uncertain append retry may leave an identical frame.
+            } else {
+                return Error(ErrorCode::counter_regression,
+                             "producer branch sequence is not contiguous and idempotent",
+                             peer.string());
+            }
+        }
+        if (batch.records.empty()) break;
+        auto committed = reader.commit(batch.token);
+        if (!committed.ok()) return committed.error();
+    }
+    return {};
+}
+
 Result<void> FileOpStream::flush() {
     for (auto& [key, state] : m_writers) {
         (void)key;

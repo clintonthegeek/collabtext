@@ -152,6 +152,11 @@ public:
     /// receipts or advancing cursors. Used by full-replay session recovery.
     [[nodiscard]] Result<void> replay_all(
         const StreamScope&, const std::function<Result<void>(const InboundDelivery&)>& visitor) const;
+    /// Read one producer's retained envelopes without consulting receiver
+    /// receipts or persisting a read cursor. Used for explicit branch export.
+    [[nodiscard]] Result<void> replay_producer(
+        const StreamScope&, const ActorId& producer,
+        const std::function<Result<void>(const InboundDelivery&)>& visitor) const;
     [[nodiscard]] Result<void> flush();
     [[nodiscard]] Result<void> close();
     [[nodiscard]] Result<void> register_stream(const StreamScope&) override;

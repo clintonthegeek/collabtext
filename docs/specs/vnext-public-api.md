@@ -277,6 +277,17 @@ seams. `DocumentSession::edits_since()` returns `Result`; callers must handle
 `history_unavailable` below its retained floor and `awaiting_state` for a future
 frontier.
 
+`DocumentSession::export_local_branch()` streams the session producer's retained
+operation deliveries for the configured document, stream, and epoch to a caller
+visitor. It includes a durable pending local commit when transport publication
+failed, deduplicates an identical uncertain append, and rejects conflicting
+bytes or sequence gaps. It preserves the original delivery tokens and opaque
+operation payloads without retaining the whole branch in memory. The visitor may
+receive a prefix before an error, so callers must stage output and publish it
+only after the method succeeds. This is an explicit rescue/export seam: it does
+not authorize the old actor to mutate a new epoch, validate a membership
+transition, or automatically replay/rebase the branch into a later descriptor.
+
 ```cpp
 class Buffer {
 public:
