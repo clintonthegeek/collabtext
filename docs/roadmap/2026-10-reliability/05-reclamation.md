@@ -69,7 +69,7 @@ Run GcModel against all F1/F2/F3 histories and adversarial membership traces; pu
 
 Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_persistent_undo'`; inject crashes before/after each publication point.
 
-**Current implementation note:** Producer-scoped checksummed membership journals and per-stream monotonic undo-retirement journals are implemented with restart, torn-tail, and uncertain-fsync reconciliation tests. A typed retirement preview/commit API binds current descriptor and consequence data, requires explicit confirmation, and checks the exact remaining-member acknowledgement set through a caller-supplied durable/authenticity verifier. Debug, Release, and ASan/UBSan focused gates pass. G02 remains open for G01-validated transitions, session/history integration, and returning-peer export; see G02 in `TASKS.json`.
+**Current implementation note:** Producer-scoped checksummed membership journals and per-stream monotonic undo-retirement journals are implemented with restart, torn-tail, and uncertain-fsync reconciliation tests. Typed enrollment and retirement preview/commit APIs bind the current parent descriptor; enrollment requires all current members plus the joining device, while retirement binds consequence data, requires explicit confirmation, and requires all remaining members. A caller-supplied verifier validates durable acknowledgement evidence. Debug, Release, and ASan/UBSan focused gates pass. G02 remains open for full journal transition validation against G01, session/history integration, and returning-peer export; see G02 in `TASKS.json`.
 
 ## G03 — Implement per-stream durable coverage and certificate construction
 

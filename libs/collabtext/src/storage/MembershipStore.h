@@ -58,6 +58,16 @@ struct MembershipAcknowledgement {
   std::string signature;
 };
 
+struct EnrollmentPreview {
+  ActorId device;
+  uint64_t parent_epoch = 0;
+  uint64_t next_epoch = 0;
+  std::string parent_descriptor_hash;
+  std::vector<ActorId> parent_members;
+  std::vector<ActorId> required_acknowledgers;
+  std::string digest;
+};
+
 /// The caller must confirm that each acknowledgement was durably recorded
 /// and authenticate its signature over the supplied transition digest.
 using DurableAcknowledgementVerifier = std::function<Result<void>(
@@ -67,6 +77,8 @@ using DurableAcknowledgementVerifier = std::function<Result<void>(
 [[nodiscard]] Result<RetirementPreview> preview_retirement(
     const MembershipDescriptor &current, const ActorId &device,
     std::vector<RetirementImpact> impacts);
+[[nodiscard]] Result<EnrollmentPreview> preview_enrollment(
+    const MembershipDescriptor &current, const ActorId &device);
 
 /// Durable per-producer journal for explicit membership transitions.
 class MembershipStore {
@@ -90,6 +102,13 @@ public:
       const std::vector<RetirementImpact> &current_impacts,
       const std::vector<MembershipAcknowledgement> &acknowledgements,
       std::string_view explicit_confirmation,
+      const DurableAcknowledgementVerifier &verify_acknowledgement);
+  /// Commits only against the current parent descriptor and after the joining
+  /// device and every current member durably acknowledge the same transition.
+  [[nodiscard]] Result<MembershipEvent> commit_enrollment(
+      const EnrollmentPreview &preview,
+      const MembershipDescriptor &current,
+      const std::vector<MembershipAcknowledgement> &acknowledgements,
       const DurableAcknowledgementVerifier &verify_acknowledgement);
   [[nodiscard]] uint64_t last_sequence() const { return m_last_sequence; }
 

@@ -91,6 +91,29 @@ bool same_preview(const RetirementPreview &a, const RetirementPreview &b) {
          a.impacts == b.impacts && a.digest == b.digest;
 }
 
+std::string enrollment_material(const EnrollmentPreview &preview) {
+  std::string out = "enrollment-preview-v1";
+  add_field(out, preview.device.to_string());
+  add_field(out, std::to_string(preview.parent_epoch));
+  add_field(out, std::to_string(preview.next_epoch));
+  add_field(out, preview.parent_descriptor_hash);
+  for (const auto &member : preview.parent_members)
+    add_field(out, member.to_string());
+  out += "|acks|";
+  for (const auto &member : preview.required_acknowledgers)
+    add_field(out, member.to_string());
+  return out;
+}
+
+bool same_preview(const EnrollmentPreview &a, const EnrollmentPreview &b) {
+  return a.device == b.device && a.parent_epoch == b.parent_epoch &&
+         a.next_epoch == b.next_epoch &&
+         a.parent_descriptor_hash == b.parent_descriptor_hash &&
+         a.parent_members == b.parent_members &&
+         a.required_acknowledgers == b.required_acknowledgers &&
+         a.digest == b.digest;
+}
+
 Result<MembershipEvent> parse_line(std::string_view line,
                                    const ActorId &producer,
                                    uint64_t expected) {
@@ -159,6 +182,37 @@ Result<RetirementPreview> preview_retirement(
   for (const auto &member : preview.parent_members)
     if (member != device) preview.required_acknowledgers.push_back(member);
   preview.digest = sha256_hex(preview_material(preview));
+  return preview;
+}
+
+Result<EnrollmentPreview> preview_enrollment(
+    const MembershipDescriptor &current, const ActorId &device) {
+  if (current.epoch == 0 || current.epoch == UINT64_MAX ||
+      current.hash.empty() || current.hash.size() > 4096 ||
+      !device.valid() || current.members.empty() ||
+      current.members.size() >= 4096)
+    return Error(ErrorCode::malformed,
+                 "enrollment descriptor is invalid or cannot add a member");
+  auto members = current.members;
+  std::sort(members.begin(), members.end());
+  if (std::any_of(members.begin(), members.end(),
+                  [](const ActorId &id) { return !id.valid(); }) ||
+      std::adjacent_find(members.begin(), members.end()) != members.end() ||
+      std::binary_search(members.begin(), members.end(), device))
+    return Error(ErrorCode::malformed,
+                 "enrollment descriptor has invalid members or device is already enrolled");
+
+  EnrollmentPreview preview;
+  preview.device = device;
+  preview.parent_epoch = current.epoch;
+  preview.next_epoch = current.epoch + 1;
+  preview.parent_descriptor_hash = current.hash;
+  preview.parent_members = std::move(members);
+  preview.required_acknowledgers = preview.parent_members;
+  preview.required_acknowledgers.push_back(device);
+  std::sort(preview.required_acknowledgers.begin(),
+            preview.required_acknowledgers.end());
+  preview.digest = sha256_hex(enrollment_material(preview));
   return preview;
 }
 
@@ -273,6 +327,53 @@ Result<MembershipEvent> MembershipStore::commit_retirement(
     return Error(ErrorCode::limit_exceeded, "retirement evidence exceeds journal limit");
   MembershipEvent event{m_last_sequence + 1, preview.next_epoch, preview.device,
                         MembershipEvent::Kind::Retired, std::move(evidence)};
+  auto persisted = append(event);
+  if (!persisted.ok()) return persisted.error();
+  return event;
+}
+
+Result<MembershipEvent> MembershipStore::commit_enrollment(
+    const EnrollmentPreview &preview, const MembershipDescriptor &current,
+    const std::vector<MembershipAcknowledgement> &acknowledgements,
+    const DurableAcknowledgementVerifier &verify_acknowledgement) {
+  auto fresh = preview_enrollment(current, preview.device);
+  if (!fresh.ok()) return fresh.error();
+  if (!same_preview(preview, fresh.value()))
+    return Error(ErrorCode::wrong_epoch,
+                 "enrollment preview is stale; review current membership again");
+  if (!verify_acknowledgement)
+    return Error(ErrorCode::malformed,
+                 "enrollment requires an acknowledgement verifier");
+  if (acknowledgements.size() != preview.required_acknowledgers.size())
+    return Error(ErrorCode::awaiting_state,
+                 "enrollment is awaiting acknowledgements from every current member and the joining device");
+  std::map<ActorId, std::string> signatures;
+  for (const auto &ack : acknowledgements) {
+    if (!ack.actor.valid() || ack.signature.empty() || ack.signature.size() > 4096 ||
+        !signatures.emplace(ack.actor, ack.signature).second)
+      return Error(ErrorCode::malformed,
+                   "enrollment acknowledgement is invalid or duplicated");
+  }
+  for (const auto &member : preview.required_acknowledgers) {
+    auto ack = signatures.find(member);
+    if (ack == signatures.end())
+      return Error(ErrorCode::awaiting_state,
+                   "enrollment acknowledgement set does not match current membership and joining device");
+    auto verified = verify_acknowledgement(member, preview.digest, ack->second);
+    if (!verified.ok()) return verified.error();
+  }
+  if (m_last_sequence == UINT64_MAX)
+    return Error(ErrorCode::limit_exceeded, "membership event sequence is exhausted");
+  std::string evidence = "enrollment-v1 " + hex(preview.digest) + " " +
+                         hex(enrollment_material(preview)) + " " +
+                         std::to_string(signatures.size());
+  for (const auto &[actor, signature] : signatures)
+    evidence += " " + actor.to_string() + " " + hex(signature);
+  if (evidence.size() > kMaxEvidenceBytes)
+    return Error(ErrorCode::limit_exceeded,
+                 "enrollment evidence exceeds journal limit");
+  MembershipEvent event{m_last_sequence + 1, preview.next_epoch, preview.device,
+                        MembershipEvent::Kind::Enrolled, std::move(evidence)};
   auto persisted = append(event);
   if (!persisted.ok()) return persisted.error();
   return event;

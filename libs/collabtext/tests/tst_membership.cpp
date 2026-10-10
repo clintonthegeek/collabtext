@@ -156,6 +156,47 @@ private slots:
     QCOMPARE(recovered.value()[0].subject,retiring);
   }
 
+  void enrollmentRequiresEveryCurrentMemberAndTheJoiningDevice() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    auto opened=MembershipStore::open(
+        std::filesystem::path(dir.path().toStdString())/"enrollment.log",actor(30));
+    QVERIFY(opened.ok()); auto store=std::move(opened.value());
+    const auto member_a=actor(31), member_b=actor(32), joining=actor(33);
+    MembershipDescriptor descriptor{4,"epoch-four-hash",{member_b,member_a}};
+    auto preview=preview_enrollment(descriptor,joining); QVERIFY(preview.ok());
+    QCOMPARE(preview.value().next_epoch,uint64_t(5));
+    QCOMPARE(preview.value().required_acknowledgers.size(),size_t(3));
+    int verified=0;
+    DurableAcknowledgementVerifier verifier=[&](const ActorId &who,
+        std::string_view digest,std::string_view signature)->Result<void> {
+      ++verified;
+      if(digest!=preview.value().digest || signature!="durable-ack")
+        return Error(ErrorCode::corrupt_record,"enrollment acknowledgement is invalid");
+      if(who!=member_a && who!=member_b && who!=joining)
+        return Error(ErrorCode::actor_conflict,"unexpected enrollment actor");
+      return {};
+    };
+    auto missing=store.commit_enrollment(preview.value(),descriptor,
+        {{member_a,"durable-ack"},{member_b,"durable-ack"}},verifier);
+    QVERIFY(!missing.ok()); QCOMPARE(missing.error().code(),ErrorCode::awaiting_state);
+    QCOMPARE(store.last_sequence(),uint64_t(0)); QCOMPARE(verified,0);
+
+    auto forked=descriptor; forked.hash="forked-epoch-four";
+    auto stale=store.commit_enrollment(preview.value(),forked,
+        {{member_a,"durable-ack"},{member_b,"durable-ack"},{joining,"durable-ack"}},verifier);
+    QVERIFY(!stale.ok()); QCOMPARE(stale.error().code(),ErrorCode::wrong_epoch);
+    QCOMPARE(store.last_sequence(),uint64_t(0));
+
+    auto committed=store.commit_enrollment(preview.value(),descriptor,
+        {{member_a,"durable-ack"},{member_b,"durable-ack"},{joining,"durable-ack"}},verifier);
+    QVERIFY(committed.ok()); QCOMPARE(verified,3);
+    QCOMPARE(committed.value().kind,MembershipEvent::Kind::Enrolled);
+    QCOMPARE(committed.value().epoch,uint64_t(5));
+    QCOMPARE(committed.value().subject,joining);
+    auto recovered=store.recover(); QVERIFY(recovered.ok());
+    QCOMPARE(recovered.value().size(),size_t(1));
+  }
+
   void cannotRetireTheLastMemberOrCommitWithoutConfirmation() {
     const auto lone=actor(20);
     MembershipDescriptor one_member{1,"epoch-one",{lone}};
