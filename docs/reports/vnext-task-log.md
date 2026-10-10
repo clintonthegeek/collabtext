@@ -2799,3 +2799,32 @@ Remaining: production StreamSync still exposes only the legacy 16-bit
   producer receipts remain necessary before L04 completes. L05 remains locked
   behind L04. No merge, push, publication or consumer message was made.
 ```
+
+```text
+Task: L05
+Status: complete
+Branch: feat/fuguemax-placement
+Baseline: 2ac0510
+Implementation: 1304dc2, 39eae85772f5143da8a363094ed77a6b8c06bbf2
+
+Delivered:
+  - Completed the optional full-replay DocumentSession over actor-owned state,
+    FileOpStream, and Buffer, including recovery readiness and pending intent
+    reconciliation.
+  - Added a source-private test accessor for SegmentWriter failure injection;
+    it does not expose transport configuration through the installed API.
+  - Injected FileSync failure during durable local publication. The session
+    reports failure and becomes unusable, then reopen reconciles the intent,
+    applies the operation once, restores its undo group, and successfully
+    undoes it.
+
+Verification:
+  - Required Debug selection passed 3/3: tst_session_recovery,
+    tst_evaluation_regressions, tst_opstream_replay; GCC 16.2.1;
+    build-roadmap-debug/verification/20261010T035139Z-2/.
+  - Earlier L05 restart, mixed-peer, copied-store, outbox, and historical
+    projection cases remain recorded in
+    build-roadmap-debug/verification/20261006T214356Z-2/.
+  - validate-plan.py passed for all 72 tasks.
+  - Durable position pins and collector enforcement remain assigned to S05/G08.
+```
