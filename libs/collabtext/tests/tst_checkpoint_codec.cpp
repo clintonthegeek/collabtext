@@ -65,6 +65,12 @@ private slots:
     auto decoded = decode_checkpoint_context(encoded.value());
     QVERIFY(decoded);
     QCOMPARE(decoded.value(), context);
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_context(truncated),
+               qPrintable(QString::number(length)));
+    }
 
     auto invalid = context;
     invalid.document.clear();
@@ -120,6 +126,12 @@ private slots:
                state.undo_entries[i].key.undo_id);
       QCOMPARE(decoded.value().undo_entries[i].undo_count,
                state.undo_entries[i].undo_count);
+    }
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_causal(truncated),
+               qPrintable(QString::number(length)));
     }
 
     auto unordered = state;
