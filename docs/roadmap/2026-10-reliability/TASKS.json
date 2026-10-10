@@ -2491,7 +2491,27 @@
         "R3"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "complete",
+      "progress": "Complete: collabedit now opens the optional DocumentSession over the sidecar store, reconstructs deterministic seed content before replay, and uses the session for checked local edits, undo/redo, polling and operation/history durability. The editor preserves its surgical text deltas, viewport/presence anchors and legacy chat/comment streams. Save flushes operation/history state before atomically replacing the materialized file; failures preserve the old file and modified state. Explicit close surfaces session errors and application shutdown refuses to exit on a failed close. Incomplete recovery opens read-only and reports the issue. A real offscreen editor test covers a peer edit, local typing, undo/redo through close/reopen, failed materialized save, and recovery of a durable edit after closing without saving the view. The sidecar manifest now uses schema v4.",
+      "verification_results": {
+        "editor_debug": "PASS: tst_editor_recovery, tst_scroll_stability, tst_collab_plain_text_edit; 3/3; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261010T053659Z-12.",
+        "editor_release": "PASS: required L07 editor/scroll/widget selection; 3/3; GCC 16.2.1 Release; build-roadmap-release/verification/20261010T053707Z-194.",
+        "editor_asan_ubsan": "PASS: required L07 editor/scroll/widget selection; 3/3 under AddressSanitizer and UndefinedBehaviorSanitizer with LeakSanitizer disabled because this runner reports that LeakSanitizer cannot operate under ptrace; build-roadmap-asan/verification/20261010T053714Z-2.",
+        "changed_path_debug": "PASS: all 82 selected correctness tests and the installed Debug consumer package gate passed; build-roadmap-debug/verification/20261010T053341Z-changed-my_twf_0. The final editor transition fix was subsequently rechecked by editor/scroll/widget tests in Debug, Release and ASan/UBSan.",
+        "installed_package": "PASS: core, file-transport and Qt installed components; isolated consumer build/run, relocation and negative component check; producer revision 62e5b871114e29f9bd7bcc1907c5d551ec02fcde; build-consumer-verify/debug-package-20261010T053809Z-2."
+      },
+      "artifacts": [
+        "build-roadmap-debug/verification/20261010T053659Z-12/",
+        "build-roadmap-release/verification/20261010T053707Z-194/",
+        "build-roadmap-asan/verification/20261010T053714Z-2/",
+        "build-roadmap-debug/verification/20261010T053341Z-changed-my_twf_0/",
+        "build-consumer-verify/debug-package-20261010T053809Z-2/"
+      ],
+      "remaining_gap": "DocumentSession remains a one-text-stream reference composition. Markoff and Wave continue to own their canonical event-log adapters and cross-block/multi-block history policy; the higher-level recovery arrival and crash matrix remains L08.",
+      "baseline_revision": "751546f",
+      "implementation_commits": [
+        "62e5b87"
+      ]
     },
     {
       "id": "L08",
