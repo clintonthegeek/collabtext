@@ -144,12 +144,12 @@ Result<void> IdListEngine::acknowledge_undo_retirements(
     return m_impl->list.acknowledge_undo_retirements(group_ids);
 }
 bool IdListEngine::coalesce_last_undo() { return m_impl->list.coalesce_last_undo(); }
-void IdListEngine::set_max_undo_depth(size_t depth) {
-    m_impl->list.set_max_undo_depth(depth);
+Result<void> IdListEngine::set_max_undo_depth(size_t depth) {
+    return m_impl->list.set_max_undo_depth(depth);
 }
 size_t IdListEngine::max_undo_depth() const { return m_impl->list.max_undo_depth(); }
-void IdListEngine::set_max_undo_bytes(size_t bytes) {
-    m_impl->list.set_max_undo_bytes(bytes);
+Result<void> IdListEngine::set_max_undo_bytes(size_t bytes) {
+    return m_impl->list.set_max_undo_bytes(bytes);
 }
 size_t IdListEngine::max_undo_bytes() const {
     return m_impl->list.max_undo_bytes();

@@ -324,6 +324,15 @@ history stack is empty, and an error reports a refused identity reservation.
 The legacy `undo()` and `redo()` wrappers remain available and return an empty
 optional for either condition.
 
+The public step and byte limit setters return `Result<void>`. If lowering a
+limit would create retirement records beyond the engine's independent pending
+queue budget, the setter leaves both the limit and history unchanged. The same
+backpressure can refuse a local edit before identity reservation. Pending
+active and pending history together is limited to 100,000 groups, and pending
+retirement snapshots are limited to 8 MiB of estimated snapshot and
+identity-array storage. Acknowledge records only after their consumer-owned
+durable publication.
+
 Two consequences worth stating:
 
 - `undo`/`redo` return `Result`, because after C3 they persist: failing to record

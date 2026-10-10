@@ -2842,3 +2842,21 @@ Verification: Debug public-header and filetransport targets compiled. Runtime
 Remaining: pending retirement memory budgeting and consumer-owned event policy
   remain open under L06.
 ```
+
+```text
+Continuation — 2026-10-10
+
+Task: L06
+Status: in progress (retirement budget implemented; runtime verification pending)
+Scope: Bound combined active/pending history to 100,000 groups and pending
+  retirement snapshots to 8 MiB of estimated metadata. Local edits check the
+  projected retirement queue before allocating operation identities; limit
+  changes refuse atomically when trim records would exceed the cap. Restore
+  validates the same bounds, and acknowledgments release the charged bytes.
+Verification: GCC 16.2.1 Debug compiled core, filetransport, public headers, and
+  the existing undo, IdList GC, Buffer GC, evaluation, realistic, and session
+  recovery test executables. The tests were not run in this turn.
+Remaining: runtime backpressure coverage; byte charges estimate object and
+  identity-array storage; Markoff/Wave own their event encodings and
+  multi-block transaction policy.
+```

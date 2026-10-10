@@ -63,7 +63,7 @@ private slots:
 
     void max_undo_depth_trims_oldest() {
         IdList list(CollabText::Test::test_counter(1));
-        list.set_max_undo_depth(3);
+        QVERIFY((list.set_max_undo_depth(3)).ok());
         for (int i = 0; i < 5; ++i) list.insert_after(Anchor::min(), static_cast<uint64_t>(i));
         QCOMPARE(list.undo_depth(), size_t{3});
     }
@@ -84,7 +84,7 @@ private slots:
         QCOMPARE(outcomes.size(), size_t(1));
         QVERIFY(replayed.restore_local_history(saved).ok());
         QCOMPARE(replayed.local_history_snapshot().cursor, size_t(1));
-        replayed.set_max_undo_bytes(512);
+        QVERIFY((replayed.set_max_undo_bytes(512)).ok());
         QCOMPARE(replayed.max_undo_bytes(), size_t(512));
         QVERIFY(replayed.undo_history_bytes() <= replayed.max_undo_bytes());
         QVERIFY(replayed.undo().has_value());
@@ -93,7 +93,7 @@ private slots:
 
     void public_engine_persists_trim_retirement_intents() {
         CollabText::IdListEngine original(CollabText::Test::test_counter(8));
-        original.set_max_undo_depth(1);
+        QVERIFY((original.set_max_undo_depth(1)).ok());
         auto first = original.try_insert_after(Anchor::min(), 1);
         auto second = original.try_insert_after(Anchor::min(), 2);
         QVERIFY(first.ok());
@@ -106,7 +106,7 @@ private slots:
 
         CollabText::IdListEngine replayed(
             CollabText::Test::test_counter(8, 100));
-        replayed.set_max_undo_depth(1);
+        QVERIFY((replayed.set_max_undo_depth(1)).ok());
         QCOMPARE(replayed.apply_ops({first.value(), second.value()}).size(),
                  size_t(2));
         QVERIFY(replayed.restore_local_history(saved).ok());

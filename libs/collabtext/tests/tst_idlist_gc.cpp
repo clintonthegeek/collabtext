@@ -13,8 +13,8 @@ private slots:
         IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
-        list.set_max_undo_depth(0);   // discard all undo entries
-        list.set_max_undo_depth(1000);
+        QVERIFY((list.set_max_undo_depth(0)).ok());  // discard all undo entries
+        QVERIFY((list.set_max_undo_depth(1000)).ok());
         QCOMPARE(list.tombstone_count(), size_t{1});
         size_t collected = list.collect_garbage();
         QCOMPARE(collected, size_t{0});
@@ -27,8 +27,8 @@ private slots:
         bob.apply_ops({op_a});
         auto rm_b = bob.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
         alice.apply_ops({rm_b});
-        alice.set_max_undo_depth(0);
-        alice.set_max_undo_depth(1000);
+        QVERIFY((alice.set_max_undo_depth(0)).ok());
+        QVERIFY((alice.set_max_undo_depth(1000)).ok());
         QCOMPARE(alice.collect_garbage(), size_t{0});  // remote deletion remains restorable
     }
 
@@ -43,8 +43,8 @@ private slots:
         Global wm = alice.version();
         wm.meet(bob.version());
 
-        alice.set_max_undo_depth(0);
-        alice.set_max_undo_depth(1000);
+        QVERIFY((alice.set_max_undo_depth(0)).ok());
+        QVERIFY((alice.set_max_undo_depth(1000)).ok());
         size_t reclaimed = alice.compact(wm);
         QCOMPARE(reclaimed, size_t{0});
         QCOMPARE(alice.tombstone_count(), size_t{1});
@@ -60,8 +60,8 @@ private slots:
         list.insert_after(Anchor::min(), 0xAA);
         list.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));  // deletion id is in undo stack
         QCOMPARE(list.collect_garbage(), size_t{0});  // protected
-        list.set_max_undo_depth(0);   // drop undo entry
-        list.set_max_undo_depth(1000);
+        QVERIFY((list.set_max_undo_depth(0)).ok());  // drop undo entry
+        QVERIFY((list.set_max_undo_depth(1000)).ok());
         QCOMPARE(list.collect_garbage(), size_t{0});  // local trimming cannot prove global retirement
         QCOMPARE(list.tombstone_count(), size_t{1});
     }
@@ -78,8 +78,8 @@ private slots:
         QCOMPARE(list.collect_garbage(), size_t{0});  // must NOT collect — redo still possible
 
         // Dropping this stack does not prove remote restoration/anchor retirement.
-        list.set_max_undo_depth(0);
-        list.set_max_undo_depth(1000);
+        QVERIFY((list.set_max_undo_depth(0)).ok());
+        QVERIFY((list.set_max_undo_depth(1000)).ok());
         QCOMPARE(list.collect_garbage(), size_t{0});
         QCOMPARE(list.tombstone_count(), size_t{1});
     }

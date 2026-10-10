@@ -66,7 +66,7 @@ private slots:
 
     void set_max_undo_depth() {
         Buffer buf(CollabText::Test::test_counter(1));
-        buf.set_max_undo_depth(50);
+        QVERIFY((buf.set_max_undo_depth(50)).ok());
         QCOMPARE(buf.max_undo_depth(), size_t(50));
     }
 
@@ -92,7 +92,7 @@ private slots:
 
     void gc_retains_after_local_history_trim() {
         Buffer buf(CollabText::Test::test_counter(1));
-        buf.set_max_undo_depth(1);
+        QVERIFY((buf.set_max_undo_depth(1)).ok());
         buf.apply_local_edit({{0, 0}}, {"hello world"});  // undo entry 1
         buf.apply_local_edit({{0, 5}}, {""});              // undo entry 2, pushes entry 1 out
 
@@ -116,7 +116,7 @@ private slots:
 
     void gc_preserves_visible_text() {
         Buffer buf(CollabText::Test::test_counter(1));
-        buf.set_max_undo_depth(0);  // local undo is disabled; global eligibility is still unknown
+        QVERIFY((buf.set_max_undo_depth(0)).ok());  // local undo is disabled; global eligibility is still unknown
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{1, 3}}, {""});  // delete "bc"
         buf.apply_local_edit({{1, 3}}, {""});  // delete "ef" (now "ad" visible)
@@ -151,7 +151,7 @@ private slots:
 
     void gc_after_undo_redo_cycle() {
         Buffer buf(CollabText::Test::test_counter(1));
-        buf.set_max_undo_depth(0);  // nothing protected
+        QVERIFY((buf.set_max_undo_depth(0)).ok());  // nothing protected
         buf.apply_local_edit({{0, 0}}, {"abc"});
         buf.apply_local_edit({{0, 3}}, {""});  // delete
         buf.undo();  // restore
@@ -169,7 +169,7 @@ private slots:
     void gc_partial_protection() {
         // Two separate deletions: one protected, one not
         Buffer buf(CollabText::Test::test_counter(1));
-        buf.set_max_undo_depth(1);
+        QVERIFY((buf.set_max_undo_depth(1)).ok());
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{0, 3}}, {""});  // delete "abc" — undo entry 1
         buf.apply_local_edit({{0, 3}}, {""});  // delete "def" — undo entry 2, pushes 1 out
@@ -195,7 +195,7 @@ private slots:
 
     void gc_with_multiple_deletions_on_same_fragment() {
         Buffer buf(CollabText::Test::test_counter(1));
-        buf.set_max_undo_depth(2);
+        QVERIFY((buf.set_max_undo_depth(2)).ok());
         buf.apply_local_edit({{0, 0}}, {"hello"});   // entry 0
         buf.apply_local_edit({{0, 5}}, {""});         // entry 1: delete "hello"
         buf.undo();                                    // undo delete
@@ -233,7 +233,7 @@ private slots:
 
     void gc_preserves_deleted_anchor_context() {
         Buffer buf(CollabText::Test::test_counter(1));
-        buf.set_max_undo_depth(0);
+        QVERIFY((buf.set_max_undo_depth(0)).ok());
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         const auto anchor = buf.anchor_at(2, Bias::Left);
         buf.apply_local_edit({{2, 4}}, {""});  // delete "cd"
@@ -251,7 +251,7 @@ private slots:
     void gc_preserves_distinct_insertions() {
         // Distinct insertion contexts remain untouched by an uncertified request.
         Buffer buf(CollabText::Test::test_counter(1));
-        buf.set_max_undo_depth(0);
+        QVERIFY((buf.set_max_undo_depth(0)).ok());
         buf.apply_local_edit({{0, 0}}, {"abc"});
         buf.apply_local_edit({{3, 3}}, {"def"});  // separate insertion
         size_t before_gc = buf.fragment_count();
@@ -271,7 +271,7 @@ private slots:
         std::mt19937 rng(seed);
 
         Buffer buf(CollabText::Test::test_counter(1));
-        buf.set_max_undo_depth(20);
+        QVERIFY((buf.set_max_undo_depth(20)).ok());
 
         for (int i = 0; i < 200; ++i) {
             std::string text = buf.text();
@@ -334,7 +334,7 @@ private slots:
         bufB.apply_ops({op2});
         QCOMPARE(bufA.text(), bufB.text());
 
-        bufA.set_max_undo_depth(0);
+        QVERIFY((bufA.set_max_undo_depth(0)).ok());
         bufA.collect_garbage();
 
         QCOMPARE(bufA.text(), bufB.text());
@@ -352,8 +352,8 @@ private slots:
         std::mt19937 rng(seed);
 
         Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
-        bufA.set_max_undo_depth(10);
-        bufB.set_max_undo_depth(10);
+        QVERIFY((bufA.set_max_undo_depth(10)).ok());
+        QVERIFY((bufB.set_max_undo_depth(10)).ok());
         std::vector<Operation> queueA, queueB;
 
         auto random_boundary_edit = [&](Buffer& buf) -> Operation {
@@ -445,7 +445,7 @@ private slots:
         QCOMPARE(bufB.text(), std::string(""));
 
         // A's local trimming is insufficient to authorize removal.
-        bufA.set_max_undo_depth(0);
+        QVERIFY((bufA.set_max_undo_depth(0)).ok());
         QCOMPARE(bufA.collect_garbage(), size_t(0));
         QVERIFY(bufA.tombstone_count() > 0);
 
@@ -500,7 +500,7 @@ private slots:
         // B deletes — this deletion is NOT covered by the watermark
         auto op2 = bufB.apply_local_edit({{0, 5}}, {""});
         bufA.apply_ops({op2});
-        bufA.set_max_undo_depth(0);
+        QVERIFY((bufA.set_max_undo_depth(0)).ok());
 
         // compact with old watermark should NOT remove (deletion > watermark)
         QCOMPARE(bufA.compact(watermark), size_t(0));
@@ -525,8 +525,8 @@ private slots:
         watermark.meet(bufB.version());
 
         // Both compact at the same watermark
-        bufA.set_max_undo_depth(0);
-        bufB.set_max_undo_depth(0);
+        QVERIFY((bufA.set_max_undo_depth(0)).ok());
+        QVERIFY((bufB.set_max_undo_depth(0)).ok());
         const auto tombstones_a = bufA.tombstone_count();
         const auto tombstones_b = bufB.tombstone_count();
         QCOMPARE(bufA.compact(watermark), size_t(0));
@@ -552,8 +552,8 @@ private slots:
         std::mt19937 rng(seed);
 
         Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
-        bufA.set_max_undo_depth(10);
-        bufB.set_max_undo_depth(10);
+        QVERIFY((bufA.set_max_undo_depth(10)).ok());
+        QVERIFY((bufB.set_max_undo_depth(10)).ok());
         std::vector<Operation> queueA, queueB;
 
         auto random_boundary_edit = [&](Buffer& buf) -> Operation {

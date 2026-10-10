@@ -94,7 +94,7 @@ private slots:
     const auto path = std::filesystem::path(temp.path().toStdString()) / "trim.log";
     const auto owner = Test::actor(12);
     Buffer original(Test::test_counter(12));
-    original.set_max_undo_depth(1);
+    QVERIFY((original.set_max_undo_depth(1)).ok());
     auto first = original.try_apply_local_edit({{0, 0}}, {"a"});
     auto second = original.try_apply_local_edit({{1, 1}}, {"b"});
     QVERIFY(first.ok());
@@ -181,7 +181,7 @@ private slots:
     const auto path = std::filesystem::path(temp.path().toStdString()) / "list.log";
     const auto owner = Test::actor(11);
     IdList original(Test::test_counter(11));
-    original.set_max_undo_depth(1);
+    QVERIFY((original.set_max_undo_depth(1)).ok());
     auto insert = original.try_insert_after(Anchor::min(), 42);
     QVERIFY(insert.ok());
     auto remove = original.try_remove_at(Anchor{idlist_op_identity(insert.value())});
@@ -222,11 +222,11 @@ private slots:
 
   void idlist_history_obeys_retained_byte_budget() {
     IdList list(Test::test_counter(9));
-    list.set_max_undo_bytes(2 * (sizeof(uint64_t) + sizeof(UndoMapKey)));
+    QVERIFY((list.set_max_undo_bytes(2 * (sizeof(uint64_t) + sizeof(UndoMapKey)))).ok());
     QVERIFY(list.try_insert_after(Anchor::min(), 1).ok());
     QVERIFY(list.try_insert_after(Anchor::min(), 2).ok());
     QCOMPARE(list.undo_depth(), size_t(2));
-    list.set_max_undo_bytes(sizeof(uint64_t) + sizeof(UndoMapKey));
+    QVERIFY((list.set_max_undo_bytes(sizeof(uint64_t) + sizeof(UndoMapKey))).ok());
     QCOMPARE(list.undo_depth(), size_t(1));
     QVERIFY(list.undo_history_bytes() <= list.max_undo_bytes());
   }
@@ -249,11 +249,11 @@ private slots:
   void history_budget_trims_old_steps_and_refuses_one_oversized_edit() {
     auto allocator = Test::test_counter(9);
     Buffer buffer(allocator);
-    buffer.set_max_undo_bytes(80);
+    QVERIFY((buffer.set_max_undo_bytes(80)).ok());
     QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {"a"}).ok());
     QVERIFY(buffer.try_apply_local_edit({{1, 1}}, {"b"}).ok());
     QCOMPARE(buffer.undo_depth(), size_t(2));
-    buffer.set_max_undo_bytes(40);
+    QVERIFY((buffer.set_max_undo_bytes(40)).ok());
     QCOMPARE(buffer.undo_depth(), size_t(1));
     QVERIFY(buffer.undo_history_bytes() <= buffer.max_undo_bytes());
     auto undo = buffer.undo();
@@ -261,7 +261,7 @@ private slots:
     QCOMPARE(buffer.text(), std::string("a"));
 
     Buffer limited(Test::test_counter(10));
-    limited.set_max_undo_bytes(32);
+    QVERIFY((limited.set_max_undo_bytes(32)).ok());
     auto refused = limited.try_apply_local_edit({{0, 0}}, {"too large"});
     QVERIFY(!refused.ok());
     QCOMPARE(refused.error().code(), ErrorCode::limit_exceeded);

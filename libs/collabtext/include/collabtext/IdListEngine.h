@@ -152,9 +152,13 @@ public:
     /// Merge the newest undo entry into the one before it, so consecutive
     /// insertions become one step. Purely local; mutates no CRDT state.
     bool coalesce_last_undo();
-    void set_max_undo_depth(size_t depth);
+    /// Set the active history step limit (at most 100,000). Refuses atomically
+    /// if trimming would exceed the pending-retirement queue's count or byte
+    /// budget.
+    Result<void> set_max_undo_depth(size_t depth);
     [[nodiscard]] size_t max_undo_depth() const;
-    void set_max_undo_bytes(size_t bytes);
+    /// Set the active history byte limit with the same retirement backpressure.
+    Result<void> set_max_undo_bytes(size_t bytes);
     [[nodiscard]] size_t max_undo_bytes() const;
     [[nodiscard]] size_t undo_history_bytes() const;
 

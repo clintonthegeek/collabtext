@@ -149,9 +149,9 @@ public:
     size_t undo_depth() const { return m_undo_cursor; }
     bool coalesce_last_undo();
     size_t max_undo_depth() const { return m_max_undo_depth; }
-    void set_max_undo_depth(size_t depth);
+    Result<void> set_max_undo_depth(size_t depth);
     size_t max_undo_bytes() const { return m_max_undo_bytes; }
-    void set_max_undo_bytes(size_t bytes);
+    Result<void> set_max_undo_bytes(size_t bytes);
     size_t undo_history_bytes() const { return m_undo_bytes; }
     [[nodiscard]] LocalHistorySnapshot local_history_snapshot() const;
     [[nodiscard]] std::optional<LocalUndoEntrySnapshot>
@@ -247,6 +247,7 @@ private:
     snapshot_undo_entry(const UndoEntry &) const;
     std::vector<UndoEntry> m_undo_stack;
     std::vector<LocalUndoEntrySnapshot> m_retired_undo_entries;
+    size_t m_retired_undo_bytes = 0;
     size_t m_undo_cursor = 0;
     size_t m_max_undo_depth = 1000;
     size_t m_undo_bytes = 0;
@@ -306,6 +307,12 @@ private:
     void enqueue_deferred(IdListOpEntry entry);
     void trim_undo_stack();
     void recalculate_undo_bytes();
+    Result<void> check_retirement_budget_for_limits(size_t depth,
+                                                     size_t bytes) const;
+    Result<void> check_retirement_budget_for_new_entry(
+        size_t retained_bytes, size_t inserted_count,
+        size_t deletion_count) const;
+    void retire_undo_entry(const UndoEntry &entry);
 
     bool apply_concrete(const IdListInsertOp& op);
     bool apply_concrete(const IdListRemoveOp& op);

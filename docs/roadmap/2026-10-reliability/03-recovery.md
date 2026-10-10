@@ -170,7 +170,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 **Coverage:** F1, F2, R10  
 **Design/decision gate:** Q3 resolved: persistent actor-local undo AND redo, bounded by step and byte limits.  
 
-**Implementation progress:** Actor-local history persists stable group identities, ordered member operation identities, and pending trim/redo-branch retirement records through CLH4 checkpoints. `DocumentSession` exposes group correlation and retirement publication/acknowledgment APIs; `IdListEngine` exposes replayable history snapshots and byte/step limits for consumer-owned persistence. See TASKS.json for current verification evidence and the remaining policy/memory-accounting limits.
+**Implementation progress:** Actor-local history persists stable group identities, ordered member operation identities, and pending trim/redo-branch retirement records through CLH4 checkpoints. `DocumentSession` exposes group correlation and retirement publication/acknowledgment APIs; `IdListEngine` exposes replayable history snapshots and byte/step limits for consumer-owned persistence. Pending retirement records are capped at 8 MiB of estimated identity storage and 100,000 combined active/pending groups, with mutation backpressure before identity reservation. See TASKS.json for verification evidence and remaining policy limits.
 
 **Files / scope:**
 
@@ -180,6 +180,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 - `libs/collabtext/src/crdt/IdList.h`
 - `libs/collabtext/src/crdt/UndoMap.h`
 - `libs/collabtext/src/crdt/IdList.cpp`
+- `libs/collabtext/src/crdt/LocalHistoryBudget.h`
 - `libs/collabtext/src/storage/LocalHistoryLog.cpp`
 - `libs/collabtext/src/storage/LocalHistoryLog.h`
 - `libs/collabtext/CMakeLists.txt`
@@ -188,6 +189,10 @@ Run `./tools/verify-roadmap.sh debug 'tst_session_recovery|tst_evaluation_regres
 - `libs/collabtext/include/collabtext/IdListEngine.h`
 - `libs/collabtext/src/IdListEngine.cpp`
 - `libs/collabtext/tests/tst_idlist_undo.cpp`
+- `libs/collabtext/tests/tst_idlist_gc.cpp`
+- `libs/collabtext/tests/tst_gc.cpp`
+- `libs/collabtext/tests/tst_evaluation_regressions.cpp`
+- `libs/collabtext/tests/tst_realistic.cpp`
 - `libs/collabtext/tests/public-headers/only_LocalHistory_h.cpp`
 - `docs/specs/vnext-public-api.md`
 - `libs/collabtext/include/collabtext/DocumentSession.h`

@@ -1,4 +1,5 @@
 #include "crdt/Buffer.h"
+#include "crdt/LocalHistoryBudget.h"
 #include "crdt/OperationQueue.h"
 #include "crdt/SequenceOrder.h"
 #include "codec/Utf.h"
@@ -46,15 +47,17 @@ void Buffer::local_clear() noexcept {
     auto allocator = m_allocator;
     auto version = m_version;
     auto retired = std::move(m_retired_undo_entries);
+    const auto retired_bytes = m_retired_undo_bytes;
     const auto undo_limit = max_undo_depth();
     const auto undo_byte_limit = max_undo_bytes();
     auto changed = std::move(m_on_change);
     *this = Buffer(std::move(allocator));
     m_version = std::move(version);
     m_retired_undo_entries = std::move(retired);
+    m_retired_undo_bytes = retired_bytes;
     m_on_change = std::move(changed);
-    set_max_undo_depth(undo_limit);
-    set_max_undo_bytes(undo_byte_limit);
+    (void)set_max_undo_depth(undo_limit);
+    (void)set_max_undo_bytes(undo_byte_limit);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,14 +125,23 @@ size_t Buffer::max_undo_depth() const {
     return m_max_undo_depth;
 }
 
-void Buffer::set_max_undo_depth(size_t depth) {
+Result<void> Buffer::set_max_undo_depth(size_t depth) {
+    if (depth > detail::kMaxPendingUndoRetirementGroups)
+        return Error(ErrorCode::limit_exceeded,
+                     "undo history group limit exceeds 100,000");
+    auto budget = check_retirement_budget_for_limits(depth, m_max_undo_bytes);
+    if (!budget.ok()) return budget.error();
     m_max_undo_depth = depth;
     trim_undo_stack();
+    return Result<void>::success();
 }
 
-void Buffer::set_max_undo_bytes(size_t bytes) {
+Result<void> Buffer::set_max_undo_bytes(size_t bytes) {
+    auto budget = check_retirement_budget_for_limits(m_max_undo_depth, bytes);
+    if (!budget.ok()) return budget.error();
     m_max_undo_bytes = bytes;
     trim_undo_stack();
+    return Result<void>::success();
 }
 
 void Buffer::recalculate_undo_bytes() {
@@ -148,12 +160,115 @@ void Buffer::trim_undo_stack() {
     while (!m_undo_stack.empty() &&
            (m_undo_stack.size() > m_max_undo_depth ||
             m_undo_bytes > m_max_undo_bytes)) {
-        m_retired_undo_entries.push_back(
-            snapshot_undo_entry(m_undo_stack.front()));
+        retire_undo_entry(m_undo_stack.front());
         m_undo_stack.erase(m_undo_stack.begin());
         if (m_undo_cursor != 0) --m_undo_cursor;
         recalculate_undo_bytes();
     }
+}
+
+void Buffer::retire_undo_entry(const UndoEntry &entry) {
+    auto snapshot = snapshot_undo_entry(entry);
+    m_retired_undo_bytes += detail::local_undo_retirement_charge(snapshot);
+    m_retired_undo_entries.push_back(std::move(snapshot));
+}
+
+Result<void> Buffer::check_retirement_budget_for_limits(size_t depth,
+                                                         size_t bytes) const {
+    size_t remaining_bytes = m_undo_bytes;
+    size_t added_bytes = 0;
+    size_t added_groups = 0;
+    size_t first = 0;
+    size_t count = m_undo_stack.size();
+    while (count > depth || remaining_bytes > bytes) {
+        if (first >= m_undo_stack.size()) break;
+        const auto &entry = m_undo_stack[first++];
+        remaining_bytes -= std::min(remaining_bytes, entry.retained_bytes);
+        const size_t charge = detail::local_undo_retirement_charge(
+            entry.operation_ids.size(), entry.inserted_keys.size(),
+            entry.deletion_ids.size());
+        if (charge > detail::kMaxPendingUndoRetirementBytes -
+                         std::min(added_bytes, detail::kMaxPendingUndoRetirementBytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "pending undo retirement memory budget would be exceeded");
+        added_bytes += charge;
+        ++added_groups;
+        --count;
+    }
+    const size_t existing_groups = m_retired_undo_entries.size();
+    if (existing_groups > detail::kMaxPendingUndoRetirementGroups ||
+        added_groups > detail::kMaxPendingUndoRetirementGroups - existing_groups ||
+        count > detail::kMaxPendingUndoRetirementGroups - existing_groups - added_groups ||
+        added_bytes > detail::kMaxPendingUndoRetirementBytes -
+                          std::min(m_retired_undo_bytes,
+                                   detail::kMaxPendingUndoRetirementBytes))
+        return Error(ErrorCode::limit_exceeded,
+                     "pending undo retirement memory budget would be exceeded");
+    return Result<void>::success();
+}
+
+Result<void> Buffer::check_retirement_budget_for_new_entry(
+    size_t retained_bytes, size_t inserted_count, size_t deletion_count) const {
+    size_t added_bytes = 0;
+    size_t added_groups = 0;
+    auto add = [&](size_t charge) -> bool {
+        if (charge > detail::kMaxPendingUndoRetirementBytes -
+                         std::min(added_bytes, detail::kMaxPendingUndoRetirementBytes))
+            return false;
+        added_bytes += charge;
+        ++added_groups;
+        return true;
+    };
+    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i) {
+        const auto &entry = m_undo_stack[i];
+        if (!add(detail::local_undo_retirement_charge(
+                entry.operation_ids.size(), entry.inserted_keys.size(),
+                entry.deletion_ids.size())))
+            return Error(ErrorCode::limit_exceeded,
+                         "pending undo retirement memory budget would be exceeded");
+    }
+
+    size_t remaining_bytes = 0;
+    for (size_t i = 0; i < m_undo_cursor; ++i) {
+        if (m_undo_stack[i].retained_bytes > SIZE_MAX - remaining_bytes) {
+            remaining_bytes = SIZE_MAX;
+            break;
+        }
+        remaining_bytes += m_undo_stack[i].retained_bytes;
+    }
+    remaining_bytes = retained_bytes > SIZE_MAX - remaining_bytes
+                          ? SIZE_MAX : remaining_bytes + retained_bytes;
+    size_t count = m_undo_cursor + 1;
+    size_t first = 0;
+    const size_t candidate_charge = detail::local_undo_retirement_charge(
+        1, inserted_count, deletion_count);
+    while (count > m_max_undo_depth || remaining_bytes > m_max_undo_bytes) {
+        if (first < m_undo_cursor) {
+            const auto &entry = m_undo_stack[first++];
+            remaining_bytes -= std::min(remaining_bytes, entry.retained_bytes);
+            if (!add(detail::local_undo_retirement_charge(
+                    entry.operation_ids.size(), entry.inserted_keys.size(),
+                    entry.deletion_ids.size())))
+                return Error(ErrorCode::limit_exceeded,
+                             "pending undo retirement memory budget would be exceeded");
+        } else {
+            remaining_bytes -= std::min(remaining_bytes, retained_bytes);
+            if (!add(candidate_charge))
+                return Error(ErrorCode::limit_exceeded,
+                             "pending undo retirement memory budget would be exceeded");
+        }
+        --count;
+    }
+    const size_t existing_groups = m_retired_undo_entries.size();
+    if (existing_groups > detail::kMaxPendingUndoRetirementGroups ||
+        added_groups > detail::kMaxPendingUndoRetirementGroups - existing_groups ||
+        count > detail::kMaxPendingUndoRetirementGroups - existing_groups - added_groups ||
+        added_bytes > detail::kMaxPendingUndoRetirementBytes -
+                          std::min(m_retired_undo_bytes,
+                                   detail::kMaxPendingUndoRetirementBytes))
+        return Error(ErrorCode::limit_exceeded,
+                     "pending undo retirement memory budget would be exceeded");
+    return Result<void>::success();
 }
 
 size_t Buffer::collect_garbage() {
@@ -557,6 +672,14 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     if (retained_bytes > m_max_undo_bytes)
         return Error(ErrorCode::limit_exceeded,
                      "local edit exceeds configured undo byte limit");
+    const size_t prospective_deletions =
+        std::any_of(ranges.begin(), ranges.end(), [](const auto &range) {
+            return range.second > range.first;
+        }) ? 1 : 0;
+    auto retirement_budget = check_retirement_budget_for_new_entry(
+        retained_bytes, static_cast<size_t>(inserted_scalars),
+        prospective_deletions);
+    if (!retirement_budget.ok()) return retirement_budget.error();
 
     auto reserved = m_allocator->reserve_run(inserted_scalars + 1);
     if (!reserved.ok()) {
@@ -686,7 +809,7 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     if (had_deletions)
         undo_entry.deletion_ids.push_back(op_identity);
     for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i)
-        m_retired_undo_entries.push_back(snapshot_undo_entry(m_undo_stack[i]));
+        retire_undo_entry(m_undo_stack[i]);
     m_undo_stack.resize(m_undo_cursor);
     m_undo_stack.push_back(std::move(undo_entry));
     m_undo_cursor = m_undo_stack.size();
@@ -1111,6 +1234,9 @@ Result<void> Buffer::acknowledge_undo_retirements(
             return Error(ErrorCode::not_found,
                          "undo retirement group is not pending");
     }
+    for (const auto &entry : m_retired_undo_entries)
+        if (unique.contains(entry.group_id))
+            m_retired_undo_bytes -= detail::local_undo_retirement_charge(entry);
     std::erase_if(m_retired_undo_entries, [&](const auto &entry) {
         return unique.contains(entry.group_id);
     });
@@ -1120,7 +1246,11 @@ Result<void> Buffer::acknowledge_undo_retirements(
 Result<void>
 Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
     if (snapshot.cursor > snapshot.entries.size() ||
-        snapshot.entries.size() > m_max_undo_depth)
+        snapshot.entries.size() > m_max_undo_depth ||
+        snapshot.retired_entries.size() >
+            detail::kMaxPendingUndoRetirementGroups ||
+        snapshot.entries.size() > detail::kMaxPendingUndoRetirementGroups -
+                                      snapshot.retired_entries.size())
         return Error(ErrorCode::malformed,
                      "local history cursor or depth is outside configured bounds");
 
@@ -1129,6 +1259,7 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
     restored.reserve(snapshot.entries.size());
     std::vector<LocalUndoEntrySnapshot> retired;
     retired.reserve(snapshot.retired_entries.size());
+    size_t retired_bytes = 0;
     size_t restored_bytes = 0;
     auto valid_local_identity = [&](const Identity &id) {
         return id.actor == owner && id.counter != 0 &&
@@ -1168,6 +1299,13 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
         restored.push_back(std::move(entry));
     }
     for (const auto &saved : snapshot.retired_entries) {
+        const size_t charge = detail::local_undo_retirement_charge(saved);
+        if (charge > detail::kMaxPendingUndoRetirementBytes -
+                         std::min(retired_bytes,
+                                  detail::kMaxPendingUndoRetirementBytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "pending undo retirement memory budget exceeded");
+        retired_bytes += charge;
         if (!valid_local_identity(saved.group_id) || saved.operation_ids.empty())
             return Error(ErrorCode::history_unavailable,
                          "retired undo group metadata is absent from owner history");
@@ -1187,6 +1325,7 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
     }
     m_undo_stack = std::move(restored);
     m_retired_undo_entries = std::move(retired);
+    m_retired_undo_bytes = retired_bytes;
     m_undo_cursor = snapshot.cursor;
     m_undo_bytes = restored_bytes;
     return Result<void>::success();

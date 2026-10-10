@@ -103,8 +103,8 @@ private slots:
         rec.tick(1);
         rec.drain();
 
-        rec.buffer(0).set_max_undo_depth(0);
-        rec.buffer(1).set_max_undo_depth(0);
+        QVERIFY((rec.buffer(0).set_max_undo_depth(0)).ok());
+        QVERIFY((rec.buffer(1).set_max_undo_depth(0)).ok());
         rec.net().compact_all();
         // V03 containment: reclamation is disabled until a certificate exists,
         // so compact_all() removes nothing and retains every tombstone.
@@ -305,8 +305,8 @@ private slots:
         rec.net().assert_convergence("after_sync");
 
         // GC request: containment retains everything until certification (V03)
-        rec.buffer(0).set_max_undo_depth(0);
-        rec.buffer(1).set_max_undo_depth(0);
+        QVERIFY((rec.buffer(0).set_max_undo_depth(0)).ok());
+        QVERIFY((rec.buffer(1).set_max_undo_depth(0)).ok());
         const size_t tombstones_before =
             rec.buffer(0).tombstone_count() + rec.buffer(1).tombstone_count();
         rec.collect_garbage(0);

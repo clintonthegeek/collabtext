@@ -24,7 +24,10 @@ struct LocalUndoEntrySnapshot {
 struct LocalHistorySnapshot {
     std::vector<LocalUndoEntrySnapshot> entries;
     /// Trimmed or redo-truncated groups awaiting durable retirement publication.
-    /// Consumers acknowledge these only after publishing each group durably.
+    /// Engines cap combined active and pending history at 100,000 groups and
+    /// the pending queue at 8 MiB of estimated snapshot-object and identity-array
+    /// storage. Consumers acknowledge these only after
+    /// publishing each group durably; until then, local edits may be refused.
     std::vector<LocalUndoEntrySnapshot> retired_entries;
     std::size_t cursor = 0;
 };

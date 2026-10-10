@@ -134,7 +134,7 @@ private slots:
             QVERIFY(a.ids().empty());
             QVERIFY(b.ids().empty());
             // Remove A's incidental local-insertion pin; B still retains deletion undo.
-            a.set_max_undo_depth(0);
+            QVERIFY((a.set_max_undo_depth(0)).ok());
             Global watermark = a.version();
             watermark.meet(b.version());
             a.compact(watermark);

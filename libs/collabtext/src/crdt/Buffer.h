@@ -220,12 +220,15 @@ public:
     /// Maximum undo stack depth. Oldest entries are discarded when exceeded.
     size_t max_undo_depth() const;
 
-    /// Set the maximum undo stack depth.
-    void set_max_undo_depth(size_t depth);
+    /// Set the maximum undo stack depth (at most 100,000). Refuses atomically
+    /// if trimming would exceed the pending-retirement queue's count or byte
+    /// budget.
+    Result<void> set_max_undo_depth(size_t depth);
 
     /// Upper bound on history's retained restoration bytes and identity keys.
     size_t max_undo_bytes() const { return m_max_undo_bytes; }
-    void set_max_undo_bytes(size_t bytes);
+    /// Set the maximum undo byte charge with the same retirement backpressure.
+    Result<void> set_max_undo_bytes(size_t bytes);
     size_t undo_history_bytes() const { return m_undo_bytes; }
 
     /// Temporarily retains all fragments, including restoration/anchor context.
@@ -342,8 +345,15 @@ private:
     FragmentTree m_fragment_tree;
 
     /// Trim the undo stack to m_max_undo_depth entries.
+    struct UndoEntry;
     void trim_undo_stack();
     void recalculate_undo_bytes();
+    Result<void> check_retirement_budget_for_limits(size_t depth,
+                                                     size_t bytes) const;
+    Result<void> check_retirement_budget_for_new_entry(
+        size_t retained_bytes, size_t inserted_count,
+        size_t deletion_count) const;
+    void retire_undo_entry(const UndoEntry &entry);
 
     /// Deferred operations awaiting causal dependencies.
     OperationQueue m_deferred_queue;
@@ -377,6 +387,7 @@ private:
     snapshot_undo_entry(const UndoEntry &) const;
     std::vector<UndoEntry> m_undo_stack;
     std::vector<LocalUndoEntrySnapshot> m_retired_undo_entries;
+    size_t m_retired_undo_bytes = 0;
     size_t m_undo_cursor = 0;  // Points past the last undoable entry
     size_t m_max_undo_depth = 1000;
     size_t m_undo_bytes = 0;
