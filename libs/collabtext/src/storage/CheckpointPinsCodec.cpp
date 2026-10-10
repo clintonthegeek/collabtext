@@ -117,14 +117,18 @@ Result<CheckpointSection> encode_checkpoint_pins(
   for (const auto &pin : pins.live_pins) {
     if (!valid_reference(pin.reference_id) ||
         (!previous.empty() && !(previous < pin.reference_id)) ||
-        pin.scope != expected_scope)
+        pin.scope.document != expected_scope.document ||
+        pin.scope.stream != expected_scope.stream ||
+        pin.scope.primitive != expected_scope.primitive ||
+        pin.scope.epoch == 0 || pin.scope.epoch > expected_scope.epoch)
       return malformed("checkpoint pins are invalid, unordered, or outside context scope");
     if (pin.token_bytes.empty() || pin.token_bytes.size() > kMaxPinTokenBytes)
       return malformed("checkpoint pin token is empty or exceeds limit");
-    if (auto valid = validate_position_scope(pin.token_bytes, expected_scope); !valid)
+    if (auto valid = validate_position_scope(pin.token_bytes, pin.scope); !valid)
       return valid.error().with_context("checkpoint.pins");
     put_u16(payload, static_cast<uint16_t>(pin.reference_id.size()));
     payload.append(pin.reference_id);
+    put_u64(payload, pin.scope.epoch);
     put_u32(payload, static_cast<uint32_t>(pin.token_bytes.size()));
     payload.append(pin.token_bytes);
     if (payload.size() > kCheckpointMaxBytes - 12)
@@ -156,7 +160,7 @@ Result<CheckpointShareableCore::Pins> decode_checkpoint_pins(
   const auto count = reader.u32();
   if (count > kMaxPins)
     return Error(ErrorCode::limit_exceeded, "checkpoint pin count exceeds limit", "checkpoint.pins");
-  if (count > (reader.bytes.size() - reader.cursor) / 8)
+  if (count > (reader.bytes.size() - reader.cursor) / 16)
     return malformed("checkpoint pin array is truncated");
   if (pins.projected_frontier > pins.canonical_frontier ||
       pins.complete != (pins.projected_frontier == pins.canonical_frontier))
@@ -168,10 +172,11 @@ Result<CheckpointShareableCore::Pins> decode_checkpoint_pins(
     if (!reader.need(2)) return malformed("checkpoint pin reference length is truncated");
     const auto reference_length = reader.u16();
     if (reference_length == 0 || reference_length > kMaxReferenceBytes ||
-        !reader.need(static_cast<size_t>(reference_length) + 4))
+        !reader.need(static_cast<size_t>(reference_length) + 12))
       return malformed("checkpoint pin reference is truncated or too long");
     std::string reference(reader.bytes.substr(reader.cursor, reference_length));
     reader.cursor += reference_length;
+    const auto source_epoch = reader.u64();
     const auto token_length = reader.u32();
     if (token_length == 0 || token_length > kMaxPinTokenBytes ||
         !reader.need(token_length))
@@ -180,9 +185,13 @@ Result<CheckpointShareableCore::Pins> decode_checkpoint_pins(
     reader.cursor += token_length;
     if (!valid_reference(reference) || (!previous.empty() && !(previous < reference)))
       return malformed("checkpoint pin references are invalid, duplicated, or unordered");
-    if (auto valid = validate_position_scope(token, expected_scope); !valid)
+    PositionScope source_scope = expected_scope;
+    source_scope.epoch = source_epoch;
+    if (source_epoch == 0 || source_epoch > expected_scope.epoch)
+      return malformed("checkpoint pin source epoch is invalid");
+    if (auto valid = validate_position_scope(token, source_scope); !valid)
       return valid.error().with_context("checkpoint.pins");
-    pins.live_pins.push_back({std::move(reference), expected_scope, std::move(token)});
+    pins.live_pins.push_back({std::move(reference), source_scope, std::move(token)});
     previous = pins.live_pins.back().reference_id;
   }
   if (reader.cursor != reader.bytes.size())

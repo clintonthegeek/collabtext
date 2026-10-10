@@ -130,10 +130,12 @@ delivery sequence must be beyond its producer's committed delivery frontier.
 The Pins section stores u64 projected and canonical event frontiers, a u8
 completeness flag, a 32-byte canonical projection hash, and a u32 live-pin
 count (at most 65,536). Each pin stores a u16 reference-ID byte length and
-printable ASCII ID, then a u32 token length and the original CTPT bytes. IDs are
-strictly ordered and unique; each token must decode under the Context's exact
-document, stream, primitive, and epoch. Token bytes are limited to 64 KiB per
-pin. Completeness is true exactly when the projected frontier equals the
+printable ASCII ID, a u64 source epoch, then a u32 token length and the original
+CTPT bytes. IDs are strictly ordered and unique; each token must decode under
+the Context's document, stream, and primitive, with a nonzero source epoch no
+later than the checkpoint epoch. This preserves the original scope of an old
+live pin until section 7 provides any required epoch translation. Token bytes
+are limited to 64 KiB per pin. Completeness is true exactly when the projected frontier equals the
 canonical frontier; an incomplete projection blocks checkpoint acceptance.
 The caller supplies the canonical event-log projection hash and compares it to
 recovered provider state before relying on the pin set.

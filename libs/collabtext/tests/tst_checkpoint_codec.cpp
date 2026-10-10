@@ -526,6 +526,23 @@ private slots:
     QVERIFY(!decoded_partial.value().complete);
     QCOMPARE(decoded_partial.value().projected_frontier, uint64_t{1});
 
+    const PositionScope old_scope{"doc-pin", "stream-pin", Primitive::text, 6};
+    auto old_engine = CrdtEngine::create(CollabText::Test::test_counter(2), old_scope);
+    QVERIFY(old_engine);
+    auto old_boundary = old_engine.value()->boundary_at(0, Affinity::right);
+    QVERIFY(old_boundary);
+    auto old_token = encode_position(PositionToken{old_boundary.value()});
+    QVERIFY(old_token);
+    auto old_epoch_pins = pins;
+    old_epoch_pins.live_pins[0].scope = old_scope;
+    old_epoch_pins.live_pins[0].token_bytes = old_token.value();
+    auto old_epoch_encoded = encode_checkpoint_pins(old_epoch_pins, context);
+    QVERIFY(old_epoch_encoded);
+    auto old_epoch_decoded = decode_checkpoint_pins(old_epoch_encoded.value(), context);
+    QVERIFY(old_epoch_decoded);
+    QCOMPARE(old_epoch_decoded.value().live_pins[0].scope, old_scope);
+    QCOMPARE(old_epoch_decoded.value().live_pins[0].token_bytes, old_token.value());
+
     auto bad_scope = pins;
     bad_scope.live_pins[0].scope.epoch++;
     QVERIFY(!encode_checkpoint_pins(bad_scope, context));
