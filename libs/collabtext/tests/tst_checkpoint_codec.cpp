@@ -1,6 +1,7 @@
 #include "storage/CheckpointCodec.h"
 #include "crdt/Buffer.h"
 #include "crdt/IdList.h"
+#include <collabtext/CrdtEngine.h>
 #include "TestActor.h"
 #include <collabtext/Serialization.h>
 
@@ -161,11 +162,15 @@ private slots:
     auto causal_section = encode_checkpoint_causal(causal);
     auto deferred_section = encode_checkpoint_deferred({}, context, causal.version);
     auto coverage_section = encode_checkpoint_coverage({});
+    CheckpointShareableCore::Pins empty_pins;
+    empty_pins.canonical_projection_hash = sha256_hex("");
+    auto pins_section = encode_checkpoint_pins(empty_pins, context);
     QVERIFY(context_section);
     QVERIFY(engine_section);
     QVERIFY(causal_section);
     QVERIFY(deferred_section);
     QVERIFY(coverage_section);
+    QVERIFY(pins_section);
 
     auto sections = shared_sections();
     sections[0] = context_section.value();
@@ -173,6 +178,7 @@ private slots:
     sections[2] = causal_section.value();
     sections[3] = deferred_section.value();
     sections[4] = coverage_section.value();
+    sections[5] = pins_section.value();
     const auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
     const auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
@@ -270,16 +276,21 @@ private slots:
     auto deferred_section = encode_checkpoint_deferred(
         {}, text_context, text_causal.version);
     auto coverage_section = encode_checkpoint_coverage({});
+    CheckpointShareableCore::Pins empty_pins;
+    empty_pins.canonical_projection_hash = sha256_hex("");
+    auto pins_section = encode_checkpoint_pins(empty_pins, text_context);
     QVERIFY(context_section);
     QVERIFY(causal_section);
     QVERIFY(deferred_section);
     QVERIFY(coverage_section);
+    QVERIFY(pins_section);
     auto sections = shared_sections();
     sections[0] = context_section.value();
     sections[1] = text_payload.value();
     sections[2] = causal_section.value();
     sections[3] = deferred_section.value();
     sections[4] = coverage_section.value();
+    sections[5] = pins_section.value();
     auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
     auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
@@ -316,16 +327,19 @@ private slots:
     deferred_section = encode_checkpoint_deferred(
         {}, list_context, list_causal.version);
     coverage_section = encode_checkpoint_coverage({});
+    pins_section = encode_checkpoint_pins(empty_pins, list_context);
     QVERIFY(context_section);
     QVERIFY(causal_section);
     QVERIFY(deferred_section);
     QVERIFY(coverage_section);
+    QVERIFY(pins_section);
     sections = shared_sections();
     sections[0] = context_section.value();
     sections[1] = list_payload.value();
     sections[2] = causal_section.value();
     sections[3] = deferred_section.value();
     sections[4] = coverage_section.value();
+    sections[5] = pins_section.value();
     framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
     artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
@@ -465,6 +479,62 @@ private slots:
         context, coverage, sealed.value());
     QVERIFY(!wrong_epoch);
     QCOMPARE(wrong_epoch.error().code(), ErrorCode::wrong_epoch);
+  }
+
+  void pinsSectionPreservesCompleteAndIncompleteProjection() {
+    const PositionScope scope{"doc-pin", "stream-pin", Primitive::text, 7};
+    auto engine = CrdtEngine::create(CollabText::Test::test_counter(1), scope);
+    QVERIFY(engine);
+    auto boundary = engine.value()->boundary_at(0, Affinity::left);
+    QVERIFY(boundary);
+    auto token = encode_position(PositionToken{boundary.value()});
+    QVERIFY(token);
+
+    CheckpointContext context{"doc-pin", "stream-pin", 7, "",
+                              CheckpointEngineKind::Text};
+    CheckpointShareableCore::Pins pins;
+    pins.projected_frontier = 2;
+    pins.canonical_frontier = 2;
+    pins.canonical_projection_hash = std::string(64, 'c');
+    pins.live_pins.push_back({"reply-1", scope, token.value()});
+    auto encoded = encode_checkpoint_pins(pins, context);
+    QVERIFY(encoded);
+    auto decoded = decode_checkpoint_pins(encoded.value(), context);
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value().projected_frontier, uint64_t{2});
+    QCOMPARE(decoded.value().canonical_frontier, uint64_t{2});
+    QVERIFY(decoded.value().complete);
+    QCOMPARE(decoded.value().canonical_projection_hash,
+             pins.canonical_projection_hash);
+    QCOMPARE(decoded.value().live_pins.size(), size_t{1});
+    QCOMPARE(decoded.value().live_pins[0].reference_id, std::string("reply-1"));
+    QCOMPARE(decoded.value().live_pins[0].token_bytes, token.value());
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_pins(truncated, context),
+               qPrintable(QString::number(length)));
+    }
+
+    auto incomplete = pins;
+    incomplete.projected_frontier = 1;
+    incomplete.complete = false;
+    auto partial = encode_checkpoint_pins(incomplete, context);
+    QVERIFY(partial);
+    auto decoded_partial = decode_checkpoint_pins(partial.value(), context);
+    QVERIFY(decoded_partial);
+    QVERIFY(!decoded_partial.value().complete);
+    QCOMPARE(decoded_partial.value().projected_frontier, uint64_t{1});
+
+    auto bad_scope = pins;
+    bad_scope.live_pins[0].scope.epoch++;
+    QVERIFY(!encode_checkpoint_pins(bad_scope, context));
+    auto bad_token = pins;
+    bad_token.live_pins[0].token_bytes[0] ^= 1;
+    QVERIFY(!encode_checkpoint_pins(bad_token, context));
+    auto inconsistent = pins;
+    inconsistent.complete = false;
+    QVERIFY(!encode_checkpoint_pins(inconsistent, context));
   }
 
   void rejectsEveryTruncation() {

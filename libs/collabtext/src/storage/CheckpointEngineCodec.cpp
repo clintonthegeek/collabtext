@@ -361,6 +361,9 @@ Result<CheckpointShareableCore> decode_checkpoint_core(
     if (core.coverage.delivery.contains(record.token.producer) &&
         core.coverage.delivery.at(record.token.producer) >= record.token.sequence)
       return malformed("deferred delivery is already included in committed coverage");
+  auto pins = decode_checkpoint_pins(artifact.sections[5], core.context);
+  if (!pins) return pins.error().with_context("checkpoint.core");
+  core.pins = std::move(pins.value());
   return core;
 }
 

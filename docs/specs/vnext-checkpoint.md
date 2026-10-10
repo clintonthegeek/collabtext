@@ -1,10 +1,10 @@
 # vNext Engine Checkpoint Format
 
 **Status:** format contract for G04; bounded framing and Context, Engine,
-Causal, and Deferred section codecs are implemented, along with the combined
-core validator and in-memory engine snapshot adapters. Coverage, pins, anchor
-translation, private companion payloads, and provider/session integrations are
-in progress.
+Causal, Deferred, Coverage, and Pins section codecs are implemented, along
+with the combined core validator and in-memory engine snapshot adapters.
+Anchor translation, private companion payloads, and provider/session
+integrations remain in progress.
 
 This format defines a validated shareable snapshot and a separately bound
 actor-local companion. It is not a replacement for the retained operation log
@@ -126,6 +126,17 @@ consumption is required. Membership validation compares both maps exactly to
 the context stream's base frontier in the named epoch and parent descriptor.
 Operation coverage cannot exceed the causal vector; a deferred or quarantined
 delivery sequence must be beyond its producer's committed delivery frontier.
+
+The Pins section stores u64 projected and canonical event frontiers, a u8
+completeness flag, a 32-byte canonical projection hash, and a u32 live-pin
+count (at most 65,536). Each pin stores a u16 reference-ID byte length and
+printable ASCII ID, then a u32 token length and the original CTPT bytes. IDs are
+strictly ordered and unique; each token must decode under the Context's exact
+document, stream, primitive, and epoch. Token bytes are limited to 64 KiB per
+pin. Completeness is true exactly when the projected frontier equals the
+canonical frontier; an incomplete projection blocks checkpoint acceptance.
+The caller supplies the canonical event-log projection hash and compares it to
+recovered provider state before relying on the pin set.
 
 The Engine section starts with `u16 engine_kind` and `u32 entry_count`, with a
 maximum of 1,000,000 entries. Every identity uses the 24-byte encoding above.

@@ -58,6 +58,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                 (void)CollabText::Storage::decode_checkpoint_engine(section);
             else if (section.id == 3)
                 (void)CollabText::Storage::decode_checkpoint_causal(section);
+            else if (section.id == 6) {
+                const auto context = CollabText::Storage::decode_checkpoint_context(
+                    shareable.value().sections[0]);
+                if (context)
+                    (void)CollabText::Storage::decode_checkpoint_pins(section,
+                                                                     context.value());
+            }
         }
     }
     (void)CollabText::Storage::decode_checkpoint(
@@ -73,5 +80,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
             CollabText::Storage::CheckpointEngineKind::Text},
         CollabText::Crdt::Global{});
     (void)CollabText::Storage::decode_checkpoint_coverage({5, 1, std::string(bytes)});
+    (void)CollabText::Storage::decode_checkpoint_pins(
+        {6, 1, std::string(bytes)},
+        CollabText::Storage::CheckpointContext{"doc", "main", 1, "",
+            CollabText::Storage::CheckpointEngineKind::Text});
     return 0;
 }

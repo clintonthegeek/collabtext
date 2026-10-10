@@ -2,6 +2,7 @@
 
 #include <collabtext/ActorId.h>
 #include <collabtext/OpStream.h>
+#include <collabtext/AnchorPins.h>
 #include "crdt/Fragment.h"
 #include "crdt/IdList.h"
 #include "crdt/UndoMap.h"
@@ -70,6 +71,13 @@ struct CheckpointShareableCore {
     std::map<ActorId, uint64_t> delivery;
     bool operator==(const Coverage &) const = default;
   } coverage;
+  struct Pins {
+    uint64_t projected_frontier = 0;
+    uint64_t canonical_frontier = 0;
+    bool complete = true;
+    std::string canonical_projection_hash;
+    std::vector<RetainedAnchorPin> live_pins;
+  } pins;
 };
 
 inline constexpr size_t kCheckpointMaxBytes = 256u * 1024u * 1024u;
@@ -119,5 +127,11 @@ decode_checkpoint_coverage(const CheckpointSection &section);
 validate_checkpoint_coverage(const CheckpointContext &context,
                              const CheckpointShareableCore::Coverage &coverage,
                              const MembershipDescriptor &descriptor);
+[[nodiscard]] Result<CheckpointSection>
+encode_checkpoint_pins(const CheckpointShareableCore::Pins &pins,
+                       const CheckpointContext &context);
+[[nodiscard]] Result<CheckpointShareableCore::Pins>
+decode_checkpoint_pins(const CheckpointSection &section,
+                       const CheckpointContext &context);
 
 }  // namespace CollabText::Storage
