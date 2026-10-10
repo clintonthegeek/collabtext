@@ -2832,6 +2832,7 @@ Verification:
 ```text
 Task: L06
 Status: in progress (partial implementation committed locally)
+Commit: 9356f3e feat(idlist): expose checked undo through public facade
 Scope update: IdListEngine now exposes try_undo()/try_redo() with
   Result<std::optional<IdListOperation>>, forwarding allocator errors while
   preserving the legacy optional-return methods. The public API guide records
