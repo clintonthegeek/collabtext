@@ -19,7 +19,13 @@
 #include "VolatileCounter.h"
 
 #include <fstream>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <set>
 #include <stdexcept>
+#include <thread>
 
 using namespace CollabText;
 
@@ -169,6 +175,99 @@ private slots:
     QVERIFY(session->redo().ok());
     QCOMPARE(session->text(), std::string("ab"));
     QVERIFY(checks >= size_t(8));
+    QVERIFY(session->close().ok());
+  }
+
+  void mutationPermitSerializesPublicationAgainstRetirement() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    std::mutex membership_mutex;
+    std::set<ActorId> enrolled;
+    std::atomic<bool> block_next_write{false};
+    std::mutex barrier_mutex;
+    std::condition_variable barrier_cv;
+    bool write_entered = false;
+    bool allow_write = false;
+    bool retirement_attempted = false;
+    bool retired = false;
+    bool retirement_waited_for_permit = false;
+
+    Storage::StepHook hook;
+    hook.observe = [&](Storage::Step step, const std::filesystem::path &) {
+      if (step != Storage::Step::Write || !block_next_write.exchange(false)) return;
+      std::unique_lock lock(barrier_mutex);
+      write_entered = true;
+      barrier_cv.notify_all();
+      barrier_cv.wait(lock, [&] { return allow_write; });
+    };
+    Crdt::WriterConfig writer_config;
+    writer_config.step_hook = &hook;
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "doc-membership-race", "text", 8};
+    config.authorize_local_mutation = [&](const DocumentId &, const StreamId &,
+                                          uint64_t, const ActorId &producer)
+      -> Result<std::shared_ptr<void>> {
+      auto lease = std::make_shared<std::unique_lock<std::mutex>>(membership_mutex);
+      if (!enrolled.contains(producer))
+        return Error(ErrorCode::wrong_epoch, "producer is no longer enrolled");
+      return std::static_pointer_cast<void>(lease);
+    };
+
+    auto opened = DocumentSessionTestAccess::open(config, writer_config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    const auto producer = session->actor();
+    enrolled.insert(producer);
+    block_next_write = true;
+    bool edit_published = false;
+    std::thread editor([&] {
+      edit_published = session->apply_local({{0, 0}}, {"x"}).ok();
+    });
+    bool saw_blocked_write = false;
+    {
+      std::unique_lock lock(barrier_mutex);
+      saw_blocked_write = barrier_cv.wait_for(
+          lock, std::chrono::seconds(5), [&] { return write_entered; });
+    }
+
+    std::thread retirer([&] {
+      {
+        std::lock_guard lock(barrier_mutex);
+        retirement_attempted = true;
+      }
+      barrier_cv.notify_all();
+      {
+        std::lock_guard lock(membership_mutex);
+        enrolled.erase(producer);
+      }
+      {
+        std::lock_guard lock(barrier_mutex);
+        retired = true;
+      }
+      barrier_cv.notify_all();
+    });
+    {
+      std::unique_lock lock(barrier_mutex);
+      barrier_cv.wait_for(lock, std::chrono::seconds(5),
+                          [&] { return retirement_attempted; });
+      if (saw_blocked_write)
+        retirement_waited_for_permit = !retired;
+      allow_write = true;
+    }
+    barrier_cv.notify_all();
+    editor.join();
+    retirer.join();
+
+    QVERIFY(saw_blocked_write);
+    QVERIFY(retirement_waited_for_permit);
+    QVERIFY(edit_published);
+    QVERIFY(retired);
+    QCOMPARE(session->text(), std::string("x"));
+    auto rejected = session->apply_local({{1, 1}}, {"y"});
+    QVERIFY(!rejected.ok());
+    QCOMPARE(rejected.error().code(), ErrorCode::wrong_epoch);
+    QCOMPARE(session->text(), std::string("x"));
     QVERIFY(session->close().ok());
   }
 
