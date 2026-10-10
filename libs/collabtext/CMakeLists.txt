@@ -490,6 +490,8 @@ add_executable(tst_transport_commit_contract tests/tst_transport_commit_contract
 target_link_libraries(tst_transport_commit_contract PRIVATE CollabText::TestSupport Qt6::Test)
 add_test(NAME tst_transport_commit_contract COMMAND tst_transport_commit_contract)
 
+add_crdt_test(tst_store_lifecycle)
+
 endif() # COLLABTEXT_BUILD_TESTS -- the suites
 
 # ===========================================================================
