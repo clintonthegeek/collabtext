@@ -114,6 +114,20 @@ bool same_preview(const EnrollmentPreview &a, const EnrollmentPreview &b) {
          a.digest == b.digest;
 }
 
+bool same_transition(const MembershipEvent &stored, uint64_t epoch,
+                     const ActorId &subject, MembershipEvent::Kind kind,
+                     std::string_view evidence) {
+  return stored.epoch == epoch && stored.subject == subject &&
+         stored.kind == kind && stored.evidence == evidence;
+}
+
+Result<void> resync_journal(const std::filesystem::path &path,
+                            const StepHook *hook) {
+  auto log = DurableAppendFile::open(path, hook);
+  if (!log.ok()) return log.error();
+  return log.value().sync();
+}
+
 Result<MembershipEvent> parse_line(std::string_view line,
                                    const ActorId &producer,
                                    uint64_t expected) {
@@ -314,10 +328,6 @@ Result<MembershipEvent> MembershipStore::commit_retirement(
                  "retirement preview is stale; review current consequences again");
   auto persisted_events = recover();
   if (!persisted_events.ok()) return persisted_events.error();
-  if (!persisted_events.value().empty() &&
-      persisted_events.value().back().epoch != current.epoch)
-    return Error(ErrorCode::wrong_epoch,
-                 "retirement parent epoch does not match the latest journal transition");
   if (explicit_confirmation.empty() || explicit_confirmation.size() > 4096 ||
       !verify_acknowledgement)
     return Error(ErrorCode::malformed,
@@ -349,6 +359,17 @@ Result<MembershipEvent> MembershipStore::commit_retirement(
     evidence += " " + actor.to_string() + " " + hex(signature);
   if (evidence.size() > kMaxEvidenceBytes)
     return Error(ErrorCode::limit_exceeded, "retirement evidence exceeds journal limit");
+  if (!persisted_events.value().empty() &&
+      persisted_events.value().back().epoch != current.epoch) {
+    const auto &stored = persisted_events.value().back();
+    if (!same_transition(stored, preview.next_epoch, preview.device,
+                         MembershipEvent::Kind::Retired, evidence))
+      return Error(ErrorCode::wrong_epoch,
+                   "retirement parent epoch does not match the latest journal transition");
+    auto durable = resync_journal(m_path, m_hook);
+    if (!durable.ok()) return durable.error();
+    return stored;
+  }
   MembershipEvent event{m_last_sequence + 1, preview.next_epoch, preview.device,
                         MembershipEvent::Kind::Retired, std::move(evidence)};
   auto persisted = append(event);
@@ -367,10 +388,6 @@ Result<MembershipEvent> MembershipStore::commit_enrollment(
                  "enrollment preview is stale; review current membership again");
   auto persisted_events = recover();
   if (!persisted_events.ok()) return persisted_events.error();
-  if (!persisted_events.value().empty() &&
-      persisted_events.value().back().epoch != current.epoch)
-    return Error(ErrorCode::wrong_epoch,
-                 "enrollment parent epoch does not match the latest journal transition");
   if (!verify_acknowledgement)
     return Error(ErrorCode::malformed,
                  "enrollment requires an acknowledgement verifier");
@@ -402,6 +419,17 @@ Result<MembershipEvent> MembershipStore::commit_enrollment(
   if (evidence.size() > kMaxEvidenceBytes)
     return Error(ErrorCode::limit_exceeded,
                  "enrollment evidence exceeds journal limit");
+  if (!persisted_events.value().empty() &&
+      persisted_events.value().back().epoch != current.epoch) {
+    const auto &stored = persisted_events.value().back();
+    if (!same_transition(stored, preview.next_epoch, preview.device,
+                         MembershipEvent::Kind::Enrolled, evidence))
+      return Error(ErrorCode::wrong_epoch,
+                   "enrollment parent epoch does not match the latest journal transition");
+    auto durable = resync_journal(m_path, m_hook);
+    if (!durable.ok()) return durable.error();
+    return stored;
+  }
   MembershipEvent event{m_last_sequence + 1, preview.next_epoch, preview.device,
                         MembershipEvent::Kind::Enrolled, std::move(evidence)};
   auto persisted = append(event);

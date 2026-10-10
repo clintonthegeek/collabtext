@@ -3094,3 +3094,7 @@ Added a regression proving `DocumentSession::export_local_branch()` returns a vi
 ## 2026-10-10 — Reject corrupt membership epoch history
 
 Added a checksummed journal fixture with a skipped epoch, proving recovery rejects semantically inconsistent records even when their record checksums and sequences are valid. `tst_membership` passed Debug (`20261010T164716Z-2`), Release (`20261010T164729Z-12`), and ASan/UBSan (`20261010T164738Z-2`, leak detection disabled for the ptrace-limited runner).
+
+## 2026-10-10 — Reconcile uncertain membership transition commits
+
+Enrollment and retirement commits now recognize an exact already-appended transition after a sync error, force a fresh journal durability barrier, and return the existing event only after that barrier succeeds. Conflicting replays remain rejected. Added injected sync failure and exact/conflicting retry coverage; `tst_membership` passed Debug (`20261010T165022Z-2`), Release (`20261010T165036Z-12`), and ASan/UBSan (`20261010T165049Z-2`, leak detection disabled for the ptrace-limited runner).

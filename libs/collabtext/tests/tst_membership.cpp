@@ -173,6 +173,46 @@ private slots:
     QCOMPARE(recovered.value().size(),size_t(2));
   }
 
+  void retirementCommitRetryConfirmsUncertainPublication() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto path = std::filesystem::path(dir.path().toStdString()) / "retire.log";
+    const auto producer = actor(14), retiring = actor(15);
+    const auto member_a = actor(16), member_b = actor(17);
+    bool fail_sync = true;
+    StepHook hook;
+    hook.fail = [&](Step step, const fs::path&) -> std::optional<Error> {
+      if (step == Step::FileSync && fail_sync) {
+        fail_sync = false;
+        return Error(ErrorCode::io_error, "injected transition sync failure");
+      }
+      return std::nullopt;
+    };
+    auto opened = MembershipStore::open(path, producer, &hook); QVERIFY(opened.ok());
+    auto store = std::move(opened.value());
+    const MembershipDescriptor descriptor{5, "epoch-five", {retiring, member_a, member_b}};
+    const std::vector<RetirementImpact> impacts{
+        {"doc", "text", 5, 1, 0, "branch"}};
+    auto preview = preview_retirement(descriptor, retiring, impacts); QVERIFY(preview.ok());
+    const std::vector<MembershipAcknowledgement> acks{
+        {member_a, "ack-a"}, {member_b, "ack-b"}};
+    const auto verifier = [](const ActorId&, std::string_view, std::string_view)
+        -> Result<void> { return {}; };
+
+    auto uncertain = store.commit_retirement(preview.value(), descriptor, impacts,
+        acks, "confirmed", verifier);
+    QVERIFY(!uncertain.ok()); QCOMPARE(store.last_sequence(), uint64_t(1));
+    auto retried = store.commit_retirement(preview.value(), descriptor, impacts,
+        acks, "confirmed", verifier);
+    QVERIFY(retried.ok());
+    QCOMPARE(retried.value().sequence, uint64_t(1));
+    QCOMPARE(retried.value().epoch, uint64_t(6));
+    auto conflicting = store.commit_retirement(preview.value(), descriptor, impacts,
+        acks, "different confirmation", verifier);
+    QVERIFY(!conflicting.ok()); QCOMPARE(conflicting.error().code(), ErrorCode::wrong_epoch);
+    auto events = store.recover(); QVERIFY(events.ok());
+    QCOMPARE(events.value().size(), size_t(1));
+  }
+
   void retirementPreviewMustBeCurrentAndUnanimouslyAcknowledged() {
     QTemporaryDir dir; QVERIFY(dir.isValid());
     const auto path=std::filesystem::path(dir.path().toStdString())/"member.log";
@@ -236,7 +276,7 @@ private slots:
     QVERIFY(committed.value().evidence.find(preview.value().digest)==std::string::npos);
     auto replay=store.commit_retirement(preview.value(),descriptor,impacts,
         {{member_a,"durable-ack"},{member_b,"durable-ack"}},"user-confirmation",verifier);
-    QVERIFY(!replay.ok()); QCOMPARE(replay.error().code(),ErrorCode::wrong_epoch);
+    QVERIFY(replay.ok()); QCOMPARE(replay.value().sequence,uint64_t(1));
     QCOMPARE(store.last_sequence(),uint64_t(1));
     auto recovered=store.recover(); QVERIFY(recovered.ok());
     QCOMPARE(recovered.value().size(),size_t(1));
@@ -282,7 +322,7 @@ private slots:
     QCOMPARE(committed.value().subject,joining);
     auto replay=store.commit_enrollment(preview.value(),descriptor,
         {{member_a,"durable-ack"},{member_b,"durable-ack"},{joining,"durable-ack"}},verifier);
-    QVERIFY(!replay.ok()); QCOMPARE(replay.error().code(),ErrorCode::wrong_epoch);
+    QVERIFY(replay.ok()); QCOMPARE(replay.value().sequence,uint64_t(1));
     QCOMPARE(store.last_sequence(),uint64_t(1));
     auto recovered=store.recover(); QVERIFY(recovered.ok());
     QCOMPARE(recovered.value().size(),size_t(1));
