@@ -125,6 +125,7 @@ private:
   const StepHook *m_hook = nullptr;
   std::optional<ProcessLease> m_lease;
   uint64_t m_last_sequence = 0;
+  uint64_t m_last_epoch = 0;
 };
 
 } // namespace CollabText::Storage

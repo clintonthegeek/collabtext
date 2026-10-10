@@ -230,6 +230,7 @@ Result<MembershipStore> MembershipStore::open(std::filesystem::path path,
   auto events = store.recover();
   if (!events.ok()) return events.error();
   store.m_last_sequence = events.value().empty() ? 0 : events.value().back().sequence;
+  store.m_last_epoch = events.value().empty() ? 0 : events.value().back().epoch;
   return store;
 }
 
@@ -249,6 +250,7 @@ Result<std::vector<MembershipEvent>> MembershipStore::recover() const {
     return Error(ErrorCode::io_error, "cannot read membership journal contents");
   std::vector<MembershipEvent> events;
   uint64_t expected = 1;
+  uint64_t previous_epoch = 0;
   size_t start = 0;
   while (start < bytes.size()) {
     auto end = bytes.find('\n', start);
@@ -257,6 +259,11 @@ Result<std::vector<MembershipEvent>> MembershipStore::recover() const {
     auto event = parse_line(std::string_view(bytes).substr(start, end - start),
                             m_producer, expected);
     if (!event.ok()) return event.error();
+    if (previous_epoch != 0 &&
+        (previous_epoch == UINT64_MAX || event.value().epoch != previous_epoch + 1))
+      return Error(ErrorCode::corrupt_record,
+                   "membership epochs are not contiguous");
+    previous_epoch = event.value().epoch;
     events.push_back(std::move(event.value()));
     if (expected == UINT64_MAX)
       return Error(ErrorCode::corrupt_record, "membership sequence overflow");
@@ -272,7 +279,9 @@ Result<void> MembershipStore::append(const MembershipEvent &event) {
       (event.kind != MembershipEvent::Kind::Enrolled &&
        event.kind != MembershipEvent::Kind::Retired) ||
       event.evidence.empty() || event.evidence.size() > kMaxEvidenceBytes ||
-      m_last_sequence == UINT64_MAX)
+      m_last_sequence == UINT64_MAX ||
+      (m_last_epoch != 0 &&
+       (m_last_epoch == UINT64_MAX || event.epoch != m_last_epoch + 1)))
     return Error(ErrorCode::malformed, "membership event is invalid or out of sequence");
   auto log = DurableAppendFile::open(m_path, m_hook);
   if (!log.ok()) return log.error();
@@ -284,9 +293,11 @@ Result<void> MembershipStore::append(const MembershipEvent &event) {
     auto recovered = recover();
     if (!recovered.ok()) return recovered.error();
     m_last_sequence = recovered.value().empty() ? 0 : recovered.value().back().sequence;
+    m_last_epoch = recovered.value().empty() ? 0 : recovered.value().back().epoch;
     return result.error();
   }
   m_last_sequence = event.sequence;
+  m_last_epoch = event.epoch;
   return {};
 }
 

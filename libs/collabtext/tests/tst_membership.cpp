@@ -61,6 +61,29 @@ private slots:
     QVERIFY(!wrong_owner.ok());
   }
 
+  void appendRequiresContiguousEpochsAcrossRestart() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto path = std::filesystem::path(dir.path().toStdString()) / "epochs.log";
+    const auto producer = actor(4), peer = actor(5);
+    {
+      auto opened = MembershipStore::open(path, producer); QVERIFY(opened.ok());
+      auto store = std::move(opened.value());
+      QVERIFY(store.append({1, 9, peer, MembershipEvent::Kind::Enrolled, "base"}).ok());
+      QVERIFY(!store.append({2, 11, peer, MembershipEvent::Kind::Retired, "skip"}).ok());
+      QVERIFY(!store.append({2, 9, peer, MembershipEvent::Kind::Retired, "repeat"}).ok());
+      QCOMPARE(store.last_sequence(), uint64_t(1));
+      QVERIFY(store.append({2, 10, peer, MembershipEvent::Kind::Retired, "next"}).ok());
+    }
+    {
+      auto opened = MembershipStore::open(path, producer); QVERIFY(opened.ok());
+      auto store = std::move(opened.value());
+      QVERIFY(!store.append({3, 12, peer, MembershipEvent::Kind::Enrolled, "skip"}).ok());
+      QVERIFY(store.append({3, 11, peer, MembershipEvent::Kind::Enrolled, "next"}).ok());
+      auto events = store.recover(); QVERIFY(events.ok());
+      QCOMPARE(events.value().back().epoch, uint64_t(11));
+    }
+  }
+
   void writerLeaseExcludesASecondProcess() {
     QTemporaryDir dir; QVERIFY(dir.isValid());
     const auto path=std::filesystem::path(dir.path().toStdString())/"cross-process.log";
