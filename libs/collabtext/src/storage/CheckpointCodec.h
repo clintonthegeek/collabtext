@@ -3,6 +3,7 @@
 #include <collabtext/ActorId.h>
 #include <collabtext/OpStream.h>
 #include <collabtext/AnchorPins.h>
+#include <collabtext/LocalHistory.h>
 #include "crdt/Fragment.h"
 #include "crdt/IdList.h"
 #include "crdt/UndoMap.h"
@@ -93,6 +94,28 @@ struct CheckpointShareableCore {
   } translations;
 };
 
+struct CheckpointLocalOwner {
+  ActorId actor;
+  std::string shareable_checkpoint_hash;
+  bool operator==(const CheckpointLocalOwner &) const = default;
+};
+
+struct CheckpointLocalWriter {
+  ActorId actor;
+  DocumentId document;
+  StreamId stream;
+  uint64_t epoch = 0;
+  uint64_t next_identity_counter = 0;
+  uint64_t durable_delivery_frontier = 0;
+  bool operator==(const CheckpointLocalWriter &) const = default;
+};
+
+struct CheckpointLocalCore {
+  CheckpointLocalOwner owner;
+  Crdt::LocalHistorySnapshot history;
+  CheckpointLocalWriter writer;
+};
+
 inline constexpr size_t kCheckpointMaxBytes = 256u * 1024u * 1024u;
 inline constexpr uint16_t kCheckpointShareableSectionCount = 7;
 inline constexpr uint16_t kCheckpointLocalSectionCount = 3;
@@ -159,5 +182,26 @@ decode_checkpoint_translations(
 validate_checkpoint_translations(
     const CheckpointShareableCore::TokenTranslations &translations,
     const MembershipDescriptor &descriptor);
+[[nodiscard]] Result<CheckpointSection>
+encode_checkpoint_local_owner(const CheckpointLocalOwner &owner);
+[[nodiscard]] Result<CheckpointLocalOwner>
+decode_checkpoint_local_owner(const CheckpointSection &section);
+[[nodiscard]] Result<CheckpointSection>
+encode_checkpoint_local_history(const Crdt::LocalHistorySnapshot &history,
+                               const ActorId &owner);
+[[nodiscard]] Result<Crdt::LocalHistorySnapshot>
+decode_checkpoint_local_history(const CheckpointSection &section,
+                                const ActorId &owner);
+[[nodiscard]] Result<CheckpointSection>
+encode_checkpoint_local_writer(const CheckpointLocalWriter &writer,
+                               const CheckpointContext &context);
+[[nodiscard]] Result<CheckpointLocalWriter>
+decode_checkpoint_local_writer(const CheckpointSection &section,
+                              const CheckpointContext &context);
+[[nodiscard]] Result<CheckpointLocalCore>
+decode_checkpoint_local_core(const CheckpointArtifact &artifact,
+                             const ActorId &expected_owner,
+                             std::string_view expected_shareable_hash,
+                             const CheckpointContext &context);
 
 }  // namespace CollabText::Storage

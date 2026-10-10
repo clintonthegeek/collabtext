@@ -1,10 +1,9 @@
 # vNext Engine Checkpoint Format
 
-**Status:** format contract for G04; bounded framing and Context, Engine,
-Causal, Deferred, Coverage, and Pins section codecs are implemented, along
-with the combined core validator and in-memory engine snapshot adapters.
-Anchor translation, private companion payloads, and provider/session
-integrations remain in progress.
+**Status:** format contract for G04; bounded framing, all shareable section
+codecs, private companion section codecs, the combined core validator, and
+in-memory engine snapshot adapters are implemented. Provider/session
+integration and atomic artifact publication remain in progress.
 
 This format defines a validated shareable snapshot and a separately bound
 actor-local companion. It is not a replacement for the retained operation log
@@ -217,6 +216,24 @@ obligations), and writer state (persistent writer identity and reserved counter
 state). Unknown sections or versions are retained as unsupported companion
 bytes and prevent local restore; they do not invalidate the shareable engine
 checkpoint.
+
+The owner section is exactly a 16-byte actor ID followed by the 32-byte raw
+digest of its shareable checkpoint. The history section stores the owner actor,
+u64 undo cursor, u32 active-group count, u32 retired-group count, then each
+active and retired group in preserved order. A group stores its 24-byte group
+identity, three u32-counted identity vectors (operation IDs, inserted items,
+deletion operations), and u64 retained-byte charge. IDs must belong to the
+owner, be nonzero and below the exhausted-counter sentinel, and be unique
+within each vector. Group IDs cannot repeat across active and retired groups.
+The cursor cannot exceed the active-group count; total groups are limited to
+100,000, total history identities to 2,000,000, and the section to 64 MiB.
+
+The writer section stores owner actor, u16-length document and stream strings,
+then u64 epoch, next identity counter, and durable delivery frontier. Its scope
+must equal the shareable Context and its actor must equal the owner section.
+The codec preserves this state for validation; import compares it to the
+owner's durable identity state and operation log. It never adopts counters from
+the artifact as authority.
 
 Undo/redo groups, cursor position, pending trim obligations, pending local
 operation intent, writer identity, and counter-reservation state stay in the

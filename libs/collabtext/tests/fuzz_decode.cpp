@@ -100,5 +100,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         CollabText::Storage::CheckpointContext{"doc", "main", 1, "",
             CollabText::Storage::CheckpointEngineKind::Text},
         CollabText::Storage::CheckpointShareableCore::Pins{});
+    const auto fuzz_owner = CollabText::ActorId{};
+    (void)CollabText::Storage::decode_checkpoint_local_owner({1, 1, std::string(bytes)});
+    (void)CollabText::Storage::decode_checkpoint_local_history(
+        {2, 1, std::string(bytes)}, fuzz_owner);
+    (void)CollabText::Storage::decode_checkpoint_local_writer(
+        {3, 1, std::string(bytes)},
+        CollabText::Storage::CheckpointContext{"doc", "main", 1, "",
+            CollabText::Storage::CheckpointEngineKind::Text});
     return 0;
 }

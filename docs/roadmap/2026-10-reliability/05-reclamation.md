@@ -123,6 +123,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_gc_certificate|tst_transport_commit_co
 - `libs/collabtext/src/storage/CheckpointEngineCodec.cpp`
 - `libs/collabtext/src/storage/CheckpointPinsCodec.cpp`
 - `libs/collabtext/src/storage/CheckpointTranslationCodec.cpp`
+- `libs/collabtext/src/storage/CheckpointLocalCodec.cpp`
 - `docs/specs/vnext-checkpoint.md`
 - `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/src/crdt/Buffer.cpp`

@@ -702,6 +702,94 @@ private slots:
     QCOMPARE(result.error().code(), ErrorCode::unsupported_version);
   }
 
+  void localCompanionSectionsRoundTripAndBindOwner() {
+    const auto actor = ActorId::parse("21000000000000000000000000000001").value();
+    const auto other = ActorId::parse("22000000000000000000000000000001").value();
+    const CheckpointContext context{"local-doc", "main", 4, "",
+                                    CheckpointEngineKind::Text};
+    const auto checkpoint_hash = sha256_hex("shareable checkpoint bytes");
+    CheckpointLocalOwner owner{actor, checkpoint_hash};
+    auto owner_section = encode_checkpoint_local_owner(owner);
+    QVERIFY(owner_section);
+    auto owner_decoded = decode_checkpoint_local_owner(owner_section.value());
+    QVERIFY(owner_decoded);
+    QCOMPARE(owner_decoded.value().actor, actor);
+    QCOMPARE(owner_decoded.value().shareable_checkpoint_hash, checkpoint_hash);
+    for (size_t length = 0; length < owner_section.value().bytes.size(); ++length) {
+      auto truncated = owner_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY(!decode_checkpoint_local_owner(truncated));
+    }
+    auto extra_owner_byte = owner_section.value();
+    extra_owner_byte.bytes.push_back('\0');
+    QVERIFY(!decode_checkpoint_local_owner(extra_owner_byte));
+
+    Crdt::LocalHistorySnapshot history;
+    history.cursor = 1;
+    history.entries.push_back({Crdt::Identity(actor, 2),
+                               {Crdt::Identity(actor, 1)},
+                               {Crdt::Identity(actor, 3)}, {}, 128});
+    history.retired_entries.push_back({Crdt::Identity(actor, 4),
+                                       {Crdt::Identity(actor, 5)}, {},
+                                       {Crdt::Identity(actor, 6)}, 64});
+    auto history_section = encode_checkpoint_local_history(history, actor);
+    QVERIFY(history_section);
+    auto history_decoded = decode_checkpoint_local_history(
+        history_section.value(), actor);
+    QVERIFY(history_decoded);
+    QCOMPARE(history_decoded.value().cursor, history.cursor);
+    QCOMPARE(history_decoded.value().entries.size(), history.entries.size());
+    QCOMPARE(history_decoded.value().retired_entries.size(),
+             history.retired_entries.size());
+    QCOMPARE(history_decoded.value().entries[0].operation_ids,
+             history.entries[0].operation_ids);
+    QCOMPARE(history_decoded.value().retired_entries[0].deletion_operations,
+             history.retired_entries[0].deletion_operations);
+    for (size_t length = 0; length < history_section.value().bytes.size(); ++length) {
+      auto truncated = history_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_local_history(truncated, actor),
+               qPrintable(QString::number(length)));
+    }
+    auto huge_count = history_section.value();
+    std::fill(huge_count.bytes.begin() + 24, huge_count.bytes.begin() + 28,
+              static_cast<char>(0xff));
+    QVERIFY(!decode_checkpoint_local_history(huge_count, actor));
+    auto foreign_history = history;
+    foreign_history.entries[0].operation_ids[0].actor = other;
+    QVERIFY(!encode_checkpoint_local_history(foreign_history, actor));
+
+    CheckpointLocalWriter writer{actor, "local-doc", "main", 4, 17, 9};
+    auto writer_section = encode_checkpoint_local_writer(writer, context);
+    QVERIFY(writer_section);
+    auto writer_decoded = decode_checkpoint_local_writer(writer_section.value(), context);
+    QVERIFY(writer_decoded);
+    QCOMPARE(writer_decoded.value().next_identity_counter, uint64_t{17});
+    QCOMPARE(writer_decoded.value().durable_delivery_frontier, uint64_t{9});
+    for (size_t length = 0; length < writer_section.value().bytes.size(); ++length) {
+      auto truncated = writer_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY(!decode_checkpoint_local_writer(truncated, context));
+    }
+    auto mismatched_writer = writer;
+    mismatched_writer.epoch++;
+    QVERIFY(!encode_checkpoint_local_writer(mismatched_writer, context));
+
+    CheckpointArtifact artifact;
+    artifact.kind = CheckpointKind::Local;
+    artifact.sections = {owner_section.value(), history_section.value(),
+                         writer_section.value()};
+    auto local = decode_checkpoint_local_core(artifact, actor, checkpoint_hash,
+                                              context);
+    QVERIFY(local);
+    QCOMPARE(local.value().owner, owner);
+    QCOMPARE(local.value().writer, writer);
+    QVERIFY(!decode_checkpoint_local_core(artifact, other, checkpoint_hash,
+                                          context));
+    QVERIFY(!decode_checkpoint_local_core(artifact, actor, sha256_hex("other"),
+                                          context));
+  }
+
   void rejectsImpossibleAndTrailingLengths() {
     auto encoded = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
     QVERIFY(encoded);
