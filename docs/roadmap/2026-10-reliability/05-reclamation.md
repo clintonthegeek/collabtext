@@ -251,3 +251,6 @@ Run `./tools/verify-roadmap.sh debug 'tst_store_compaction|tst_checkpoint_recove
 **Verification:**
 
 Run bounded long-lived Debug/Release campaigns and ASan; publish counts and actual byte metrics, with explicit campaign time/memory budgets. Verify the W-series named cases assigned above at this task's implementation layer and record their evidence; later dependent cases remain pending.
+
+
+**G02 follow-up (2026-10-10):** CME2 transition records now bind a parent descriptor hash, and `MembershipStore::validate_transition_link()` matches the exact durable event and membership delta. `validate_transition()` is the fail-closed path: it requires a caller-supplied durable checkpoint verifier after event validation. Its tests prove callback ordering and refusal/exception handling only; there is still no shareable checkpoint codec/store to verify artifact bytes or represented frontiers. A `DocumentSession` mutation permit can hold a consumer coordinator lock through durable local publication; without a configured callback the session remains uncoordinated. The mutex-backed retirement/write race test passed Debug, Release, and ASan/UBSan, including 20 consecutive ASan session-suite repetitions. A real consumer coordinator, checkpoint artifact validator, retirement/history orchestration, and returning-branch reconciliation remain open.

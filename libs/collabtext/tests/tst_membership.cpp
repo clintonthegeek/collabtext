@@ -250,6 +250,36 @@ private slots:
     child.hash.clear();
     auto sealed = seal_membership_descriptor(child); QVERIFY(sealed.ok());
     QVERIFY(store.validate_transition_link(parent, sealed.value()).ok());
+    auto no_checkpoint_verifier = store.validate_transition(parent, sealed.value(), {});
+    QVERIFY(!no_checkpoint_verifier.ok());
+    QCOMPARE(no_checkpoint_verifier.error().code(), ErrorCode::awaiting_state);
+    bool checkpoint_seen = false;
+    auto fully_validated = store.validate_transition(
+        parent, sealed.value(), [&](const MembershipDescriptor &verified_parent,
+                                    const MembershipDescriptor &verified_child) {
+          checkpoint_seen = verified_parent.hash == parent.hash &&
+              verified_child.base_checkpoint_hash == child.base_checkpoint_hash;
+          return checkpoint_seen
+              ? Result<void>{}
+              : Result<void>{Error(ErrorCode::corrupt_record,
+                                   "checkpoint verifier received an unexpected descriptor")};
+        });
+    QVERIFY(fully_validated.ok());
+    QVERIFY(checkpoint_seen);
+    auto corrupt_checkpoint = store.validate_transition(
+        parent, sealed.value(), [](const MembershipDescriptor &,
+                                   const MembershipDescriptor &) -> Result<void> {
+          return Error(ErrorCode::corrupt_record, "simulated corrupt checkpoint");
+        });
+    QVERIFY(!corrupt_checkpoint.ok());
+    QCOMPARE(corrupt_checkpoint.error().code(), ErrorCode::corrupt_record);
+    auto throwing_checkpoint = store.validate_transition(
+        parent, sealed.value(), [](const MembershipDescriptor &,
+                                   const MembershipDescriptor &) -> Result<void> {
+          throw std::runtime_error("simulated checkpoint reader exception");
+        });
+    QVERIFY(!throwing_checkpoint.ok());
+    QCOMPARE(throwing_checkpoint.error().code(), ErrorCode::io_error);
 
     auto wrong_event = event;
     wrong_event.subject = actor(33);

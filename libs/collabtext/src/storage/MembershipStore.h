@@ -65,6 +65,13 @@ struct MembershipDescriptor {
     const MembershipEvent &event,
     const ActorId &producer);
 
+/// The caller must resolve and validate the durable base checkpoint named by
+/// `next`, including its integrity, completeness, and exact represented
+/// frontiers. MembershipStore has no checkpoint codec of its own.
+using MembershipCheckpointVerifier = std::function<Result<void>(
+    const MembershipDescriptor &parent,
+    const MembershipDescriptor &next)>;
+
 /// Consequences of removing a device from the next epoch. Counts and branch
 /// hashes are captured by the caller from durable document/session state.
 struct RetirementImpact {
@@ -135,6 +142,13 @@ public:
   [[nodiscard]] Result<void> validate_transition_link(
       const MembershipDescriptor &parent,
       const MembershipDescriptor &next) const;
+  /// Full transition validation fails closed without a checkpoint verifier.
+  /// The event-link check runs first, then the caller verifies durable base
+  /// checkpoint bytes and their relationship to the child descriptor.
+  [[nodiscard]] Result<void> validate_transition(
+      const MembershipDescriptor &parent,
+      const MembershipDescriptor &next,
+      const MembershipCheckpointVerifier &verify_checkpoint) const;
   /// Commits only if the preview still matches current descriptor/impact data,
   /// explicit user confirmation is present, and every remaining member has a
   /// verified acknowledgement from durable caller-owned state.

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <exception>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -542,6 +543,29 @@ Result<void> MembershipStore::validate_transition_link(
     return Error(ErrorCode::corrupt_record,
                  "legacy membership event has no bound parent descriptor");
   return validate_membership_transition_link(parent, next, *match, m_producer);
+}
+
+Result<void> MembershipStore::validate_transition(
+    const MembershipDescriptor &parent, const MembershipDescriptor &next,
+    const MembershipCheckpointVerifier &verify_checkpoint) const {
+  if (!verify_checkpoint)
+    return Error(ErrorCode::awaiting_state,
+                 "full membership transition validation requires a durable checkpoint verifier");
+  auto event_link = validate_transition_link(parent, next);
+  if (!event_link.ok()) return event_link.error();
+  try {
+    auto checkpoint = verify_checkpoint(parent, next);
+    if (!checkpoint.ok())
+      return checkpoint.error().with_context(
+          "validating membership transition base checkpoint");
+    return {};
+  } catch (const std::exception &error) {
+    return Error(ErrorCode::io_error, error.what(),
+                 "validating membership transition base checkpoint");
+  } catch (...) {
+    return Error(ErrorCode::io_error,
+                 "checkpoint verifier threw an unknown exception");
+  }
 }
 
 Result<MembershipEvent> MembershipStore::commit_retirement(

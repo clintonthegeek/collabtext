@@ -3123,3 +3123,8 @@ Membership journal writes now use CME2 records that persist the parent descripto
 The installed live consumer gate was rerun against this candidate after the public `DocumentSessionConfig` change. The relocated installation compiled the `DocumentSession` public header without source-tree leakage; the live gate passed Wave 16/16 strict cases and the Markoff-shaped Markdown fixture 4/4 (`build-consumer-verify/debug-live-20261010T175017Z-2`, manifest v11).
 
 A deterministic concurrency regression now models the consumer coordinator with a mutex-backed membership lease. It blocks the storage write, starts retirement concurrently, proves retirement cannot complete while the write holds its permit, then confirms later local edits are refused after retirement. `tst_session_recovery` passed Debug, Release, and ASan/UBSan; the ASan/UBSan session target passed 20 consecutive runs (`--repeat until-fail:20`, leak detection disabled).
+
+
+## 2026-10-10 — Require checkpoint verification for full transitions
+
+Added `MembershipStore::validate_transition()` as the full validation entry point. It first checks the child descriptor against the unique durable CME2 event, then requires a caller-supplied checkpoint verifier; absent verification returns `awaiting_state`, verifier failures propagate, and thrown exceptions become `io_error`. The test double checks the exact parent and child checkpoint reference supplied and injects refusal and exception cases. `tst_membership` passed Debug, Release, and ASan/UBSan. The repository still has no shareable checkpoint codec/store, so this is a fail-closed integration contract rather than evidence that any checkpoint artifact has yet been independently validated; G04/G05 must provide that verifier.
