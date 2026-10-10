@@ -473,6 +473,74 @@ private slots:
     QVERIFY(c->close().ok());
   }
 
+  void consumer_event_log_correlates_undo_and_redo_groups_append_only() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const DocumentSessionConfig config{root / "shared", root / "device",
+                                       "doc-events", "text-events", 1};
+    const auto canonical = root / "consumer" / "events.log";
+    const auto identity_text = [](const Crdt::Identity &id) {
+      return id.actor.to_string() + "/" + std::to_string(id.counter);
+    };
+    std::string original_row;
+    std::string undo_row;
+    std::string group_id;
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      auto edit = session->apply_local({{0, 0}}, {"word"});
+      QVERIFY(edit.ok());
+      const auto group = session->next_undo_group();
+      QVERIFY(group.has_value());
+      group_id = identity_text(group->id);
+      auto edit_wire = encode_operation(edit.value());
+      QVERIFY(edit_wire.ok());
+      original_row = "accepted:event-1:" + group_id + ":" +
+                     identity_text(Crdt::op_identity(edit.value())) + ":" +
+                     to_hex(edit_wire.value());
+      QVERIFY(append_durable_line(canonical, original_row).ok());
+
+      auto undo = session->undo();
+      QVERIFY(undo.ok());
+      auto undo_wire = encode_operation(undo.value());
+      QVERIFY(undo_wire.ok());
+      undo_row = "accepted:event-2:" + group_id + ":" +
+                 identity_text(Crdt::op_identity(undo.value())) + ":" +
+                 to_hex(undo_wire.value());
+      QVERIFY(append_durable_line(canonical, undo_row).ok());
+      QCOMPARE(session->text(), std::string{});
+      QVERIFY(session->close().ok());
+    }
+    {
+      auto reopened = DocumentSession::open(config);
+      QVERIFY(reopened.ok());
+      auto session = std::move(reopened).value();
+      const auto group = session->next_redo_group();
+      QVERIFY(group.has_value());
+      QCOMPARE(identity_text(group->id), group_id);
+      auto redo = session->redo();
+      QVERIFY(redo.ok());
+      auto redo_wire = encode_operation(redo.value());
+      QVERIFY(redo_wire.ok());
+      const auto redo_row = "accepted:event-3:" + group_id + ":" +
+                            identity_text(Crdt::op_identity(redo.value())) + ":" +
+                            to_hex(redo_wire.value());
+      QVERIFY(append_durable_line(canonical, redo_row).ok());
+      QCOMPARE(session->text(), std::string("word"));
+      QVERIFY(session->close().ok());
+    }
+    std::ifstream events(canonical);
+    std::vector<std::string> rows;
+    for (std::string row; std::getline(events, row);)
+      rows.push_back(std::move(row));
+    QCOMPARE(rows.size(), size_t(3));
+    QCOMPARE(rows[0], original_row);
+    QCOMPARE(rows[1], undo_row);
+    QVERIFY(rows[2].starts_with("accepted:event-3:" + group_id + ":"));
+  }
+
   void consumer_outbox_reconciles_without_rewinding_canonical_history() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
