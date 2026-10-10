@@ -47,9 +47,12 @@ Run GcModel against all F1/F2/F3 histories and adversarial membership traces; pu
 **Files / scope:**
 
 - `libs/collabtext/src/storage/MembershipStore.cpp`
+- `libs/collabtext/src/storage/MembershipStore.h`
 - `libs/collabtext/src/storage/RetentionState.cpp`
+- `libs/collabtext/src/storage/RetentionState.h`
 - `libs/collabtext/tests/tst_membership.cpp`
 - `libs/collabtext/tests/tst_undo_retirement.cpp`
+- `libs/collabtext/CMakeLists.txt`
 
 **Steps:**
 
@@ -65,6 +68,8 @@ Run GcModel against all F1/F2/F3 histories and adversarial membership traces; pu
 **Verification:**
 
 Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_persistent_undo'`; inject crashes before/after each publication point.
+
+**Current implementation note:** Producer-scoped checksummed membership journals and per-stream monotonic undo-retirement journals are implemented with restart, torn-tail, and uncertain-fsync reconciliation tests. Preview/commit integration and returning-peer export remain open; see G02 in `TASKS.json`.
 
 ## G03 — Implement per-stream durable coverage and certificate construction
 

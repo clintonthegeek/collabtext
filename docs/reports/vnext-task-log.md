@@ -3049,3 +3049,11 @@ Added `docs/specs/vnext-membership-gc.md` as the normative protocol and an indep
 The independent QtTest target exercises F1/F2/F3 histories, membership and crash-window adversaries, checkpoint and pin requirements, and a bounded exhaustive undo/redo-retention matrix. This task specifies and models eligibility; it does not enable production reclamation.
 
 **Verification:** `tst_gc_model` passed 15/15 in Debug, Release, and ASan/UBSan (`ASAN_OPTIONS=detect_leaks=0`). `validate-plan.py`, `check-scope.py --strict`, and `git diff --check` passed. LeakSanitizer remains unavailable in this runner because its shutdown is incompatible with ptrace; ASan/UBSan reported no issue.
+
+## G02 — durable membership and undo-retirement publication (in progress)
+
+**Baseline:** `4f17c5f`
+
+Added `MembershipStore`, a producer-scoped append-only journal for explicit enrollment/retirement facts with strict sequence, owner, checksum, corruption, and torn-tail validation. Added `RetentionState`, a per-stream monotonic set of retired undo groups. Its publication method requires a caller-provided durable history-trim commit before journaling. If append durability fails after bytes were written, both journals reconcile from disk before accepting another sequence, preventing a retry from reusing an already-published sequence. Added restart, incomplete-tail, callback-order, idempotence, and injected fsync-failure regressions.
+
+**Verification:** Debug and Release selected gates each passed `tst_membership`, `tst_undo_retirement`, and `tst_persistent_undo` (3/3). ASan/UBSan passed the same 3/3 with `ASAN_OPTIONS=detect_leaks=0`; LeakSanitizer shutdown is unsupported under this runner's ptrace environment. This is the durable journal foundation only. G02 remains open for protocol-validated epoch transitions, session/history integration, typed retirement preview and explicit commit, and returning-device export/reconciliation.

@@ -79,6 +79,8 @@ add_library(collabtext_core STATIC
     src/identity/ReplicaAllocator.cpp
     src/storage/DurableFile.cpp
     src/storage/LocalHistoryLog.cpp
+    src/storage/MembershipStore.cpp
+    src/storage/RetentionState.cpp
 )
 add_library(CollabText::Core ALIAS collabtext_core)
 set_target_properties(collabtext_core PROPERTIES
@@ -426,6 +428,8 @@ add_dependencies(tst_store_fault_harness store_crash_worker)
 add_crdt_test(tst_rope_integration)
 add_crdt_test(tst_undomap)
 add_crdt_test(tst_persistent_undo)
+add_crdt_test(tst_membership)
+add_crdt_test(tst_undo_retirement)
 add_crdt_test(tst_gc)
 add_crdt_test(tst_evaluation_regressions)
 add_crdt_test(tst_serialization)

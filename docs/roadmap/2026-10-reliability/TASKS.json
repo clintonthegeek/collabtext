@@ -2870,9 +2870,12 @@
       ],
       "files": [
         "libs/collabtext/src/storage/MembershipStore.cpp",
+        "libs/collabtext/src/storage/MembershipStore.h",
         "libs/collabtext/src/storage/RetentionState.cpp",
+        "libs/collabtext/src/storage/RetentionState.h",
         "libs/collabtext/tests/tst_membership.cpp",
-        "libs/collabtext/tests/tst_undo_retirement.cpp"
+        "libs/collabtext/tests/tst_undo_retirement.cpp",
+        "libs/collabtext/CMakeLists.txt"
       ],
       "steps": [
         "Persist enrollment/retirement/epoch events in per-producer immutable records using L01; validate them against G01 before changing eligible peer sets.",
@@ -2890,7 +2893,9 @@
         "R10"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "in_progress",
+      "baseline_revision": "4f17c5f",
+      "notes": "G02 foundation in progress. Added producer-scoped, checksummed append-only membership event records with strict sequence, owner, corruption, and torn-tail validation. Added per-stream monotonic retired undo-group records; its publication API requires a caller-supplied durable history-trim commit first and is idempotent. Append errors reconcile state from disk to avoid sequence reuse after uncertain publication. Restart, torn-tail, trim failure ordering, and injected fsync-failure cases are covered. Debug/Release/ASan-UBSan selected gates passed (3/3 each; LeakSanitizer disabled for the ptrace-limited runner). Remaining G02 work: validated epoch transition semantics, integrated trim publication with engine/session history persistence, typed retirement preview/explicit commit API, and returning-device export/reconciliation."
     },
     {
       "id": "G03",
