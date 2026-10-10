@@ -156,12 +156,15 @@ private slots:
                               CheckpointEngineKind::Text};
     CheckpointCausalState causal;
     auto context_section = encode_checkpoint_context(context);
+    auto engine_section = encode_checkpoint_engine(CheckpointEngineState{});
     auto causal_section = encode_checkpoint_causal(causal);
     QVERIFY(context_section);
+    QVERIFY(engine_section);
     QVERIFY(causal_section);
 
     auto sections = shared_sections();
     sections[0] = context_section.value();
+    sections[1] = engine_section.value();
     sections[2] = causal_section.value();
     const auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(framed);
@@ -169,11 +172,25 @@ private slots:
     QVERIFY(artifact);
     const auto decoded_context = decode_checkpoint_context(artifact.value().sections[0]);
     const auto decoded_causal = decode_checkpoint_causal(artifact.value().sections[2]);
+    const auto core = decode_checkpoint_core(artifact.value());
     QVERIFY(decoded_context);
     QVERIFY(decoded_causal);
+    QVERIFY(core);
     QCOMPARE(decoded_context.value(), context);
     QCOMPARE(decoded_causal.value().version, causal.version);
     QVERIFY(decoded_causal.value().undo_entries.empty());
+
+    auto wrong_context = encode_checkpoint_context(
+        CheckpointContext{"project", "main", 7, "",
+                          CheckpointEngineKind::IdList});
+    QVERIFY(wrong_context);
+    sections[0] = wrong_context.value();
+    const auto mismatched_frame = encode_checkpoint(CheckpointKind::Shareable, sections);
+    QVERIFY(mismatched_frame);
+    const auto mismatched_artifact = decode_checkpoint(
+        mismatched_frame.value(), CheckpointKind::Shareable);
+    QVERIFY(mismatched_artifact);
+    QVERIFY(!decode_checkpoint_core(mismatched_artifact.value()));
   }
 
   void engineSectionRoundTripsTextAndIdList() {
@@ -237,9 +254,27 @@ private slots:
     text_state.fragments = text_snapshot.fragments;
     auto text_payload = encode_checkpoint_engine(text_state);
     QVERIFY(text_payload);
-    auto decoded_text = decode_checkpoint_engine(text_payload.value());
-    QVERIFY(decoded_text);
-    text_snapshot.fragments = std::move(decoded_text.value().fragments);
+    CheckpointContext text_context{"doc", "main", 1, "",
+                                   CheckpointEngineKind::Text};
+    CheckpointCausalState text_causal{text_snapshot.version,
+                                      text_snapshot.undo_entries};
+    auto context_section = encode_checkpoint_context(text_context);
+    auto causal_section = encode_checkpoint_causal(text_causal);
+    QVERIFY(context_section);
+    QVERIFY(causal_section);
+    auto sections = shared_sections();
+    sections[0] = context_section.value();
+    sections[1] = text_payload.value();
+    sections[2] = causal_section.value();
+    auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
+    QVERIFY(framed);
+    auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
+    QVERIFY(artifact);
+    auto decoded_core = decode_checkpoint_core(artifact.value());
+    QVERIFY(decoded_core);
+    text_snapshot.version = decoded_core.value().causal.version;
+    text_snapshot.undo_entries = decoded_core.value().causal.undo_entries;
+    text_snapshot.fragments = std::move(decoded_core.value().engine.fragments);
     Crdt::Buffer restored_text(CollabText::Test::test_counter(2));
     QVERIFY(restored_text.restore_checkpoint_state(text_snapshot));
     QCOMPARE(restored_text.text(), source_text.text());
@@ -258,9 +293,27 @@ private slots:
     list_state.entries = list_snapshot.entries;
     auto list_payload = encode_checkpoint_engine(list_state);
     QVERIFY(list_payload);
-    auto decoded_list = decode_checkpoint_engine(list_payload.value());
-    QVERIFY(decoded_list);
-    list_snapshot.entries = std::move(decoded_list.value().entries);
+    CheckpointContext list_context{"doc", "main", 1, "",
+                                   CheckpointEngineKind::IdList};
+    CheckpointCausalState list_causal{list_snapshot.version,
+                                      list_snapshot.undo_entries};
+    context_section = encode_checkpoint_context(list_context);
+    causal_section = encode_checkpoint_causal(list_causal);
+    QVERIFY(context_section);
+    QVERIFY(causal_section);
+    sections = shared_sections();
+    sections[0] = context_section.value();
+    sections[1] = list_payload.value();
+    sections[2] = causal_section.value();
+    framed = encode_checkpoint(CheckpointKind::Shareable, sections);
+    QVERIFY(framed);
+    artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
+    QVERIFY(artifact);
+    decoded_core = decode_checkpoint_core(artifact.value());
+    QVERIFY(decoded_core);
+    list_snapshot.version = decoded_core.value().causal.version;
+    list_snapshot.undo_entries = decoded_core.value().causal.undo_entries;
+    list_snapshot.entries = std::move(decoded_core.value().engine.entries);
     Crdt::IdList restored_list(CollabText::Test::test_counter(4));
     QVERIFY(restored_list.restore_checkpoint_state(list_snapshot));
     QCOMPARE(restored_list.ids(), source_list.ids());

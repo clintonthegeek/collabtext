@@ -296,4 +296,58 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
   return state;
 }
 
+Result<CheckpointShareableCore> decode_checkpoint_core(
+    const CheckpointArtifact &artifact) {
+  if (artifact.kind != CheckpointKind::Shareable || artifact.sections.size() != 7)
+    return malformed("checkpoint core requires a complete shareable artifact");
+  for (size_t i = 0; i < artifact.sections.size(); ++i)
+    if (artifact.sections[i].id != i + 1)
+      return malformed("checkpoint core sections are missing or unordered");
+
+  CheckpointShareableCore core;
+  auto context = decode_checkpoint_context(artifact.sections[0]);
+  if (!context) return context.error().with_context("checkpoint.core");
+  core.context = std::move(context.value());
+  auto engine = decode_checkpoint_engine(artifact.sections[1]);
+  if (!engine) return engine.error().with_context("checkpoint.core");
+  core.engine = std::move(engine.value());
+  if (core.context.engine != core.engine.kind)
+    return malformed("checkpoint context and engine section kinds disagree");
+  auto causal = decode_checkpoint_causal(artifact.sections[2]);
+  if (!causal) return causal.error().with_context("checkpoint.core");
+  core.causal = std::move(causal.value());
+
+  auto covered = [&](const Crdt::Identity &id) {
+    return valid_identity(id) && core.causal.version.observed(id);
+  };
+  auto covered_link = [&](const Crdt::Link &link) {
+    return (!link.parent || covered(*link.parent)) &&
+           (!link.right_origin || covered(*link.right_origin));
+  };
+  if (core.engine.kind == CheckpointEngineKind::Text) {
+    for (const auto &fragment : core.engine.fragments) {
+      const auto last_item = Crdt::Identity(
+          fragment.origin.actor,
+          fragment.origin.counter + static_cast<uint64_t>(fragment.length) - 1);
+      if (!covered(last_item) || !covered_link(fragment.link))
+        return malformed("checkpoint text entry references identity outside causal state");
+      for (const auto &deletion : fragment.deletions)
+        if (!covered(deletion))
+          return malformed("checkpoint text deletion is outside causal state");
+    }
+  } else {
+    for (const auto &entry : core.engine.entries) {
+      if (!covered(entry.origin) || !covered_link(entry.link))
+        return malformed("checkpoint list entry references identity outside causal state");
+      for (const auto &deletion : entry.deletions)
+        if (!covered(deletion))
+          return malformed("checkpoint list deletion is outside causal state");
+    }
+  }
+  for (const auto &entry : core.causal.undo_entries)
+    if (!covered(entry.key.edit_id) || !covered(entry.key.undo_id))
+      return malformed("checkpoint UndoMap identity is outside causal state");
+  return core;
+}
+
 }  // namespace CollabText::Storage

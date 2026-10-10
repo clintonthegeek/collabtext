@@ -50,6 +50,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     const auto shareable = CollabText::Storage::decode_checkpoint(
         bytes, CollabText::Storage::CheckpointKind::Shareable);
     if (shareable) {
+        (void)CollabText::Storage::decode_checkpoint_core(shareable.value());
         for (const auto& section : shareable.value().sections) {
             if (section.id == 1)
                 (void)CollabText::Storage::decode_checkpoint_context(section);

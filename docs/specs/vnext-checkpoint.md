@@ -124,6 +124,12 @@ derived. Import rebuilds them from logical entries and UndoMap state, then
 checks visible text/count, fragment ranges, identities, links, and summaries
 before exposing the engine. Serialized visibility is never authoritative.
 
+The core artifact decoder parses Context, Engine, and Causal together. It rejects
+engine-kind disagreement and any engine link, deletion, item range, or UndoMap
+identity not covered by the causal version vector. Primitive restore then
+performs its additional state and owner-allocator checks before swapping live
+state.
+
 Deferred records retain the original operation bytes and delivery token. They
 are not included in applied operation coverage. Quarantined records remain
 separately retained with their reason and original bytes; they do not become
