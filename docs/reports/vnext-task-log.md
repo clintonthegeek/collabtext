@@ -3086,3 +3086,7 @@ Added returning-device local branch export. `FileOpStream::replay_producer()` sc
 # 2026-10-10 — Membership journal epoch continuity
 
 Closed a gap in G02's lower-level journal API: `MembershipStore::append()` and recovery now reject repeated or skipped transition epochs, matching the continuity requirement already enforced by typed transition commits. The first journaled transition may begin at an existing epoch; subsequent records must advance exactly one epoch. Added an append/reopen regression. `tst_membership` passed Debug (`20261010T164258Z-2`), Release (`20261010T164314Z-12`), and ASan/UBSan (`20261010T164349Z-2`, `ASAN_OPTIONS=detect_leaks=0`). A first ASan attempt failed only because LeakSanitizer cannot run in this ptrace-limited runner; rerunning with leak checks disabled passed.
+
+## 2026-10-10 — Returning branch export retry safety
+
+Added a regression proving `DocumentSession::export_local_branch()` returns a visitor's typed failure, stops at the first failed item, and can be retried to emit the same ordered source deliveries. Visitor exceptions now return `io_error` through the API's `Result` contract. `tst_session_recovery` passed Debug (`20261010T164450Z-2`), Release (`20261010T164526Z-12`), and ASan/UBSan (`20261010T164549Z-2`, leak detection disabled for the ptrace-limited runner).

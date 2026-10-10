@@ -102,7 +102,8 @@ public:
   /// Stream this actor's durable operations in their original scope, including
   /// a durable pending local commit if its log append failed. The visitor may
   /// receive a prefix before an error; stage output and publish it only on
-  /// success. The metadata output is valid only when this returns success.
+  /// success. Visitor exceptions are returned as io_error. The metadata output
+  /// is valid only when this returns success.
   [[nodiscard]] Result<void> export_local_branch(
       LocalBranchExport &metadata,
       const std::function<Result<void>(const OutboundDelivery &)> &visitor);

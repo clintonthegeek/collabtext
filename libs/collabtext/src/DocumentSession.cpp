@@ -560,6 +560,8 @@ Result<void> DocumentSession::export_local_branch(
     }
   } catch (const std::filesystem::filesystem_error& error) {
     return Error(ErrorCode::io_error, error.what(), "exporting local branch");
+  } catch (const std::exception& error) {
+    return Error(ErrorCode::io_error, error.what(), "exporting local branch");
   }
   return {};
 }

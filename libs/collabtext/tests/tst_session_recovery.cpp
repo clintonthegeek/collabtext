@@ -19,6 +19,7 @@
 #include "VolatileCounter.h"
 
 #include <fstream>
+#include <stdexcept>
 
 using namespace CollabText;
 
@@ -380,6 +381,45 @@ private slots:
     QVERIFY(decoded.ok());
     QCOMPARE(Crdt::op_identity(decoded.value()).actor, local_actor);
     QVERIFY(local->close().ok());
+  }
+
+  void localBranchExportVisitorFailureLeavesSourceRetryable() {
+    QTemporaryDir tmp; QVERIFY(tmp.isValid());
+    const auto root = std::filesystem::path(tmp.path().toStdString());
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "doc-branch-retry", "text", 1};
+    config.initial_text = "seed";
+    auto opened = DocumentSession::open(config); QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    QVERIFY(session->apply_local({{4, 4}}, {"!"}).ok());
+    QVERIFY(session->apply_local({{5, 5}}, {"?"}).ok());
+
+    LocalBranchExport metadata;
+    size_t failed_visits = 0;
+    auto failed = session->export_local_branch(metadata,
+        [&](const OutboundDelivery&) -> Result<void> {
+          ++failed_visits;
+          return Error(ErrorCode::io_error, "staging destination failed");
+        });
+    QVERIFY(!failed.ok()); QCOMPARE(failed.error().code(), ErrorCode::io_error);
+    QCOMPARE(failed_visits, size_t(1));
+
+    auto threw = session->export_local_branch(metadata,
+        [](const OutboundDelivery&) -> Result<void> {
+          throw std::runtime_error("staging callback threw");
+        });
+    QVERIFY(!threw.ok()); QCOMPARE(threw.error().code(), ErrorCode::io_error);
+
+    std::vector<OutboundDelivery> retry;
+    auto retried = session->export_local_branch(metadata,
+        [&](const OutboundDelivery& delivery) -> Result<void> {
+          retry.push_back(delivery);
+          return {};
+        });
+    QVERIFY(retried.ok()); QCOMPARE(retry.size(), size_t(2));
+    QCOMPARE(retry[0].token.sequence, uint64_t(1));
+    QCOMPARE(retry[1].token.sequence, uint64_t(2));
+    QVERIFY(session->close().ok());
   }
 
   void localBranchExportIncludesPendingIntentWithoutWrittenSegment() {
