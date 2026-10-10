@@ -175,20 +175,8 @@ private slots:
 
   void retirementCommitRetryConfirmsUncertainPublication() {
     QTemporaryDir dir; QVERIFY(dir.isValid());
-    const auto path = std::filesystem::path(dir.path().toStdString()) / "retire.log";
     const auto producer = actor(14), retiring = actor(15);
     const auto member_a = actor(16), member_b = actor(17);
-    bool fail_sync = true;
-    StepHook hook;
-    hook.fail = [&](Step step, const fs::path&) -> std::optional<Error> {
-      if (step == Step::FileSync && fail_sync) {
-        fail_sync = false;
-        return Error(ErrorCode::io_error, "injected transition sync failure");
-      }
-      return std::nullopt;
-    };
-    auto opened = MembershipStore::open(path, producer, &hook); QVERIFY(opened.ok());
-    auto store = std::move(opened.value());
     const MembershipDescriptor descriptor{5, "epoch-five", {retiring, member_a, member_b}};
     const std::vector<RetirementImpact> impacts{
         {"doc", "text", 5, 1, 0, "branch"}};
@@ -197,20 +185,39 @@ private slots:
         {member_a, "ack-a"}, {member_b, "ack-b"}};
     const auto verifier = [](const ActorId&, std::string_view, std::string_view)
         -> Result<void> { return {}; };
+    const std::vector<Step> failure_points{Step::Write, Step::FileSync, Step::DirSync};
+    for (const auto point : failure_points) {
+      const auto path = std::filesystem::path(dir.path().toStdString()) /
+                        (std::string(to_string(point)) + ".log");
+      bool fail_once = true;
+      StepHook hook;
+      hook.fail = [&](Step step, const fs::path&) -> std::optional<Error> {
+        if (step == point && fail_once) {
+          fail_once = false;
+          return Error(ErrorCode::io_error, "injected transition publication failure");
+        }
+        return std::nullopt;
+      };
+      auto opened = MembershipStore::open(path, producer, &hook); QVERIFY(opened.ok());
+      auto store = std::move(opened.value());
+      auto uncertain = store.commit_retirement(preview.value(), descriptor, impacts,
+          acks, "confirmed", verifier);
+      QVERIFY(!uncertain.ok());
+      const uint64_t published = point == Step::Write ? 0 : 1;
+      QCOMPARE(store.last_sequence(), published);
 
-    auto uncertain = store.commit_retirement(preview.value(), descriptor, impacts,
-        acks, "confirmed", verifier);
-    QVERIFY(!uncertain.ok()); QCOMPARE(store.last_sequence(), uint64_t(1));
-    auto retried = store.commit_retirement(preview.value(), descriptor, impacts,
-        acks, "confirmed", verifier);
-    QVERIFY(retried.ok());
-    QCOMPARE(retried.value().sequence, uint64_t(1));
-    QCOMPARE(retried.value().epoch, uint64_t(6));
-    auto conflicting = store.commit_retirement(preview.value(), descriptor, impacts,
-        acks, "different confirmation", verifier);
-    QVERIFY(!conflicting.ok()); QCOMPARE(conflicting.error().code(), ErrorCode::wrong_epoch);
-    auto events = store.recover(); QVERIFY(events.ok());
-    QCOMPARE(events.value().size(), size_t(1));
+      auto retried = store.commit_retirement(preview.value(), descriptor, impacts,
+          acks, "confirmed", verifier);
+      QVERIFY(retried.ok());
+      QCOMPARE(retried.value().sequence, uint64_t(1));
+      QCOMPARE(retried.value().epoch, uint64_t(6));
+      auto conflicting = store.commit_retirement(preview.value(), descriptor, impacts,
+          acks, "different confirmation", verifier);
+      QVERIFY(!conflicting.ok());
+      QCOMPARE(conflicting.error().code(), ErrorCode::wrong_epoch);
+      auto events = store.recover(); QVERIFY(events.ok());
+      QCOMPARE(events.value().size(), size_t(1));
+    }
   }
 
   void retirementPreviewMustBeCurrentAndUnanimouslyAcknowledged() {
