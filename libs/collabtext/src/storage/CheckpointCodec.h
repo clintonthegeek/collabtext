@@ -1,6 +1,8 @@
 #pragma once
 
 #include <collabtext/ActorId.h>
+#include "crdt/Fragment.h"
+#include "crdt/IdList.h"
 #include "crdt/UndoMap.h"
 
 #include <cstddef>
@@ -42,6 +44,12 @@ struct CheckpointCausalState {
   std::vector<Crdt::UndoMapEntry> undo_entries;
 };
 
+struct CheckpointEngineState {
+  CheckpointEngineKind kind = CheckpointEngineKind::Text;
+  std::vector<Crdt::Fragment> fragments;
+  std::vector<Crdt::IdListEntry> entries;
+};
+
 inline constexpr size_t kCheckpointMaxBytes = 256u * 1024u * 1024u;
 inline constexpr uint16_t kCheckpointShareableSectionCount = 7;
 inline constexpr uint16_t kCheckpointLocalSectionCount = 3;
@@ -66,5 +74,9 @@ decode_checkpoint_context(const CheckpointSection &section);
 encode_checkpoint_causal(const CheckpointCausalState &state);
 [[nodiscard]] Result<CheckpointCausalState>
 decode_checkpoint_causal(const CheckpointSection &section);
+[[nodiscard]] Result<CheckpointSection>
+encode_checkpoint_engine(const CheckpointEngineState &state);
+[[nodiscard]] Result<CheckpointEngineState>
+decode_checkpoint_engine(const CheckpointSection &section);
 
 }  // namespace CollabText::Storage

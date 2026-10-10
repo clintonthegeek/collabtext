@@ -1,8 +1,9 @@
 # vNext Engine Checkpoint Format
 
-**Status:** format contract for G04; bounded framing, Context section encoding,
-and in-memory engine snapshot adapters are implemented. Remaining section
-payload codecs and provider/session integrations are in progress.
+**Status:** format contract for G04; bounded framing, Context, Engine, and
+Causal section codecs, plus in-memory engine snapshot adapters, are implemented.
+Remaining section payload codecs and provider/session integrations are in
+progress.
 
 This format defines a validated shareable snapshot and a separately bound
 actor-local companion. It is not a replacement for the retained operation log
@@ -101,6 +102,22 @@ UndoMap entries use the engine's strict `(edit identity, undo identity)` order.
 Each count is limited to 1,000,000, and complete section consumption is
 required. Restore rebuilds the UndoMap and rejects invalid identities, duplicate
 or unordered keys, and zero counts.
+
+The Engine section starts with `u16 engine_kind` and `u32 entry_count`, with a
+maximum of 1,000,000 entries. Every identity uses the 24-byte encoding above.
+Each entry then stores its origin identity and a placement link: a parent
+presence byte and optional identity, a side byte (`0=left`, `1=right`), and a
+right-origin presence byte and optional identity. Presence bytes are only 0 or
+1; a left link's parent and right origin must agree.
+
+For text engines, each record continues with a u32 deletion count and that many
+deletion identities, followed by u32 UTF-8 byte length, u32 Unicode scalar
+length, then exactly that many text bytes. For IdList, each record instead has
+a u64 value after its link, then the deletion count and identities. The decoder
+checks UTF-8 and scalar lengths, nonzero identities, non-overlapping text
+identity ranges, unique list origins, placement consistency, configured entry
+and byte limits, and complete consumption. Visibility and summaries are
+recomputed by the restore adapter.
 
 Visibility flags, summary-tree nodes, lookup tables, and other indexes are
 derived. Import rebuilds them from logical entries and UndoMap state, then

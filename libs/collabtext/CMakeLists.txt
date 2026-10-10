@@ -79,6 +79,7 @@ add_library(collabtext_core STATIC
     src/identity/ReplicaAllocator.cpp
     src/storage/DurableFile.cpp
     src/storage/CheckpointCodec.cpp
+    src/storage/CheckpointEngineCodec.cpp
     src/storage/LocalHistoryLog.cpp
     src/storage/MembershipStore.cpp
     src/storage/RetentionState.cpp

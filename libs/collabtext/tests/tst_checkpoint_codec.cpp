@@ -173,6 +173,56 @@ private slots:
     QVERIFY(decoded_causal.value().undo_entries.empty());
   }
 
+  void engineSectionRoundTripsTextAndIdList() {
+    const auto actor = ActorId::parse("11000000000000000000000000000001").value();
+    CheckpointEngineState text;
+    Crdt::Fragment fragment{Crdt::Identity(actor, 1), {}, 3, 1, "雪"};
+    text.fragments.push_back(fragment);
+    auto text_section = encode_checkpoint_engine(text);
+    QVERIFY(text_section);
+    auto text_decoded = decode_checkpoint_engine(text_section.value());
+    QVERIFY(text_decoded);
+    QCOMPARE(text_decoded.value().kind, CheckpointEngineKind::Text);
+    QCOMPARE(text_decoded.value().fragments.size(), size_t{1});
+    QCOMPARE(text_decoded.value().fragments[0].origin, fragment.origin);
+    QCOMPARE(text_decoded.value().fragments[0].link, fragment.link);
+    QCOMPARE(text_decoded.value().fragments[0].text, fragment.text);
+    QCOMPARE(text_decoded.value().fragments[0].length, uint32_t{1});
+    for (size_t length = 0; length < text_section.value().bytes.size(); ++length) {
+      auto truncated = text_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_engine(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    CheckpointEngineState list;
+    list.kind = CheckpointEngineKind::IdList;
+    list.entries.emplace_back(Crdt::Identity(actor, 3), Crdt::Link{}, 0xfeedu);
+    auto list_section = encode_checkpoint_engine(list);
+    QVERIFY(list_section);
+    auto list_decoded = decode_checkpoint_engine(list_section.value());
+    QVERIFY(list_decoded);
+    QCOMPARE(list_decoded.value().kind, CheckpointEngineKind::IdList);
+    QCOMPARE(list_decoded.value().entries.size(), size_t{1});
+    QCOMPARE(list_decoded.value().entries[0].origin, list.entries[0].origin);
+    QCOMPARE(list_decoded.value().entries[0].id, uint64_t{0xfeedu});
+    for (size_t length = 0; length < list_section.value().bytes.size(); ++length) {
+      auto truncated = list_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_engine(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    auto invalid_utf8 = text_section.value();
+    invalid_utf8.bytes.back() = static_cast<char>(0xff);
+    QVERIFY(!decode_checkpoint_engine(invalid_utf8));
+    auto trailing = list_section.value();
+    trailing.bytes.push_back('\0');
+    QVERIFY(!decode_checkpoint_engine(trailing));
+    text.entries.push_back(list.entries[0]);
+    QVERIFY(!encode_checkpoint_engine(text));
+  }
+
   void rejectsEveryTruncation() {
     auto encoded = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
     QVERIFY(encoded);

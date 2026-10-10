@@ -53,6 +53,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         for (const auto& section : shareable.value().sections) {
             if (section.id == 1)
                 (void)CollabText::Storage::decode_checkpoint_context(section);
+            else if (section.id == 2)
+                (void)CollabText::Storage::decode_checkpoint_engine(section);
             else if (section.id == 3)
                 (void)CollabText::Storage::decode_checkpoint_causal(section);
         }
@@ -62,6 +64,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // Exercise the bounded typed section parsers directly too, including when
     // the input is a payload rather than a complete valid artifact.
     (void)CollabText::Storage::decode_checkpoint_context({1, 1, std::string(bytes)});
+    (void)CollabText::Storage::decode_checkpoint_engine({2, 1, std::string(bytes)});
     (void)CollabText::Storage::decode_checkpoint_causal({3, 1, std::string(bytes)});
     return 0;
 }
