@@ -3098,3 +3098,5 @@ Added a checksummed journal fixture with a skipped epoch, proving recovery rejec
 ## 2026-10-10 — Reconcile uncertain membership transition commits
 
 Enrollment and retirement commits now recognize an exact already-appended transition after a sync error, force a fresh journal durability barrier, and return the existing event only after that barrier succeeds. Conflicting replays remain rejected. Added injected sync failure and exact/conflicting retry coverage; `tst_membership` passed Debug (`20261010T165022Z-2`), Release (`20261010T165036Z-12`), and ASan/UBSan (`20261010T165049Z-2`, leak detection disabled for the ptrace-limited runner).
+
+The integrated G02 gate (`tst_membership|tst_undo_retirement|tst_persistent_undo|tst_session_recovery`) passed 4/4 in Debug (`20261010T165207Z-12`), Release (`20261010T165224Z-214`), and ASan/UBSan (`20261010T165236Z-2`, leak detection disabled for the ptrace-limited runner).
