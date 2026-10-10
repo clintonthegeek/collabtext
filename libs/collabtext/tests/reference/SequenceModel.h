@@ -125,6 +125,8 @@ class Document {
     std::map<std::string, std::string> group_before_;               // group -> right boundary at mint
     std::map<std::string, std::vector<std::string>> children_;      // parent -> groups
     std::map<std::string, std::vector<std::string>> group_items_;   // group -> its items
+    std::map<std::string, std::vector<std::string>> remove_targets_; // remove operation -> items
+    std::map<std::string, bool> operation_effective_;                // undo/redo target state
     std::set<std::string> undone_;
     std::vector<std::string> deferred_;
 
@@ -260,18 +262,23 @@ public:
                 for (const auto& id : op.targets) {
                     auto found = items_.find(id);
                     if (found == items_.end()) return false;
-                    found->second.removed = true;
                 }
+                remove_targets_[op.id] = op.targets;
+                operation_effective_[op.id] = true;
+                for (const auto& id : op.targets) items_.at(id).removed = true;
                 removed_ops_.insert(op.id);
                 break;
             }
             case Operation::Kind::undo: {
-                // The target names the original *operation*, not an item, so the
-                // group is looked up by operation id.
-                if (!group_items_.count(op.target)) return false;
-                for (const auto& id : group_items(op.target))
-                    if (auto item = items_.find(id); item != items_.end()) item->second.undone = true;
-                undone_.insert(op.target);
+                // Undo names the original operation. Inserts become hidden;
+                // deletes stop contributing removal marks.
+                if (!group_items_.count(op.target) && !remove_targets_.count(op.target)) return false;
+                operation_effective_[op.target] = false;
+                if (group_items_.count(op.target)) {
+                    for (const auto& id : group_items(op.target)) items_.at(id).undone = true;
+                    undone_.insert(op.target);
+                }
+                if (remove_targets_.count(op.target)) refresh_removed(remove_targets_.at(op.target));
                 undone_ops_.insert(op.id);
                 break;
             }
@@ -279,10 +286,13 @@ public:
                 // Redo must clear the per-item flag, not just the record of it:
                 // leaving the flag set is how an undone insert stays invisible
                 // after it has been restored.
+                if (!group_items_.count(op.target) && !remove_targets_.count(op.target)) return false;
+                operation_effective_[op.target] = true;
                 undone_.erase(op.target);
                 if (group_items_.count(op.target))
                     for (const auto& id : group_items(op.target))
                         if (auto item = items_.find(id); item != items_.end()) item->second.undone = false;
+                if (remove_targets_.count(op.target)) refresh_removed(remove_targets_.at(op.target));
                 undone_ops_.insert(op.id);
                 break;
             }
@@ -349,6 +359,19 @@ public:
     }
 
 private:
+    void refresh_removed(const std::vector<std::string>& affected) {
+        for (const auto& id : affected) {
+            bool removed = false;
+            for (const auto& [operation, targets] : remove_targets_) {
+                if (!operation_effective_[operation]) continue;
+                if (std::find(targets.begin(), targets.end(), id) != targets.end()) {
+                    removed = true;
+                    break;
+                }
+            }
+            items_.at(id).removed = removed;
+        }
+    }
     std::set<std::string> applied_;
     std::set<std::string> removed_ops_;
     std::set<std::string> undone_ops_;

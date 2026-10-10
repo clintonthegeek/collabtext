@@ -2943,3 +2943,28 @@ Remaining: Pin projection does not enable or perform GC. G01/G06 own
 certificate checks, epoch translations and physical reclamation; G08 measures
 retained pin metadata. Historical playback remains bounded by its own
 projection/archive floor.
+
+Task: S06
+Status: complete
+Commit: pending
+Scope: Expanded the independent model from 12 insertion shapes to every
+causally valid interleaving of two/three three-scalar concurrent typing
+groups, including forward/reverse typing. Checked 13,520 interleavings,
+duplicate replay for every order, and reversed delivery with defer/drain for
+each of the 12 shapes. Added a deletion undo/redo regression that verifies
+hidden content returns while item identity/order remain stable. Carried the
+original fixture token values through fresh model reconstruction for all 11
+declared token-bearing arrival paths: 28 position outcomes, 17 comparisons,
+and 17 duplicate deliveries.
+Verification: Debug model/production semantics 2/2 passed in 16.17 s
+(20261010T073845Z-2). Release 2/2 passed in 1.13 s
+(20261010T074335Z-2). The bounded ASan/UBSan model case passed directly with
+`ASAN_OPTIONS=detect_leaks=0` in 86.132 s; the full verification wrapper's
+LeakSanitizer shutdown is unsupported by this runner's ptrace environment.
+Production S01 fixtures replay through fresh Buffer/IdList engines in all
+fixture arrival orders. CTPT encoding and fresh-process recovery remain
+evidenced by S04's position/recovery gate. No counterexample was found.
+Limits: Exhaustive only for the stated 13,520 small insertion histories and
+listed fixture states/orders; deletion undo/redo has a focused synthetic
+regression, not an exhaustive delete-history matrix. This is bounded
+evidence, not a proof for arbitrary histories.

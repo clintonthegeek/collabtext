@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <map>
 #include <numeric>
+#include <set>
 #include <string>
 
 using namespace SequenceReference;
@@ -172,8 +173,38 @@ void append_typed_group(std::vector<Operation>& operations, const std::string& a
             op.between_left = at == 0 ? "START" : actor + "/" + std::to_string((at - 1) * 2 + 1);
             op.between_right = "END";
         }
+        if (at) op.after.push_back(actor + "/" + std::to_string((at - 1) * 2 + 4));
         operations.push_back(op);
     }
+}
+
+void enumerate_causal_orders(const std::vector<Operation>& operations,
+                             std::vector<std::string>& prefix,
+                             std::set<std::string>& delivered,
+                             std::vector<std::vector<std::string>>& out) {
+    if (prefix.size() == operations.size()) {
+        out.push_back(prefix);
+        return;
+    }
+    for (const auto& op : operations) {
+        if (delivered.contains(op.id)) continue;
+        if (!std::all_of(op.after.begin(), op.after.end(),
+                         [&](const auto& dependency) { return delivered.contains(dependency); }))
+            continue;
+        delivered.insert(op.id);
+        prefix.push_back(op.id);
+        enumerate_causal_orders(operations, prefix, delivered, out);
+        prefix.pop_back();
+        delivered.erase(op.id);
+    }
+}
+
+std::vector<std::vector<std::string>> causal_orders(const std::vector<Operation>& operations) {
+    std::vector<std::vector<std::string>> out;
+    std::vector<std::string> prefix;
+    std::set<std::string> delivered;
+    enumerate_causal_orders(operations, prefix, delivered, out);
+    return out;
 }
 
 } // namespace
@@ -185,6 +216,8 @@ private slots:
     void everyArrivalOrderConverges();
     void duplicateAndReversedDelivery();
     void namedTokenPositionsAndComparisons();
+    void sameTokenAcrossEveryCausalArrivalAndReplay();
+    void undoRedoRestoresDeletedItems();
     void boundedEnumeration();
     void productionAtomizingRuleIsRejected();
 };
@@ -423,6 +456,110 @@ void SequenceModelTest::namedTokenPositionsAndComparisons() {
     QCOMPARE(comparisons, 14);
 }
 
+/// Carry each fixture's originally minted token values through every arrival
+/// order and a fresh reference-document reconstruction. Duplicate each delivery
+/// as well; the assertions target resolution of the same token, not a newly
+/// minted boundary in each final state.
+void SequenceModelTest::sameTokenAcrossEveryCausalArrivalAndReplay() {
+    const auto root = QString::fromUtf8(COLLABTEXT_SEQUENCE_FIXTURE_DIR);
+    size_t fixture_orders = 0, positions = 0, comparisons = 0, duplicate_deliveries = 0;
+    for (const auto& name : fixture_names(root)) {
+        const auto fixture = load(root + QLatin1Char('/') + name);
+        if (fixture.tokens.isEmpty()) continue;
+        auto seed_document = build(fixture);
+        QVERIFY(seed_document.replay(fixture.operations,
+                                     fixture.arrival_orders.front()).complete);
+        const auto seed_state = boundary_state(fixture, seed_document,
+                                               seed_document.order());
+        std::map<std::string, BoundaryReference::Token> persisted;
+        for (const auto& entry : fixture.tokens) {
+            const auto object = entry.toObject();
+            auto token = token_from(object, seed_state.context);
+            if (!fixture.initial.empty()) token.mint_state.insert("__initial_seed");
+            persisted.emplace(str(object["id"]), std::move(token));
+        }
+
+        for (const auto& arrival : fixture.arrival_orders) {
+            auto restarted = build(fixture);
+            std::vector<std::string> duplicate_order;
+            duplicate_order.reserve(arrival.size() * 2);
+            for (const auto& id : arrival) {
+                duplicate_order.push_back(id);
+                duplicate_order.push_back(id);
+            }
+            const auto report = restarted.replay(fixture.operations, duplicate_order);
+            QVERIFY2(report.complete, qPrintable(fixture.id + ": duplicate replay did not drain"));
+            QCOMPARE(report.duplicate, arrival.size());
+            const auto state = boundary_state(fixture, restarted, restarted.order());
+            for (const auto& entry : fixture.tokens) {
+                const auto object = entry.toObject();
+                const auto id = str(object["id"]);
+                const auto actual = BoundaryReference::resolve(state, persisted.at(id));
+                const auto wanted = fixture.expected["positions"].toObject()
+                                        .value(QString::fromStdString(id)).toObject();
+                const auto wanted_state = str(wanted["state"]);
+                if (wanted_state == "collapsed") {
+                    QCOMPARE(actual.status, BoundaryReference::Status::resolved);
+                    QVERIFY(actual.collapsed());
+                } else {
+                    const auto status = BoundaryReference::status_from_name(wanted_state);
+                    QVERIFY(status.has_value());
+                    QCOMPARE(actual.status, *status);
+                }
+                if (actual.status == BoundaryReference::Status::resolved)
+                    QCOMPARE(actual.offset, uint32_t(wanted["offset"].toInteger()));
+                ++positions;
+            }
+            for (const auto& entry : fixture.expected["comparisons"].toArray()) {
+                const auto object = entry.toObject();
+                const auto comparison = BoundaryReference::compare(
+                    state, persisted.at(str(object["left"])), persisted.at(str(object["right"])));
+                QVERIFY(comparison.has_value());
+                const auto actual = *comparison < 0 ? "less" : *comparison > 0 ? "greater" : "equal";
+                QCOMPARE(QString::fromStdString(actual), QString::fromStdString(str(object["order"])));
+                ++comparisons;
+            }
+            ++fixture_orders;
+            duplicate_deliveries += arrival.size();
+        }
+    }
+    QCOMPARE(fixture_orders, size_t(11));
+    QCOMPARE(positions, size_t(28));
+    QCOMPARE(comparisons, size_t(17));
+    QCOMPARE(duplicate_deliveries, size_t(17));
+}
+
+/// A local deletion is an operation with an undoable effect. Keep the item's
+/// identity and position while toggling that effect, and ensure redo restores
+/// the deletion rather than restoring the item.
+void SequenceModelTest::undoRedoRestoresDeletedItems() {
+    Document document(false, IdentityOrder({{"A", std::string(31, '0') + "1"}}));
+    document.seed({{"A/1", "x"}});
+    Operation remove;
+    remove.id = "A/4";
+    remove.kind = Operation::Kind::remove;
+    remove.targets = {"A/1"};
+    Operation undo;
+    undo.id = "A/6";
+    undo.kind = Operation::Kind::undo;
+    undo.after = {remove.id};
+    undo.target = remove.id;
+    Operation redo;
+    redo.id = "A/8";
+    redo.kind = Operation::Kind::redo;
+    redo.after = {undo.id};
+    redo.target = remove.id;
+
+    QVERIFY(document.integrate(remove));
+    QCOMPARE(QString::fromStdString(document.text()), QString());
+    QVERIFY(document.integrate(undo));
+    QCOMPARE(QString::fromStdString(document.text()), QStringLiteral("x"));
+    QCOMPARE(document.order(), std::vector<std::string>{"A/1"});
+    QVERIFY(document.integrate(redo));
+    QCOMPARE(QString::fromStdString(document.text()), QString());
+    QCOMPARE(document.order(), std::vector<std::string>{"A/1"});
+}
+
 /// Bounded enumeration over the shapes that decide the repair: two and three
 /// concurrent typing groups, each typed forward or in reverse. Every group must
 /// stay contiguous -- interleaving them is precisely the F8 defect.
@@ -430,7 +567,7 @@ void SequenceModelTest::boundedEnumeration() {
     const std::map<std::string, std::string> actors{
         {"A", std::string(31, '0') + "1"}, {"B", std::string(31, '0') + "2"}, {"C", std::string(31, '0') + "3"}};
     const std::vector<std::string> words{"abc", "XYZ", "mnq"};
-    int cases = 0;
+    size_t shapes = 0, histories = 0, duplicate_histories = 0, deferred_histories = 0;
     for (int groups = 2; groups <= 3; ++groups) {
         for (int mask = 0; mask < (1 << groups); ++mask) {
             std::vector<Operation> operations;
@@ -446,31 +583,54 @@ void SequenceModelTest::boundedEnumeration() {
             std::string expected;
             for (int g = 0; g < groups; ++g) expected += words[static_cast<size_t>(g)];
 
-            auto document = Document(false, IdentityOrder(actors));
-            const auto report = document.replay(operations, arrival);
-            QVERIFY(report.complete);
-            QCOMPARE(QString::fromStdString(document.text()), QString::fromStdString(expected));
-
-            const auto order = document.order();
-            QCOMPARE(order.size(), size_t(groups) * 3);
-            // No interleaving: all of one actor's scalars form one run.
-            std::set<std::string> started;
-            std::string previous_actor;
-            for (const auto& id : order) {
-                const auto parsed = parse_id(id);
-                QVERIFY(parsed.has_value());
-                if (parsed->actor != previous_actor) {
-                    QVERIFY2(started.insert(parsed->actor).second,
-                             qPrintable(QStringLiteral("actor ") + QString::fromStdString(parsed->actor)
-                                        + QStringLiteral(" appears in two runs: ")
-                                        + QString::fromStdString(join(order))));
-                    previous_actor = parsed->actor;
+            ++shapes;
+            const auto orders = causal_orders(operations);
+            QVERIFY(!orders.empty());
+            for (const auto& causal_order : orders) {
+                auto document = Document(false, IdentityOrder(actors));
+                const auto report = document.replay(operations, causal_order);
+                QVERIFY(report.complete);
+                QCOMPARE(QString::fromStdString(document.text()), QString::fromStdString(expected));
+                const auto order = document.order();
+                QCOMPARE(order.size(), size_t(groups) * 3);
+                std::set<std::string> started;
+                std::string previous_actor;
+                for (const auto& id : order) {
+                    const auto parsed = parse_id(id);
+                    QVERIFY(parsed.has_value());
+                    if (parsed->actor != previous_actor) {
+                        QVERIFY2(started.insert(parsed->actor).second,
+                                 qPrintable(QStringLiteral("actor ") + QString::fromStdString(parsed->actor)
+                                            + QStringLiteral(" appears in two runs: ")
+                                            + QString::fromStdString(join(order))));
+                        previous_actor = parsed->actor;
+                    }
                 }
+                auto with_duplicates = causal_order;
+                for (const auto& id : causal_order) with_duplicates.push_back(id);
+                auto duplicate_document = Document(false, IdentityOrder(actors));
+                const auto duplicate_report = duplicate_document.replay(operations, with_duplicates);
+                QVERIFY(duplicate_report.complete);
+                QCOMPARE(duplicate_report.duplicate, causal_order.size());
+                QCOMPARE(QString::fromStdString(join(duplicate_document.order())),
+                         QString::fromStdString(join(document.order())));
+                ++histories;
+                ++duplicate_histories;
             }
-            ++cases;
+            auto reverse_delivery = arrival;
+            std::reverse(reverse_delivery.begin(), reverse_delivery.end());
+            auto deferred = Document(false, IdentityOrder(actors));
+            const auto deferred_report = deferred.replay(operations, reverse_delivery);
+            QVERIFY(deferred_report.complete);
+            QVERIFY(deferred_report.deferred > 0);
+            QCOMPARE(QString::fromStdString(deferred.text()), QString::fromStdString(expected));
+            ++deferred_histories;
         }
     }
-    QCOMPARE(cases, 12);
+    QCOMPARE(shapes, size_t(12));
+    QCOMPARE(histories, size_t(13520));
+    QCOMPARE(duplicate_histories, histories);
+    QCOMPARE(deferred_histories, shapes);
 }
 
 QTEST_MAIN(SequenceModelTest)

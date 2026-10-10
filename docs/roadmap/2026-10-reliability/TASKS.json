@@ -2774,10 +2774,12 @@
         "R4"
       ],
       "gate": null,
-      "status": "not_started",
+      "status": "complete",
       "consumer_requirements": [
         "W2"
-      ]
+      ],
+      "baseline_revision": "245e2e8",
+      "notes": "Completed against baseline 245e2e8. Expanded the model to all 13,520 causal interleavings of two/three three-scalar typing groups in forward/reverse directions, with duplicate replay and reversed deferral/drain checks. Added undo/redo of a deletion and carried each persisted fixture token across all 11 model arrival-order/restart replays (28 position and 17 comparison checks, 17 duplicate deliveries). Production S01 fixtures are independently replayed through fresh Buffer/IdList engines in every declared arrival order; CTPT codec and fresh-process token recovery remain covered by the S04 position/recovery evidence. Bounded evidence only; it is not a proof for arbitrary histories."
     },
     {
       "id": "S07",
