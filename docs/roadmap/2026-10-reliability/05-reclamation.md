@@ -119,6 +119,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_gc_certificate|tst_transport_commit_co
 - `libs/collabtext/src/storage/CheckpointCodec.cpp`
 - `libs/collabtext/src/crdt/Buffer.cpp`
 - `libs/collabtext/src/crdt/IdList.cpp`
+- `libs/collabtext/tests/fuzz_decode.cpp`
 - `libs/collabtext/tests/tst_checkpoint_codec.cpp`
 
 **Steps:**
