@@ -306,7 +306,7 @@ private slots:
         QCOMPARE(counter.reserve().value(), 8u);
         QVERIFY(!counter.exhausted());
 
-        counter.restore(std::numeric_limits<uint64_t>::max() - 1).ok();
+        QVERIFY(counter.restore(std::numeric_limits<uint64_t>::max() - 1).ok());
         QCOMPARE(counter.reserve().value(), std::numeric_limits<uint64_t>::max() - 1);
         QVERIFY(counter.exhausted());
 
