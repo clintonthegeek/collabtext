@@ -2859,8 +2859,13 @@ Verification: Required Debug 3/3, Release 3/3, ASan/UBSan 3/3 with
   ASan/UBSan. LeakSanitizer itself is unsupported in this environment and
   failed after successful Qt cases with its ptrace diagnostic.
 Remaining: full physical arrival matrix for both Buffer and IdList encodings;
-  editor manifest-before-seed arrival integration; join lease contention to
-  both engine cases. L08 stays open; GC stays disabled.
+  editor manifest-before-seed arrival integration. L08 stays open; GC stays
+  disabled.
+
+L08 continuation: Added real Buffer and IdList codec round-trips across copied
+  producer/receiver replica trees and verified producer writer-lease contention.
+  Re-ran final-source Debug 3/3, Release 3/3, ASan/UBSan 3/3 and the bounded
+  ASan/UBSan store fault corpus; see the milestone report for evidence paths.
 
 Task: L06
 Status: in progress (retirement budget implemented; runtime verification pending)

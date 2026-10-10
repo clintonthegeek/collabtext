@@ -2546,7 +2546,7 @@
       "gate": null,
       "status": "in_progress",
       "baseline_revision": "d1a7b28",
-      "notes": "Partial L08 evidence: physical separate-root newest-before-oldest arrival, corrupt older-segment refusal/repair, and fresh receiver replay now executable in tst_store_lifecycle. Debug/Release/ASan selected suites and bounded store fault corpus pass; see docs/reports/vnext-recovery-milestone.md. Remaining acceptance: separate-tree arrival matrix for Buffer and IdList encodings, editor manifest-before-seed integration, and joining writer lease contention to both operation-kind paths. GC stays disabled."
+      "notes": "Partial L08 evidence: physically separate-root tests now transfer and apply real Buffer and IdList codec operations; a controlled newest-before-oldest/corruption/repair sequence checks replay incompleteness, and writer lease contention is checked. Debug/Release/ASan selected suites and bounded fault corpus pass; see docs/reports/vnext-recovery-milestone.md. Remaining: run the full missing/corrupt arrival matrix against both engine operation encodings, and add editor manifest-before-seed arrival integration. GC stays disabled."
     },
     {
       "id": "S04",

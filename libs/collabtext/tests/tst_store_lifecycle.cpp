@@ -1,7 +1,11 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "crdt/Buffer.h"
+#include "crdt/IdList.h"
+#include "crdt/IdentityAllocator.h"
 #include "transport/StreamSync.h"
+#include <collabtext/Serialization.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -16,6 +20,19 @@ using namespace CollabText::Crdt;
 namespace fs = std::filesystem;
 
 namespace {
+void copy_tree(const fs::path &from, const fs::path &to) {
+  fs::create_directories(to);
+  for (const auto &entry : fs::recursive_directory_iterator(from)) {
+    const auto rel = fs::relative(entry.path(), from);
+    const auto target = to / rel;
+    if (entry.is_directory()) fs::create_directories(target);
+    else if (entry.is_regular_file()) {
+      fs::create_directories(target.parent_path());
+      fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+    }
+  }
+}
+
 fs::path stream_path(const fs::path &root, const ActorId &actor,
                      const std::string &stream, uint64_t epoch) {
   std::string escaped;
@@ -31,6 +48,86 @@ fs::path stream_path(const fs::path &root, const ActorId &actor,
 class TestStoreLifecycle final : public QObject {
   Q_OBJECT
 private slots:
+  void buffer_and_idlist_operations_recover_from_copied_replica_tree() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const fs::path base = tmp.path().toStdString();
+    const fs::path device_a = base / "producer";
+    const fs::path device_b = base / "receiver";
+    const auto producer = CollabText::Test::actor(91);
+    const auto receiver_actor = CollabText::Test::actor(92);
+    const StreamScope text_scope{"document:text", 2};
+    const StreamScope list_scope{"document:list", 2};
+
+    Crdt::Buffer source_text(CollabText::Test::test_counter(91));
+    auto text_op = source_text.try_apply_local_edit({{0, 0}}, {"recover me"});
+    QVERIFY(text_op.ok());
+    auto text_bytes = Crdt::encode_operation(text_op.value());
+    QVERIFY(text_bytes.ok());
+
+    Crdt::IdList source_list(CollabText::Test::test_counter(91));
+    auto list_op = source_list.try_insert_after(Crdt::Anchor::min(), 0xabc);
+    QVERIFY(list_op.ok());
+    auto list_bytes = Crdt::encode_idlist_operation(list_op.value());
+    QVERIFY(list_bytes.ok());
+
+    {
+      FileOpStream sender(device_a, producer);
+      QVERIFY(sender.start().ok());
+      QVERIFY(sender.register_stream(text_scope).ok());
+      QVERIFY(sender.register_stream(list_scope).ok());
+      QVERIFY(sender.push({{text_scope.stream, text_scope.epoch, producer, 1},
+                           text_bytes.value()}, PushDurability::durable).ok());
+      QVERIFY(sender.push({{list_scope.stream, list_scope.epoch, producer, 1},
+                           list_bytes.value()}, PushDurability::durable).ok());
+
+      // The same actor cannot have two concurrent local writers, regardless of
+      // which engine or stream is being written.
+      FileOpStream competing(device_a, producer);
+      auto competing_start = competing.start();
+      QVERIFY(!competing_start.ok());
+      QCOMPARE(competing_start.error().code(), ErrorCode::writer_conflict);
+      QVERIFY(sender.close().ok());
+    }
+
+    copy_tree(device_a / "replicas", device_b / "replicas");
+    FileOpStream replica(device_b, receiver_actor);
+    QVERIFY(replica.start().ok());
+    QVERIFY(replica.register_stream(text_scope).ok());
+    QVERIFY(replica.register_stream(list_scope).ok());
+
+    Crdt::Buffer recovered_text(CollabText::Test::test_counter(93));
+    size_t text_count = 0;
+    auto text_replay = replica.replay_all(text_scope, [&](const InboundDelivery &d) -> Result<void> {
+      auto decoded = Crdt::decode_operation(d.payload);
+      if (!decoded.ok()) return decoded.error();
+      auto outcome = recovered_text.apply_ops({decoded.value()});
+      if (outcome.size() != 1 || outcome.front().kind() != ApplyOutcomeKind::applied)
+        return Error(ErrorCode::malformed, "recovered Buffer operation was not applied");
+      ++text_count;
+      return {};
+    });
+    QVERIFY(text_replay.ok());
+    QCOMPARE(text_count, size_t(1));
+    QCOMPARE(recovered_text.text(), std::string("recover me"));
+
+    Crdt::IdList recovered_list(CollabText::Test::test_counter(94));
+    size_t list_count = 0;
+    auto list_replay = replica.replay_all(list_scope, [&](const InboundDelivery &d) -> Result<void> {
+      auto decoded = Crdt::decode_idlist_operation(d.payload);
+      if (!decoded.ok()) return decoded.error();
+      auto outcome = recovered_list.apply_ops({decoded.value()});
+      if (outcome.size() != 1 || outcome.front().kind() != ApplyOutcomeKind::applied)
+        return Error(ErrorCode::malformed, "recovered IdList operation was not applied");
+      ++list_count;
+      return {};
+    });
+    QVERIFY(list_replay.ok());
+    QCOMPARE(list_count, size_t(1));
+    QCOMPARE(recovered_list.ids(), (std::vector<uint64_t>{0xabc}));
+    QVERIFY(replica.close().ok());
+  }
+
   void physically_separate_replica_roots_replay_after_restart() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
