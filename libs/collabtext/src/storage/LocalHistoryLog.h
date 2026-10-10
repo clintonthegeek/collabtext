@@ -19,7 +19,8 @@ struct PendingLocalHistoryCommit {
 class LocalHistoryLog {
 public:
   [[nodiscard]] static Result<LocalHistoryLog>
-  open(std::filesystem::path path, ActorId owner);
+  open(std::filesystem::path path, ActorId owner,
+       const StepHook *hook = nullptr);
 
   LocalHistoryLog(LocalHistoryLog &&) noexcept = default;
   LocalHistoryLog &operator=(LocalHistoryLog &&) noexcept = default;
@@ -37,11 +38,13 @@ public:
   [[nodiscard]] Result<void> close() { return {}; }
 
 private:
-  LocalHistoryLog(std::filesystem::path path, ActorId owner)
-      : m_path(std::move(path)), m_owner(std::move(owner)) {}
+  LocalHistoryLog(std::filesystem::path path, ActorId owner,
+                  const StepHook *hook)
+      : m_path(std::move(path)), m_owner(std::move(owner)), m_hook(hook) {}
 
   std::filesystem::path m_path;
   ActorId m_owner;
+  const StepHook *m_hook = nullptr;
 };
 
 } // namespace CollabText::Storage

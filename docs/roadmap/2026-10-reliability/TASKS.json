@@ -2398,14 +2398,15 @@
       "consumer_requirements": [
         "W5"
       ],
-      "progress": "Partial: Buffer and IdList expose replay-validated local history snapshots and enforce step/retained-byte limits. DocumentSession accepts max_undo_steps/max_undo_bytes, restores Buffer history after full replay, and retries pending edit/undo/redo commits from durable intent records. Coalescing carries byte charges; oversized Buffer edits are refused before reserving identities. Tests cover both primitive snapshots, byte-budget trim/refusal, policy-preserving reopen, pending-intent recovery, undo\u2192close\u2192reopen\u2192redo, and owner undo preserving peer edits.",
+      "progress": "Partial: Buffer and IdList expose replay-validated local history snapshots and enforce step/retained-byte limits. DocumentSession accepts max_undo_steps/max_undo_bytes, restores Buffer history after full replay, and retries pending edit/undo/redo commits from durable intent records. Coalescing carries byte charges; oversized Buffer edits are refused before reserving identities. Restart tests cover pending-intent recovery, undo\u2192reopen\u2192redo, and owner undo preserving peer edits. A filesystem crash matrix now checks failures before intent publication, directory-sync uncertainty after rename, checkpoint failure, and failed pending-marker clear.",
       "verification_results": {
-        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, including configurable policy across reopen; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261006T215910Z-2"
+        "undo_debug": "PASS: tst_persistent_undo, tst_idlist_undo, tst_undomap, tst_session_recovery; 4/4 passed, including history commit crash matrix, configurable policy across reopen, pending-intent recovery, and peer-edit preservation; GCC 16.2.1 Debug; build-roadmap-debug/verification/20261010T031812Z-2",
+        "history_commit_crash_matrix": "PASS: injected Write/FileSync/Close/Replace failures leave no intent; post-rename DirSync uncertainty leaves a complete recoverable intent; checkpoint failure preserves the old checkpoint plus intent; failed clear preserves the retryable intent and completed checkpoint. Included in build-roadmap-debug/verification/20261010T031812Z-2."
       },
       "artifacts": [
-        "build-roadmap-debug/verification/20261006T215910Z-2/"
+        "build-roadmap-debug/verification/20261010T031812Z-2/"
       ],
-      "remaining_gap": "Inject crashes at every intent/push/checkpoint/clear boundary; persist consumer-owned IdList history and expose durable coalescing/retirement group metadata for W5. The retained-byte charge is an estimate, not an allocator-level memory measurement. Buffer undo/redo identity reservation failures map to not_found because the primitive API returns optional."
+      "remaining_gap": "Inject failure in the FileOpStream push within the full DocumentSession intent protocol; expose typed Buffer/IdList undo/redo reservation failures; persist consumer-owned IdList history and expose durable coalescing/retirement group metadata for W5. The retained-byte charge is an estimate, not an allocator-level memory measurement."
     },
     {
       "id": "L07",

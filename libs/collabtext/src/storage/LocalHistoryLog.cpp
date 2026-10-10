@@ -154,10 +154,11 @@ bool belongs_to(const Crdt::LocalHistorySnapshot &snapshot,
 } // namespace
 
 Result<LocalHistoryLog> LocalHistoryLog::open(std::filesystem::path path,
-                                               ActorId owner) {
+                                               ActorId owner,
+                                               const StepHook *hook) {
   if (!owner.valid())
     return Error(ErrorCode::invalid_identity, "local history needs a valid owner");
-  return LocalHistoryLog(std::move(path), std::move(owner));
+  return LocalHistoryLog(std::move(path), std::move(owner), hook);
 }
 
 Result<std::optional<Crdt::LocalHistorySnapshot>>
@@ -240,7 +241,7 @@ LocalHistoryLog::store_snapshot(const Crdt::LocalHistorySnapshot &snapshot) {
   auto record = encode(snapshot, m_owner);
   if (record.size() > kMaxSnapshotBytes)
     return Error(ErrorCode::limit_exceeded, "local history snapshot exceeds byte limit");
-  return replace_atomically(m_path, record);
+  return replace_atomically(m_path, record, m_hook);
 }
 
 Result<void> LocalHistoryLog::store_pending(
@@ -259,12 +260,12 @@ Result<void> LocalHistoryLog::store_pending(
                  "pending local history commit exceeds byte limit");
   auto path = m_path;
   path += ".pending";
-  return replace_atomically(path, bytes);
+  return replace_atomically(path, bytes, m_hook);
 }
 
 Result<void> LocalHistoryLog::clear_pending() {
   auto path = m_path;
   path += ".pending";
-  return replace_atomically(path, "CLP0\n");
+  return replace_atomically(path, "CLP0\n", m_hook);
 }
 } // namespace CollabText::Storage

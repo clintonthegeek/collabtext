@@ -1,6 +1,10 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <memory>
+#include <optional>
+#include <vector>
+
 #include "crdt/Buffer.h"
 #include "crdt/IdList.h"
 #include "storage/LocalHistoryLog.h"
@@ -151,6 +155,112 @@ private slots:
     auto cleared = log.recover_pending();
     QVERIFY(cleared.ok());
     QVERIFY(!cleared.value().has_value());
+  }
+
+  void history_commit_fault_matrix_keeps_old_or_recoverable_state() {
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto root = std::filesystem::path(temp.path().toStdString());
+    const auto owner = Test::actor(9);
+    Crdt::LocalHistorySnapshot empty;
+    Storage::PendingLocalHistoryCommit pending{7, "operation-bytes", empty};
+
+    const std::vector<Storage::Step> pre_publish_steps{
+        Storage::Step::Write, Storage::Step::FileSync,
+        Storage::Step::Close, Storage::Step::Replace};
+    for (size_t i = 0; i < pre_publish_steps.size(); ++i) {
+      const auto path = root / ("pre-" + std::to_string(i)) / "history.snapshot";
+      std::filesystem::create_directories(path.parent_path());
+      auto fail_once = std::make_shared<bool>(false);
+      Storage::StepHook hook;
+      hook.fail = [step = pre_publish_steps[i], fail_once](Storage::Step actual,
+                                                          const auto &) {
+        if (actual == step && !*fail_once) {
+          *fail_once = true;
+          return std::optional<Error>(
+              Error(ErrorCode::io_error, "injected checkpoint failure"));
+        }
+        return std::optional<Error>{};
+      };
+      auto opened = Storage::LocalHistoryLog::open(path, owner, &hook);
+      QVERIFY(opened.ok());
+      auto log = std::move(opened).value();
+      QVERIFY(!log.store_pending(pending).ok());
+      auto recovered = log.recover_pending();
+      QVERIFY(recovered.ok());
+      QVERIFY(!recovered.value().has_value());
+    }
+
+    // A directory-sync failure is after rename: the call reports uncertainty,
+    // while recovery sees the complete intent and can retry it.
+    const auto uncertain_path = root / "uncertain" / "history.snapshot";
+    std::filesystem::create_directories(uncertain_path.parent_path());
+    Storage::StepHook dir_sync_failure;
+    dir_sync_failure.fail = [](Storage::Step step, const auto &) {
+      if (step == Storage::Step::DirSync)
+        return std::optional<Error>(Error(ErrorCode::io_error,
+                                           "injected directory-sync failure"));
+      return std::optional<Error>{};
+    };
+    auto uncertain_open =
+        Storage::LocalHistoryLog::open(uncertain_path, owner, &dir_sync_failure);
+    QVERIFY(uncertain_open.ok());
+    auto uncertain = std::move(uncertain_open).value();
+    auto publish_result = uncertain.store_pending(pending);
+    QVERIFY(!publish_result.ok());
+    QCOMPARE(publish_result.error().code(), ErrorCode::commit_uncertain);
+    auto intent = uncertain.recover_pending();
+    QVERIFY(intent.ok());
+    QVERIFY(intent.value().has_value());
+    QCOMPARE(intent.value()->sequence, uint64_t(7));
+
+    // Once intent publication succeeds, a checkpoint failure leaves both the
+    // previous checkpoint and the pending transaction available for replay.
+    auto clean_open = Storage::LocalHistoryLog::open(uncertain_path, owner);
+    QVERIFY(clean_open.ok());
+    auto clean = std::move(clean_open).value();
+    Crdt::LocalHistorySnapshot next;
+    next.cursor = 0;
+    Storage::StepHook checkpoint_failure;
+    checkpoint_failure.fail = [](Storage::Step step, const auto &file_path) {
+      if (step == Storage::Step::FileSync &&
+          file_path.filename().string().starts_with("history.snapshot.tmp."))
+        return std::optional<Error>(Error(ErrorCode::io_error,
+                                           "injected history checkpoint failure"));
+      return std::optional<Error>{};
+    };
+    auto checkpoint_open = Storage::LocalHistoryLog::open(
+        uncertain_path, owner, &checkpoint_failure);
+    QVERIFY(checkpoint_open.ok());
+    auto checkpoint_log = std::move(checkpoint_open).value();
+    QVERIFY(!checkpoint_log.store_snapshot(next).ok());
+    auto still_pending = checkpoint_log.recover_pending();
+    QVERIFY(still_pending.ok() && still_pending.value().has_value());
+    auto old_checkpoint = checkpoint_log.recover();
+    QVERIFY(old_checkpoint.ok() && !old_checkpoint.value().has_value());
+
+    // A failed clear leaves a harmless replayable intent after checkpointing;
+    // recovery can repeat publication and complete the clear.
+    Storage::StepHook clear_failure;
+    clear_failure.fail = [](Storage::Step step, const auto &file_path) {
+      if (step == Storage::Step::FileSync &&
+          file_path.filename().string().starts_with("history.snapshot.pending.tmp."))
+        return std::optional<Error>(Error(ErrorCode::io_error,
+                                           "injected pending-marker clear failure"));
+      return std::optional<Error>{};
+    };
+    auto clear_open = Storage::LocalHistoryLog::open(uncertain_path, owner,
+                                                     &clear_failure);
+    QVERIFY(clear_open.ok());
+    auto clear_log = std::move(clear_open).value();
+    QVERIFY(clear_log.store_snapshot(next).ok());
+    QVERIFY(!clear_log.clear_pending().ok());
+    QVERIFY(clear_log.recover_pending().value().has_value());
+    auto committed_checkpoint = clear_log.recover();
+    QVERIFY(committed_checkpoint.ok());
+    QVERIFY(committed_checkpoint.value().has_value());
+    QVERIFY(clean.clear_pending().ok());
+    QVERIFY(!clean.recover_pending().value().has_value());
   }
 };
 
