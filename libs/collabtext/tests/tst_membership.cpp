@@ -1,9 +1,12 @@
+#include <QCoreApplication>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <QTest>
 
 #include "storage/MembershipStore.h"
 
 #include <fstream>
+#include <iostream>
 #include <optional>
 
 using namespace CollabText;
@@ -56,6 +59,27 @@ private slots:
     }
     auto wrong_owner = MembershipStore::open(path, actor(9));
     QVERIFY(!wrong_owner.ok());
+  }
+
+  void writerLeaseExcludesASecondProcess() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto path=std::filesystem::path(dir.path().toStdString())/"cross-process.log";
+    QProcess holder;
+    holder.start(QCoreApplication::applicationFilePath(),
+        {"--hold-membership-lease",QString::fromStdString(path.string())});
+    QVERIFY(holder.waitForStarted());
+    QVERIFY(holder.waitForReadyRead(5000));
+    QCOMPARE(QString::fromUtf8(holder.readLine()).trimmed(),QStringLiteral("ready"));
+
+    auto competing=MembershipStore::open(path,actor(94));
+    QVERIFY(!competing.ok()); QCOMPARE(competing.error().code(),ErrorCode::writer_conflict);
+
+    holder.closeWriteChannel();
+    QVERIFY(holder.waitForFinished(5000));
+    QCOMPARE(holder.exitStatus(),QProcess::NormalExit);
+    QCOMPARE(holder.exitCode(),0);
+    auto after_release=MembershipStore::open(path,actor(94));
+    QVERIFY(after_release.ok());
   }
 
   void refusesTornAndCorruptTailInsteadOfDroppingMembership() {
@@ -331,5 +355,19 @@ private slots:
   }
 };
 
-QTEST_GUILESS_MAIN(TestMembership)
+int main(int argc,char **argv) {
+  QCoreApplication app(argc,argv);
+  if(argc==3 && std::string_view(argv[1])=="--hold-membership-lease") {
+    auto opened=MembershipStore::open(std::filesystem::path(argv[2]),actor(94));
+    if(!opened.ok()) {
+      std::cerr<<opened.error().message()<<'\n';
+      return 2;
+    }
+    std::cout<<"ready\n"<<std::flush;
+    std::cin.get();
+    return 0;
+  }
+  TestMembership test;
+  return QTest::qExec(&test,argc,argv);
+}
 #include "tst_membership.moc"
