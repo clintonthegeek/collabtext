@@ -140,6 +140,22 @@ canonical frontier; an incomplete projection blocks checkpoint acceptance.
 The caller supplies the canonical event-log projection hash and compares it to
 recovered provider state before relying on the pin set.
 
+The Anchor translation section begins with a u32 supported-token-version count
+(1–64), the strictly increasing u32 versions, and a u32 translation count (at
+most 65,536). Each entry stores a u16 printable-ASCII pin reference ID, u64
+source epoch, u32 source-token length and exact source CTPT bytes, then u32
+current-token length and exact translated CTPT bytes. Entries are ordered by
+reference ID. Every live pin older than the checkpoint epoch has exactly one
+entry; no current-epoch pin has one. The source bytes and epoch must equal the
+corresponding Pins record, and both tokens must validate for the same document,
+stream and primitive at their respective epochs. A final 32-byte SHA-256 digest
+binds all preceding section bytes and is the translation manifest hash. The
+membership verifier compares this hash and the exact supported-version list
+with the immutable epoch descriptor. The codec checks identity, scope, ordering
+and digest; the provider that creates a translation remains responsible for
+proving that it preserves boundary meaning before publication. Unsupported
+token versions fail closed in the CTPT reader and require a checked translation.
+
 The Engine section starts with `u16 engine_kind` and `u32 entry_count`, with a
 maximum of 1,000,000 entries. Every identity uses the 24-byte encoding above.
 Each entry then stores its origin identity and a placement link: a parent

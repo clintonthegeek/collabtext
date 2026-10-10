@@ -78,6 +78,19 @@ struct CheckpointShareableCore {
     std::string canonical_projection_hash;
     std::vector<RetainedAnchorPin> live_pins;
   } pins;
+  struct Translation {
+    std::string reference_id;
+    uint64_t source_epoch = 0;
+    std::string source_token_bytes;
+    std::string current_token_bytes;
+    bool operator==(const Translation &) const = default;
+  };
+  struct TokenTranslations {
+    std::vector<uint32_t> supported_token_versions;
+    std::string manifest_hash;
+    std::vector<Translation> entries;
+    bool operator==(const TokenTranslations &) const = default;
+  } translations;
 };
 
 inline constexpr size_t kCheckpointMaxBytes = 256u * 1024u * 1024u;
@@ -133,5 +146,18 @@ encode_checkpoint_pins(const CheckpointShareableCore::Pins &pins,
 [[nodiscard]] Result<CheckpointShareableCore::Pins>
 decode_checkpoint_pins(const CheckpointSection &section,
                        const CheckpointContext &context);
+[[nodiscard]] Result<CheckpointSection>
+encode_checkpoint_translations(
+    const CheckpointShareableCore::TokenTranslations &translations,
+    const CheckpointContext &context,
+    const CheckpointShareableCore::Pins &pins);
+[[nodiscard]] Result<CheckpointShareableCore::TokenTranslations>
+decode_checkpoint_translations(
+    const CheckpointSection &section, const CheckpointContext &context,
+    const CheckpointShareableCore::Pins &pins);
+[[nodiscard]] Result<void>
+validate_checkpoint_translations(
+    const CheckpointShareableCore::TokenTranslations &translations,
+    const MembershipDescriptor &descriptor);
 
 }  // namespace CollabText::Storage

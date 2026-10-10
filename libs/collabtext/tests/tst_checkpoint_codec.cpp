@@ -14,10 +14,16 @@ using namespace CollabText::Storage;
 
 namespace {
 
+std::string raw_digest(std::string_view input);
+
 std::vector<CheckpointSection> shared_sections() {
+  std::string empty_manifest(12, '\0');
+  empty_manifest[3] = 1;
+  empty_manifest[7] = 1;
+  empty_manifest.append(raw_digest(empty_manifest));
   return {{1, 1, "ctx"}, {2, 1, "engine"}, {3, 1, "causal"},
           {4, 1, "deferred"}, {5, 1, "coverage"}, {6, 1, "pins"},
-          {7, 1, "translations"}};
+          {7, 1, std::move(empty_manifest)}};
 }
 
 std::vector<CheckpointSection> local_sections() {
@@ -533,6 +539,10 @@ private slots:
     QVERIFY(old_boundary);
     auto old_token = encode_position(PositionToken{old_boundary.value()});
     QVERIFY(old_token);
+    auto current_boundary = engine.value()->boundary_at(0, Affinity::right);
+    QVERIFY(current_boundary);
+    auto current_token = encode_position(PositionToken{current_boundary.value()});
+    QVERIFY(current_token);
     auto old_epoch_pins = pins;
     old_epoch_pins.live_pins[0].scope = old_scope;
     old_epoch_pins.live_pins[0].token_bytes = old_token.value();
@@ -542,6 +552,81 @@ private slots:
     QVERIFY(old_epoch_decoded);
     QCOMPARE(old_epoch_decoded.value().live_pins[0].scope, old_scope);
     QCOMPARE(old_epoch_decoded.value().live_pins[0].token_bytes, old_token.value());
+
+    CheckpointShareableCore::TokenTranslations translations;
+    translations.supported_token_versions = {1};
+    translations.entries.push_back(
+        {"reply-1", 6, old_token.value(), current_token.value()});
+    auto translations_section = encode_checkpoint_translations(
+        translations, context, old_epoch_decoded.value());
+    QVERIFY(translations_section);
+    auto decoded_translations = decode_checkpoint_translations(
+        translations_section.value(), context, old_epoch_decoded.value());
+    QVERIFY(decoded_translations);
+    QCOMPARE(decoded_translations.value().entries, translations.entries);
+    QVERIFY(!decoded_translations.value().manifest_hash.empty());
+    for (size_t length = 0; length < translations_section.value().bytes.size(); ++length) {
+      auto truncated = translations_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_translations(
+                   truncated, context, old_epoch_decoded.value()),
+               qPrintable(QString::number(length)));
+    }
+    auto tampered_translation = translations_section.value();
+    tampered_translation.bytes[tampered_translation.bytes.size() - 1] ^= 1;
+    QVERIFY(!decode_checkpoint_translations(
+        tampered_translation, context, old_epoch_decoded.value()));
+    MembershipDescriptor descriptor;
+    descriptor.supported_token_versions = {1};
+    descriptor.translation_manifest_hash =
+        decoded_translations.value().manifest_hash;
+    QVERIFY(validate_checkpoint_translations(decoded_translations.value(), descriptor));
+    descriptor.translation_manifest_hash[0] =
+        descriptor.translation_manifest_hash[0] == '0' ? '1' : '0';
+    QVERIFY(!validate_checkpoint_translations(decoded_translations.value(), descriptor));
+    auto unsupported_versions = translations;
+    unsupported_versions.supported_token_versions = {1, 2};
+    QVERIFY(!encode_checkpoint_translations(
+        unsupported_versions, context, old_epoch_decoded.value()));
+    auto missing_translation = translations;
+    missing_translation.entries.clear();
+    QVERIFY(!encode_checkpoint_translations(
+        missing_translation, context, old_epoch_decoded.value()));
+    auto mismatched_source = translations;
+    mismatched_source.entries[0].source_token_bytes = current_token.value();
+    QVERIFY(!encode_checkpoint_translations(
+        mismatched_source, context, old_epoch_decoded.value()));
+    auto wrong_destination_scope = translations;
+    wrong_destination_scope.entries[0].current_token_bytes = old_token.value();
+    QVERIFY(!encode_checkpoint_translations(
+        wrong_destination_scope, context, old_epoch_decoded.value()));
+
+    CheckpointCausalState empty_causal;
+    auto ctx_section = encode_checkpoint_context(context);
+    auto engine_section = encode_checkpoint_engine(CheckpointEngineState{});
+    auto causal_section = encode_checkpoint_causal(empty_causal);
+    auto deferred_section = encode_checkpoint_deferred({}, context, empty_causal.version);
+    auto coverage_section = encode_checkpoint_coverage({});
+    QVERIFY(ctx_section && engine_section && causal_section && deferred_section &&
+            coverage_section);
+    auto core_sections = shared_sections();
+    core_sections[0] = ctx_section.value();
+    core_sections[1] = engine_section.value();
+    core_sections[2] = causal_section.value();
+    core_sections[3] = deferred_section.value();
+    core_sections[4] = coverage_section.value();
+    core_sections[5] = old_epoch_encoded.value();
+    core_sections[6] = translations_section.value();
+    auto core_frame = encode_checkpoint(CheckpointKind::Shareable,
+                                       std::move(core_sections));
+    QVERIFY(core_frame);
+    auto core_artifact = decode_checkpoint(core_frame.value(),
+                                           CheckpointKind::Shareable);
+    QVERIFY(core_artifact);
+    auto translated_core = decode_checkpoint_core(core_artifact.value());
+    QVERIFY(translated_core);
+    QCOMPARE(translated_core.value().translations.entries,
+             translations.entries);
 
     auto bad_scope = pins;
     bad_scope.live_pins[0].scope.epoch++;

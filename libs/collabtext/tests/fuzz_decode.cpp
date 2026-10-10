@@ -65,6 +65,17 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                     (void)CollabText::Storage::decode_checkpoint_pins(section,
                                                                      context.value());
             }
+            else if (section.id == 7 && shareable.value().sections.size() == 7) {
+                const auto context = CollabText::Storage::decode_checkpoint_context(
+                    shareable.value().sections[0]);
+                if (context) {
+                    const auto pins = CollabText::Storage::decode_checkpoint_pins(
+                        shareable.value().sections[5], context.value());
+                    if (pins)
+                        (void)CollabText::Storage::decode_checkpoint_translations(
+                            section, context.value(), pins.value());
+                }
+            }
         }
     }
     (void)CollabText::Storage::decode_checkpoint(
@@ -84,5 +95,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         {6, 1, std::string(bytes)},
         CollabText::Storage::CheckpointContext{"doc", "main", 1, "",
             CollabText::Storage::CheckpointEngineKind::Text});
+    (void)CollabText::Storage::decode_checkpoint_translations(
+        {7, 1, std::string(bytes)},
+        CollabText::Storage::CheckpointContext{"doc", "main", 1, "",
+            CollabText::Storage::CheckpointEngineKind::Text},
+        CollabText::Storage::CheckpointShareableCore::Pins{});
     return 0;
 }

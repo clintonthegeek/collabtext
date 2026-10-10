@@ -83,6 +83,7 @@ add_library(collabtext_core STATIC
     src/storage/CheckpointDeferredCodec.cpp
     src/storage/CheckpointEngineCodec.cpp
     src/storage/CheckpointPinsCodec.cpp
+    src/storage/CheckpointTranslationCodec.cpp
     src/storage/LocalHistoryLog.cpp
     src/storage/MembershipStore.cpp
     src/storage/RetentionState.cpp

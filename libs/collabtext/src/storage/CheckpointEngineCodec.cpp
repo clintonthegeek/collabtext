@@ -364,6 +364,10 @@ Result<CheckpointShareableCore> decode_checkpoint_core(
   auto pins = decode_checkpoint_pins(artifact.sections[5], core.context);
   if (!pins) return pins.error().with_context("checkpoint.core");
   core.pins = std::move(pins.value());
+  auto translations = decode_checkpoint_translations(
+      artifact.sections[6], core.context, core.pins);
+  if (!translations) return translations.error().with_context("checkpoint.core");
+  core.translations = std::move(translations.value());
   return core;
 }
 
