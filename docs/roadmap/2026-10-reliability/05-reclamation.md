@@ -17,6 +17,7 @@ Read [execution rules](EXECUTION.md) and [decisions](DECISIONS.md) before starti
 
 - `docs/specs/vnext-membership-gc.md`
 - `libs/collabtext/tests/reference/GcModel.h`
+- `libs/collabtext/tests/tst_gc_model.cpp`
 - `docs/specs/vnext-external-position-contract.md`
 
 **Steps:**

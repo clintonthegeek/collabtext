@@ -3038,3 +3038,14 @@ manifest v10. The final 14-case CrdtEngine API test passed in Debug, Release,
 and ASan/UBSan. Leak detection was disabled for ASan because this runner's
 LeakSanitizer shutdown is unsupported under ptrace; no ASan/UBSan finding was
 reported. `tools/check-public-headers.sh` passed.
+
+## G01 — specify membership epochs and reclamation certificates
+
+**Status:** complete
+**Baseline:** `14c374f`
+
+Added `docs/specs/vnext-membership-gc.md` as the normative protocol and an independent slow eligibility model in `libs/collabtext/tests/reference/GcModel.h`. Membership is immutable within each epoch; enrollment and retirement require explicit durable transitions, silent peers remain members, and returning retired peers retain an exportable unsynced branch. Certificates require exact common per-stream/per-producer delivery and operation coverage, undo-retirement floors, validated complete checkpoints, and complete external pin projections/translations. The model rejects stale or missing acknowledgements, deferred/cross-stream work, unknown actors, unresolved concurrent proposals, retained relevant undo/redo, corruption, and missing translation. Live pins survive retirement of their author; orphan metadata accounting saturates safely.
+
+The independent QtTest target exercises F1/F2/F3 histories, membership and crash-window adversaries, checkpoint and pin requirements, and a bounded exhaustive undo/redo-retention matrix. This task specifies and models eligibility; it does not enable production reclamation.
+
+**Verification:** `tst_gc_model` passed 15/15 in Debug, Release, and ASan/UBSan (`ASAN_OPTIONS=detect_leaks=0`). `validate-plan.py`, `check-scope.py --strict`, and `git diff --check` passed. LeakSanitizer remains unavailable in this runner because its shutdown is incompatible with ptrace; ASan/UBSan reported no issue.

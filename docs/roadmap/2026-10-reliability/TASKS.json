@@ -2829,7 +2829,8 @@
       "files": [
         "docs/specs/vnext-membership-gc.md",
         "libs/collabtext/tests/reference/GcModel.h",
-        "docs/specs/vnext-external-position-contract.md"
+        "docs/specs/vnext-external-position-contract.md",
+        "libs/collabtext/tests/tst_gc_model.cpp"
       ],
       "steps": [
         "Define immutable epoch membership, explicit enrollment/retirement events, producer identities, and how new actors join without invalidating an already published common frontier. Devices stay enrolled indefinitely until explicitly retired; elapsed time, reminders, and presence are advisory and never acknowledgements.",
@@ -2852,10 +2853,12 @@
         "R10"
       ],
       "gate": "Q2/Q3 resolved: explicit retirement and persistent undo/redo. The protocol still requires complete independent review/model checks; incomplete certificates never unlock physical GC.",
-      "status": "not_started",
+      "status": "complete",
       "consumer_requirements": [
         "W3"
-      ]
+      ],
+      "baseline_revision": "14c374f",
+      "notes": "Completed the normative epoch-membership and reclamation-certificate protocol plus an independent bounded value model. It defines explicit durable enrollment/retirement, silent-peer obligations, per-stream/per-producer common coverage by intersection, private undo-retirement, checkpoint integrity, external pin projection and translation requirements, crash/interruption and returning-peer reconciliation. Eligibility rejects incomplete or stale evidence, unresolved forks, retained relevant undo/redo, corrupt/incomplete checkpoints, and missing pin translations. Tests cover F1/F2/F3, membership transitions, crash windows, pins, checkpoints, unknown actors, cross-stream/deferred coverage, and a bounded exhaustive undo/redo matrix. Debug, Release, and ASan/UBSan model suites pass 15/15; LeakSanitizer is disabled due this runner's ptrace limitation. Plan and strict scope validators pass. This is a bounded protocol model only; production physical GC remains disabled pending G02-G06."
     },
     {
       "id": "G02",

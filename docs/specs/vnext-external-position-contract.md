@@ -105,10 +105,13 @@ the referenced document object, such as a live reply, rather than to the presenc
 of the device that authored it. Retiring that device does not release a live
 reply's pin. Undo limits and ephemeral cursor timeouts do not release it either.
 
-S05/G01 specify the pin state machine, including idempotent registration,
+S05 specifies the pin state machine, including idempotent registration,
 replay/recovery, concurrent release, permitted undo of release, and incomplete
-external-log projections. An adapter must establish durable pin protection before
-publishing an attachment that depends on it, and recover pins before enabling GC.
+external-log projections. G01's [membership and reclamation
+protocol](vnext-membership-gc.md) defines how those obligations gate
+certificate eligibility. An adapter must establish durable pin protection
+before publishing an attachment that depends on it, and recover pins before
+enabling GC.
 Two unrelated successful writes do not establish atomicity across the external
 event log and the engine store. Define the actual protocol: for example, a durable
 pin before an external append with conservative orphan retention, or canonical

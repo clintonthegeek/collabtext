@@ -369,6 +369,12 @@ add_crdt_test(tst_summary_laws)
 add_crdt_test(tst_decode_validation)
 add_crdt_test(tst_operation_validation)
 add_crdt_test(tst_operation_values)
+# G01's reclamation model is deliberately independent of every production
+# target; it uses only values and QtTest, like the S02/S04 model gates.
+add_executable(tst_gc_model tests/tst_gc_model.cpp)
+target_link_libraries(tst_gc_model PRIVATE Qt6::Test)
+target_include_directories(tst_gc_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+add_test(NAME tst_gc_model COMMAND tst_gc_model)
 # Independent S04a model links QtTest only: no production Core or anchor helpers.
 add_executable(tst_boundary_model tests/tst_boundary_model.cpp)
 target_link_libraries(tst_boundary_model PRIVATE Qt6::Test)
