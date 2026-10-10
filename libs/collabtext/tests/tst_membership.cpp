@@ -4,6 +4,7 @@
 #include <QTest>
 
 #include "storage/MembershipStore.h"
+#include "core/Sha256.h"
 
 #include <fstream>
 #include <iostream>
@@ -22,6 +23,13 @@ ActorId actor(uint8_t seed) {
 
 std::string simulated_ack(const ActorId &who, std::string_view digest) {
   return "simulated-durable-ack:" + who.to_string() + ":" + std::string(digest);
+}
+
+std::string membership_record(const ActorId &producer, uint64_t sequence,
+                              uint64_t epoch, const ActorId &subject) {
+  auto body = "CME1 " + producer.to_string() + " " + std::to_string(sequence) +
+      " " + std::to_string(epoch) + " " + subject.to_string() + " E 6161";
+  return body + " " + sha256_hex(body) + "\n";
 }
 }
 
@@ -82,6 +90,21 @@ private slots:
       auto events = store.recover(); QVERIFY(events.ok());
       QCOMPARE(events.value().back().epoch, uint64_t(11));
     }
+  }
+
+  void recoveryRejectsChecksummedSkippedEpoch() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto path = std::filesystem::path(dir.path().toStdString()) / "skipped.log";
+    const auto producer = actor(8), peer = actor(9);
+    {
+      std::ofstream out(path, std::ios::binary);
+      out << membership_record(producer, 1, 9, peer)
+          << membership_record(producer, 2, 11, peer);
+      QVERIFY(out.good());
+    }
+    auto opened = MembershipStore::open(path, producer);
+    QVERIFY(!opened.ok());
+    QCOMPARE(opened.error().code(), ErrorCode::corrupt_record);
   }
 
   void writerLeaseExcludesASecondProcess() {

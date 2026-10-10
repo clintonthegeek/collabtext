@@ -3090,3 +3090,7 @@ Closed a gap in G02's lower-level journal API: `MembershipStore::append()` and r
 ## 2026-10-10 — Returning branch export retry safety
 
 Added a regression proving `DocumentSession::export_local_branch()` returns a visitor's typed failure, stops at the first failed item, and can be retried to emit the same ordered source deliveries. Visitor exceptions now return `io_error` through the API's `Result` contract. `tst_session_recovery` passed Debug (`20261010T164450Z-2`), Release (`20261010T164526Z-12`), and ASan/UBSan (`20261010T164549Z-2`, leak detection disabled for the ptrace-limited runner).
+
+## 2026-10-10 — Reject corrupt membership epoch history
+
+Added a checksummed journal fixture with a skipped epoch, proving recovery rejects semantically inconsistent records even when their record checksums and sequences are valid. `tst_membership` passed Debug (`20261010T164716Z-2`), Release (`20261010T164729Z-12`), and ASan/UBSan (`20261010T164738Z-2`, leak detection disabled for the ptrace-limited runner).
