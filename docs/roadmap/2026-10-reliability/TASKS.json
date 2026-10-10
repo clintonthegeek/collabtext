@@ -2428,7 +2428,22 @@
       "artifacts": [
         "build-roadmap-debug/verification/20261010T041334Z-2/"
       ],
-      "remaining_gap": "The pending-retirement metadata queue has no independent in-memory budget when a consumer delays acknowledgment; retained-byte charges remain policy estimates. Consumer-specific event encoding and multi-block transaction policy remain owned by Markoff/Wave."
+      "remaining_gap": "The pending-retirement metadata queue has no independent in-memory budget when a consumer delays acknowledgment; retained-byte charges remain policy estimates. Consumer-specific event encoding and multi-block transaction policy remain owned by Markoff/Wave.",
+      "baseline_revision": "2f94d6c",
+      "implementation_commits": [
+        "c823228",
+        "d269d93",
+        "6e12088",
+        "b0f83b9",
+        "a752271",
+        "ea16b7d",
+        "147e157",
+        "1063c40",
+        "2ac0510",
+        "75b2c37",
+        "2f94d6c",
+        "8323289"
+      ]
     },
     {
       "id": "L07",
