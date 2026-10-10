@@ -124,6 +124,22 @@ private slots:
     QVERIFY(!stale.ok()); QCOMPARE(stale.error().code(),ErrorCode::wrong_epoch);
     QCOMPARE(store.last_sequence(),uint64_t(0));
 
+    auto forked_descriptor=descriptor;
+    forked_descriptor.hash="concurrent-epoch-seven-hash";
+    auto forked=store.commit_retirement(preview.value(),forked_descriptor,impacts,
+        {{member_a,"durable-ack"},{member_b,"durable-ack"}},"user-confirmation",verifier);
+    QVERIFY(!forked.ok()); QCOMPARE(forked.error().code(),ErrorCode::wrong_epoch);
+    QCOMPARE(store.last_sequence(),uint64_t(0));
+
+    DurableAcknowledgementVerifier rejected_verifier=[](
+        const ActorId &,std::string_view,std::string_view)->Result<void> {
+      return Error(ErrorCode::corrupt_record,"acknowledgement signature is invalid");
+    };
+    auto rejected=store.commit_retirement(preview.value(),descriptor,impacts,
+        {{member_a,"bad-ack"},{member_b,"bad-ack"}},"user-confirmation",rejected_verifier);
+    QVERIFY(!rejected.ok()); QCOMPARE(rejected.error().code(),ErrorCode::corrupt_record);
+    QCOMPARE(store.last_sequence(),uint64_t(0));
+
     auto wrong_ack=store.commit_retirement(preview.value(),descriptor,impacts,
         {{member_a,"durable-ack"},{retiring,"durable-ack"}},"user-confirmation",verifier);
     QVERIFY(!wrong_ack.ok()); QCOMPARE(store.last_sequence(),uint64_t(0));
