@@ -686,9 +686,9 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
         return ranges[a].first < ranges[b].first;
     });
 
-    // The edit is applied to a flat copy of the document. Placement is the slow,
-    // whole-vector path on purpose (S03): one code path, SequenceOrder::integrate,
-    // decides where an element goes for the originator and for every peer.
+    // The edit is applied to a flat copy of the document. SequenceOrder decides
+    // every position for the originator and peers, using its checked append
+    // shortcut only when the link proves the new run belongs at the end.
     auto frags = get_fragments();
 
     // ---- Mint every insertion against the OLD state ----
@@ -880,10 +880,10 @@ Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
     if (!m_version.observed_all(op.version))
         return ApplyStep::not_ready;
 
-    // Every remote edit takes this one path: copy the document, apply the
-    // deletions, integrate each inserted run by its tree relation, rebuild. It is
-    // O(n) per operation by design (S03 disabled the locator fast paths rather than
-    // adapt them); the only thing it must be is the same rule the originator ran.
+    // Remote edits copy the document, apply deletions, integrate inserted runs by
+    // their tree relation, then rebuild. The append shortcut avoids index
+    // construction and middle insertion for a proven tail run; every other link
+    // follows the general placement algorithm.
     auto frags = get_fragments();
 
     apply_deletion_runs(frags, op.deletion_runs, op.deletion_id);

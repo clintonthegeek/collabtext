@@ -9,6 +9,8 @@
 namespace CollabText::Crdt::SequenceOrder {
 namespace {
 
+thread_local IntegrationCounters counters;
+
 /// A position in the flat item sequence: fragment index and offset within it.
 struct Pos {
     size_t frag = 0;
@@ -113,6 +115,19 @@ private:
     Index<Run> m_ix;
 };
 
+/// The only safe direct append is a right child with END as its right origin
+/// and a parent equal to the final current item (or the root of an empty list).
+/// END ranks after every existing right origin; every other shape must run the
+/// general placement search.
+template <class Run>
+bool has_final_append_preconditions(const std::vector<Run>& runs, const Run& incoming) {
+    const Link& link = incoming.link;
+    if (incoming.length == 0 || link.side != Side::Right || link.right_origin) return false;
+    if (!link.parent) return runs.empty();
+    return !runs.empty() && runs.back().length > 0 &&
+           runs.back().item_at(runs.back().length - 1) == *link.parent;
+}
+
 }  // namespace
 
 template <class Run>
@@ -143,7 +158,19 @@ Link mint_link(const std::vector<Run>& frags, const std::optional<Identity>& lef
 }
 
 template <class Run>
-bool integrate(std::vector<Run>& frags, Run incoming) {
+bool integrate_impl(std::vector<Run>& frags, Run incoming, bool allow_append) {
+    // A right child with END as its right origin sorts after every known sibling.
+    // If its parent is the final known item (or the root of an empty sequence),
+    // it is therefore exactly the final run. This skips index construction and
+    // vector middle-insertion while preserving later unseen concurrent siblings:
+    // they will be ordered when their own operation is integrated.
+    if (allow_append && has_final_append_preconditions(frags, incoming)) {
+        frags.push_back(std::move(incoming));
+        ++counters.append_fast;
+        return true;
+    }
+    ++counters.general;
+
     Pos at;
     {
         Walker<Run> w(frags);
@@ -209,6 +236,19 @@ bool integrate(std::vector<Run>& frags, Run incoming) {
 }
 
 template <class Run>
+bool integrate(std::vector<Run>& frags, Run incoming) {
+    return integrate_impl(frags, std::move(incoming), true);
+}
+
+template <class Run>
+bool integrate_slow(std::vector<Run>& frags, Run incoming) {
+    return integrate_impl(frags, std::move(incoming), false);
+}
+
+IntegrationCounters integration_counters() { return counters; }
+void reset_integration_counters() { counters = {}; }
+
+template <class Run>
 std::optional<std::string> check_consistency(const std::vector<Run>& runs) {
     const Index<Run> ix(runs);
     auto where = [&](size_t i) {
@@ -243,9 +283,11 @@ std::optional<std::string> check_consistency(const std::vector<Run>& runs) {
 
 template Link mint_link<Fragment>(const std::vector<Fragment>&, const std::optional<Identity>&);
 template bool integrate<Fragment>(std::vector<Fragment>&, Fragment);
+template bool integrate_slow<Fragment>(std::vector<Fragment>&, Fragment);
 template std::optional<ItemPos> find_item<Fragment>(const std::vector<Fragment>&, const Identity&);
 template Link mint_link<IdListEntry>(const std::vector<IdListEntry>&, const std::optional<Identity>&);
 template bool integrate<IdListEntry>(std::vector<IdListEntry>&, IdListEntry);
+template bool integrate_slow<IdListEntry>(std::vector<IdListEntry>&, IdListEntry);
 template std::optional<ItemPos> find_item<IdListEntry>(const std::vector<IdListEntry>&, const Identity&);
 template std::optional<std::string> check_consistency<Fragment>(const std::vector<Fragment>&);
 template std::optional<std::string> check_consistency<IdListEntry>(const std::vector<IdListEntry>&);

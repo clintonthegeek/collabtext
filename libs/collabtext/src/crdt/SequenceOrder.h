@@ -17,8 +17,9 @@
 // the list is, for each node, its left children (with their subtrees), the node,
 // then its right children (with their subtrees). Same-side siblings are ordered by
 // identity; right siblings are ordered first by the REVERSE list order of their
-// right origins. This is a slow-path, whole-vector implementation by design:
-// correctness against the reference model first, optimization later.
+// right origins. A proven append shortcut handles right children at END whose
+// parent is already the final item; all other placements use the general
+// whole-vector algorithm. The slow route remains available for differential tests.
 
 #include "crdt/Placement.h"
 
@@ -60,6 +61,19 @@ template <class Run>
 template <class Run>
 [[nodiscard]] bool integrate(std::vector<Run>& runs, Run incoming);
 
+/// Force the general placement algorithm. Kept beside the fast route so the
+/// equivalence test can compare both on the same input corpus.
+template <class Run>
+[[nodiscard]] bool integrate_slow(std::vector<Run>& runs, Run incoming);
+
+/// Per-thread path counts; these are diagnostic and never affect document state.
+struct IntegrationCounters {
+    uint64_t append_fast = 0;
+    uint64_t general = 0;
+};
+[[nodiscard]] IntegrationCounters integration_counters();
+void reset_integration_counters();
+
 /// Index of the run holding `id`, with the item's offset in it.
 struct ItemPos {
     size_t run = 0;
@@ -80,9 +94,11 @@ template <class Run>
 
 extern template Link mint_link<Fragment>(const std::vector<Fragment>&, const std::optional<Identity>&);
 extern template bool integrate<Fragment>(std::vector<Fragment>&, Fragment);
+extern template bool integrate_slow<Fragment>(std::vector<Fragment>&, Fragment);
 extern template std::optional<ItemPos> find_item<Fragment>(const std::vector<Fragment>&, const Identity&);
 extern template Link mint_link<IdListEntry>(const std::vector<IdListEntry>&, const std::optional<Identity>&);
 extern template bool integrate<IdListEntry>(std::vector<IdListEntry>&, IdListEntry);
+extern template bool integrate_slow<IdListEntry>(std::vector<IdListEntry>&, IdListEntry);
 extern template std::optional<ItemPos> find_item<IdListEntry>(const std::vector<IdListEntry>&, const Identity&);
 extern template std::optional<std::string> check_consistency<Fragment>(const std::vector<Fragment>&);
 extern template std::optional<std::string> check_consistency<IdListEntry>(const std::vector<IdListEntry>&);

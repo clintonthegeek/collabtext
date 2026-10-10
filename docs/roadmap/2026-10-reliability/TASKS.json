@@ -2791,6 +2791,9 @@
       "files": [
         "libs/collabtext/src/crdt/Buffer.cpp",
         "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/src/crdt/SequenceOrder.cpp",
+        "libs/collabtext/src/crdt/SequenceOrder.h",
+        "libs/collabtext/CMakeLists.txt",
         "libs/collabtext/tests/tst_sequence_fast_paths.cpp",
         "libs/collabtext/tests/tst_edits_since.cpp"
       ],
@@ -2809,9 +2812,9 @@
         "R6"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "185e813",
-      "notes": "Started after S06 completion. Removed the obsolete first-pass accumulator and duplicate state reset from Buffer::edits_since; added split-fragment mixed-Unicode undo reconstruction coverage. Auditing the current shared SequenceOrder path and fuzz/model harness before enabling any shortcut; no safe candidate selected yet."
+      "notes": "Completed. Removed the obsolete accumulator from Buffer::edits_since and added split/mixed-Unicode undo reconstruction coverage. Added a constant-time append path only for nonempty right children at END whose parent is the final known item, or an empty-root insertion; all other links use the retained general algorithm. Per-thread fast/general counters are available. Direct differential coverage compares Buffer Fragment and IdListEntry runs, including split fallback, concurrent same-position roots, hidden/retired origins, and exact boundary offsets/collapse. Full selected Debug and Release gates each passed 7/7; ASan/UBSan passed all six fuzz/differential/fast-path/delta suites with leak detection disabled. The final helper revision passed focused fast-path plus production differential tests in all three modes. Release benchmark-format smoke passed without performance assertions. This establishes correctness within the bounded corpus, not a measured speed claim."
     },
     {
       "id": "G01",

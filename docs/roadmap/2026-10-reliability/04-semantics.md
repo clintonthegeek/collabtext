@@ -357,6 +357,9 @@ Run `./tools/verify-roadmap.sh debug 'tst_sequence_model|tst_sequence_semantics'
 
 - `libs/collabtext/src/crdt/Buffer.cpp`
 - `libs/collabtext/src/crdt/IdList.cpp`
+- `libs/collabtext/src/crdt/SequenceOrder.cpp`
+- `libs/collabtext/src/crdt/SequenceOrder.h`
+- `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/tests/tst_sequence_fast_paths.cpp`
 - `libs/collabtext/tests/tst_edits_since.cpp`
 

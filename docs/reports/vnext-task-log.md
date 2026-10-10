@@ -2946,7 +2946,7 @@ projection/archive floor.
 
 Task: S06
 Status: complete
-Commit: pending
+Commit: 185e813 test(sequence): expand bounded causal replay model
 Scope: Expanded the independent model from 12 insertion shapes to every
 causally valid interleaving of two/three three-scalar concurrent typing
 groups, including forward/reverse typing. Checked 13,520 interleavings,
@@ -2970,15 +2970,21 @@ regression, not an exhaustive delete-history matrix. This is bounded
 evidence, not a proof for arbitrary histories.
 
 Task: S07
-Status: in progress
+Status: complete
 Commit: pending
 Scope so far: Removed the dead first-pass accumulator and redundant resets in
 `Buffer::edits_since`, leaving one old-position walk and one changed-text
 accumulator. Added a regression that splits a mixed-Unicode fragment, inserts
 at scalar boundaries, deletes a neighbor, undoes that deletion, and proves the
-reported byte edits reconstruct exact current text. The production ordering
-implementation remains on the shared whole-vector route; no shortcut has been
-re-enabled before the fast/slow equivalence harness exists.
+reported byte edits reconstruct exact current text. Added a narrowly gated
+`SequenceOrder` append path for a right child at END whose parent is the final
+known item (or an empty root). All other cases use the general algorithm,
+retained as `integrate_slow` for comparisons. Per-thread counters report append
+fast-path and general/fallback calls. Direct tests compare Fragment and
+IdListEntry outputs field by field for root append, tail append, fragment
+splitting, and list-head insertion. The suite also compares same-position
+concurrency, hidden and immediately retired origins, and boundary offsets plus
+collapse outcomes at valid UTF-8 scalar boundaries.
 Verification so far: Debug focused model, Buffer/IdList fuzz and delta tests
 passed 4/4 (20261010T074553Z-2); production ordering also passed with the S06
 Debug gate. The delta test passed independently in Debug
@@ -2987,6 +2993,12 @@ Debug gate. The delta test passed independently in Debug
 opt-in benchmark option; its measurement-format smoke passed with the Qt
 offscreen platform and no speed assertion. The focused delta test passed
 ASan/UBSan with LeakSanitizer disabled (20261010T074713Z-2).
-Remaining: Build a differential fast-path harness with fragment split,
-concurrency, Unicode, undo-visibility and globally retained retired-origin
-cases; choose and prove a safe optimization; record fast/fallback counters.
+Verification: Direct cases cover concurrency, hidden/retired origins, split
+fallback, and exact anchor outcomes. Debug full
+gate passed 7/7 in 17.09 s (20261010T075418Z-2); Release 7/7 in 1.36 s
+(20261010T075439Z-2); ASan/UBSan 6/6 in 36.00 s with leak detection off
+(20261010T075452Z-2). After the final precondition-helper refactor, the fast
+path plus production differential passed in Debug 2/2 (20261010T075615Z-2),
+Release 2/2 (20261010T075627Z-2), and ASan/UBSan 2/2 (20261010T075635Z-2).
+Release benchmark-format smoke passed with no speed assertion. No benchmark
+claim is made; counters are available for later measurement.
