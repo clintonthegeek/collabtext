@@ -2,6 +2,7 @@
 
 #include "collabtext/CrdtEngine.h"
 
+#include <QByteArray>
 #include <QObject>
 #include <QTextDocument>
 
@@ -25,15 +26,18 @@ public:
 
     void insertText(int position, const QString &text);
     void removeText(int position, int length);
+    [[nodiscard]] Result<ApplyOutcome> applyUpdate(const QByteArray &update);
 
     bool undo();
     bool redo();
 
 signals:
     void updateReady(const QByteArray &update);
+    void operationError(const QString &message);
 
 private:
     void syncEngineToQt();
+    void onQtContentsChange(int position, int charsRemoved, int charsAdded);
 
     CrdtEngine *m_engine = nullptr;
     QTextDocument *m_qtDoc = nullptr;

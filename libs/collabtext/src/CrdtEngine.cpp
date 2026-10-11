@@ -3,6 +3,7 @@
 #include "crdt/Utf16.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace CollabText {
 
@@ -92,6 +93,8 @@ void CrdtEngine::insert(int position, const std::string &text)
 void CrdtEngine::remove(int position, int length)
 {
     const std::string current = m_impl->buffer.text();
+    if (current.size() > std::numeric_limits<uint32_t>::max())
+        return;
     uint32_t byte_start = static_cast<uint32_t>(
         Crdt::utf16_to_byte_offset(current, position));
     uint32_t byte_end = static_cast<uint32_t>(
@@ -99,6 +102,41 @@ void CrdtEngine::remove(int position, int length)
     auto op = m_impl->buffer.apply_local_edit({{byte_start, byte_end}}, {""});
     m_impl->emit_op(op);
     m_impl->notify();
+}
+
+Result<Crdt::Operation> CrdtEngine::try_replace(
+    int position, int length, const std::string &text)
+{
+    const std::string current = m_impl->buffer.text();
+    if (current.size() > std::numeric_limits<uint32_t>::max())
+        return Error(ErrorCode::malformed,
+                     "document byte length exceeds the operation offset range");
+    const auto current_length = Crdt::utf16_length(current);
+    if (position < 0 || length < 0 ||
+        static_cast<uint64_t>(position) > current_length ||
+        static_cast<uint64_t>(length) > current_length - static_cast<uint64_t>(position))
+        return Error(ErrorCode::malformed, "text edit range is outside the document");
+
+    const auto start16 = static_cast<size_t>(position);
+    const auto end16 = start16 + static_cast<size_t>(length);
+    const auto start_byte = Crdt::utf16_to_byte_offset(current, start16);
+    const auto end_byte = Crdt::utf16_to_byte_offset(current, end16);
+    if (Crdt::byte_to_utf16_offset(current, start_byte) != start16 ||
+        Crdt::byte_to_utf16_offset(current, end_byte) != end16)
+        return Error(ErrorCode::malformed,
+                     "text edit range splits a UTF-16 surrogate pair");
+
+    if (text.size() > std::numeric_limits<uint32_t>::max())
+        return Error(ErrorCode::malformed,
+                     "inserted text exceeds the operation offset range");
+
+    auto operation = m_impl->buffer.try_apply_local_edit(
+        {{static_cast<uint32_t>(start_byte), static_cast<uint32_t>(end_byte)}},
+        {text});
+    if (!operation.ok()) return operation.error();
+    m_impl->emit_op(operation.value());
+    m_impl->notify();
+    return std::move(operation).value();
 }
 
 std::string CrdtEngine::text() const

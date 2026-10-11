@@ -48,6 +48,10 @@ public:
     // Text operations. Offsets are UTF-16 code unit positions.
     void insert(int position, const std::string &text);
     void remove(int position, int length);
+    /// Replace one UTF-16 range as a single undoable CRDT operation. Positions
+    /// inside a surrogate pair and ranges outside the text are rejected.
+    [[nodiscard]] Result<Crdt::Operation>
+    try_replace(int position, int length, const std::string &text);
     std::string text() const;
     int length() const;
 

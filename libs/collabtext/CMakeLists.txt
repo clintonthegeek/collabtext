@@ -170,6 +170,7 @@ endif()
 # ---------------------------------------------------------------------------
 if(COLLABTEXT_BUILD_QT)
     add_library(collabtext_qtadapter STATIC
+        include/collabtext/SyncManager.h
         src/SyncManager.cpp
     )
     add_library(CollabText::QtAdapter ALIAS collabtext_qtadapter)
@@ -185,6 +186,7 @@ if(COLLABTEXT_BUILD_QT)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
     add_library(collabtext_widgets STATIC
+        include/collabtext/CollabDocument.h
         src/CollabDocument.cpp
         src/ui/AvatarWidget.cpp
         src/ui/PresenceIndicator.cpp
@@ -455,6 +457,12 @@ add_crdt_test(tst_presence_manager)
 add_crdt_test(tst_identity_widgets)
 add_crdt_test(tst_collab_plain_text_edit)
 add_crdt_test(tst_scroll_stability)
+if(COLLABTEXT_BUILD_QT)
+    add_crdt_test(tst_document_adapter)
+    target_link_libraries(tst_document_adapter PRIVATE collabtext_widgets)
+    add_crdt_test(tst_sync_manager_presence)
+    target_link_libraries(tst_sync_manager_presence PRIVATE collabtext_qtadapter)
+endif()
 add_crdt_test(tst_stream_sync)
 add_crdt_test(tst_opstream_streamsync)
 add_crdt_test(tst_opstream_acks)

@@ -3213,7 +3213,8 @@
         "R9"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "in_progress",
+      "notes": "A03 started after A02/L07/S05 prerequisites were confirmed. Added a QTextDocument-to-CrdtEngine adapter with UTF-16-safe replace edits, minimal engine-to-Qt patches under scoped signal suppression, remote operation application, one local update emission per edit, and engine-owned undo/redo. Removed SyncManager operation-transport stubs and cursor advancement that silently skipped remote operations; documented the presence-only scope and added a regression test that its startup does not create obsolete ops/seq/cursor paths. Adapter tests cover direct QTextCursor edits including surrogate pairs and selection replacement, remote/duplicate/malformed operations, non-BMP typing, multi-cursor edits, programmatic edits, undo/redo, and remote insert cursor preservation. The focused Debug roadmap verification set has passed once before the last cursor test was added; rerun is in progress. Remaining acceptance gaps: a QInputMethodEvent commit could not be driven successfully in this Qt offscreen harness, CollabPane still uses its DocumentSession-specific mutation binding rather than this adapter, scroll preservation needs adapter-level coverage, and Release/ASan verification remains outstanding. Do not mark A03 complete until those gaps are resolved or explicitly scoped."
     },
     {
       "id": "A04",
