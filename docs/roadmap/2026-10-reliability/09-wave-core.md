@@ -221,6 +221,8 @@ Run `tst_membership`, `tst_checkpoint_codec`, `tst_checkpoint_recovery`, `tst_gc
 - `docs/releases/integration-alpha.md`
 - `docs/reports/2026-10-11-wave-core-candidate.md`
 
+- `docs/reports/vnext-task-log.md`
+
 **Steps:**
 
 1. Update package to alpha.3 and capability manifest in the same change. Replace stale next-task and unimplemented-recovery claims; distinguish implemented source capability, installed evidence and external consumer approval.

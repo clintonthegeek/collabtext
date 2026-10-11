@@ -3,10 +3,11 @@
 2026-10-11. Branch `feat/fuguemax-placement`; package `0.2.0-alpha.3`, capability
 manifest v15. The new immutable candidate tag is
 `collabtext-wave-core-2026-10-11` (resolve it with `git rev-parse TAG^{commit}`
-after candidate preparation). The earlier
+in this checkout). The earlier
 `collabtext-adoption-2026-10-11` at `0d21670896d02dda3dc44d18d37f9657935333ed`
 is preserved. Local tagging does not distribute a package or move Wave's pin.
-Exact implementation/evidence revisions are recorded in the candidate report.
+Exact revisions, commands and results are in the
+[candidate report](../reports/2026-10-11-wave-core-candidate.md).
 
 This answers Wave's `docs/handoff/collabtext-integration-feedback.md`. Wave
 remains the canonical EventStore owner. Core adds capabilities, not another log.

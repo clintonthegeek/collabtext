@@ -1,7 +1,7 @@
 # Reliability roadmap implementation log
 
 Worktree: `/home/clinton/dev/collabtext/.worktrees/reliability-v2`.
-Branch: `roadmap/reliability-v2`. Source baseline: `046d375`; approved native
+Current branch: `feat/fuguemax-placement` (earlier work used `roadmap/reliability-v2`). Source baseline: `046d375`; approved native
 engine roadmap: `374f93c`. Task status and full implementation hashes are in
 [TASKS.json](../roadmap/2026-10-reliability/TASKS.json).
 
@@ -3157,3 +3157,19 @@ Added public `DocumentSession::capture_shareable_checkpoint` with public provide
 ## 2026-10-11 — G04/G05: compose and store the local checkpoint companion
 
 `DocumentSession::capture_checkpoint` now returns a shareable CTCK artifact and a separate CTCL companion. The local companion binds to the exact shareable digest and captures current undo/redo history, durable next-identity reservation, and the local producer's committed delivery frontier. The session regression decodes both artifacts, checks the writer fields, publishes them through `CheckpointStore`, and recovers the stored pair under the expected context. `tst_session_recovery` passes Debug (`build-roadmap-debug/verification/20261011T033955Z-12`), Release (`build-roadmap-release/verification/20261011T034010Z-200`), and ASan/UBSan (`build-roadmap-asan/verification/20261011T034029Z-2`, leak detection disabled for the runner ptrace restriction). The standalone public-header check passes. Startup restore and replay from checkpoint coverage remain the next G05 work. The relocated installed FileTransport package gate passes against revision 5c870049e51c84dfb41d203d4c4d156c3af73423 and exercises both artifact outputs (`build-consumer-verify/checkpoint-bundle-5c87004`).
+
+## 2026-10-11 — Q01–Q05/Q04a: Wave Core adoption completion
+
+Native typed zero-width markers, current-format archive readers, text-owned undo
+metadata and a deterministic per-stream projection allocator are implemented.
+Removed obsolete CME1/unbound checkpoint readers and the ignored presence engine
+parameter after proving current replacements. Full Debug/Release passed 99/99;
+post-removal affected checks passed 15/15 each; full leak-enabled ASan/UBSan passed
+99/99. Relocated Core-only live package gates passed in all three modes. Both
+existing Wave-owned probes passed; production marker/thread and new-allocator
+acceptance remains external Q06. Full revisions, commands, counts and artifacts:
+[Wave Core candidate report](2026-10-11-wave-core-candidate.md).
+
+New annotated candidate `collabtext-wave-core-2026-10-11`; prior adoption tag is
+unchanged. No push, consumer edit, publication or master merge. Broad performance
+and GC certification remain governed by their incomplete registry tasks.

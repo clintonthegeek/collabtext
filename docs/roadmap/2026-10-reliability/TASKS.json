@@ -10,8 +10,7 @@
     "placement": "FugueMax",
     "spec": "docs/specs/vnext-sequence-algorithm.md#0",
     "next": [
-      "Q04a",
-      "Q05"
+      "Q06"
     ],
     "unblocked_not_next": [
       "G03",
@@ -3930,8 +3929,21 @@
       "gate": "The marker uses existing ordering; specification and independent model must pass before Q02.",
       "status": "complete",
       "baseline_revision": "0d21670896d02dda3dc44d18d37f9657935333ed",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "0bda34af49da38c81c29d17719543011d0bcb450"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-wave-core-candidate.md",
+        "full_debug": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_release": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_asan_ubsan_leaks": "99/99 at aafe7e7; no suppressions",
+        "installed_live": "Debug/Release/ASan 4/4 CTests, Wave 16/16 strict, Markdown 4/4 at e1ff945",
+        "artifacts": [
+          "/tmp/ct-wave-debug-live-e1ff945/results.json",
+          "/tmp/ct-wave-release-live-e1ff945/results.json",
+          "/tmp/ct-wave-asan-live-e1ff945/results.json"
+        ]
+      }
     },
     {
       "id": "Q02",
@@ -3977,10 +3989,26 @@
         "R14"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "0d21670896d02dda3dc44d18d37f9657935333ed",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "0bda34af49da38c81c29d17719543011d0bcb450",
+        "a72fca55577a2641ad1eda1bf1d39dbf0d536918",
+        "aafe7e702633cce9224652442484cb3a2a9b2de7",
+        "e1ff945bd338c526501e244515bcbbdbe3ffc96c"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-wave-core-candidate.md",
+        "full_debug": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_release": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_asan_ubsan_leaks": "99/99 at aafe7e7; no suppressions",
+        "installed_live": "Debug/Release/ASan 4/4 CTests, Wave 16/16 strict, Markdown 4/4 at e1ff945",
+        "artifacts": [
+          "/tmp/ct-wave-debug-live-e1ff945/results.json",
+          "/tmp/ct-wave-release-live-e1ff945/results.json",
+          "/tmp/ct-wave-asan-live-e1ff945/results.json"
+        ]
+      }
     },
     {
       "id": "Q03",
@@ -4013,10 +4041,23 @@
         "R14"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "0d21670896d02dda3dc44d18d37f9657935333ed",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "0bda34af49da38c81c29d17719543011d0bcb450"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-wave-core-candidate.md",
+        "full_debug": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_release": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_asan_ubsan_leaks": "99/99 at aafe7e7; no suppressions",
+        "installed_live": "Debug/Release/ASan 4/4 CTests, Wave 16/16 strict, Markdown 4/4 at e1ff945",
+        "artifacts": [
+          "/tmp/ct-wave-debug-live-e1ff945/results.json",
+          "/tmp/ct-wave-release-live-e1ff945/results.json",
+          "/tmp/ct-wave-asan-live-e1ff945/results.json"
+        ]
+      }
     },
     {
       "id": "Q04",
@@ -4057,10 +4098,26 @@
         "R14"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "0d21670896d02dda3dc44d18d37f9657935333ed",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "0bda34af49da38c81c29d17719543011d0bcb450",
+        "a72fca55577a2641ad1eda1bf1d39dbf0d536918",
+        "aafe7e702633cce9224652442484cb3a2a9b2de7",
+        "e1ff945bd338c526501e244515bcbbdbe3ffc96c"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-wave-core-candidate.md",
+        "full_debug": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_release": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_asan_ubsan_leaks": "99/99 at aafe7e7; no suppressions",
+        "installed_live": "Debug/Release/ASan 4/4 CTests, Wave 16/16 strict, Markdown 4/4 at e1ff945",
+        "artifacts": [
+          "/tmp/ct-wave-debug-live-e1ff945/results.json",
+          "/tmp/ct-wave-release-live-e1ff945/results.json",
+          "/tmp/ct-wave-asan-live-e1ff945/results.json"
+        ]
+      }
     },
     {
       "id": "Q04a",
@@ -4100,10 +4157,23 @@
         "R14"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "a72fca5",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "aafe7e702633cce9224652442484cb3a2a9b2de7"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-wave-core-candidate.md",
+        "full_debug": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_release": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_asan_ubsan_leaks": "99/99 at aafe7e7; no suppressions",
+        "installed_live": "Debug/Release/ASan 4/4 CTests, Wave 16/16 strict, Markdown 4/4 at e1ff945",
+        "artifacts": [
+          "/tmp/ct-wave-debug-live-e1ff945/results.json",
+          "/tmp/ct-wave-release-live-e1ff945/results.json",
+          "/tmp/ct-wave-asan-live-e1ff945/results.json"
+        ]
+      }
     },
     {
       "id": "Q05",
@@ -4138,7 +4208,8 @@
         "docs/README.md",
         "tests/consumer-smoke/README.md",
         "docs/releases/integration-alpha.md",
-        "docs/reports/2026-10-11-wave-core-candidate.md"
+        "docs/reports/2026-10-11-wave-core-candidate.md",
+        "docs/reports/vnext-task-log.md"
       ],
       "steps": [
         "Update package to alpha.3 and capability manifest in the same change. Replace stale next-task and unimplemented-recovery claims; distinguish implemented source capability, installed evidence and external consumer approval.",
@@ -4156,10 +4227,26 @@
         "R14"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "0d21670896d02dda3dc44d18d37f9657935333ed",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "0bda34af49da38c81c29d17719543011d0bcb450",
+        "a72fca55577a2641ad1eda1bf1d39dbf0d536918",
+        "aafe7e702633cce9224652442484cb3a2a9b2de7",
+        "e1ff945bd338c526501e244515bcbbdbe3ffc96c"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-wave-core-candidate.md",
+        "full_debug": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_release": "99/99 at a72fca5; affected cleanup 15/15 at aafe7e7",
+        "full_asan_ubsan_leaks": "99/99 at aafe7e7; no suppressions",
+        "installed_live": "Debug/Release/ASan 4/4 CTests, Wave 16/16 strict, Markdown 4/4 at e1ff945",
+        "artifacts": [
+          "/tmp/ct-wave-debug-live-e1ff945/results.json",
+          "/tmp/ct-wave-release-live-e1ff945/results.json",
+          "/tmp/ct-wave-asan-live-e1ff945/results.json"
+        ]
+      }
     },
     {
       "id": "Q06",
@@ -4193,8 +4280,8 @@
       "verification_results": {}
     }
   ],
-  "revised": "2026-10-04",
-  "revision_reason": "Wave ask2 sequencing amendment: early installed package/probes, independent live-boundary gate, and reviewable alpha candidates; 72 tasks. Preserve current statuses/evidence, native C++ primitives, optional transport/session composition, and later recovery/pin/GC certification.",
+  "revised": "2026-10-11",
+  "revision_reason": "Finish Wave Core adoption requirements Q01\u2013Q05/Q04a with native markers, durable current-format readers, owned undo and stable projection identities; obsolete alpha compatibility removed; external Q06 and later consumer/GC/performance gates remain open.",
   "removed_tasks": [
     {
       "id": "E01",
