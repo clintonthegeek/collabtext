@@ -55,11 +55,57 @@ PeerCoverageEvidence evidence(const MembershipDescriptor &d, const ActorId &memb
   return {member, d.epoch, d.hash, d.base_checkpoint_hash, {}};
 }
 
-GcEligibilityVerifier allow_test_eligibility() {
-  return [](const MembershipDescriptor &, std::string_view,
-            const DeliveryCoverage &,
-            const std::vector<PeerCoverageEvidence> &) {
-    return Result<void>{};
+GcReference::Coverage reference_coverage(const DeliveryCoverage &coverage) {
+  GcReference::Coverage result;
+  for (const auto &[stream, frontier] : coverage)
+    for (const auto &[producer, counter] : frontier)
+      result[stream].emplace(producer.to_string(), counter);
+  return result;
+}
+
+GcEligibilityVerifier model_eligibility(
+    std::function<void(GcReference::World &)> alter = {}) {
+  return [alter = std::move(alter)](
+      const MembershipDescriptor &descriptor, std::string_view checkpoint_hash,
+      const DeliveryCoverage &common,
+      const std::vector<PeerCoverageEvidence> &evidence) {
+    GcReference::World world;
+    world.epoch.number = descriptor.epoch;
+    world.epoch.hash = descriptor.hash;
+    world.proposal = {"candidate-1", descriptor.hash,
+                      std::string(checkpoint_hash), reference_coverage(common),
+                      {{"undo-owner", 1}}, 1, {"translation-manifest"}};
+    world.checkpoint.hash = std::string(checkpoint_hash);
+    world.checkpoint.epoch_hash = descriptor.hash;
+    world.checkpoint.coverage = reference_coverage(common);
+    world.checkpoint.durable = true;
+    world.checkpoint.integrity_valid = true;
+    world.checkpoint.logical_state = true;
+    world.checkpoint.deferred_input = true;
+    world.checkpoint.coverage_state = true;
+    world.checkpoint.pin_projection = true;
+    world.pins.complete = true;
+    world.pins.frontier = 1;
+    const auto retired_undo = GcReference::UndoFloor{{"undo-owner", 1}};
+    for (const auto &member_id : descriptor.members) {
+      const auto name = member_id.to_string();
+      world.epoch.members.insert(name);
+      auto item = std::find_if(evidence.begin(), evidence.end(),
+          [&](const auto &candidate) { return candidate.member == member_id; });
+      if (item == evidence.end()) continue;
+      GcReference::Member member;
+      member.durable_coverage = reference_coverage(item->delivery);
+      member.retired_undo_sequence = retired_undo;
+      world.members.emplace(name, member);
+      world.acknowledgements.emplace(name, GcReference::PeerAck{
+          descriptor.hash, world.proposal.id, member.durable_coverage,
+          retired_undo, 1, std::string(checkpoint_hash), true, true});
+    }
+    if (alter) alter(world);
+    return GcReference::eligible(world)
+        ? Result<void>{}
+        : Result<void>(Error(ErrorCode::awaiting_state,
+                             "independent G01 reference model rejects eligibility"));
   };
 }
 }
@@ -88,7 +134,7 @@ private slots:
       return Result<void>{};
     };
     auto certificate = certify_common_coverage(d, peers, verify,
-                                               allow_test_eligibility());
+                                               model_eligibility());
     QVERIFY(certificate.ok());
 
     std::vector<GcReference::Coverage> vectors;
@@ -120,20 +166,27 @@ private slots:
     const auto d = descriptor();
     std::vector<PeerCoverageEvidence> peers;
     for (const auto &member : d.members) peers.push_back(evidence(d, member));
-    auto no_verifier = certify_common_coverage(d, peers, {},
-                                               allow_test_eligibility());
+    auto no_verifier = certify_common_coverage(d, peers, {}, model_eligibility());
     QVERIFY(!no_verifier.ok());
     auto no_eligibility_verifier = certify_common_coverage(
         d, peers, [](const auto &, const auto &) { return Result<void>{}; }, {});
     QVERIFY(!no_eligibility_verifier.ok());
     auto deferred_input = certify_common_coverage(
         d, peers, [](const auto &, const auto &) { return Result<void>{}; },
-        [](const auto &, std::string_view, const DeliveryCoverage &,
-           const std::vector<PeerCoverageEvidence> &) {
-          return Result<void>(Error(ErrorCode::awaiting_state,
-                                    "checkpoint has deferred input"));
-        });
+        model_eligibility([](auto &world) {
+          world.checkpoint.deferred_input = false;
+        }));
     QVERIFY(!deferred_input.ok());
+    auto private_undo_unverified = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+        model_eligibility([](auto &world) {
+          world.acknowledgements.begin()->second.private_history_durable = false;
+        }));
+    QVERIFY(!private_undo_unverified.ok());
+    auto incomplete_pins = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+        model_eligibility([](auto &world) { world.pins.complete = false; }));
+    QVERIFY(!incomplete_pins.ok());
     auto eligibility_threw = certify_common_coverage(
         d, peers, [](const auto &, const auto &) { return Result<void>{}; },
         [](const auto &, std::string_view, const DeliveryCoverage &,
@@ -145,25 +198,25 @@ private slots:
     missing.pop_back();
     QVERIFY(!certify_common_coverage(d, missing, [](const auto &, const auto &) {
       return Result<void>{};
-    }, allow_test_eligibility()).ok());
+    }, model_eligibility()).ok());
     auto stale = peers;
     stale.front().descriptor_hash = sha256_hex("old membership");
     QVERIFY(!certify_common_coverage(d, stale, [](const auto &, const auto &) {
       return Result<void>{};
-    }, allow_test_eligibility()).ok());
+    }, model_eligibility()).ok());
     auto rejected = certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>(Error(ErrorCode::corrupt_record, "checkpoint not durable"));
-    }, allow_test_eligibility());
+    }, model_eligibility());
     QVERIFY(!rejected.ok());
     auto throwing = certify_common_coverage(d, peers, [](const auto &, const auto &) -> Result<void> {
       throw std::runtime_error("verifier fault");
-    }, allow_test_eligibility());
+    }, model_eligibility());
     QVERIFY(!throwing.ok());
     auto mixed_checkpoint = peers;
     mixed_checkpoint.back().checkpoint_hash = sha256_hex("different checkpoint");
     QVERIFY(!certify_common_coverage(d, mixed_checkpoint,
         [](const auto &, const auto &) { return Result<void>{}; },
-        allow_test_eligibility()).ok());
+        model_eligibility()).ok());
   }
 
   void unsupportedStreamAndDuplicateMemberAreRejected() {
@@ -173,17 +226,17 @@ private slots:
     peers.front().delivery["not-in-descriptor"][actor(9)] = 1;
     QVERIFY(!certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>{};
-    }, allow_test_eligibility()).ok());
+    }, model_eligibility()).ok());
     peers.front().delivery.clear();
     peers.front().delivery["text"][ActorId{}] = 1;
     QVERIFY(!certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>{};
-    }, allow_test_eligibility()).ok());
+    }, model_eligibility()).ok());
     peers.front().delivery.clear();
     peers.back().member = peers.front().member;
     QVERIFY(!certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>{};
-    }, allow_test_eligibility()).ok());
+    }, model_eligibility()).ok());
   }
 
   void silentCurrentMemberConstrainsCoverageToZero() {
@@ -196,7 +249,7 @@ private slots:
     // this producer. It stays in membership, so the common frontier is zero.
     auto certificate = certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>{};
-    }, allow_test_eligibility());
+    }, model_eligibility());
     QVERIFY(certificate.ok());
     QVERIFY(!certificate.value().common_delivery().contains("text"));
   }
@@ -359,10 +412,7 @@ private slots:
                                       "peer evidence differs from durable copy"));
           return Result<void>{};
         },
-        [](const auto &, std::string_view, const DeliveryCoverage &,
-           const std::vector<PeerCoverageEvidence> &) {
-          return Result<void>{};
-        });
+        model_eligibility());
     QVERIFY(certificate.ok());
     QCOMPARE(certificate.value().checkpoint_hash(), candidate_checkpoint);
     QCOMPARE(certificate.value().common_delivery().at("text").at(actor(20)),
