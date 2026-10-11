@@ -7,14 +7,21 @@
 
 #include <QApplication>
 #include <QScrollBar>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextDocument>
 
+#include <collabtext/CollabDocument.h>
+#include <collabtext/DocumentSession.h>
+
 #include "crdt/Buffer.h"
 #include "ui/CollabPlainTextEdit.h"
 #include "TestActor.h"
+
+#include <cmath>
+#include <filesystem>
 
 using CollabText::Test::actor;
 
@@ -25,6 +32,56 @@ class TestScrollStability : public QObject {
     Q_OBJECT
 
 private slots:
+    void documentAdapterSessionDeltaPreservesStableTopAnchor() {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        std::string text;
+        for (int i = 0; i < 100; ++i)
+            text += "Line " + std::to_string(i) + "\n";
+
+        const std::filesystem::path root(temporary.path().toStdString());
+        CollabText::DocumentSessionConfig config{
+            root / "shared", root / "private", "scroll-adapter-document", "text", 1};
+        config.initial_text = text;
+        auto opened = CollabText::DocumentSession::open(config);
+        QVERIFY(opened.ok());
+        auto session = std::move(opened).value();
+        QVERIFY(session->ready());
+
+        CollabText::CollabDocument adapter(*session);
+        CollabPlainTextEdit edit;
+        edit.setDocument(adapter.qtDocument());
+        edit.resize(300, 120);
+        edit.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&edit));
+        edit.verticalScrollBar()->setValue(edit.verticalScrollBar()->maximum() / 2);
+        QApplication::processEvents();
+
+        const uint32_t top_before = edit.topVisibleByteOffset();
+        QVERIFY(top_before > 0);
+        const auto anchor_before = session->anchor_at(top_before, Bias::Left);
+        const auto version_before = session->recovery_frontier();
+        QVERIFY(session->apply_local({{0, 0}}, {"INSERTED BY PEER\n"}).ok());
+        auto edits = session->edits_since(version_before);
+        QVERIFY(edits.ok());
+        QVERIFY(!edits.value().empty());
+
+        adapter.applySessionEdits(edits.value());
+        const auto current_text = session->text();
+        QCOMPARE(adapter.qtDocument()->toPlainText(),
+                 QString::fromUtf8(current_text.data(),
+                     static_cast<qsizetype>(current_text.size())));
+        const uint32_t restored = session->resolve_anchor(anchor_before);
+        edit.scrollByteOffsetToTop(restored, /*keepCursorVisible=*/false);
+        QApplication::processEvents();
+
+        const qint64 drift = static_cast<qint64>(edit.topVisibleByteOffset()) -
+                             static_cast<qint64>(restored);
+        QVERIFY2(std::abs(drift) < 20,
+                 qPrintable(QString("top drift too large: actual=%1 expected=%2")
+                                .arg(edit.topVisibleByteOffset()).arg(restored)));
+    }
+
     void remote_insert_above_viewport_preserves_top_anchor() {
         // Set up Alice's buffer and widget, populated with a 100-line doc.
         Buffer aliceBuf(CollabText::Test::test_counter(1));

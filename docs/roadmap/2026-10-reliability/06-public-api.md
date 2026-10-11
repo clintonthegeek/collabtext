@@ -121,6 +121,10 @@ Compile each installed header in a separate translation unit and run the externa
 - `libs/collabtext/src/CrdtEngine.cpp`
 - `libs/collabtext/src/SyncManager.cpp`
 - `libs/collabtext/tests/tst_document_adapter.cpp`
+- `libs/collabtext/tests/tst_scroll_stability.cpp`
+- `libs/collabtext/CMakeLists.txt`
+- `app/collabedit/CollabPane.h`
+- `app/collabedit/CollabPane.cpp`
 
 **Steps:**
 

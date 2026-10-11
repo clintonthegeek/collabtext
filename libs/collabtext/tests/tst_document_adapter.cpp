@@ -6,8 +6,11 @@
 
 #include <QPlainTextEdit>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTextCursor>
+
+#include <filesystem>
 
 using namespace CollabText;
 
@@ -157,6 +160,47 @@ private slots:
     auto valid = engine.try_replace(1, 2, "🌊");
     QVERIFY(valid);
     QCOMPARE(engine.text(), std::string("a🌊b"));
+  }
+
+  void durableSessionBackendTracksQtAndAppliesSessionDeltasWithoutFeedback() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const std::filesystem::path root(temporary.path().toStdString());
+    DocumentSessionConfig config{root / "shared", root / "private",
+                                 "adapter-session", "text", 1};
+    config.initial_text = "a😀z";
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    QVERIFY(session->ready());
+
+    CollabDocument adapter(*session);
+    QSignalSpy local_edits(&adapter, &CollabDocument::localEditApplied);
+    QVERIFY(local_edits.isValid());
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("a😀z"));
+
+    QTextCursor cursor(adapter.qtDocument());
+    cursor.setPosition(1);
+    cursor.setPosition(3, QTextCursor::KeepAnchor);
+    cursor.insertText(QString::fromUtf8("🌊"));
+    QCOMPARE(session->text(), std::string("a🌊z"));
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("a🌊z"));
+    QCOMPARE(local_edits.size(), 1);
+
+    const auto before_remote = session->recovery_frontier();
+    auto remote = session->apply_local({{0, 0}}, {"R"});
+    QVERIFY(remote.ok());
+    auto deltas = session->edits_since(before_remote);
+    QVERIFY(deltas.ok());
+    adapter.applySessionEdits(deltas.value());
+    QCOMPARE(session->text(), std::string("Ra🌊z"));
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("Ra🌊z"));
+    QCOMPARE(local_edits.size(), 1);
+
+    QVERIFY(adapter.undo());
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("a🌊z"));
+    QVERIFY(adapter.redo());
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("Ra🌊z"));
   }
 };
 

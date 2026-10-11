@@ -1,5 +1,6 @@
 #include "CollabPane.h"
 
+#include <collabtext/CollabDocument.h>
 #include "crdt/ChatMessage.h"
 #include "crdt/Comment.h"
 #include "ui/ChatPanelWidget.h"
@@ -10,7 +11,6 @@
 
 #include <QDateTime>
 #include <QHBoxLayout>
-#include <QPlainTextDocumentLayout>
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QSplitter>
@@ -86,9 +86,8 @@ CollabPane::CollabPane(CollabText::Identity::Identity identity,
     editorColLayout->setContentsMargins(0, 0, 0, 0);
 
     m_edit = new CollabPlainTextEdit(editorCol);
-    m_qtDoc = new QTextDocument(this);
-    m_qtDoc->setDocumentLayout(new QPlainTextDocumentLayout(m_qtDoc));
-    m_qtDoc->setUndoRedoEnabled(false);
+    m_collabDocument = new CollabDocument(*m_session, this);
+    m_qtDoc = m_collabDocument->qtDocument();
     m_edit->setDocument(m_qtDoc);
     m_edit->setReadOnly(!m_session->ready());
     editorColLayout->addWidget(m_edit, 1);
@@ -124,15 +123,19 @@ CollabPane::CollabPane(CollabText::Identity::Identity identity,
     // every durable operation before the editor becomes interactive.
     m_presence.start();
 
-    // 3) Render the resulting text into the QTextDocument as the
-    //    initial content, then connect the change signal so future
-    //    edits route to the buffer.
-    m_syncing = true;
-    m_qtDoc->setPlainText(QString::fromStdString(m_session->text()));
-    m_syncing = false;
-
-    connect(m_qtDoc, &QTextDocument::contentsChange,
+    // CollabDocument owns the supported Qt binding for local edits. Session
+    // polling and view-level scroll policy remain composed here.
+    connect(m_collabDocument, &CollabDocument::localEditApplied,
             this, &CollabPane::onContentsChange);
+    connect(m_collabDocument, &CollabDocument::operationError, this,
+            [this](const QString &message) {
+                if (!m_session->ready()) {
+                    m_edit->setReadOnly(true);
+                    m_modified = true;
+                    emit changed();
+                }
+                emit errorOccurred(message);
+            });
     if (!m_session->ready()) {
         m_recoveryErrorShown = true;
         const auto &report = m_session->recovery_report();
@@ -226,23 +229,11 @@ QString CollabPane::shutdown() {
 }
 
 void CollabPane::onContentsChange(int position, int charsRemoved, int charsAdded) {
-    if (m_syncing) return;
-
-    std::string bufText = m_session->text();
-    QString qBufText = QString::fromStdString(bufText);
     QString qtNow = m_qtDoc->toPlainText();
 
-    uint32_t byteStart = qBufText.left(position).toUtf8().size();
-    uint32_t byteEnd = byteStart;
-    if (charsRemoved > 0) {
-        byteEnd = qBufText.left(position + charsRemoved).toUtf8().size();
-    }
-
     QString insertedQt;
-    std::string inserted;
     if (charsAdded > 0) {
         insertedQt = qtNow.mid(position, charsAdded);
-        inserted = insertedQt.toStdString();
     }
 
     // Coalescing decision (made BEFORE applying the edit).
@@ -259,7 +250,9 @@ void CollabPane::onContentsChange(int position, int charsRemoved, int charsAdded
     // pushed an entry onto the stack between the previous user edit
     // and this one, we MUST NOT coalesce — the previous undo entry
     // is no longer ours.
-    const bool stackContinuous = (m_session->undo_depth() == m_lastUndoDepth);
+    const size_t undoDepthAfterEdit = m_session->undo_depth();
+    const bool stackContinuous = undoDepthAfterEdit > 0 &&
+        undoDepthAfterEdit - 1 == m_lastUndoDepth;
 
     bool shouldCoalesce = false;
     if (inWindow && stackContinuous && m_lastEditKind == thisKind) {
@@ -271,21 +264,6 @@ void CollabPane::onContentsChange(int position, int charsRemoved, int charsAdded
                    && position == m_lastEditEndQt - 1) {
             shouldCoalesce = true;
         }
-    }
-
-    auto op = m_session->apply_local({{byteStart, byteEnd}}, {inserted});
-    if (!op.ok()) {
-        if (m_session->ready()) {
-            m_syncing = true;
-            m_qtDoc->setPlainText(QString::fromStdString(m_session->text()));
-            m_syncing = false;
-        } else {
-            m_edit->setReadOnly(true);
-            m_modified = true;
-            emit changed();
-        }
-        emit errorOccurred(toQString(op.error().message()));
-        return;
     }
 
     if (shouldCoalesce) {
@@ -796,22 +774,7 @@ void CollabPane::applyEditsPreservingScroll(const std::vector<SessionTextEdit> &
 }
 
 void CollabPane::applyEditsToQt(const std::vector<SessionTextEdit> &edits) {
-    if (edits.empty()) return;
-    m_syncing = true;
-
-    for (auto it = edits.rbegin(); it != edits.rend(); ++it) {
-        int qtStart = byteOffsetToQtPos(it->old_start);
-        int qtEnd   = byteOffsetToQtPos(it->old_end);
-        QTextCursor cursor(m_qtDoc);
-        cursor.setPosition(qtStart);
-        if (qtEnd > qtStart)
-            cursor.setPosition(qtEnd, QTextCursor::KeepAnchor);
-        QString replacement = QString::fromUtf8(
-            it->new_text.data(), static_cast<int>(it->new_text.size()));
-        cursor.insertText(replacement);
-    }
-
-    m_syncing = false;
+    m_collabDocument->applySessionEdits(edits);
 }
 
 uint32_t CollabPane::qtPosToByteOffset(int qtPos) const {

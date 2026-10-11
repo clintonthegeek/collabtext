@@ -25,6 +25,7 @@ class CollabPlainTextEdit;
 class CommentsPanelWidget;
 class ParticipantListWidget;
 }
+namespace CollabText { class CollabDocument; }
 
 namespace CollabEdit {
 
@@ -85,6 +86,7 @@ private:
     std::unique_ptr<CollabText::Crdt::StreamSync> m_streamSync;
 
     CollabText::Ui::CollabPlainTextEdit *m_edit = nullptr;
+    CollabText::CollabDocument *m_collabDocument = nullptr;
     CollabText::Ui::ParticipantListWidget *m_participantList = nullptr;
     CollabText::Ui::ChatPanelWidget *m_chatPanel = nullptr;
     CollabText::Ui::CommentsPanelWidget *m_commentsPanel = nullptr;
@@ -99,7 +101,6 @@ private:
     uint64_t m_chatSeq = 0;
     uint64_t m_commentSeq = 0;
     size_t m_lastChatCount = 0;
-    bool m_syncing = false;
     bool m_shutdownComplete = false;
     bool m_modified = false;
     bool m_recoveryErrorShown = false;
