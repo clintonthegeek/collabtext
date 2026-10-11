@@ -143,9 +143,46 @@ Run `tst_wave_core` and public-header compilation in Debug/Release/ASan and relo
 
 Run codec goldens and `tools/verify-consumer-package.sh --mode MODE --gate live --components core` for Debug/Release/ASan; run the actual Wave-owned standalone probe against the relocated Release prefix.
 
+## Q04a — Remove obsolete compatibility paths after proving current replacements
+
+**Depends on:** Q04, G04
+
+**Coverage:** R9, R14
+
+**Files:**
+
+- `libs/collabtext/src/storage/MembershipStore.cpp`
+- `libs/collabtext/src/storage/CheckpointCodec.cpp`
+- `libs/collabtext/src/storage/CheckpointEngineCodec.cpp`
+- `libs/collabtext/tests/tst_membership.cpp`
+- `libs/collabtext/tests/tst_checkpoint_codec.cpp`
+- `libs/collabtext/tests/fuzz_decode.cpp`
+- `libs/collabtext/include/collabtext/SyncManager.h`
+- `libs/collabtext/src/SyncManager.cpp`
+- `libs/collabtext/tests/tst_sync_manager_presence.cpp`
+- `docs/specs/wave-core-adoption.md`
+- `libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md`
+
+**Steps:**
+
+1. Use passing current membership, certified checkpoint and presence gates as replacement evidence. Remove CME1 membership journal decoding, unbound checkpoint engine section 1 decoding, and the ignored CrdtEngine constructor parameter from presence-only SyncManager.
+2. Replace old-read acceptance tests with explicit unsupported-version rejection; retain current CME2 and engine section 2/3 round-trip, recovery and certified binding checks. Keep fuzz inputs addressed to current engine section versions.
+3. State the clean adoption cut explicitly: no earlier alpha store/token upgrade obligation is assumed. CTBO/0002–0003 and CTPT/1–2 are current writer formats; their archive reader commitment starts with this candidate for Wave durable adoption, not obsolete experimental stores.
+4. Run affected Debug/Release/leak-enabled ASan and installed current-package checks before candidate tagging; consumers must rebuild for the SyncManager constructor cleanup.
+
+**Acceptance:**
+
+- No obsolete membership or unbound checkpoint reader remains; old inputs fail with a typed unsupported-version error.
+- Current replacements preserve bound recovery and presence behavior; Core adoption remains transport-independent.
+- No compatibility layer is introduced for earlier alpha data.
+
+**Verification:**
+
+Run `tst_membership`, `tst_checkpoint_codec`, `tst_checkpoint_recovery`, `tst_gc_certificate`, `tst_session_recovery`, `tst_sync_manager_presence` in Debug/Release/ASan and installed header checks.
+
 ## Q05 — Align adoption documents and prepare a new immutable candidate
 
-**Depends on:** Q04
+**Depends on:** Q04a
 
 **Coverage:** R9, R14
 
@@ -174,6 +211,11 @@ Run codec goldens and `tools/verify-consumer-package.sh --mode MODE --gate live 
 
 - `docs/specs/vnext-operation-codec.md`
 - `docs/roadmap/2026-10-reliability/00-consumer-integration.md`
+
+- `docs/README.md`
+- `tests/consumer-smoke/README.md`
+- `docs/releases/integration-alpha.md`
+- `docs/reports/2026-10-11-wave-core-candidate.md`
 
 **Steps:**
 

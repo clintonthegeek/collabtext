@@ -23,7 +23,7 @@ std::vector<CheckpointSection> shared_sections() {
   empty_manifest[3] = 1;
   empty_manifest[7] = 1;
   empty_manifest.append(raw_digest(empty_manifest));
-  return {{1, 1, "ctx"}, {2, 1, "engine"}, {3, 1, "causal"},
+  return {{1, 1, "ctx"}, {2, 2, "engine"}, {3, 1, "causal"},
           {4, 1, "deferred"}, {5, 1, "coverage"}, {6, 1, "pins"},
           {7, 1, std::move(empty_manifest)}};
 }
@@ -542,15 +542,11 @@ private slots:
     QCOMPARE(text_decoded.value().fragments[0].link, fragment.link);
     QCOMPARE(text_decoded.value().fragments[0].text, fragment.text);
     QCOMPARE(text_decoded.value().fragments[0].length, uint32_t{1});
-    auto legacy_text_section = text_section.value();
-    QCOMPARE(legacy_text_section.version, uint16_t{2});
-    QVERIFY(!legacy_text_section.bytes.empty());
-    QCOMPARE(legacy_text_section.bytes.back(), '\0');
-    legacy_text_section.bytes.pop_back(); // v1 had no reclamation marker.
-    legacy_text_section.version = 1;
-    auto legacy_text_decoded = decode_checkpoint_engine(legacy_text_section);
-    QVERIFY(legacy_text_decoded);
-    QVERIFY(legacy_text_decoded.value().reclamation.empty());
+    auto obsolete = text_section.value();
+    obsolete.version = 1;
+    auto refused = decode_checkpoint_engine(obsolete);
+    QVERIFY(!refused);
+    QCOMPARE(refused.error().code(), ErrorCode::unsupported_version);
     for (size_t length = 0; length < text_section.value().bytes.size(); ++length) {
       auto truncated = text_section.value();
       truncated.bytes.resize(length);
@@ -582,7 +578,7 @@ private slots:
     auto trailing = list_section.value();
     trailing.bytes.push_back('\0');
     QVERIFY(!decode_checkpoint_engine(trailing));
-    CheckpointSection huge_count{2, 1, std::string("\0\1\0\x0f\x42\x40", 6)};
+    CheckpointSection huge_count{2, 2, std::string("\0\1\0\x0f\x42\x40", 6)};
     QVERIFY(!decode_checkpoint_engine(huge_count));
     text.entries.push_back(list.entries[0]);
     QVERIFY(!encode_checkpoint_engine(text));

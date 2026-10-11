@@ -1,6 +1,5 @@
 #pragma once
 
-#include "collabtext/CrdtEngine.h"
 #include "collabtext/Identity.h"
 #include "collabtext/IdentityProjector.h"
 #include "collabtext/PresenceManager.h"
@@ -18,14 +17,12 @@ namespace CollabText {
 // Presence and ephemeral-state helper. This class does not transport CRDT
 // operations. File-backed durable edits use DocumentSession, which composes
 // FileOpStream internally; other transports need a consumer-owned composition
-// around Core and OpStream. The retained `engine` constructor parameter is
-// ignored for source compatibility.
+// around Core and OpStream.
 class SyncManager : public QObject {
     Q_OBJECT
 
 public:
-    SyncManager(CrdtEngine *engine,
-                const Identity::Identity &identity,
+    SyncManager(const Identity::Identity &identity,
                 const std::string &replica_id,
                 const std::string &device_name,
                 QObject *parent = nullptr);

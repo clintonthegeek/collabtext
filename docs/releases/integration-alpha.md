@@ -1,3 +1,8 @@
+> Historical alpha.1/alpha.2 preparation evidence. The current alpha.3 adoption
+> candidate and reader promises are in [wave-core-response.md](../handoff/wave-core-response.md)
+> and the installed capability manifest. Capability limits below describe those
+> earlier snapshots, not the current branch.
+
 # collabtext 0.2.0-alpha.2 — position-capable integration alpha
 
 **Status: prepared, not published.** No tag exists on any remote, no package has

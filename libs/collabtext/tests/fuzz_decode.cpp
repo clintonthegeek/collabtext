@@ -152,7 +152,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // Exercise the bounded typed section parsers directly too, including when
     // the input is a payload rather than a complete valid artifact.
     (void)CollabText::Storage::decode_checkpoint_context({1, 1, std::string(bytes)});
-    (void)CollabText::Storage::decode_checkpoint_engine({2, 1, std::string(bytes)});
+    (void)CollabText::Storage::decode_checkpoint_engine({2, 2, std::string(bytes)});
     (void)CollabText::Storage::decode_checkpoint_causal({3, 1, std::string(bytes)});
     (void)CollabText::Storage::decode_checkpoint_deferred(
         {4, 1, std::string(bytes)},

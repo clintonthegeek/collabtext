@@ -260,15 +260,10 @@ Result<MembershipEvent> parse_line(std::string_view line,
   std::string magic, producer_s, seq_s, epoch_s, actor_s, kind_s, parent_s, evidence_s, extra;
   if (!(in >> magic >> producer_s >> seq_s >> epoch_s >> actor_s >> kind_s))
     return Error(ErrorCode::corrupt_record, "membership record has invalid fields");
-  if (magic == "CME2") {
-    if (!(in >> parent_s >> evidence_s) || !is_hash(parent_s))
-      return Error(ErrorCode::corrupt_record, "membership parent descriptor hash is invalid");
-  } else if (magic == "CME1") {
-    if (!(in >> evidence_s))
-      return Error(ErrorCode::corrupt_record, "legacy membership record is incomplete");
-  } else {
-    return Error(ErrorCode::corrupt_record, "membership record version is unsupported");
-  }
+  if (magic != "CME2")
+    return Error(ErrorCode::unsupported_version, "membership record version is unsupported");
+  if (!(in >> parent_s >> evidence_s) || !is_hash(parent_s))
+    return Error(ErrorCode::corrupt_record, "membership parent descriptor hash is invalid");
   if (in >> extra)
     return Error(ErrorCode::corrupt_record, "membership record has invalid fields");
   auto record_producer = ActorId::parse(producer_s);
@@ -308,7 +303,7 @@ Result<MembershipEvent> find_transition_event(
                  "descriptor transition event is missing from the producer journal");
   if (match->parent_descriptor_hash.empty())
     return Error(ErrorCode::corrupt_record,
-                 "legacy membership event has no bound parent descriptor");
+                 "membership event has no bound parent descriptor");
   return *match;
 }
 } // namespace

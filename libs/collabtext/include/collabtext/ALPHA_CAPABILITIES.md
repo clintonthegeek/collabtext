@@ -43,7 +43,7 @@ failure; decode never commits consumer coverage. Unknown versions return typed
 | Position `CTPT` (binary, includes NUL) | 1 existing four kinds; 2 TextMarker kind 5 | Supported persisted bytes; retain readers and semantic meaning. Existing version-1 goldens unchanged |
 | List operation `CTLO` | 0002 | Checked alpha interchange; cross-version durable reader obligation not yet declared |
 | Global `CTGV`, gap `CTGP` | 0001 | Checked alpha interchange; decoding a gap does not publish or certify it |
-| Checkpoints/private history journals/store artifacts | Marker engine section 3, retained section readers 1/2 | Implemented checked formats, but no general cross-version store obligation. Validate upgrades against the exact candidate |
+| Checkpoints/private history journals/store artifacts | Marker engine section 3, current section readers 2/3 | Implemented checked formats, but no general cross-version store obligation. Validate upgrades against the exact candidate |
 
 Pre-vNext CTBO/CTLO version 0001 is unsupported. Future writers must retain the
 supported CTBO/CTPT readers and literal fixtures. Byte determinism of newly

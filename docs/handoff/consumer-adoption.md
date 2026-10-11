@@ -265,3 +265,12 @@ explicit integration tag. Future performance PRs run both consumer gates.
 
 These fixtures demonstrate contracts. Passing them does not certify either
 real consumer's persistence or UI integration.
+
+
+2026-10-11 clean-cut amendment: the user requires no compatibility for earlier
+alpha stores. Superseded readers and source-compatibility parameters are removed
+once current replacements pass. CME1 and unbound checkpoint engine section 1 are
+unsupported; presence-only SyncManager no longer takes an ignored engine pointer.
+CTBO/0002–0003 and CTPT/1–2 remain current writer formats; the reader obligation
+above starts with this adoption candidate for newly durable Wave data. This is
+not an obligation to upgrade earlier experimental stores.

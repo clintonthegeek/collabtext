@@ -20,7 +20,7 @@ private slots:
     identity.display_name = "Presence Only";
     identity.color = "#336699";
 
-    SyncManager manager(nullptr, identity, "presence-device", "Test Device");
+    SyncManager manager(identity, "presence-device", "Test Device");
     manager.start(QString::fromStdString(root.string()));
     QVERIFY(manager.isRunning());
     manager.stop();

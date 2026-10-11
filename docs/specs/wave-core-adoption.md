@@ -45,7 +45,7 @@ Old bytes need no rewriting. Alpha ABI/source stability is separate from these
 reader obligations. New APIs are additive; consumers rebuild against the package.
 
 Checkpoint engine sections with markers use version 3, adding one boolean kind
-byte before each text fragment. Readers retain section versions 1/2. Other
+byte before each text fragment. Section versions 2/3 are current; obsolete engine section 1 is refused. Other
 checkpoint sections remain unchanged. Collection remains disabled for initial
 Wave adoption; durable marker pins/collection need their own certified gate.
 
@@ -84,3 +84,12 @@ big-endian adapter version. The actor is the first 16 SHA-256 digest bytes.
 All-zero output is refused. A consumer checks the derived actor against its
 namespace registry; probabilistic collision resistance is not a registry.
 Canonical event IDs identify/order transitions in Wave; they are not actor IDs.
+
+
+2026-10-11 clean-cut amendment: the user requires no compatibility for earlier
+alpha stores. Superseded readers and source-compatibility parameters are removed
+once current replacements pass. CME1 and unbound checkpoint engine section 1 are
+unsupported; presence-only SyncManager no longer takes an ignored engine pointer.
+CTBO/0002–0003 and CTPT/1–2 remain current writer formats; the reader obligation
+above starts with this adoption candidate for newly durable Wave data. This is
+not an obligation to upgrade earlier experimental stores.

@@ -28,8 +28,7 @@ std::string SyncManager::now_iso8601()
 // Construction / destruction
 // ---------------------------------------------------------------------------
 
-SyncManager::SyncManager(CrdtEngine *engine,
-                         const Identity::Identity &identity,
+SyncManager::SyncManager(const Identity::Identity &identity,
                          const std::string &replica_id,
                          const std::string &device_name,
                          QObject *parent)
@@ -38,7 +37,6 @@ SyncManager::SyncManager(CrdtEngine *engine,
     , m_replicaId(replica_id)
     , m_deviceName(device_name)
 {
-    (void)engine;
     connect(&m_timer, &QTimer::timeout, this, &SyncManager::syncCycle);
 }
 

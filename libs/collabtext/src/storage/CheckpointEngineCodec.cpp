@@ -306,7 +306,7 @@ Result<CheckpointSection> encode_checkpoint_engine(
 Result<CheckpointEngineState> decode_checkpoint_engine(
     const CheckpointSection &section) {
   if (section.id != 2) return malformed("checkpoint engine state must be section 2");
-  if (section.version != 1 && section.version != 2 && section.version != 3)
+  if (section.version != 2 && section.version != 3)
     return Error(ErrorCode::unsupported_version, "checkpoint engine section version is unsupported", "checkpoint.engine");
   if (section.bytes.size() > kCheckpointMaxBytes - kSectionHeaderBytes)
     return Error(ErrorCode::limit_exceeded, "checkpoint engine section exceeds byte limit", "checkpoint.engine");
@@ -384,7 +384,7 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
     if (const auto issue = Crdt::SequenceOrder::check_consistency(state.entries))
       return malformed(*issue);
   }
-  if (section.version >= 2 && !read_reclamation(reader, state.reclamation))
+  if (!read_reclamation(reader, state.reclamation))
     return malformed("checkpoint reclamation binding is invalid or truncated");
   if (reader.cursor != reader.bytes.size())
     return malformed("checkpoint engine section has trailing bytes");

@@ -194,38 +194,18 @@ private slots:
     QCOMPARE(opened.error().code(), ErrorCode::corrupt_record);
   }
 
-  void recoveryReadsLegacyEventsButTheyCannotProveTransitions() {
+  void obsoleteUnboundMembershipRecordsAreUnsupported() {
     QTemporaryDir dir; QVERIFY(dir.isValid());
     const auto producer = actor(35), subject = actor(36);
-    const auto path = std::filesystem::path(dir.path().toStdString()) / "legacy.log";
-    const auto legacy_body = "CME1 " + producer.to_string() + " 1 7 " +
-        subject.to_string() + " E 6161";
+    const auto path = std::filesystem::path(dir.path().toStdString()) / "obsolete.log";
+    const auto body = "CME1 " + producer.to_string() + " 1 7 " + subject.to_string() + " E 6161";
     {
       std::ofstream out(path, std::ios::binary);
-      out << legacy_body << " " << sha256_hex(legacy_body) << "\n";
+      out << body << " " << sha256_hex(body) << "\n";
     }
-    auto opened = MembershipStore::open(path, producer); QVERIFY(opened.ok());
-    auto events = opened.value().recover(); QVERIFY(events.ok());
-    QCOMPARE(events.value().size(), size_t(1));
-    QVERIFY(events.value().front().parent_descriptor_hash.empty());
-    QVERIFY(events.value().front().evidence == "aa");
-
-    auto parent = fixture_descriptor(6, {actor(37)});
-    auto child = parent;
-    child.epoch = 7;
-    child.parent_hash = parent.hash;
-    child.members.push_back(subject);
-    std::sort(child.members.begin(), child.members.end());
-    for (auto &frontier : child.base_frontiers) {
-      frontier.operation.emplace(subject, 0);
-      frontier.delivery.emplace(subject, 0);
-    }
-    child.transition_event_hash = sha256_hex(
-        legacy_body + " " + sha256_hex(legacy_body));
-    child.base_checkpoint_hash = sha256_hex("legacy-child-checkpoint");
-    child.hash.clear();
-    auto sealed = seal_membership_descriptor(child); QVERIFY(sealed.ok());
-    QVERIFY(!opened.value().validate_transition_link(parent, sealed.value()).ok());
+    auto opened = MembershipStore::open(path, producer);
+    QVERIFY(!opened.ok());
+    QCOMPARE(opened.error().code(), ErrorCode::unsupported_version);
   }
 
   void descriptorTransitionMustMatchDurableJournalEvent() {
