@@ -2372,11 +2372,15 @@ private slots:
       std::string descriptor_hash;
       std::string checkpoint_hash;
       bool refuse = false;
+      bool refuse_publication = false;
     };
     auto expected_binding = std::make_shared<ExpectedReclamationBinding>();
     config.validate_checkpoint_candidate =
-        [](std::string_view shareable,
-           const std::optional<std::string> &) -> Result<void> {
+        [expected_binding](std::string_view shareable,
+                           const std::optional<std::string> &) -> Result<void> {
+      if (expected_binding->refuse_publication)
+        return Error(ErrorCode::awaiting_state,
+                     "test provider refused checkpoint publication");
       if (shareable.empty())
         return Error(ErrorCode::malformed, "empty checkpoint artifact");
       return {};
@@ -2512,6 +2516,23 @@ private slots:
         Storage::decode_checkpoint_core(unchanged_artifact.value());
     QVERIFY(unchanged_core.ok());
     QVERIFY(unchanged_core.value().engine.reclamation.empty());
+
+    expected_binding->refuse_publication = true;
+    auto refused_publication = session->install_reclamation_frontier(
+        *certified_frontier, provider);
+    QVERIFY(!refused_publication.ok());
+    QCOMPARE(refused_publication.error().code(), ErrorCode::awaiting_state);
+    expected_binding->refuse_publication = false;
+    auto rolled_back_capture = session->capture_checkpoint(provider);
+    QVERIFY(rolled_back_capture.ok());
+    auto rolled_back_artifact = Storage::decode_checkpoint(
+        rolled_back_capture.value().shareable_artifact_bytes,
+        Storage::CheckpointKind::Shareable);
+    QVERIFY(rolled_back_artifact.ok());
+    auto rolled_back_core =
+        Storage::decode_checkpoint_core(rolled_back_artifact.value());
+    QVERIFY(rolled_back_core.ok());
+    QVERIFY(rolled_back_core.value().engine.reclamation.empty());
 
     auto reset_due = session->checkpoint_due();
     QVERIFY(reset_due.ok());

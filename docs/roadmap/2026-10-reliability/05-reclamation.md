@@ -199,6 +199,8 @@ Run `./tools/verify-roadmap.sh debug 'tst_checkpoint_recovery|tst_store_lifecycl
 `IdListCheckpointState` now also carries the persisted binding. Restore rejects malformed or causally ahead floors, and IdList applies the same shared remote-undo rejection check before changing its UndoMap. The six-suite Debug gate (GC/model/certificate, IdList GC, checkpoint codec and session recovery) passed 6/6 (20261011T072930Z-12). IdList does not yet have DocumentSession-style provider validation and certified installation; both primitives still retain all tombstones and UndoMap entries.
 
 The corresponding Release selection passed 7/7 (20261011T073056Z-2). ASan/UBSan passed 7/7 with `ASAN_OPTIONS=detect_leaks=0` (20261011T073318Z-2). The default sanitizer invocation hit the runner's LeakSanitizer/ptrace limitation after the test assertions completed; disabling leak detection is the established runner workaround.
+
+A further session recovery regression injects provider rejection after the cutoff is tentatively installed but before the checkpoint manifest is published. It verifies the installation returns the provider error and a later capture contains no cutoff; `tst_session_recovery` passed 1/1 in Debug (20261011T073526Z-2).
 **Coverage:** F1, F2, F3, F7, R7, R10  
 
 **Files / scope:**
