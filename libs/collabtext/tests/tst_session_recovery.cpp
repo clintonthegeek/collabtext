@@ -2363,7 +2363,7 @@ private slots:
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     const std::filesystem::path root = tmp.path().toStdString();
-    const StreamScope scope{"checkpoint-receipt-stream", 1};
+    const StreamScope scope{"checkpoint-receipt-stream", 2};
     DocumentSessionConfig config{root / "shared", root / "device",
                                  "checkpoint-receipt-doc", scope.stream,
                                  scope.epoch};
@@ -2423,11 +2423,24 @@ private slots:
     QVERIFY(peer_operation.ok());
     auto peer_payload = encode_operation(peer_operation.value());
     QVERIFY(peer_payload.ok());
+    const PositionScope old_pin_scope{
+        pin_scope.document, pin_scope.stream, Primitive::text, scope.epoch - 1};
+    auto old_epoch_engine = CrdtEngine::create(Test::test_counter(189),
+                                                old_pin_scope);
+    QVERIFY(old_epoch_engine.ok());
+    QVERIFY(Test::apply_succeeded(
+        old_epoch_engine.value()->apply_remote(peer_operation.value())));
     auto pinned_position = peer_engine.value()->attachment_at(
         2, Affinity::left, ReferentSide::preceding);
     QVERIFY(pinned_position.ok());
     auto pinned_position_bytes = encode_position(PositionToken{pinned_position.value()});
     QVERIFY(pinned_position_bytes.ok());
+    auto old_pinned_position = old_epoch_engine.value()->attachment_at(
+        2, Affinity::left, ReferentSide::preceding);
+    QVERIFY(old_pinned_position.ok());
+    auto old_pinned_position_bytes =
+        encode_position(PositionToken{old_pinned_position.value()});
+    QVERIFY(old_pinned_position_bytes.ok());
     auto peer_delete = peer_engine.value()->try_remove(0, 4);
     QVERIFY(peer_delete.ok());
     auto peer_delete_payload = encode_operation(peer_delete.value());
@@ -2453,11 +2466,17 @@ private slots:
     QCOMPARE(session->text(), std::string());
 
     SessionCheckpointProviderState provider;
+    provider.parent_descriptor_hash = sha256_hex("checkpoint-receipt-parent");
     provider.projected_pin_frontier = 1;
     provider.canonical_pin_frontier = 1;
     provider.canonical_pin_projection_hash = sha256_hex("reply-1-pin");
     provider.live_pins.push_back(
-        {"reply-1", pin_scope, pinned_position_bytes.value()});
+        {"reply-current", pin_scope, pinned_position_bytes.value()});
+    provider.live_pins.push_back(
+        {"reply-old", old_pin_scope, old_pinned_position_bytes.value()});
+    provider.translations.push_back(
+        {"reply-old", old_pin_scope.epoch, old_pinned_position_bytes.value(),
+         pinned_position_bytes.value()});
     auto captured = session->capture_checkpoint(provider);
     QVERIFY(captured.ok());
     QCOMPARE(captured.value().delivery_coverage.at(producer), uint64_t(2));
@@ -2469,6 +2488,8 @@ private slots:
     const auto session_actor = session->actor();
     Storage::MembershipDescriptor descriptor;
     descriptor.epoch = scope.epoch;
+    descriptor.parent_hash = provider.parent_descriptor_hash;
+    descriptor.transition_event_hash = sha256_hex("checkpoint-receipt-transition");
     descriptor.base_checkpoint_hash = sha256_hex("reclamation-base-checkpoint");
     descriptor.members = {session_actor};
     Storage::MembershipDescriptor::StreamFrontier base;
@@ -2481,10 +2502,12 @@ private slots:
       base.delivery.emplace(actor, 0);
     descriptor.base_frontiers.push_back(std::move(base));
     descriptor.supported_token_versions = {1};
-    descriptor.translation_manifest_hash = sha256_hex("reclamation-translations");
+    descriptor.translation_manifest_hash =
+        captured.value().translation_manifest_hash;
     auto sealed_descriptor = Storage::seal_membership_descriptor(
         std::move(descriptor));
-    QVERIFY(sealed_descriptor.ok());
+    QVERIFY2(sealed_descriptor.ok(),
+             sealed_descriptor.ok() ? "" : sealed_descriptor.error().message().data());
     descriptor = std::move(sealed_descriptor).value();
 
     Storage::PeerCoverageEvidence evidence;
@@ -2667,6 +2690,7 @@ private slots:
     provider.canonical_pin_frontier = 2;
     provider.canonical_pin_projection_hash = sha256_hex("");
     provider.live_pins.clear();
+    provider.translations.clear();
     auto released_checkpoint = bound_session->publish_checkpoint(provider);
     QVERIFY(released_checkpoint.ok());
     evidence.checkpoint_hash = released_checkpoint.value().shareable_artifact_hash;
@@ -2728,6 +2752,30 @@ private slots:
     QCOMPARE(refused_undo.value().size(), size_t(1));
     QCOMPARE(refused_undo.value().front().reason.code(),
              ErrorCode::history_unavailable);
+
+    auto late_placement = peer_engine.value()->try_insert(2, "x");
+    QVERIFY(late_placement.ok());
+    auto late_placement_payload = Crdt::encode_operation(late_placement.value());
+    QVERIFY(late_placement_payload.ok());
+    {
+      Crdt::FileOpStream peer(root / "shared", producer);
+      QVERIFY(peer.start().ok());
+      QVERIFY(peer.register_stream(scope).ok());
+      QVERIFY(peer.push(
+          {{scope.stream, scope.epoch, producer, 4},
+           late_placement_payload.value()},
+          PushDurability::durable).ok());
+      QVERIFY(peer.close().ok());
+    }
+    auto late_placement_poll = bound_session->poll();
+    QVERIFY(late_placement_poll.ok());
+    QCOMPARE(late_placement_poll.value().quarantined, size_t(1));
+    QVERIFY(bound_session->text().empty());
+    auto quarantined_after_placement = bound_session->quarantined_deliveries();
+    QVERIFY(quarantined_after_placement.ok());
+    QCOMPARE(quarantined_after_placement.value().size(), size_t(1));
+    QCOMPARE(quarantined_after_placement.value().back().reason.code(),
+             ErrorCode::history_unavailable);
     QVERIFY(bound_session->close().ok());
 
     expected_binding->refuse = true;
@@ -2736,9 +2784,9 @@ private slots:
     QVERIFY(refused_open.ok());
     auto refused_session = std::move(refused_open).value();
     QVERIFY(binding_validated);
-    // The older unbound checkpoint still has the complete undo history, so
-    // after provider refusal the retained late undo can safely replay.
-    QCOMPARE(refused_session->text(), std::string("peer"));
+    // The older unbound checkpoint still has the complete history, so after
+    // provider refusal both the late undo and its descendant insertion replay.
+    QCOMPARE(refused_session->text(), std::string("pexer"));
     QVERIFY(refused_session->close().ok());
   }
 
