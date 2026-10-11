@@ -218,6 +218,79 @@ private slots:
     }
   }
 
+  void artifactFailuresNeverAdvanceTheManifest() {
+    const std::array<Step, 5> steps{Step::Write, Step::FileSync, Step::Close,
+                                    Step::Replace, Step::DirSync};
+    for (const auto failed_step : steps) {
+      QTemporaryDir temp;
+      QVERIFY(temp.isValid());
+      const auto actor = Test::actor(116);
+      bool inject = false;
+      bool artifact_renamed = false;
+      StepHook hook;
+      hook.fail = [&](Step step, const fs::path &path) -> std::optional<Error> {
+        const bool artifact_path = path.filename().string().starts_with("shareable-");
+        const bool artifact_directory_sync = step == Step::DirSync && artifact_renamed;
+        if (inject && step == failed_step &&
+            (artifact_path || artifact_directory_sync))
+          return Error(ErrorCode::io_error, "injected checkpoint artifact failure");
+        return {};
+      };
+      hook.observe = [&](Step step, const fs::path &path) {
+        if (step == Step::Replace &&
+            path.filename().string().starts_with("shareable-"))
+          artifact_renamed = true;
+      };
+      auto store = CheckpointStore::open(temp.path().toStdString(), &hook);
+      QVERIFY(store);
+      const auto old_bytes = checkpoint("artifact-stable-state");
+      QVERIFY(store.value().publish(old_bytes, {}, actor));
+      const auto candidate = checkpoint("artifact-not-yet-published");
+      artifact_renamed = false;
+      inject = true;
+      QVERIFY(!store.value().publish(candidate, {}, actor));
+
+      auto recovered = store.value().recover(actor, accept_checkpoint);
+      QVERIFY(recovered);
+      QVERIFY(recovered.value());
+      QCOMPARE(recovered.value()->shareable_bytes, old_bytes);
+      QCOMPARE(recovered.value()->generation, uint64_t{1});
+    }
+  }
+
+  void manifestSlotsRollOverAndKeepThePreviousCompleteGeneration() {
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto actor = Test::actor(117);
+    auto store = CheckpointStore::open(temp.path().toStdString());
+    QVERIFY(store);
+    const auto first = checkpoint("generation-one");
+    const auto second = checkpoint("generation-two");
+    const auto third = checkpoint("generation-three");
+    auto first_publish = store.value().publish(first, {}, actor);
+    QVERIFY(first_publish);
+    QCOMPARE(first_publish.value().generation, uint64_t{1});
+    auto second_publish = store.value().publish(second, {}, actor);
+    QVERIFY(second_publish);
+    QCOMPARE(second_publish.value().generation, uint64_t{2});
+    auto third_publish = store.value().publish(third, {}, actor);
+    QVERIFY(third_publish);
+    QCOMPARE(third_publish.value().generation, uint64_t{3});
+    QVERIFY(fs::exists(fs::path(temp.path().toStdString()) / "manifest-0"));
+    QVERIFY(fs::exists(fs::path(temp.path().toStdString()) / "manifest-1"));
+
+    const auto third_artifact = fs::path(temp.path().toStdString()) /
+        ("shareable-" + sha256_hex(third));
+    QVERIFY(fs::remove(third_artifact));
+    auto fallback = store.value().recover(actor, accept_checkpoint);
+    QVERIFY(fallback);
+    QVERIFY(fallback.value());
+    QCOMPARE(fallback.value()->shareable_bytes, second);
+    QCOMPARE(fallback.value()->generation, uint64_t{2});
+    QVERIFY(fs::exists(fs::path(temp.path().toStdString()) /
+                       ("shareable-" + sha256_hex(first))));
+  }
+
   void rejectsWrongContextAndCompanionBinding() {
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
