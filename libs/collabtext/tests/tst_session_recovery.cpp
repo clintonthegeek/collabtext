@@ -5,6 +5,8 @@
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/MembershipCoordinator.h>
 #include "crdt/Buffer.h"
+#include "crdt/PositionPayload.h"
+#include "crdt/PositionTraversal.h"
 #include "crdt/SeedOp.h"
 #include "core/Sha256.h"
 #include "identity/ReplicaAllocator.h"
@@ -22,6 +24,7 @@
 #include <collabtext/Serialization.h>
 #include "VolatileCounter.h"
 
+#include <algorithm>
 #include <fstream>
 #include <atomic>
 #include <chrono>
@@ -73,6 +76,22 @@ Result<void> append_durable_line(const std::filesystem::path &path,
   std::string framed(line);
   framed.push_back('\n');
   return file.append(framed);
+}
+Result<ResolvedTextPosition> resolve_text_token_on_buffer(
+    const Crdt::Buffer &buffer, std::string_view encoded) {
+  auto token = decode_position(encoded);
+  if (!token.ok()) return token.error();
+  const detail::PositionPayload *payload = nullptr;
+  if (const auto *boundary = std::get_if<TextBoundary>(&token.value()))
+    payload = detail::PositionAccess::get(*boundary);
+  else if (const auto *attachment = std::get_if<TextAttachment>(&token.value()))
+    payload = detail::PositionAccess::get(*attachment);
+  else
+    return Error(ErrorCode::wrong_primitive,
+                 "position token does not identify a text location");
+  auto items = buffer.position_items();
+  if (!items.ok()) return items.error();
+  return detail::resolve_boundary(*payload, items.value());
 }
 class ReadOnlyAllocator final : public Crdt::IdentityAllocator {
 public:
@@ -2359,7 +2378,7 @@ private slots:
     QVERIFY(replayed->close().ok());
   }
 
-  void sessionCheckpointBindsCoveredPeerReceiptToPublishedDigest() {
+  void sessionCheckpointBindsReceiptAndPreservesTranslatedPinsThroughCollection() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     const std::filesystem::path root = tmp.path().toStdString();
@@ -2430,13 +2449,12 @@ private slots:
     QVERIFY(old_epoch_engine.ok());
     QVERIFY(Test::apply_succeeded(
         old_epoch_engine.value()->apply_remote(peer_operation.value())));
-    auto pinned_position = peer_engine.value()->attachment_at(
-        2, Affinity::left, ReferentSide::preceding);
+    auto pinned_position = peer_engine.value()->boundary_at(2, Affinity::left);
     QVERIFY(pinned_position.ok());
     auto pinned_position_bytes = encode_position(PositionToken{pinned_position.value()});
     QVERIFY(pinned_position_bytes.ok());
-    auto old_pinned_position = old_epoch_engine.value()->attachment_at(
-        2, Affinity::left, ReferentSide::preceding);
+    auto old_pinned_position =
+        old_epoch_engine.value()->boundary_at(2, Affinity::left);
     QVERIFY(old_pinned_position.ok());
     auto old_pinned_position_bytes =
         encode_position(PositionToken{old_pinned_position.value()});
@@ -2445,6 +2463,14 @@ private slots:
     QVERIFY(peer_delete.ok());
     auto peer_delete_payload = encode_operation(peer_delete.value());
     QVERIFY(peer_delete_payload.ok());
+    auto garbage_insert = peer_engine.value()->try_insert(0, "junk");
+    QVERIFY(garbage_insert.ok());
+    auto garbage_insert_payload = encode_operation(garbage_insert.value());
+    QVERIFY(garbage_insert_payload.ok());
+    auto garbage_delete = peer_engine.value()->try_remove(0, 4);
+    QVERIFY(garbage_delete.ok());
+    auto garbage_delete_payload = encode_operation(garbage_delete.value());
+    QVERIFY(garbage_delete_payload.ok());
     {
       Crdt::FileOpStream peer(root / "shared", producer);
       QVERIFY(peer.start().ok());
@@ -2455,6 +2481,12 @@ private slots:
       QVERIFY(peer.push({{scope.stream, scope.epoch, producer, 2},
                          peer_delete_payload.value()},
                         PushDurability::durable).ok());
+      QVERIFY(peer.push({{scope.stream, scope.epoch, producer, 3},
+                         garbage_insert_payload.value()},
+                        PushDurability::durable).ok());
+      QVERIFY(peer.push({{scope.stream, scope.epoch, producer, 4},
+                         garbage_delete_payload.value()},
+                        PushDurability::durable).ok());
       QVERIFY(peer.close().ok());
     }
     auto delivery_due = session->checkpoint_due();
@@ -2462,7 +2494,7 @@ private slots:
     QVERIFY(delivery_due.value());
     auto polled = session->poll();
     QVERIFY(polled.ok());
-    QCOMPARE(polled.value().committed, size_t(2));
+    QCOMPARE(polled.value().committed, size_t(4));
     QCOMPARE(session->text(), std::string());
 
     SessionCheckpointProviderState provider;
@@ -2479,7 +2511,7 @@ private slots:
          pinned_position_bytes.value()});
     auto captured = session->capture_checkpoint(provider);
     QVERIFY(captured.ok());
-    QCOMPARE(captured.value().delivery_coverage.at(producer), uint64_t(2));
+    QCOMPARE(captured.value().delivery_coverage.at(producer), uint64_t(4));
     auto published = session->publish_checkpoint(provider);
     QVERIFY(published.ok());
     QCOMPARE(published.value().shareable_artifact_hash,
@@ -2606,7 +2638,7 @@ private slots:
       for (int shift = 56; shift >= 0; shift -= 8)
         expected.push_back(static_cast<char>(value >> shift));
     };
-    append_u64(2);
+    append_u64(4);
     expected.push_back(1);
     append_u64(published.value().shareable_artifact_hash.size());
     expected += published.value().shareable_artifact_hash;
@@ -2680,11 +2712,92 @@ private slots:
         *collection_frontier, provider);
     QVERIFY(!missing_lease.ok());
     QCOMPARE(missing_lease.error().code(), ErrorCode::awaiting_state);
+
+    auto before_gc_artifact = Storage::decode_checkpoint(
+        installed.value().shareable_artifact_bytes,
+        Storage::CheckpointKind::Shareable);
+    QVERIFY(before_gc_artifact.ok());
+    auto before_gc_core = Storage::decode_checkpoint_core(
+        before_gc_artifact.value());
+    QVERIFY(before_gc_core.ok());
+    const auto old_pin_translation = std::find_if(
+        before_gc_core.value().translations.entries.begin(),
+        before_gc_core.value().translations.entries.end(),
+        [&](const auto &translation) {
+          return translation.reference_id == "reply-old" &&
+                 translation.source_token_bytes ==
+                     old_pinned_position_bytes.value();
+        });
+    QVERIFY(old_pin_translation !=
+            before_gc_core.value().translations.entries.end());
+    Crdt::Buffer before_gc(Test::test_counter(192));
+    Crdt::BufferCheckpointState before_gc_state;
+    before_gc_state.version = before_gc_core.value().causal.version;
+    before_gc_state.fragments = before_gc_core.value().engine.fragments;
+    before_gc_state.undo_entries = before_gc_core.value().causal.undo_entries;
+    before_gc_state.reclamation = before_gc_core.value().engine.reclamation;
+    QVERIFY(before_gc.restore_checkpoint_state(before_gc_state).ok());
+    auto before_old_pin = resolve_text_token_on_buffer(
+        before_gc, old_pin_translation->current_token_bytes);
+    QVERIFY2(before_old_pin.ok(), before_old_pin.ok()
+                                      ? ""
+                                      : before_old_pin.error().message().data());
+    auto before_current_pin = resolve_text_token_on_buffer(
+        before_gc, pinned_position_bytes.value());
+    QVERIFY(before_current_pin.ok());
+
     *lease_enabled = true;
     auto reclaimed = bound_session->collect_garbage(
         *collection_frontier, provider);
     QVERIFY(reclaimed.ok());
-    QCOMPARE(reclaimed.value(), size_t(0));
+    QCOMPARE(reclaimed.value(), size_t(4));
+    auto after_partial_collection =
+        bound_session->capture_checkpoint(provider);
+    QVERIFY(after_partial_collection.ok());
+    auto after_partial_artifact = Storage::decode_checkpoint(
+        after_partial_collection.value().shareable_artifact_bytes,
+        Storage::CheckpointKind::Shareable);
+    QVERIFY(after_partial_artifact.ok());
+    auto after_partial_core = Storage::decode_checkpoint_core(
+        after_partial_artifact.value());
+    QVERIFY(after_partial_core.ok());
+    const auto after_old_pin_translation = std::find_if(
+        after_partial_core.value().translations.entries.begin(),
+        after_partial_core.value().translations.entries.end(),
+        [&](const auto &translation) {
+          return translation.reference_id == "reply-old" &&
+                 translation.source_token_bytes ==
+                     old_pinned_position_bytes.value();
+        });
+    QVERIFY(after_old_pin_translation !=
+            after_partial_core.value().translations.entries.end());
+    QCOMPARE(after_old_pin_translation->current_token_bytes,
+             old_pin_translation->current_token_bytes);
+    Crdt::Buffer after_partial_gc(Test::test_counter(193));
+    Crdt::BufferCheckpointState after_partial_state;
+    after_partial_state.version = after_partial_core.value().causal.version;
+    after_partial_state.fragments = after_partial_core.value().engine.fragments;
+    after_partial_state.undo_entries =
+        after_partial_core.value().causal.undo_entries;
+    after_partial_state.reclamation =
+        after_partial_core.value().engine.reclamation;
+    QVERIFY(after_partial_gc.restore_checkpoint_state(after_partial_state).ok());
+    auto after_old_pin = resolve_text_token_on_buffer(
+        after_partial_gc, after_old_pin_translation->current_token_bytes);
+    QVERIFY(after_old_pin.ok());
+    auto after_current_pin = resolve_text_token_on_buffer(
+        after_partial_gc, pinned_position_bytes.value());
+    QVERIFY(after_current_pin.ok());
+    QCOMPARE(after_old_pin.value().byte_offset,
+             before_old_pin.value().byte_offset);
+    QCOMPARE(after_old_pin.value().lost_left, before_old_pin.value().lost_left);
+    QCOMPARE(after_old_pin.value().lost_right, before_old_pin.value().lost_right);
+    QCOMPARE(after_current_pin.value().byte_offset,
+             before_current_pin.value().byte_offset);
+    QCOMPARE(after_current_pin.value().lost_left,
+             before_current_pin.value().lost_left);
+    QCOMPARE(after_current_pin.value().lost_right,
+             before_current_pin.value().lost_right);
 
     provider.projected_pin_frontier = 2;
     provider.canonical_pin_frontier = 2;
@@ -2730,10 +2843,13 @@ private slots:
 
     Crdt::Buffer unreclaimed_reference(Test::test_counter(191));
     auto reference_history = unreclaimed_reference.apply_ops(
-        {peer_operation.value(), peer_delete.value()});
-    QCOMPARE(reference_history.size(), size_t(2));
+        {peer_operation.value(), peer_delete.value(), garbage_insert.value(),
+         garbage_delete.value()});
+    QCOMPARE(reference_history.size(), size_t(4));
     QVERIFY(Test::apply_succeeded(reference_history[0]));
     QVERIFY(Test::apply_succeeded(reference_history[1]));
+    QVERIFY(Test::apply_succeeded(reference_history[2]));
+    QVERIFY(Test::apply_succeeded(reference_history[3]));
     const auto fresh_actor = Test::actor(190);
     auto fresh_writer = CrdtEngine::create(Test::test_counter(190), pin_scope);
     QVERIFY(fresh_writer.ok());
@@ -2773,7 +2889,7 @@ private slots:
       QVERIFY(peer.start().ok());
       QVERIFY(peer.register_stream(scope).ok());
       QVERIFY(peer.push(
-          {{scope.stream, scope.epoch, producer, 3},
+          {{scope.stream, scope.epoch, producer, 5},
            late_undo_payload.value()},
           PushDurability::durable).ok());
       QVERIFY(peer.close().ok());
@@ -2801,7 +2917,7 @@ private slots:
       QVERIFY(peer.start().ok());
       QVERIFY(peer.register_stream(scope).ok());
       QVERIFY(peer.push(
-          {{scope.stream, scope.epoch, producer, 4},
+          {{scope.stream, scope.epoch, producer, 6},
            late_placement_payload.value()},
           PushDurability::durable).ok());
       QVERIFY(peer.close().ok());

@@ -212,6 +212,52 @@ private slots:
                  CollabText::ApplyOutcomeKind::applied);
     }
 
+    void certified_collection_preserves_independent_root_convergence() {
+        IdList author(CollabText::Test::test_counter(1));
+        IdList deleter(CollabText::Test::test_counter(2));
+        IdList collected(CollabText::Test::test_counter(3));
+        IdList reference(CollabText::Test::test_counter(4));
+
+        const auto inserted = author.insert_after(Anchor::min(), 0xAA);
+        for (IdList *replica : {&deleter, &collected, &reference})
+            QCOMPARE(replica->apply_remote_op_checked(inserted).kind(),
+                     CollabText::ApplyOutcomeKind::applied);
+        const auto removed = deleter.remove_at(
+            Anchor(Identity(actor(1), 1), Bias::Left));
+        for (IdList *replica : {&collected, &reference})
+            QCOMPARE(replica->apply_remote_op_checked(removed).kind(),
+                     CollabText::ApplyOutcomeKind::applied);
+
+        auto checkpoint = collected.checkpoint_state();
+        checkpoint.reclamation = {
+            "id-list-stream", std::string(64, '1'), std::string(64, '2'),
+            {{actor(1), 1}, {actor(2), checkpoint.version.get(actor(2))}}};
+        QVERIFY(collected.restore_checkpoint_state(checkpoint).ok());
+        auto reclaimed = collected.collect_garbage({});
+        QVERIFY(reclaimed.ok());
+        QCOMPARE(reclaimed.value(), size_t{1});
+        QCOMPARE(collected.entry_count(), size_t{0});
+        QCOMPARE(reference.entry_count(), size_t{1});
+
+        IdList left_writer(CollabText::Test::test_counter(5));
+        IdList right_writer(CollabText::Test::test_counter(6));
+        const auto left_root =
+            left_writer.insert_after(Anchor::min(), 0xB0);
+        const auto right_root =
+            right_writer.insert_after(Anchor::min(), 0xC0);
+        QCOMPARE(collected.apply_remote_op_checked(left_root).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(collected.apply_remote_op_checked(right_root).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(reference.apply_remote_op_checked(right_root).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(reference.apply_remote_op_checked(left_root).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+
+        QCOMPARE(collected.ids(), reference.ids());
+        QCOMPARE(collected.ids().size(), size_t{2});
+    }
+
     void certified_collection_preserves_local_history_and_live_placements() {
         IdList local(CollabText::Test::test_counter(8));
         local.insert_after(Anchor::min(), 0x10);
