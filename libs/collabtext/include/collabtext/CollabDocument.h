@@ -49,7 +49,7 @@ signals:
 private:
     void initializeDocument(const std::string &text);
     void syncBackendToQt();
-    void onQtContentsChange(int position, int charsRemoved, int charsAdded);
+    void onQtContentsChanged();
 
     CrdtEngine *m_engine = nullptr;
     DocumentSession *m_session = nullptr;

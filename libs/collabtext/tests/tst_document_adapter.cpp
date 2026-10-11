@@ -5,6 +5,7 @@
 #include "ui/CollabPlainTextEdit.h"
 
 #include <QPlainTextEdit>
+#include <QClipboard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -36,6 +37,30 @@ private slots:
     QCOMPARE(QString::fromUtf8(document.engine()->text().c_str()),
              QString::fromUtf8("a雪z"));
     QCOMPARE(updates.size(), 2);
+  }
+
+  void clipboardPasteIsAppliedToTheBackendAfterQtCommitsTheChange() {
+    const QString text = QStringLiteral("paste probe");
+    QApplication::clipboard()->setText(text);
+    QCOMPARE(QApplication::clipboard()->text(), text);
+
+    CollabDocument adapter(Test::test_counter(133));
+    Ui::CollabPlainTextEdit customExternal;
+    customExternal.setDocument(adapter.qtDocument());
+    customExternal.paste();
+    QCOMPARE(customExternal.toPlainText(), text);
+    QCOMPARE(QString::fromUtf8(adapter.engine()->text().c_str()), text);
+  }
+
+  void programmaticWholeDocumentReplacementUpdatesTheBackend() {
+    CollabDocument adapter(Test::test_counter(135));
+    adapter.qtDocument()->setPlainText(QString::fromUtf8("before 🧭"));
+    QCOMPARE(QString::fromUtf8(adapter.engine()->text().c_str()),
+             QString::fromUtf8("before 🧭"));
+
+    adapter.qtDocument()->setPlainText(QString::fromUtf8("after 🌊"));
+    QCOMPARE(QString::fromUtf8(adapter.engine()->text().c_str()),
+             QString::fromUtf8("after 🌊"));
   }
 
   void remoteOperationsUpdateQtWithoutBeingReemitted() {

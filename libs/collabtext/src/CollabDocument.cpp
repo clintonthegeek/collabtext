@@ -46,10 +46,8 @@ void CollabDocument::initializeDocument(const std::string &text) {
   m_qtDoc->setUndoRedoEnabled(false);
   m_qtDoc->setPlainText(QString::fromUtf8(
       text.data(), static_cast<qsizetype>(text.size())));
-  connect(m_qtDoc, &QTextDocument::contentsChange, this,
-          [this](int position, int charsRemoved, int charsAdded) {
-            onQtContentsChange(position, charsRemoved, charsAdded);
-          });
+  connect(m_qtDoc, &QTextDocument::contentsChanged, this,
+          [this] { onQtContentsChanged(); });
 }
 
 void CollabDocument::insertText(int position, const QString &text) {
@@ -135,16 +133,43 @@ bool CollabDocument::redo() {
   return true;
 }
 
-void CollabDocument::onQtContentsChange(int position, int charsRemoved,
-                                        int charsAdded) {
+void CollabDocument::onQtContentsChanged() {
   if (m_suppressQtSignals) return;
+  const QString previous = QString::fromUtf8(
+      m_backendText.data(), static_cast<qsizetype>(m_backendText.size()));
   const QString visible = m_qtDoc->toPlainText();
-  if (position < 0 || charsRemoved < 0 || charsAdded < 0 ||
-      position > visible.size() || charsAdded > visible.size() - position) {
-    emit operationError(QStringLiteral("Qt document reported an invalid edit range"));
-    syncBackendToQt();
-    return;
-  }
+  if (previous == visible) return;
+
+  int position = 0;
+  const int commonLength = qMin(previous.size(), visible.size());
+  while (position < commonLength && previous[position] == visible[position])
+    ++position;
+  if (position > 0 && position < previous.size() && position < visible.size() &&
+      ((previous[position - 1].isHighSurrogate() &&
+        previous[position].isLowSurrogate()) ||
+       (visible[position - 1].isHighSurrogate() &&
+        visible[position].isLowSurrogate())))
+    --position;
+
+  int suffix = 0;
+  while (suffix < previous.size() - position &&
+         suffix < visible.size() - position &&
+         previous[previous.size() - suffix - 1] ==
+             visible[visible.size() - suffix - 1])
+    ++suffix;
+  const int previousEnd = previous.size() - suffix;
+  const int visibleEnd = visible.size() - suffix;
+  const auto splitsSurrogatePair = [](const QString &text, int offset) {
+    return offset > 0 && offset < text.size() &&
+           text[offset - 1].isHighSurrogate() && text[offset].isLowSurrogate();
+  };
+  if (suffix > 0 && previousEnd > position && visibleEnd > position &&
+      (splitsSurrogatePair(previous, previousEnd) ||
+       splitsSurrogatePair(visible, visibleEnd)))
+    --suffix;
+
+  const int charsRemoved = previous.size() - position - suffix;
+  const int charsAdded = visible.size() - position - suffix;
   const QString inserted = visible.mid(position, charsAdded);
   if (m_engine) {
     auto edited = m_engine->try_replace(
