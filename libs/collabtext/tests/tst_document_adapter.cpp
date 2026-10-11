@@ -175,6 +175,12 @@ private slots:
     cursor.movePosition(QTextCursor::End);
     editor.setTextCursor(cursor);
 
+    QInputMethodEvent preedit(QString::fromUtf8("かな"), {});
+    QApplication::sendEvent(&editor, &preedit);
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QStringLiteral("a"));
+    QCOMPARE(session->text(), std::string("a"));
+    QCOMPARE(local_edits.size(), 0);
+
     QInputMethodEvent commit;
     commit.setCommitString(QString::fromUtf8("é🧭"));
     QApplication::sendEvent(&editor, &commit);
