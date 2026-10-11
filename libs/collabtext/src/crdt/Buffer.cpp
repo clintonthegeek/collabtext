@@ -451,6 +451,126 @@ size_t Buffer::collect_garbage() {
     return 0;
 }
 
+Result<size_t> Buffer::collect_garbage(
+    const std::set<Identity> &pinned_identities) {
+    if (!reclamation_binding_is_well_formed(m_reclamation))
+        return Error(ErrorCode::awaiting_state,
+                     "physical reclamation requires an installed certified frontier");
+    for (const auto &[actor, through] : m_reclamation.operation_frontier)
+        if (m_version.get(actor) < through)
+            return Error(ErrorCode::counter_regression,
+                         "installed reclamation frontier exceeds engine state");
+
+    auto fragments = get_fragments();
+    std::vector<bool> remove(fragments.size(), false);
+    size_t reclaimed_items = 0;
+    const auto interval_contains = [](const Fragment &fragment,
+                                      const Identity &identity) {
+        return identity.actor == fragment.origin.actor &&
+               identity.counter >= fragment.origin.counter &&
+               identity.counter - fragment.origin.counter < fragment.length;
+    };
+    const auto undo_snapshot = m_undo_map.entries();
+    const auto retained_by_local_history = [&](const Fragment &fragment) {
+        for (const auto &entry : m_undo_stack) {
+            for (const auto &key : entry.inserted_keys)
+                if (interval_contains(fragment, key.position)) return true;
+            for (const auto &deletion : entry.deletion_ids)
+                if (std::find(fragment.deletions.begin(),
+                              fragment.deletions.end(), deletion) !=
+                    fragment.deletions.end())
+                    return true;
+        }
+        for (const auto &entry : m_retired_undo_entries) {
+            for (const auto &identity : entry.inserted_items)
+                if (interval_contains(fragment, identity)) return true;
+            for (const auto &deletion : entry.deletion_operations)
+                if (std::find(fragment.deletions.begin(),
+                              fragment.deletions.end(), deletion) !=
+                    fragment.deletions.end())
+                    return true;
+        }
+        return false;
+    };
+
+    for (size_t i = 0; i < fragments.size(); ++i) {
+        const auto &fragment = fragments[i];
+        if (fragment.visible ||
+            !tombstone_is_covered(m_reclamation.operation_frontier,
+                                  fragment.origin, fragment.length,
+                                  fragment.deletions) ||
+            retained_by_local_history(fragment))
+            continue;
+
+        bool protected_by_pin = false;
+        for (const auto &identity : pinned_identities)
+            if (interval_contains(fragment, identity)) {
+                protected_by_pin = true;
+                break;
+            }
+        if (protected_by_pin) continue;
+
+        bool referenced = false;
+        for (size_t j = 0; j < fragments.size() && !referenced; ++j) {
+            if (i == j) continue;
+            const auto &link = fragments[j].link;
+            referenced = (link.parent && interval_contains(fragment, *link.parent)) ||
+                         (link.right_origin &&
+                          interval_contains(fragment, *link.right_origin));
+        }
+        if (referenced) continue;
+
+        bool has_uncovered_undo = false;
+        for (const auto &entry : undo_snapshot) {
+            const bool targets_fragment =
+                interval_contains(fragment, entry.key.edit_id) ||
+                std::find(fragment.deletions.begin(), fragment.deletions.end(),
+                          entry.key.edit_id) != fragment.deletions.end();
+            if (targets_fragment && !operation_is_covered(
+                                        m_reclamation.operation_frontier,
+                                        entry.key.undo_id)) {
+                has_uncovered_undo = true;
+                break;
+            }
+        }
+        if (has_uncovered_undo) continue;
+        remove[i] = true;
+        reclaimed_items += fragment.length;
+    }
+
+    if (reclaimed_items == 0) return size_t{0};
+    const auto is_reclaimed_target = [&](const Identity &identity) {
+        for (size_t i = 0; i < fragments.size(); ++i)
+            if (remove[i] &&
+                (interval_contains(fragments[i], identity) ||
+                 std::find(fragments[i].deletions.begin(),
+                           fragments[i].deletions.end(), identity) !=
+                     fragments[i].deletions.end()))
+                return true;
+        return false;
+    };
+
+    auto undo_entries = m_undo_map.entries();
+    std::erase_if(undo_entries, [&](const UndoMapEntry &entry) {
+        return is_reclaimed_target(entry.key.edit_id);
+    });
+    UndoMap rebuilt_undo;
+    if (auto restored = rebuilt_undo.restore_entries(undo_entries);
+        !restored.ok())
+        return restored.error();
+
+    FragmentTree rebuilt_tree;
+    for (size_t i = 0; i < fragments.size(); ++i) {
+        if (remove[i]) continue;
+        auto &fragment = fragments[i];
+        fragment.visible = fragment.compute_visible(rebuilt_undo);
+        rebuilt_tree.push_item(std::move(fragment));
+    }
+    m_undo_map = std::move(rebuilt_undo);
+    m_fragment_tree = std::move(rebuilt_tree);
+    return reclaimed_items;
+}
+
 // ---------------------------------------------------------------------------
 // edits_since — compute visible text changes between two versions
 // ---------------------------------------------------------------------------
@@ -1057,6 +1177,19 @@ Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
     apply_deletion_runs(frags, op.deletion_runs, op.deletion_id);
 
     for (auto &ins : op.inserted_fragments) {
+        for (const auto *dependency : {&ins.link.parent, &ins.link.right_origin}) {
+            if (*dependency &&
+                !SequenceOrder::find_item(frags, **dependency) &&
+                operation_is_covered(m_reclamation.operation_frontier,
+                                     **dependency)) {
+                m_apply_error = Error(
+                    ErrorCode::history_unavailable,
+                    "inserted run depends on a reclaimed placement identity",
+                    "placement dependency " + (*dependency)->actor.to_string() +
+                        "/" + std::to_string((*dependency)->counter));
+                return ApplyStep::malformed;
+            }
+        }
         Fragment frag(ins.origin, ins.link, static_cast<uint32_t>(ins.content.size()),
                       ins.length, ins.content);
         if (!SequenceOrder::integrate(frags, std::move(frag))) {

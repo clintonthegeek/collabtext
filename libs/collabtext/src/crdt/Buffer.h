@@ -267,6 +267,8 @@ public:
 
 private:
     friend class ::CollabText::DocumentSession;
+    [[nodiscard]] Result<size_t> collect_garbage(
+        const std::set<Identity> &pinned_identities);
     void set_reclamation_binding(ReclamationBinding binding) {
         m_reclamation = std::move(binding);
     }

@@ -2397,6 +2397,15 @@ private slots:
                      "test provider rejected the reclamation certificate");
       return {};
     };
+    auto lease_enabled = std::make_shared<bool>(true);
+    config.acquire_reclamation_lease =
+        [lease_enabled](const DocumentId &, const StreamId &, uint64_t,
+           const Storage::CertifiedOperationFrontier &)
+            -> Result<std::shared_ptr<void>> {
+      if (!*lease_enabled)
+        return Error(ErrorCode::awaiting_state, "test lease unavailable");
+      return std::static_pointer_cast<void>(std::make_shared<int>(1));
+    };
     config.checkpoint_delivery_threshold = 1;
     auto opened = DocumentSession::open(config);
     QVERIFY(opened.ok());
@@ -2411,12 +2420,19 @@ private slots:
     QVERIFY(peer_operation.ok());
     auto peer_payload = encode_operation(peer_operation.value());
     QVERIFY(peer_payload.ok());
+    auto peer_delete = peer_engine.try_apply_local_edit({{0, 4}}, {""});
+    QVERIFY(peer_delete.ok());
+    auto peer_delete_payload = encode_operation(peer_delete.value());
+    QVERIFY(peer_delete_payload.ok());
     {
       Crdt::FileOpStream peer(root / "shared", producer);
       QVERIFY(peer.start().ok());
       QVERIFY(peer.register_stream(scope).ok());
       QVERIFY(peer.push({{scope.stream, scope.epoch, producer, 1},
                          peer_payload.value()},
+                        PushDurability::durable).ok());
+      QVERIFY(peer.push({{scope.stream, scope.epoch, producer, 2},
+                         peer_delete_payload.value()},
                         PushDurability::durable).ok());
       QVERIFY(peer.close().ok());
     }
@@ -2425,14 +2441,14 @@ private slots:
     QVERIFY(delivery_due.value());
     auto polled = session->poll();
     QVERIFY(polled.ok());
-    QCOMPARE(polled.value().committed, size_t(1));
-    QCOMPARE(session->text(), std::string("peer"));
+    QCOMPARE(polled.value().committed, size_t(2));
+    QCOMPARE(session->text(), std::string());
 
     SessionCheckpointProviderState provider;
     provider.canonical_pin_projection_hash = sha256_hex("");
     auto captured = session->capture_checkpoint(provider);
     QVERIFY(captured.ok());
-    QCOMPARE(captured.value().delivery_coverage.at(producer), uint64_t(1));
+    QCOMPARE(captured.value().delivery_coverage.at(producer), uint64_t(2));
     auto published = session->publish_checkpoint(provider);
     QVERIFY(published.ok());
     QCOMPARE(published.value().shareable_artifact_hash,
@@ -2555,7 +2571,7 @@ private slots:
       for (int shift = 56; shift >= 0; shift -= 8)
         expected.push_back(static_cast<char>(value >> shift));
     };
-    append_u64(1);
+    append_u64(2);
     expected.push_back(1);
     append_u64(published.value().shareable_artifact_hash.size());
     expected += published.value().shareable_artifact_hash;
@@ -2606,8 +2622,47 @@ private slots:
     QVERIFY(bound_open.ok());
     auto bound_session = std::move(bound_open).value();
     QVERIFY(binding_validated);
-    QCOMPARE(bound_session->text(), std::string("peer"));
+    QVERIFY(bound_session->text().empty());
     QVERIFY(bound_session->recovery_report().diagnostics.empty());
+
+    evidence.checkpoint_hash = installed.value().shareable_artifact_hash;
+    evidence.operation[scope.stream] = installed.value().operation_coverage;
+    evidence.delivery[scope.stream] = installed.value().delivery_coverage;
+    auto collection_certificate = Storage::certify_common_coverage(
+        descriptor, {evidence},
+        [](const auto &, const auto &) { return Result<void>{}; },
+        [](const auto &, auto, const auto &, const auto &, const auto &) {
+          return Result<void>{};
+        });
+    QVERIFY(collection_certificate.ok());
+    auto collection_frontier =
+        collection_certificate.value().operation_frontier(scope.stream);
+    QVERIFY(collection_frontier.has_value());
+    expected_binding->checkpoint_hash =
+        installed.value().shareable_artifact_hash;
+    *lease_enabled = false;
+    auto missing_lease = bound_session->collect_garbage(
+        *collection_frontier, provider);
+    QVERIFY(!missing_lease.ok());
+    QCOMPARE(missing_lease.error().code(), ErrorCode::awaiting_state);
+    *lease_enabled = true;
+    auto reclaimed = bound_session->collect_garbage(
+        *collection_frontier, provider);
+    QVERIFY(reclaimed.ok());
+    QCOMPARE(reclaimed.value(), size_t(4));
+    auto after_collection = bound_session->capture_checkpoint(provider);
+    QVERIFY(after_collection.ok());
+    auto after_collection_artifact = Storage::decode_checkpoint(
+        after_collection.value().shareable_artifact_bytes,
+        Storage::CheckpointKind::Shareable);
+    QVERIFY(after_collection_artifact.ok());
+    auto after_collection_core =
+        Storage::decode_checkpoint_core(after_collection_artifact.value());
+    QVERIFY(after_collection_core.ok());
+    QVERIFY(after_collection_core.value().engine.fragments.empty());
+    auto unavailable_history = bound_session->edits_since(Crdt::Global{});
+    QVERIFY(!unavailable_history.ok());
+    QCOMPARE(unavailable_history.error().code(), ErrorCode::history_unavailable);
 
     auto late_undo = peer_engine.try_undo();
     QVERIFY(late_undo.ok());
@@ -2619,7 +2674,7 @@ private slots:
       QVERIFY(peer.start().ok());
       QVERIFY(peer.register_stream(scope).ok());
       QVERIFY(peer.push(
-          {{scope.stream, scope.epoch, producer, 2},
+          {{scope.stream, scope.epoch, producer, 3},
            late_undo_payload.value()},
           PushDurability::durable).ok());
       QVERIFY(peer.close().ok());
@@ -2627,7 +2682,7 @@ private slots:
     auto late_undo_poll = bound_session->poll();
     QVERIFY(late_undo_poll.ok());
     QCOMPARE(late_undo_poll.value().quarantined, size_t(1));
-    QCOMPARE(bound_session->text(), std::string("peer"));
+    QVERIFY(bound_session->text().empty());
     auto refused_undo = bound_session->quarantined_deliveries();
     QVERIFY(refused_undo.ok());
     QCOMPARE(refused_undo.value().size(), size_t(1));
@@ -2643,7 +2698,7 @@ private slots:
     QVERIFY(binding_validated);
     // The older unbound checkpoint still has the complete undo history, so
     // after provider refusal the retained late undo can safely replay.
-    QCOMPARE(refused_session->text(), std::string());
+    QCOMPARE(refused_session->text(), std::string("peer"));
     QVERIFY(refused_session->close().ok());
   }
 

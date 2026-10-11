@@ -1,6 +1,7 @@
 #include <collabtext/DocumentSession.h>
 
 #include "crdt/Buffer.h"
+#include "crdt/PositionPayload.h"
 #include "crdt/ReclamationPolicy.h"
 #include "crdt/SeedOp.h"
 #include "core/Sha256.h"
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <exception>
 #include <limits>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -1279,6 +1281,142 @@ Result<SessionCheckpointCapture> DocumentSession::install_reclamation_frontier(
     return published.error();
   }
   return std::move(published).value();
+}
+
+Result<size_t> DocumentSession::collect_garbage(
+    const Storage::CertifiedOperationFrontier &frontier,
+    const SessionCheckpointProviderState &provider) {
+  if (!m_impl || m_impl->closed || !m_impl->buffer)
+    return Error(ErrorCode::writer_conflict,
+                 "session is unavailable for reclamation");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok())
+    return allowed.error();
+  if (!m_impl->config.acquire_reclamation_lease)
+    return Error(ErrorCode::awaiting_state,
+                 "physical reclamation requires a provider stability lease");
+
+  std::shared_ptr<void> lease;
+  try {
+    SessionCallbackScope callback_scope(m_impl->callback_active);
+    auto acquired = m_impl->config.acquire_reclamation_lease(
+        m_impl->config.document, m_impl->config.stream, m_impl->config.epoch,
+        frontier);
+    if (!acquired.ok())
+      return acquired.error().with_context("acquiring reclamation lease");
+    if (!acquired.value())
+      return Error(ErrorCode::awaiting_state,
+                   "provider returned no reclamation stability lease");
+    lease = std::move(acquired).value();
+  } catch (const std::exception &error) {
+    return Error(ErrorCode::io_error, error.what(),
+                 "acquiring reclamation lease");
+  } catch (...) {
+    return Error(ErrorCode::io_error,
+                 "reclamation lease provider threw an unknown exception");
+  }
+
+  auto valid = validate_reclamation_frontier(frontier);
+  if (!valid.ok()) return valid.error();
+  Global collection_floor;
+  for (const auto &[actor, through] : frontier.counters())
+    collection_floor.observe(Crdt::Identity(actor, through));
+  for (size_t i = 0; i < m_impl->history_floor.pair_count(); ++i) {
+    const auto [actor, through] = m_impl->history_floor.pair(i);
+    const auto certified = frontier.counters().find(actor);
+    if (certified == frontier.counters().end() || certified->second < through)
+      return Error(ErrorCode::counter_regression,
+                   "reclamation frontier does not cover the retained history floor");
+  }
+
+  auto installed = install_reclamation_frontier(frontier, provider);
+  if (!installed.ok()) return installed.error();
+
+  auto artifact = Storage::decode_checkpoint(
+      installed.value().shareable_artifact_bytes,
+      Storage::CheckpointKind::Shareable);
+  if (!artifact.ok()) return artifact.error();
+  auto core = Storage::decode_checkpoint_core(artifact.value());
+  if (!core.ok()) return core.error();
+
+  std::set<Crdt::Identity> pinned_identities;
+  const PositionScope current_scope{m_impl->config.document,
+                                    m_impl->config.stream,
+                                    Primitive::text,
+                                    m_impl->config.epoch};
+  const auto same_scope = [](const PositionScope &left,
+                             const PositionScope &right) {
+    return left.document == right.document && left.stream == right.stream &&
+           left.primitive == right.primitive && left.epoch == right.epoch;
+  };
+  for (const auto &pin : core.value().pins.live_pins) {
+    if (pin.scope.document != current_scope.document ||
+        pin.scope.stream != current_scope.stream ||
+        pin.scope.primitive != current_scope.primitive ||
+        pin.scope.epoch > current_scope.epoch)
+      return Error(ErrorCode::wrong_epoch,
+                   "live position pin is outside the reclamation stream");
+    if (auto checked = validate_position_scope(pin.token_bytes, pin.scope);
+        !checked.ok())
+      return checked.error();
+
+    std::string_view current_token_bytes = pin.token_bytes;
+    if (pin.scope.epoch != current_scope.epoch) {
+      const auto translated = std::find_if(
+          core.value().translations.entries.begin(),
+          core.value().translations.entries.end(),
+          [&](const auto &entry) {
+            return entry.reference_id == pin.reference_id &&
+                   entry.source_epoch == pin.scope.epoch &&
+                   entry.source_token_bytes == pin.token_bytes;
+          });
+      if (translated == core.value().translations.entries.end())
+        return Error(ErrorCode::awaiting_state,
+                     "live old-epoch pin has no checkpoint translation");
+      current_token_bytes = translated->current_token_bytes;
+    }
+    auto token = decode_position(current_token_bytes);
+    if (!token.ok()) return token.error();
+    auto token_scope = position_scope(token.value());
+    if (!token_scope.ok()) return token_scope.error();
+    if (!same_scope(token_scope.value(), current_scope))
+      return Error(ErrorCode::wrong_epoch,
+                   "translated pin does not target the current text stream");
+    std::visit(
+        [&](const auto &typed) {
+          const auto *payload = CollabText::detail::PositionAccess::get(typed);
+          if (payload->left) pinned_identities.insert(*payload->left);
+          if (payload->right) pinned_identities.insert(*payload->right);
+          if (payload->referent)
+            pinned_identities.insert(*payload->referent);
+        },
+        token.value());
+  }
+
+  auto before_collection = m_impl->buffer->checkpoint_state();
+  const auto pre_collection_checkpoint =
+      installed.value().shareable_artifact_hash;
+  const auto previous_history_floor = m_impl->history_floor;
+  auto reclaimed = m_impl->buffer->collect_garbage(pinned_identities);
+  if (!reclaimed.ok()) return reclaimed.error();
+  if (reclaimed.value() == 0) return size_t{0};
+
+  m_impl->history_floor = collection_floor;
+  auto published = publish_checkpoint(provider);
+  if (!published.ok()) {
+    if (m_impl->latest_shareable_checkpoint_hash ==
+            pre_collection_checkpoint &&
+        published.error().code() != ErrorCode::commit_uncertain) {
+      auto restored = m_impl->buffer->restore_checkpoint_state(before_collection);
+      m_impl->history_floor = previous_history_floor;
+      if (!restored.ok()) {
+        m_impl->poisoned = true;
+        return restored.error().with_context(
+            "rolling back an unpublished reclamation checkpoint");
+      }
+    }
+    return published.error();
+  }
+  return reclaimed.value();
 }
 
 Result<bool> DocumentSession::checkpoint_due() const {

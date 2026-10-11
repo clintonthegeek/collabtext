@@ -98,6 +98,13 @@ struct DocumentSessionConfig {
                              std::string_view, std::string_view,
                              const std::map<ActorId, uint64_t> &)>
       validate_reclamation_binding;
+  /// Hold membership, private-history acknowledgements, and canonical pin
+  /// projection stable from certificate validation through post-collection
+  /// checkpoint publication. Physical collection requires a nonnull lease.
+  std::function<Result<std::shared_ptr<void>>(
+      const DocumentId &, const StreamId &, uint64_t,
+      const Storage::CertifiedOperationFrontier &)>
+      acquire_reclamation_lease;
 };
 
 /// Local producer deliveries retained for one original document epoch.
@@ -236,6 +243,13 @@ public:
   /// next shareable checkpoint. On a pre-commit failure the in-memory binding
   /// is rolled back; an uncertain or durable publication keeps it installed.
   [[nodiscard]] Result<SessionCheckpointCapture> install_reclamation_frontier(
+      const Storage::CertifiedOperationFrontier &,
+      const SessionCheckpointProviderState &);
+  /// Collect only checkpointed, covered tombstones that are not pinned, needed
+  /// by local history, or referenced by retained placement links. The provider
+  /// must supply a lease that keeps certificate eligibility stable until the
+  /// post-collection checkpoint is durable.
+  [[nodiscard]] Result<size_t> collect_garbage(
       const Storage::CertifiedOperationFrontier &,
       const SessionCheckpointProviderState &);
   /// Report whether retained delivery coverage has grown by the configured
