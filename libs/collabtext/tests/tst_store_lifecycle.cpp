@@ -58,6 +58,49 @@ fs::path stream_path(const fs::path &root, const ActorId &actor,
 class TestStoreLifecycle final : public QObject {
   Q_OBJECT
 private slots:
+  void deliveryFrontiersAreProducerScopedAndEmptyForAnEmptyStream() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const fs::path root = temporary.path().toStdString();
+    const auto first_actor = CollabText::Test::actor(181);
+    const auto second_actor = CollabText::Test::actor(182);
+    const auto reader_actor = CollabText::Test::actor(183);
+    const StreamScope populated{"frontier-populated", 1};
+    const StreamScope empty{"frontier-empty", 1};
+
+    {
+      FileOpStream first(root, first_actor);
+      QVERIFY(first.start().ok());
+      QVERIFY(first.register_stream(populated).ok());
+      for (uint64_t sequence = 1; sequence <= 2; ++sequence)
+        QVERIFY(first.push({{populated.stream, populated.epoch, first_actor,
+                            sequence}, "first-" + std::to_string(sequence)},
+                           PushDurability::durable).ok());
+      QVERIFY(first.close().ok());
+    }
+    {
+      FileOpStream second(root, second_actor);
+      QVERIFY(second.start().ok());
+      QVERIFY(second.register_stream(populated).ok());
+      QVERIFY(second.push({{populated.stream, populated.epoch, second_actor, 1},
+                           "second-1"}, PushDurability::durable).ok());
+      QVERIFY(second.close().ok());
+    }
+
+    FileOpStream reader(root, reader_actor);
+    QVERIFY(reader.start().ok());
+    QVERIFY(reader.register_stream(populated).ok());
+    QVERIFY(reader.register_stream(empty).ok());
+    auto frontiers = reader.delivery_frontiers(populated);
+    QVERIFY(frontiers.ok());
+    QCOMPARE(frontiers.value(), (std::map<ActorId, uint64_t>{
+        {first_actor, 2}, {second_actor, 1}}));
+    auto no_deliveries = reader.delivery_frontiers(empty);
+    QVERIFY(no_deliveries.ok());
+    QVERIFY(no_deliveries.value().empty());
+    QVERIFY(reader.close().ok());
+  }
+
   void buffer_and_idlist_partial_arrival_is_incomplete_until_older_segments_arrive() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
