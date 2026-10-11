@@ -371,6 +371,29 @@ private slots:
     QVERIFY(static_cast<bool>(verifier));
     QVERIFY(verifier(d, checkpoint_hash, operation, delivery).ok());
 
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const auto root = std::filesystem::path(temporary.path().toStdString());
+    const auto owner = d.members.front();
+    {
+      auto store = CoverageStore::open(root, owner);
+      QVERIFY(store.ok());
+      auto published = store.value().publish(
+          d, checkpoint_hash, operation, delivery, verifier);
+      QVERIFY(published.ok());
+      QCOMPARE(published.value().operation, operation);
+      QCOMPARE(published.value().delivery, delivery);
+    }
+    {
+      auto store = CoverageStore::open(root, owner);
+      QVERIFY(store.ok());
+      auto recovered = store.value().recover(d, checkpoint_hash, verifier);
+      QVERIFY(recovered.ok());
+      QVERIFY(recovered.value().has_value());
+      QCOMPARE(recovered.value()->operation, operation);
+      QCOMPARE(recovered.value()->delivery, delivery);
+    }
+
     auto wrong_operation = operation;
     wrong_operation["text"][actor(20)]++;
     QVERIFY(!verifier(d, checkpoint_hash, wrong_operation, delivery).ok());
