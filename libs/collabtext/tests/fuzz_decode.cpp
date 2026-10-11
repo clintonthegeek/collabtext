@@ -52,7 +52,31 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         bytes, CollabText::Storage::CheckpointKind::Shareable);
     if (shareable) {
         const auto core = CollabText::Storage::decode_checkpoint_core(shareable.value());
-        if (core) (void)CollabText::Storage::encode_checkpoint_core(core.value());
+        if (core) {
+            (void)CollabText::Storage::encode_checkpoint_core(core.value());
+            const auto local_actor = CollabText::ActorId::parse(
+                "ffffffffffffffffffffffffffffffff");
+            if (local_actor) {
+                const auto shareable_hash = CollabText::sha256_hex(bytes);
+                CollabText::Storage::CheckpointLocalCore local;
+                local.owner = {local_actor.value(), shareable_hash};
+                local.writer = {local_actor.value(), core.value().context.document,
+                    core.value().context.stream, core.value().context.epoch, 1, 0};
+                const auto local_bytes =
+                    CollabText::Storage::encode_checkpoint_local_core(
+                        local, core.value().context, bytes);
+                if (local_bytes) {
+                    const auto local_artifact =
+                        CollabText::Storage::decode_checkpoint(
+                            local_bytes.value(),
+                            CollabText::Storage::CheckpointKind::Local);
+                    if (local_artifact)
+                        (void)CollabText::Storage::decode_checkpoint_local_core(
+                            local_artifact.value(), local_actor.value(),
+                            shareable_hash, core.value().context);
+                }
+            }
+        }
         if (core && !core.value().translations.supported_token_versions.empty()) {
             auto descriptor = CollabText::Storage::MembershipDescriptor{};
             descriptor.epoch = core.value().context.epoch;

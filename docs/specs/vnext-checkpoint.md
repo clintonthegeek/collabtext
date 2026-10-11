@@ -225,6 +225,9 @@ obligations), and writer state (persistent writer identity and reserved counter
 state). Unknown sections or versions are retained as unsupported companion
 bytes and prevent local restore; they do not invalidate the shareable engine
 checkpoint.
+The typed `encode_checkpoint_local_core` path composes these sections and
+computes the owner binding from the supplied shareable artifact bytes; the
+writer actor and context scope must match the local owner and shareable context.
 
 The owner section is exactly a 16-byte actor ID followed by the 32-byte raw
 digest of its shareable checkpoint. The history section stores the owner actor,

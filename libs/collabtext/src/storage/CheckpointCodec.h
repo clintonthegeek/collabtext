@@ -192,6 +192,12 @@ validate_checkpoint_translations(
     const MembershipDescriptor &descriptor);
 [[nodiscard]] Result<CheckpointSection>
 encode_checkpoint_local_owner(const CheckpointLocalOwner &owner);
+/// Compose the local companion sections in canonical order and bind its owner
+/// to the SHA-256 of the supplied, already validated shareable artifact bytes.
+[[nodiscard]] Result<std::string>
+encode_checkpoint_local_core(const CheckpointLocalCore &core,
+                             const CheckpointContext &context,
+                             std::string_view shareable_checkpoint_bytes);
 [[nodiscard]] Result<CheckpointLocalOwner>
 decode_checkpoint_local_owner(const CheckpointSection &section);
 [[nodiscard]] Result<CheckpointSection>

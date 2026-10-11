@@ -1,5 +1,7 @@
 #include "storage/CheckpointCodec.h"
 
+#include "core/Sha256.h"
+
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -212,6 +214,36 @@ encode_checkpoint_local_owner(const CheckpointLocalOwner &owner) {
   put_actor(payload, owner.actor);
   payload.append(unhex(owner.shareable_checkpoint_hash));
   return CheckpointSection{1, 1, std::move(payload)};
+}
+
+Result<std::string> encode_checkpoint_local_core(
+    const CheckpointLocalCore &core, const CheckpointContext &context,
+    std::string_view shareable_checkpoint_bytes) {
+  if (shareable_checkpoint_bytes.size() > kCheckpointMaxBytes)
+    return Error(ErrorCode::limit_exceeded,
+                 "shareable checkpoint exceeds artifact size limit",
+                 "checkpoint.local");
+  if (core.owner.shareable_checkpoint_hash !=
+      sha256_hex(shareable_checkpoint_bytes))
+    return Error(ErrorCode::corrupt_record,
+                 "local owner binding differs from expected shareable checkpoint",
+                 "checkpoint.local");
+  if (core.writer.actor != core.owner.actor)
+    return Error(ErrorCode::actor_conflict,
+                 "local writer identity differs from local owner",
+                 "checkpoint.local");
+  auto owner = encode_checkpoint_local_owner(core.owner);
+  if (!owner) return owner.error().with_context("checkpoint.local");
+  auto history = encode_checkpoint_local_history(core.history, core.owner.actor);
+  if (!history) return history.error().with_context("checkpoint.local");
+  auto writer = encode_checkpoint_local_writer(core.writer, context);
+  if (!writer) return writer.error().with_context("checkpoint.local");
+  std::vector<CheckpointSection> sections;
+  sections.reserve(kCheckpointLocalSectionCount);
+  sections.push_back(std::move(owner.value()));
+  sections.push_back(std::move(history.value()));
+  sections.push_back(std::move(writer.value()));
+  return encode_checkpoint(CheckpointKind::Local, std::move(sections));
 }
 
 Result<CheckpointLocalOwner>

@@ -832,9 +832,16 @@ private slots:
   void localCompanionSectionsRoundTripAndBindOwner() {
     const auto actor = ActorId::parse("21000000000000000000000000000001").value();
     const auto other = ActorId::parse("22000000000000000000000000000001").value();
-    const CheckpointContext context{"local-doc", "main", 4, "",
+    const CheckpointContext context{"local-doc", "main", 4,
+                                    sha256_hex("parent"),
                                     CheckpointEngineKind::Text};
-    const auto checkpoint_hash = sha256_hex("shareable checkpoint bytes");
+    CheckpointShareableCore shareable;
+    shareable.context = context;
+    shareable.pins.canonical_projection_hash = sha256_hex("");
+    shareable.translations.supported_token_versions = {1};
+    const auto shareable_bytes = encode_checkpoint_core(shareable);
+    QVERIFY(shareable_bytes);
+    const auto checkpoint_hash = sha256_hex(shareable_bytes.value());
     CheckpointLocalOwner owner{actor, checkpoint_hash};
     auto owner_section = encode_checkpoint_local_owner(owner);
     QVERIFY(owner_section);
@@ -902,11 +909,9 @@ private slots:
     mismatched_writer.epoch++;
     QVERIFY(!encode_checkpoint_local_writer(mismatched_writer, context));
 
-    CheckpointArtifact artifact;
-    artifact.kind = CheckpointKind::Local;
-    artifact.sections = {owner_section.value(), history_section.value(),
-                         writer_section.value()};
-    auto local_frame = encode_checkpoint(CheckpointKind::Local, artifact.sections);
+    CheckpointLocalCore local_core{owner, history, writer};
+    auto local_frame = encode_checkpoint_local_core(
+        local_core, context, shareable_bytes.value());
     QVERIFY(local_frame);
     auto decoded_local_artifact = decode_checkpoint(
         local_frame.value(), CheckpointKind::Local);
@@ -916,10 +921,19 @@ private slots:
     QVERIFY(local);
     QCOMPARE(local.value().owner, owner);
     QCOMPARE(local.value().writer, writer);
-    QVERIFY(!decode_checkpoint_local_core(artifact, other, checkpoint_hash,
-                                          context));
-    QVERIFY(!decode_checkpoint_local_core(artifact, actor, sha256_hex("other"),
-                                          context));
+    QVERIFY(!decode_checkpoint_local_core(decoded_local_artifact.value(), other,
+                                          checkpoint_hash, context));
+    QVERIFY(!decode_checkpoint_local_core(decoded_local_artifact.value(), actor,
+                                          sha256_hex("other"), context));
+    QVERIFY(!encode_checkpoint_local_core(local_core, context, "other"));
+    auto foreign_writer = local_core;
+    foreign_writer.writer.actor = other;
+    QVERIFY(!encode_checkpoint_local_core(foreign_writer, context,
+                                         shareable_bytes.value()));
+    auto wrong_scope = local_core;
+    wrong_scope.writer.epoch++;
+    QVERIFY(!encode_checkpoint_local_core(wrong_scope, context,
+                                         shareable_bytes.value()));
   }
 
   void rejectsImpossibleAndTrailingLengths() {
