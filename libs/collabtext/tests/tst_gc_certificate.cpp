@@ -319,7 +319,7 @@ private slots:
         model_eligibility()).ok());
   }
 
-  void membershipCheckpointVerifierBindsBothCoverageMaps() {
+  void verifiedMembershipCheckpointCoverageCertifiesAfterRecovery() {
     auto d = descriptor();
     const OperationCoverage operation{{"text", {{actor(20), 8}}},
                                       {"ids", {{actor(21), 3}}}};
@@ -374,9 +374,8 @@ private slots:
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
     const auto root = std::filesystem::path(temporary.path().toStdString());
-    const auto owner = d.members.front();
-    {
-      auto store = CoverageStore::open(root, owner);
+    for (const auto &member : d.members) {
+      auto store = CoverageStore::open(root, member);
       QVERIFY(store.ok());
       auto published = store.value().publish(
           d, checkpoint_hash, operation, delivery, verifier);
@@ -384,15 +383,38 @@ private slots:
       QCOMPARE(published.value().operation, operation);
       QCOMPARE(published.value().delivery, delivery);
     }
-    {
-      auto store = CoverageStore::open(root, owner);
+
+    std::vector<PeerCoverageEvidence> recovered_peers;
+    for (const auto &member : d.members) {
+      auto store = CoverageStore::open(root, member);
       QVERIFY(store.ok());
       auto recovered = store.value().recover(d, checkpoint_hash, verifier);
       QVERIFY(recovered.ok());
       QVERIFY(recovered.value().has_value());
       QCOMPARE(recovered.value()->operation, operation);
       QCOMPARE(recovered.value()->delivery, delivery);
+      recovered_peers.push_back(std::move(*recovered.value()));
     }
+    const DurableCoverageVerifier durable = [&](const auto &descriptor,
+                                                 const auto &item) -> Result<void> {
+      if (descriptor.hash != d.hash)
+        return Error(ErrorCode::wrong_epoch, "membership descriptor changed");
+      auto store = CoverageStore::open(root, item.member);
+      if (!store) return store.error();
+      auto recovered = store.value().recover(d, checkpoint_hash, verifier);
+      if (!recovered) return recovered.error();
+      if (!recovered.value() || recovered.value()->operation != item.operation ||
+          recovered.value()->delivery != item.delivery)
+        return Error(ErrorCode::corrupt_record,
+                     "peer coverage differs from its durable record");
+      return {};
+    };
+    auto certificate = certify_common_coverage(
+        d, recovered_peers, durable, model_eligibility());
+    QVERIFY(certificate.ok());
+    QCOMPARE(certificate.value().checkpoint_hash(), checkpoint_hash);
+    QCOMPARE(certificate.value().common_operation(), operation);
+    QCOMPARE(certificate.value().common_delivery(), delivery);
 
     auto wrong_operation = operation;
     wrong_operation["text"][actor(20)]++;
