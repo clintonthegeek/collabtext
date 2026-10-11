@@ -184,7 +184,10 @@ public:
   capture_checkpoint(const SessionCheckpointProviderState &) const;
   /// Validate and atomically publish a freshly captured bundle through the
   /// configured CheckpointStore. Requires a provider validator that checks
-  /// membership and other canonical provider-owned state.
+  /// membership and other canonical provider-owned state. After the checkpoint
+  /// manifest is durable, covered remote delivery receipts are bound to its
+  /// checkpoint ID. A receipt write error may therefore be returned after the
+  /// checkpoint itself has already become recoverable.
   [[nodiscard]] Result<SessionCheckpointCapture>
   publish_checkpoint(const SessionCheckpointProviderState &);
   /// Stream this actor's durable operations in their original scope, including

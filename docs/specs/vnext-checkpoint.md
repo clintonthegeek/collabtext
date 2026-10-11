@@ -387,17 +387,23 @@ engine state represents the covered deliveries or authenticate the checkpoint.
 
 `DocumentSession::publish_checkpoint` captures the current validated provider
 projection, calls the provider validator before writing, and atomically
-publishes the bundle through `CheckpointStore`. Startup validates a candidate,
-restores shareable engine state and available actor-local history, and replays
-only deliveries beyond recorded coverage. If uncovered replay fails after the
-checkpoint state was installed, it rebuilds the initial engine state before
-retrying the full retained log. A focused fixture proves the next local edit
-envelope and resulting text match between checkpoint startup and full replay.
+publishes the bundle through `CheckpointStore`. After the checkpoint manifest
+is durable, it persists per-producer receipts for represented remote delivery
+frontiers, naming the shareable digest as the recovery point. Receipt frontiers
+are checked against retained logs and are never regressed; if a receipt write
+fails, the checkpoint may already be recoverable and a subset of receipts may
+already name it. This does not advance persisted read cursors. Startup validates
+a candidate, restores shareable engine state and available actor-local history,
+and replays only deliveries beyond recorded coverage. If uncovered replay fails
+after the checkpoint state was installed, it rebuilds the initial engine state
+before retrying the full retained log. A focused fixture proves the next local
+edit envelope and resulting text match between checkpoint startup and full
+replay.
 
 Transport cursors are not advanced or persisted by this path, so covered log
-prefixes are still scanned and validated. Session-level recovery points are not
-yet bound to persisted transport receipts, and equivalent behavior across
-broader edit sequences, remote interleavings, and undo/redo remains to be
-verified. Automatic size/time threshold scheduling and recovery-time
-measurement are also outstanding. Previous checkpoints and covered logs remain
-retained for G06.
+prefixes are still scanned and validated. Startup does not retrofit receipts
+for imported or otherwise pre-existing checkpoint manifests that lack them.
+Equivalent behavior across broader edit sequences, remote interleavings, and
+undo/redo remains to be verified. Automatic size/time threshold scheduling and
+recovery-time measurement are also outstanding. Previous checkpoints and
+covered logs remain retained for G06.

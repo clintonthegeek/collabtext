@@ -1009,6 +1009,13 @@ Result<SessionCheckpointCapture> DocumentSession::publish_checkpoint(
       capture.value().local_companion_artifact_bytes,
       m_impl->replica->actor());
   if (!published.ok()) return published.error();
+  const StreamScope scope{m_impl->config.stream, m_impl->config.epoch};
+  auto receipts = m_impl->transport->persist_checkpoint_receipts(
+      scope, capture.value().delivery_coverage,
+      RecoveryPoint::checkpoint(published.value().checkpoint_id));
+  if (!receipts.ok())
+    return receipts.error().with_context(
+        "checkpoint is durable but recovery receipt publication failed");
   return std::move(capture).value();
 }
 

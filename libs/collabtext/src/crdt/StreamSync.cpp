@@ -179,6 +179,58 @@ FileOpStream::delivery_frontiers(const StreamScope &scope) const {
     return frontiers;
 }
 
+Result<void> FileOpStream::persist_checkpoint_receipts(
+    const StreamScope &scope,
+    const std::map<ActorId, uint64_t> &delivery_frontiers,
+    const RecoveryPoint &point) {
+    auto state_it = m_scopes.find(scope_key(scope));
+    if (state_it == m_scopes.end())
+        return Error(ErrorCode::unknown_stream,
+                     "stream scope is not registered");
+    if (!point.valid() || point.kind() != RecoveryPoint::Kind::checkpoint
+        || point.checkpoint_id().size() > 1024)
+        return Error(ErrorCode::malformed,
+                     "checkpoint receipts require a valid checkpoint recovery point");
+    for (const auto &[producer, through] : delivery_frontiers) {
+        (void)through;
+        if (!producer.valid())
+            return Error(ErrorCode::invalid_identity,
+                         "checkpoint delivery frontier has an invalid producer");
+    }
+    auto retained = this->delivery_frontiers(scope);
+    if (!retained.ok()) return retained.error();
+    for (const auto &[producer, through] : delivery_frontiers) {
+        const auto available = retained.value().find(producer);
+        const auto maximum = available == retained.value().end()
+                                 ? 0 : available->second;
+        if (through > maximum)
+            return Error(ErrorCode::corrupt_record,
+                         "checkpoint receipt exceeds retained delivery log",
+                         producer.to_string());
+    }
+
+    auto &state = *state_it->second;
+    for (const auto &[producer, through] : delivery_frontiers) {
+        if (producer == m_local_actor) continue;
+        if (through == 0) continue;
+        const auto key = producer.to_string();
+        const auto current = state.frontiers.find(key);
+        if (current != state.frontiers.end() && current->second.sequence > through)
+            continue;
+        const auto receipt_dir = m_shared_folder / "local"
+            / m_local_actor.to_string() / "receipts"
+            / stream_dir_name(scope.stream) / std::to_string(scope.epoch);
+        fs::create_directories(receipt_dir);
+        auto encoded = encode_receipt_value(through, point);
+        auto persisted = Storage::replace_atomically(
+            receipt_dir / key, encoded, m_writer_cfg.step_hook,
+            m_writer_cfg.file_ops);
+        if (!persisted.ok()) return persisted.error();
+        state.frontiers[key] = {through, point};
+    }
+    return {};
+}
+
 Result<void> FileOpStream::replay_uncovered(
     const StreamScope &scope,
     const std::map<ActorId, uint64_t> &delivery_frontiers,

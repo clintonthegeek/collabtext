@@ -159,6 +159,12 @@ public:
     /// every covered delivery.
     [[nodiscard]] Result<std::map<ActorId, uint64_t>>
     delivery_frontiers(const StreamScope &) const;
+    /// Persist per-producer checkpoint receipts only after the application
+    /// has durably published the referenced checkpoint. Frontiers are checked
+    /// against retained logs and existing receipts are never regressed.
+    [[nodiscard]] Result<void> persist_checkpoint_receipts(
+        const StreamScope &, const std::map<ActorId, uint64_t> &delivery_frontiers,
+        const RecoveryPoint &);
     /// Validate the complete retained log but visit only records beyond the
     /// checkpoint's per-producer delivery frontiers. Covered records are still
     /// scanned for gaps/corruption, and a claimed frontier beyond the retained
