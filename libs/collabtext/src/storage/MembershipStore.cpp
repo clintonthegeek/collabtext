@@ -556,6 +556,59 @@ Result<EnrollmentPreview> preview_enrollment(
   return preview;
 }
 
+namespace {
+Result<void> validate_recovered_acknowledgements(
+    const DecodedMembershipEvidence &evidence, MembershipEvent::Kind kind,
+    std::string_view digest, std::string_view material,
+    const std::optional<std::string> &confirmation,
+    const std::vector<ActorId> &required,
+    const DurableAcknowledgementVerifier &verify_acknowledgement) {
+  if (!verify_acknowledgement || evidence.kind != kind ||
+      evidence.transition_digest != digest || evidence.preview_material != material ||
+      sha256_hex(material) != digest ||
+      evidence.explicit_confirmation != confirmation ||
+      evidence.acknowledgements.size() != required.size())
+    return Error(ErrorCode::corrupt_record,
+                 "recovered membership evidence differs from the canonical preview");
+  for (size_t i = 0; i < required.size(); ++i) {
+    const auto &ack = evidence.acknowledgements[i];
+    if (ack.actor != required[i] || !ack.actor.valid() || ack.signature.empty() ||
+        ack.signature.size() > 4096)
+      return Error(ErrorCode::corrupt_record,
+                   "recovered acknowledgement set differs from required members");
+    auto verified = verify_durable_acknowledgement(
+        verify_acknowledgement, ack.actor, digest, ack.signature);
+    if (!verified.ok())
+      return verified.error().with_context(
+          "revalidating recovered membership acknowledgement");
+  }
+  return {};
+}
+} // namespace
+
+Result<void> validate_membership_evidence(
+    const DecodedMembershipEvidence &evidence, const EnrollmentPreview &preview,
+    const DurableAcknowledgementVerifier &verify_acknowledgement) {
+  const auto material = enrollment_material(preview);
+  return validate_recovered_acknowledgements(
+      evidence, MembershipEvent::Kind::Enrolled, preview.digest, material, {},
+      preview.required_acknowledgers, verify_acknowledgement);
+}
+
+Result<void> validate_membership_evidence(
+    const DecodedMembershipEvidence &evidence, const RetirementPreview &preview,
+    std::string_view explicit_confirmation,
+    const DurableAcknowledgementVerifier &verify_acknowledgement) {
+  if (explicit_confirmation.empty() || explicit_confirmation.size() > 4096)
+    return Error(ErrorCode::malformed,
+                 "retirement confirmation is empty or exceeds its bound");
+  const auto material = preview_material(preview);
+  return validate_recovered_acknowledgements(
+      evidence, MembershipEvent::Kind::Retired, preview.digest, material,
+      std::string(explicit_confirmation), preview.required_acknowledgers,
+      verify_acknowledgement);
+}
+
 Result<MembershipStore> MembershipStore::open(std::filesystem::path path,
                                              ActorId producer,
                                              const StepHook *hook) {

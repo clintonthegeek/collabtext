@@ -620,6 +620,29 @@ private slots:
     QCOMPARE(decoded_retirement.value().acknowledgements[0].actor, member_a);
     QCOMPARE(decoded_retirement.value().acknowledgements[0].signature,
              std::string("signed-a"));
+    size_t retirement_verifications = 0;
+    auto verify_retirement_ledger = [&](const ActorId &ack_actor,
+        std::string_view digest, std::string_view signature) -> Result<void> {
+      ++retirement_verifications;
+      const auto durable = retirement_ack_log.find(ack_actor);
+      if (digest != retirement_preview.value().digest ||
+          durable == retirement_ack_log.end() || durable->second != signature)
+        return Error(ErrorCode::corrupt_record,
+                     "recovered retirement acknowledgement is not durable");
+      return {};
+    };
+    QVERIFY(validate_membership_evidence(
+        decoded_retirement.value(), retirement_preview.value(),
+        "confirmed by operator", verify_retirement_ledger));
+    QCOMPARE(retirement_verifications, size_t(2));
+    QVERIFY(!validate_membership_evidence(
+        decoded_retirement.value(), retirement_preview.value(),
+        "different confirmation", verify_retirement_ledger));
+    auto changed_retirement_preview = retirement_preview.value();
+    changed_retirement_preview.impacts[0].unsynced_operations++;
+    QVERIFY(!validate_membership_evidence(
+        decoded_retirement.value(), changed_retirement_preview,
+        "confirmed by operator", verify_retirement_ledger));
     const auto complete_evidence = retirement_events.value().front().evidence;
     const auto version_end = complete_evidence.find(' ');
     const auto evidence_digest_end = complete_evidence.find(' ', version_end + 1);
@@ -724,6 +747,23 @@ private slots:
     const auto enrollment_ack_log = std::map<ActorId, std::string>{
         {member_a, "signed-a"}, {member_b, "signed-b"},
         {joining, "signed-joining"}};
+    auto verify_enrollment_ledger = [&](const ActorId &ack_actor,
+        std::string_view digest, std::string_view signature) -> Result<void> {
+      const auto durable = enrollment_ack_log.find(ack_actor);
+      if (digest != enrollment_preview.value().digest ||
+          durable == enrollment_ack_log.end() || durable->second != signature)
+        return Error(ErrorCode::corrupt_record,
+                     "recovered enrollment acknowledgement is not durable");
+      return {};
+    };
+    QVERIFY(validate_membership_evidence(
+        decoded_enrollment.value(), enrollment_preview.value(),
+        verify_enrollment_ledger));
+    auto missing_enrollment_ack = decoded_enrollment.value();
+    missing_enrollment_ack.acknowledgements.pop_back();
+    QVERIFY(!validate_membership_evidence(
+        missing_enrollment_ack, enrollment_preview.value(),
+        verify_enrollment_ledger));
     auto enrollment_child = enrollment_parent;
     enrollment_child.epoch = 21;
     enrollment_child.parent_hash = enrollment_parent.hash;

@@ -65,11 +65,13 @@ After recovering a membership journal, consumers can call
 `decode_membership_transition_evidence()` on the linked event. It strictly
 checks the enrollment/retirement version, canonical actor ordering, bounded
 signatures and confirmation, and that the recorded transition digest matches
-the embedded preview material. The caller still checks that the preview
-material and acknowledgement actors match its current canonical membership and
-proposal, and verifies every signature against its durable acknowledgement
-ledger before `MembershipStore::validate_transition()` may accept the change.
-The decoder does not authenticate keys or replace caller-owned durable state.
+the embedded preview material. Reconstruct the canonical typed preview from
+durable membership and provider state, then pass it with the decoded evidence
+to `validate_membership_evidence()`. That helper checks the preview material,
+digest, confirmation and exact required acknowledgement set, then calls the
+consumer's verifier for each durable signature. The consumer still owns the
+canonical state and acknowledgement ledger, and must authenticate the keys;
+the helper does not replace caller-owned durable state.
 
 `DocumentSessionConfig::initial_text` supplies deterministic seed content for
 sidecar formats that reconstruct their seed locally instead of storing it as a

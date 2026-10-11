@@ -141,6 +141,18 @@ using DurableAcknowledgementVerifier = std::function<Result<void>(
     const ActorId &actor, std::string_view transition_digest,
     std::string_view signature)>;
 
+/// Match recovered evidence to the freshly reconstructed canonical preview,
+/// then revalidate every signature against the caller's durable ack ledger.
+[[nodiscard]] Result<void> validate_membership_evidence(
+    const DecodedMembershipEvidence &evidence,
+    const EnrollmentPreview &preview,
+    const DurableAcknowledgementVerifier &verify_acknowledgement);
+[[nodiscard]] Result<void> validate_membership_evidence(
+    const DecodedMembershipEvidence &evidence,
+    const RetirementPreview &preview,
+    std::string_view explicit_confirmation,
+    const DurableAcknowledgementVerifier &verify_acknowledgement);
+
 [[nodiscard]] Result<RetirementPreview> preview_retirement(
     const MembershipDescriptor &current, const ActorId &device,
     std::vector<RetirementImpact> impacts);
