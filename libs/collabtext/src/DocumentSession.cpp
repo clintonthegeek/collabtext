@@ -651,6 +651,10 @@ DocumentSession::open_with_writer_config(
     if (!replayed.ok() && checkpoint_loaded) {
       impl->report.diagnostics.push_back(replayed.error().with_context(
           "uncovered checkpoint replay failed; retrying a full retained-log scan"));
+      auto reset = impl->reset_for_full_replay();
+      if (!reset.ok())
+        return reset.error().with_context(
+            "resetting partial checkpoint state before full replay");
       replayed = impl->transport->replay_all(
           scope, [&](const InboundDelivery &delivery) {
             return impl->replay_delivery(delivery);

@@ -1548,6 +1548,78 @@ private slots:
     QVERIFY(replayed->close().ok());
   }
 
+  void invalidCheckpointCoverageResetsBeforeFullReplayFallback() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "doc-fallback-reset", "stream-fallback-reset", 1};
+    config.checkpoint_store = root / "checkpoints";
+    config.validate_checkpoint_candidate =
+        [](std::string_view, const std::optional<std::string> &) -> Result<void> {
+      return {};
+    };
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto source = std::move(opened).value();
+    auto edit = source->apply_local({{0, 0}}, {"logged"});
+    QVERIFY(edit.ok());
+    SessionCheckpointProviderState provider;
+    provider.canonical_pin_projection_hash = sha256_hex("");
+    auto capture = source->capture_checkpoint(provider);
+    QVERIFY(capture.ok());
+
+    auto shareable_artifact = Storage::decode_checkpoint(
+        capture.value().shareable_artifact_bytes,
+        Storage::CheckpointKind::Shareable);
+    QVERIFY(shareable_artifact.ok());
+    auto core = Storage::decode_checkpoint_core(shareable_artifact.value());
+    QVERIFY(core.ok());
+    bool changed_engine_state = false;
+    for (auto &fragment : core.value().engine.fragments) {
+      if (fragment.text == "logged") {
+        fragment.text = "mutant";
+        changed_engine_state = true;
+      }
+    }
+    QVERIFY(changed_engine_state);
+    const auto absent_producer = Test::actor(186);
+    core.value().coverage.delivery[absent_producer] = 1;
+    auto invalid_shareable = Storage::encode_checkpoint_core(core.value());
+    QVERIFY(invalid_shareable.ok());
+    const auto invalid_hash = sha256_hex(invalid_shareable.value());
+
+    auto local_artifact = Storage::decode_checkpoint(
+        capture.value().local_companion_artifact_bytes,
+        Storage::CheckpointKind::Local);
+    QVERIFY(local_artifact.ok());
+    auto local_core = Storage::decode_checkpoint_local_core(
+        local_artifact.value(), source->actor(),
+        capture.value().shareable_artifact_hash, core.value().context);
+    QVERIFY(local_core.ok());
+    local_core.value().owner.shareable_checkpoint_hash = invalid_hash;
+    auto invalid_local = Storage::encode_checkpoint_local_core(
+        local_core.value(), core.value().context, invalid_shareable.value());
+    QVERIFY(invalid_local.ok());
+    const auto owner = source->actor();
+    QVERIFY(source->close().ok());
+    {
+      auto store_open = Storage::CheckpointStore::open(config.checkpoint_store);
+      QVERIFY(store_open.ok());
+      auto store = std::move(store_open).value();
+      auto published = store.publish(invalid_shareable.value(),
+                                     invalid_local.value(), owner);
+      QVERIFY(published.ok());
+    }
+
+    auto fallback_open = DocumentSession::open(config);
+    QVERIFY(fallback_open.ok());
+    auto fallback = std::move(fallback_open).value();
+    QCOMPARE(fallback->text(), std::string("logged"));
+    QVERIFY(!fallback->recovery_report().diagnostics.empty());
+    QVERIFY(fallback->close().ok());
+  }
+
   void consumer_event_log_correlates_undo_and_redo_groups_append_only() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
