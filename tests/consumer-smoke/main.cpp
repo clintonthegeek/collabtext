@@ -33,6 +33,7 @@
 #include <collabtext/Engine.h>
 #include <collabtext/IdListEngine.h>
 #include <collabtext/IdListOperations.h>
+#include <collabtext/MembershipCoordinator.h>
 #include <collabtext/OpStream.h>
 #include <collabtext/Operations.h>
 #include <collabtext/Serialization.h>
@@ -63,6 +64,7 @@ template<class T> T checked_codec(CollabText::Result<T> result) {
 
 int failures = 0;
 void check(bool condition, const char *what);
+CollabText::ActorId actor(uint8_t n);
 
 #ifdef CONSUMER_WANT_TRANSPORT
 void check_installed_branch_export() {
@@ -125,6 +127,35 @@ void check(bool condition, const char *what) {
     if (condition) return;
     std::fprintf(stderr, "consumer: FAILED %s\n", what);
     ++failures;
+}
+
+void check_installed_membership_coordinator() {
+    using namespace CollabText;
+    const auto member = actor(8);
+    auto created = MembershipCoordinator::create(
+        {{"consumer-membership-doc", "text", 1, {member}}});
+    check(created.ok(), "installed membership coordinator factory is available");
+    if (!created.ok()) return;
+    auto coordinator = std::move(created).value();
+    auto permit = coordinator->authorize_local_mutation(
+        "consumer-membership-doc", "text", 1, member);
+    check(permit.ok(), "installed coordinator issues a scoped mutation permit");
+    if (permit.ok()) permit.value().reset();
+    bool durable_commit = false;
+    const auto transition = coordinator->commit_transition(
+        "consumer-membership-doc", "text", 1, 2,
+        "consumer-membership-transition-v1", {member}, [&] {
+            durable_commit = true;
+            return Result<void>{};
+        });
+    check(transition.ok() && durable_commit,
+          "installed coordinator runs the durable transition before advancing");
+    check(!coordinator->authorize_local_mutation(
+              "consumer-membership-doc", "text", 1, member).ok(),
+          "installed coordinator refuses the retired epoch");
+    check(coordinator->authorize_local_mutation(
+              "consumer-membership-doc", "text", 2, member).ok(),
+          "installed coordinator authorizes the committed epoch");
 }
 
 /// A consumer-owned transport implementing the installed interface with stable
@@ -363,6 +394,8 @@ int main() {
             }
         }
     }
+
+    check_installed_membership_coordinator();
 
 #ifdef CONSUMER_WANT_TRANSPORT
     check_installed_branch_export();

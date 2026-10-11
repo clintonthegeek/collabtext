@@ -1,6 +1,6 @@
 # collabtext alpha capability manifest
 
-**Version:** 11
+**Version:** 12
 **Introduced by:** roadmap task A02a
 **Package version at this manifest revision:** `0.2.0-alpha.2`
 **Branch:** `feat/fuguemax-placement` (the workstream label "v2" is not a
@@ -13,7 +13,13 @@ not been given. `0.2.0-alpha.2` is a SemVer **prerelease**. CMake's
 cannot name the prerelease label — ask for no version or for `0.2.0`, and read
 `COLLABTEXT_VERSION_STRING` from the config file for the full label.
 
-**What changed at version 11:** `DocumentSession` can stream its local
+**What changed at version 12:** `MembershipCoordinator` provides RAII
+authorization permits for local writes and inbound deliveries and serializes
+durable epoch changes against those permits. Ambiguous transition publication
+blocks the scope until exact retry or reconstruction from canonical durable
+state. Consumers still own acknowledgement authentication, durable membership
+records, descriptor/checkpoint validation, and wiring the coordinator into each
+session. Version 11 added `DocumentSession` local branch export: it streams its
 producer's durable operation deliveries in their original document, stream, and
 epoch, including a durable pending operation when transport publication failed.
 The export preserves delivery tokens and opaque payload bytes; it does not rebase
@@ -70,9 +76,10 @@ These are stated so a consumer designs around them rather than discovering them.
 | **Persistent bounded undo/redo.** Buffer persists actor-local undo/redo through `DocumentSession`; `IdListEngine` exposes replayable history snapshots for consumer-owned persistence. | **available** | `tst_persistent_undo`, `tst_idlist_undo`, `tst_session_recovery`, `tst_editor_recovery` reopen/undo/redo cases. |
 | **Crash recovery.** `DocumentSession` full-replays one text stream and recovers its local undo state; the broader sender/receiver arrival and fault matrix is pending. | **partial** | `tst_session_recovery`, `tst_editor_recovery`; L08 owns the cross-transport recovery milestone. |
 | **Returning-device local branch export.** `DocumentSession::export_local_branch()` streams only the local producer's retained deliveries for the original document/stream/epoch, preserving tokens and payload bytes and including a recoverable pending commit. | **available** | `tst_session_recovery::localBranchExportKeepsOriginalScopeAndExcludesPeerOperations`, pending-commit export and duplicate reconciliation cases; relocated FileTransport package consumer calls the installed API. Consumers must stage output and publish it only after success; they remain responsible for explicit validation and reconciliation before a newer epoch can use the branch. |
+| **Membership authorization coordination.** `MembershipCoordinator` supplies local and inbound RAII permits, serializes one-step epoch changes against active permits, and blocks a scope after an uncertain transition until exact retry or recovery. | **partial** | `tst_session_recovery::membershipCoordinatorFailsClosedAndPublishesOnlyDurableTransitions`, `mutationPermitSerializesPublicationAgainstRetirement`, and installed Core consumer smoke. Consumers must configure both `DocumentSession` authorization callbacks and provide a durable callback that validates and commits the matching membership event/checkpoint. |
 | **Durable identity for consumers.** A `ReplicaAllocator` exists in the source tree but is not exported or installed. | **partial** | Not part of the installed public surface. A consumer supplies its own `IdentityAllocator` and is responsible for durability. Making `ReplicaAllocator` public is a separate decision, because it means committing to its persistence format. |
 | **Epoch / document / stream on the operation.** An operation carries no epoch, so a receiver cannot check one. | **not implemented** | P07 owns the envelope; L04 owns its persistence. |
-| **Automatic old-epoch authorization or branch rebase.** Export preserves the original epoch context and does not authorize mutation or replay under a newer descriptor. | **not implemented** | G01/G02 own transition validation and explicit reconciliation; arbitrary old-epoch edits are not promised to merge losslessly. |
+| **Automatic returning-branch reconciliation or branch rebase.** Export preserves the original epoch context and the coordinator does not replay or transform operations into a newer descriptor. | **not implemented** | G01/G02 own transition validation and explicit reconciliation; arbitrary old-epoch edits are not promised to merge losslessly. |
 | **GC, pins, checkpoints, reclamation.** | **not implemented, and inert** | G01–G08. `collect_garbage()` and `compact()` return zero and retain everything. **Do not call them expecting reclamation.** |
 | **Formatting / annotation layer.** | **not planned** | Deliberately out of scope. A consumer's document layer owns it over character CRDTs. |
 | **Qt widget layer** | **available, not part of Core** | `CollabText::Widgets`. The alpha's headless path is Core alone. |

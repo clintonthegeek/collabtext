@@ -1,0 +1,1 @@
+#include <collabtext/MembershipCoordinator.h>

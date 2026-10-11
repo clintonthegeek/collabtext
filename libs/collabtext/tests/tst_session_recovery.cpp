@@ -3,6 +3,7 @@
 
 #include <collabtext/Anchor.h>
 #include <collabtext/CrdtEngine.h>
+#include <collabtext/MembershipCoordinator.h>
 #include "crdt/Buffer.h"
 #include "crdt/SeedOp.h"
 #include "core/Sha256.h"
@@ -24,7 +25,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
-#include <set>
 #include <stdexcept>
 #include <thread>
 
@@ -230,8 +230,7 @@ private slots:
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     const std::filesystem::path root = tmp.path().toStdString();
-    std::mutex membership_mutex;
-    std::set<ActorId> enrolled;
+    std::shared_ptr<MembershipCoordinator> coordinator;
     std::atomic<bool> block_next_write{false};
     std::mutex barrier_mutex;
     std::condition_variable barrier_cv;
@@ -240,6 +239,7 @@ private slots:
     bool retirement_attempted = false;
     bool retired = false;
     bool retirement_waited_for_permit = false;
+    bool retirement_commit_ok = false;
 
     Storage::StepHook hook;
     hook.observe = [&](Storage::Step step, const std::filesystem::path &) {
@@ -256,17 +256,22 @@ private slots:
     config.authorize_local_mutation = [&](const DocumentId &, const StreamId &,
                                           uint64_t, const ActorId &producer)
       -> Result<std::shared_ptr<void>> {
-      auto lease = std::make_shared<std::unique_lock<std::mutex>>(membership_mutex);
-      if (!enrolled.contains(producer))
-        return Error(ErrorCode::wrong_epoch, "producer is no longer enrolled");
-      return std::static_pointer_cast<void>(lease);
+      if (!coordinator)
+        return Error(ErrorCode::awaiting_state,
+                     "membership coordinator is not initialized");
+      return coordinator->authorize_local_mutation(
+          config.document, config.stream, config.epoch, producer);
     };
 
     auto opened = DocumentSessionTestAccess::open(config, writer_config);
     QVERIFY(opened.ok());
     auto session = std::move(opened).value();
     const auto producer = session->actor();
-    enrolled.insert(producer);
+    const auto peer = Test::actor(222);
+    auto coordinator_result = MembershipCoordinator::create({
+        {config.document, config.stream, config.epoch, {producer, peer}}});
+    QVERIFY(coordinator_result.ok());
+    coordinator = std::move(coordinator_result).value();
     block_next_write = true;
     bool edit_published = false;
     std::thread editor([&] {
@@ -285,15 +290,16 @@ private slots:
         retirement_attempted = true;
       }
       barrier_cv.notify_all();
-      {
-        std::lock_guard lock(membership_mutex);
-        enrolled.erase(producer);
-      }
-      {
-        std::lock_guard lock(barrier_mutex);
-        retired = true;
-      }
-      barrier_cv.notify_all();
+      auto transition = coordinator->commit_transition(
+          config.document, config.stream, config.epoch, config.epoch + 1,
+          "session-race-retirement-v1",
+          {peer}, [&]() -> Result<void> {
+            std::lock_guard lock(barrier_mutex);
+            retired = true;
+            barrier_cv.notify_all();
+            return {};
+          });
+      retirement_commit_ok = transition.ok();
     });
     {
       std::unique_lock lock(barrier_mutex);
@@ -311,12 +317,142 @@ private slots:
     QVERIFY(retirement_waited_for_permit);
     QVERIFY(edit_published);
     QVERIFY(retired);
+    QVERIFY(retirement_commit_ok);
     QCOMPARE(session->text(), std::string("x"));
     auto rejected = session->apply_local({{1, 1}}, {"y"});
     QVERIFY(!rejected.ok());
     QCOMPARE(rejected.error().code(), ErrorCode::wrong_epoch);
     QCOMPARE(session->text(), std::string("x"));
     QVERIFY(session->close().ok());
+  }
+
+  void membershipCoordinatorFailsClosedAndPublishesOnlyDurableTransitions() {
+    const auto member_a = Test::actor(221);
+    const auto member_b = Test::actor(222);
+    const std::string transition_id = "coordinator-transition-7-8-v1";
+    auto created = MembershipCoordinator::create(
+        {{"coordinator-doc", "text", 7, {member_a, member_b}}});
+    QVERIFY(created.ok());
+    auto coordinator = std::move(created).value();
+
+    auto local = coordinator->authorize_local_mutation(
+        "coordinator-doc", "text", 7, member_a);
+    QVERIFY(local.ok());
+    QVERIFY(!coordinator->authorize_local_mutation(
+        "coordinator-doc", "text", 8, member_a));
+    QVERIFY(!coordinator->authorize_local_mutation(
+        "coordinator-doc", "text", 7, Test::actor(223)));
+    DeliveryToken token{"text", 7, member_a, 1};
+    auto inbound = coordinator->authorize_inbound_delivery(
+        "coordinator-doc", "text", 7, token);
+    QVERIFY(inbound.ok());
+    token.stream = "other";
+    QVERIFY(!coordinator->authorize_inbound_delivery(
+        "coordinator-doc", "text", 7, token));
+    inbound.value().reset();
+    local.value().reset();
+
+    const auto rejected_transition = coordinator->commit_transition(
+        "coordinator-doc", "text", 7, 8, transition_id, {member_b}, [] {
+          return Result<void>(Error(ErrorCode::io_error,
+                                    "simulated durable publication failure"));
+        });
+    QVERIFY(!rejected_transition.ok());
+    QVERIFY(coordinator->authorize_local_mutation(
+        "coordinator-doc", "text", 7, member_a));
+
+    const auto uncertain_transition = coordinator->commit_transition(
+        "coordinator-doc", "text", 7, 8, transition_id, {member_b}, [] {
+          return Result<void>(Error(ErrorCode::commit_uncertain,
+                                    "simulated uncertain durable publication"));
+        });
+    QVERIFY(!uncertain_transition.ok());
+    auto blocked_actor = coordinator->authorize_local_mutation(
+        "coordinator-doc", "text", 7, member_a);
+    QVERIFY(!blocked_actor.ok());
+    QCOMPARE(blocked_actor.error().code(), ErrorCode::commit_uncertain);
+    auto conflicting_retry = coordinator->commit_transition(
+        "coordinator-doc", "text", 7, 8, "different-transition-id", {member_b}, [] {
+          return Result<void>{};
+        });
+    QVERIFY(!conflicting_retry.ok());
+    QCOMPARE(conflicting_retry.error().code(), ErrorCode::wrong_epoch);
+
+    ErrorCode nested_authorization_error = ErrorCode::malformed;
+    const auto reentrant_transition = coordinator->commit_transition(
+        "coordinator-doc", "text", 7, 8, transition_id, {member_b}, [&] {
+          auto nested = coordinator->authorize_local_mutation(
+              "coordinator-doc", "text", 7, member_a);
+          if (nested.ok())
+            return Result<void>(Error(ErrorCode::malformed,
+                                      "reentrant authorization unexpectedly succeeded"));
+          nested_authorization_error = nested.error().code();
+          return Result<void>(nested.error());
+        });
+    QVERIFY(!reentrant_transition.ok());
+    QCOMPARE(reentrant_transition.error().code(), ErrorCode::reentrant_mutation);
+    QCOMPARE(nested_authorization_error, ErrorCode::reentrant_mutation);
+
+    auto other_created = MembershipCoordinator::create(
+        {{"other-doc", "text", 1, {member_a}}});
+    QVERIFY(other_created.ok());
+    auto other = std::move(other_created).value();
+    auto cross_coordinator_reentrancy = coordinator->commit_transition(
+        "coordinator-doc", "text", 7, 8, transition_id, {member_b}, [&] {
+          return other->commit_transition("other-doc", "text", 1, 2,
+              "other-transition-v1",
+              {member_a}, [&]() -> Result<void> {
+                auto nested = coordinator->authorize_local_mutation(
+                    "coordinator-doc", "text", 7, member_a);
+                if (nested.ok())
+                  return Error(ErrorCode::malformed,
+                               "cross-coordinator reentrancy unexpectedly succeeded");
+                return nested.error();
+              });
+        });
+    QVERIFY(!cross_coordinator_reentrancy.ok());
+    QCOMPARE(cross_coordinator_reentrancy.error().code(),
+             ErrorCode::reentrant_mutation);
+
+    const auto throwing_retry = coordinator->commit_transition(
+        "coordinator-doc", "text", 7, 8, transition_id, {member_b}, []() -> Result<void> {
+          throw std::runtime_error("simulated transition callback interruption");
+        });
+    QVERIFY(!throwing_retry.ok());
+    QCOMPARE(throwing_retry.error().code(), ErrorCode::io_error);
+    auto still_blocked = coordinator->authorize_local_mutation(
+        "coordinator-doc", "text", 7, member_a);
+    QVERIFY(!still_blocked.ok());
+    QCOMPARE(still_blocked.error().code(), ErrorCode::commit_uncertain);
+
+    bool durable = false;
+    QVERIFY(coordinator->commit_transition(
+        "coordinator-doc", "text", 7, 8, transition_id, {member_b}, [&] {
+          durable = true;
+          return Result<void>{};
+        }).ok());
+    QVERIFY(durable);
+    QVERIFY(!coordinator->authorize_local_mutation(
+        "coordinator-doc", "text", 7, member_a));
+    QVERIFY(!coordinator->authorize_inbound_delivery(
+        "coordinator-doc", "text", 7,
+        DeliveryToken{"text", 7, member_b, 1}));
+    QVERIFY(coordinator->authorize_local_mutation(
+        "coordinator-doc", "text", 8, member_b));
+    QVERIFY(coordinator->authorize_inbound_delivery(
+        "coordinator-doc", "text", 8,
+        DeliveryToken{"text", 8, member_b, 1}));
+
+    auto temporary_created = MembershipCoordinator::create(
+        {{"temporary-doc", "text", 1, {member_a}}});
+    QVERIFY(temporary_created.ok());
+    auto temporary_coordinator = std::move(temporary_created).value();
+    auto temporary_permit = temporary_coordinator->authorize_local_mutation(
+        "temporary-doc", "text", 1, member_a);
+    QVERIFY(temporary_permit.ok());
+    auto lease_outliving_coordinator = std::move(temporary_permit).value();
+    temporary_coordinator.reset();
+    lease_outliving_coordinator.reset();
   }
 
   void external_token_roundtrip_reopen_durable_file_replay() {

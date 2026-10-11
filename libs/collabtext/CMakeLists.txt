@@ -50,6 +50,7 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(collabtext_core STATIC
     src/AnchorPins.cpp
+    src/MembershipCoordinator.cpp
     src/CrdtEngine.cpp
     src/IdListEngine.cpp
     src/core/Sha256.cpp
@@ -326,6 +327,7 @@ add_library(collabtext_public_headers_core OBJECT
     tests/public-headers/only_IdListEngine_h.cpp
     tests/public-headers/only_IdListOperations_h.cpp
     tests/public-headers/only_LocalHistory_h.cpp
+    tests/public-headers/only_MembershipCoordinator_h.cpp
     tests/public-headers/only_Operations_h.cpp
     tests/public-headers/only_OpStream_h.cpp
     tests/public-headers/only_Serialization_h.cpp

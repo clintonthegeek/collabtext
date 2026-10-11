@@ -298,6 +298,21 @@ only after the method succeeds. This is an explicit rescue/export seam: it does
 not authorize the old actor to mutate a new epoch, validate a membership
 transition, or automatically replay/rebase the branch into a later descriptor.
 
+`MembershipCoordinator` is the public synchronization gate for consumers which
+compose membership with `DocumentSession`. Initialize one `MembershipScope` per
+document/stream with the recovered epoch and sorted or unsorted member IDs (the
+factory canonicalizes them). Its local-mutation and inbound-delivery methods
+return RAII permits suitable for the corresponding session authorization
+callbacks. `commit_transition()` runs the caller's durable commit under the
+exclusive gate and changes the active membership only after success. Its
+callback must not reenter a membership coordinator. Supply a stable transition
+identity that covers the full event and checkpoint inputs; an uncertain
+publication or callback exception blocks that scope until the same identity
+and values are retried or state is recovered durably. The caller remains
+responsible for authenticating acknowledgements and validating the journal
+event and checkpoint; this helper supplies concurrency control, not a
+membership database.
+
 `DocumentSession::quarantined_deliveries()` exposes exact rejected inbound
 tokens, payload bytes, and reasons for checkpoint/provider diagnostics. Its
 count and byte budgets default to 1,024 records and 16 MiB. If either budget is

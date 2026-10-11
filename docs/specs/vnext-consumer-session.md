@@ -61,6 +61,33 @@ Rejected envelopes are retained in the bounded quarantine snapshot and do not
 advance receipts. Without these callbacks, `DocumentSession` is deliberately
 uncoordinated and must not be treated as enforcing epoch membership itself.
 
+`MembershipCoordinator` provides the shared-lock leases for that composition.
+Create it with the active document/stream epochs and member sets, then capture
+the shared coordinator in both session callbacks:
+
+```cpp
+config.authorize_local_mutation = [gate](const DocumentId &doc,
+    const StreamId &stream, uint64_t epoch, const ActorId &actor) {
+  return gate->authorize_local_mutation(doc, stream, epoch, actor);
+};
+config.authorize_inbound_delivery = [gate](const DocumentId &doc,
+    const StreamId &stream, uint64_t epoch, const DeliveryToken &token) {
+  return gate->authorize_inbound_delivery(doc, stream, epoch, token);
+};
+```
+
+Use `commit_transition()` to hold the exclusive gate while the caller commits
+the matching durable transition; its callback must not reenter a membership
+coordinator. Advance is published to sessions only after that callback succeeds.
+On `commit_uncertain`, callback exceptions, or process
+restart before recovery, the coordinator blocks the scope; retry with the same
+transition identity and exact durable inputs, or recreate the gate from
+recovered canonical membership. The identity must include every event and
+checkpoint input that distinguishes this transition from a conflicting retry.
+The caller still validates the preview, acknowledgements, transition event and
+checkpoint before invoking this operation. The coordinator does not persist
+membership or infer it from silence.
+
 After recovering a membership journal, consumers can call
 `decode_membership_transition_evidence()` on the linked event. It strictly
 checks the enrollment/retirement version, canonical actor ordering, bounded
