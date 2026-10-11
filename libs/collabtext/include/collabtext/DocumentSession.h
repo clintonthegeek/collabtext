@@ -61,6 +61,10 @@ struct DocumentSessionConfig {
   /// the shareable state, and replays retained deliveries beyond its coverage.
   std::filesystem::path checkpoint_store;
   SessionCheckpointCandidateValidator validate_checkpoint_candidate;
+  /// Optional delivery count at which `checkpoint_due()` becomes true. Zero
+  /// disables threshold advice; callers still control provider state and
+  /// explicitly publish with `publish_checkpoint()`.
+  uint64_t checkpoint_delivery_threshold = 0;
 };
 
 /// Local producer deliveries retained for one original document epoch.
@@ -190,6 +194,9 @@ public:
   /// checkpoint itself has already become recoverable.
   [[nodiscard]] Result<SessionCheckpointCapture>
   publish_checkpoint(const SessionCheckpointProviderState &);
+  /// Report whether retained delivery coverage has grown by the configured
+  /// threshold since the latest successfully published/selected checkpoint.
+  [[nodiscard]] Result<bool> checkpoint_due() const;
   /// Stream this actor's durable operations in their original scope, including
   /// a durable pending local commit if its log append failed. The visitor may
   /// receive a prefix before an error; stage output and publish it only on

@@ -40,6 +40,7 @@ struct DocumentSession::Impl {
   std::unordered_map<std::string, std::string> replayed_payload_hashes;
   std::unordered_map<std::string, DeferredState> deferred_tokens;
   std::map<ActorId, uint64_t> checkpointed_delivery_frontiers;
+  std::map<ActorId, uint64_t> checkpoint_threshold_frontiers;
   std::optional<Crdt::LocalHistorySnapshot> checkpoint_local_history;
   std::vector<SessionQuarantinedDelivery> quarantined_deliveries;
   size_t quarantined_bytes = 0;
@@ -434,6 +435,11 @@ struct DocumentSession::Impl {
     deferred_tokens = std::move(restored_deferred);
     replayed_payload_hashes = std::move(restored_payload_hashes);
     checkpointed_delivery_frontiers = core.coverage.delivery;
+    checkpoint_threshold_frontiers = core.coverage.delivery;
+    for (const auto &record : core.deferred)
+      checkpoint_threshold_frontiers[record.token.producer] = std::max(
+          checkpoint_threshold_frontiers[record.token.producer],
+          record.token.sequence);
     checkpoint_local_history = local_core
                                    ? std::optional<Crdt::LocalHistorySnapshot>(
                                          local_core->history)
@@ -467,6 +473,7 @@ struct DocumentSession::Impl {
     replayed_payload_hashes.clear();
     deferred_tokens.clear();
     checkpointed_delivery_frontiers.clear();
+    checkpoint_threshold_frontiers.clear();
     checkpoint_local_history.reset();
     quarantined_deliveries.clear();
     quarantined_bytes = 0;
@@ -596,6 +603,11 @@ DocumentSession::open_with_writer_config(
       config.document.empty() || config.stream.empty() || config.epoch == 0)
     return Error(ErrorCode::malformed, "session requires store, private state, "
                                        "document, stream and nonzero epoch");
+  if (config.checkpoint_delivery_threshold != 0 &&
+      (config.checkpoint_store.empty() ||
+       !config.validate_checkpoint_candidate))
+    return Error(ErrorCode::malformed,
+                 "checkpoint thresholds require a store and provider validator");
   try {
     auto impl = std::make_unique<Impl>();
     impl->config = std::move(config);
@@ -1013,6 +1025,21 @@ Result<SessionCheckpointCapture> DocumentSession::publish_checkpoint(
       capture.value().local_companion_artifact_bytes,
       m_impl->replica->actor());
   if (!published.ok()) return published.error();
+  m_impl->checkpointed_delivery_frontiers =
+      capture.value().delivery_coverage;
+  m_impl->checkpoint_threshold_frontiers =
+      capture.value().delivery_coverage;
+  for (const auto &[key, deferred] : m_impl->deferred_tokens) {
+    (void)key;
+    auto &frontier = m_impl->checkpoint_threshold_frontiers[
+        deferred.token.producer];
+    frontier = std::max(frontier, deferred.token.sequence);
+  }
+  for (const auto &quarantined : m_impl->quarantined_deliveries) {
+    auto &frontier = m_impl->checkpoint_threshold_frontiers[
+        quarantined.delivery.token.producer];
+    frontier = std::max(frontier, quarantined.delivery.token.sequence);
+  }
   const StreamScope scope{m_impl->config.stream, m_impl->config.epoch};
   auto receipts = m_impl->transport->persist_checkpoint_receipts(
       scope, capture.value().delivery_coverage,
@@ -1021,6 +1048,28 @@ Result<SessionCheckpointCapture> DocumentSession::publish_checkpoint(
     return receipts.error().with_context(
         "checkpoint is durable but recovery receipt publication failed");
   return std::move(capture).value();
+}
+
+Result<bool> DocumentSession::checkpoint_due() const {
+  if (!m_impl || m_impl->closed)
+    return Error(ErrorCode::writer_conflict,
+                 "session is unavailable for checkpoint threshold query");
+  const auto threshold = m_impl->config.checkpoint_delivery_threshold;
+  if (threshold == 0) return false;
+  const StreamScope scope{m_impl->config.stream, m_impl->config.epoch};
+  auto retained = m_impl->transport->delivery_frontiers(scope);
+  if (!retained.ok()) return retained.error();
+  uint64_t uncovered = 0;
+  for (const auto &[producer, through] : retained.value()) {
+    const auto baseline = m_impl->checkpoint_threshold_frontiers.find(producer);
+    const uint64_t covered = baseline == m_impl->checkpoint_threshold_frontiers.end()
+                                 ? 0 : baseline->second;
+    if (through <= covered) continue;
+    const uint64_t delta = through - covered;
+    if (delta >= threshold - uncovered) return true;
+    uncovered += delta;
+  }
+  return false;
 }
 
 Result<void> DocumentSession::save() {

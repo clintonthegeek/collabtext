@@ -405,5 +405,9 @@ prefixes are still scanned and validated. Startup does not retrofit receipts
 for imported or otherwise pre-existing checkpoint manifests that lack them.
 Equivalent behavior across broader edit sequences, remote interleavings, and
 undo/redo remains to be verified. Automatic size/time threshold scheduling and
-recovery-time measurement are also outstanding. Previous checkpoints and
-covered logs remain retained for G06.
+recovery-time measurement are also outstanding. `checkpoint_due()` provides an
+advisory delivery-count threshold; callers still supply current provider state
+and invoke explicit publication. Its baseline counts delivery records retained
+in the last checkpoint, including deferred and quarantined records, while
+transport receipt coverage remains limited to safely represented contiguous
+prefixes. Previous checkpoints and covered logs remain retained for G06.

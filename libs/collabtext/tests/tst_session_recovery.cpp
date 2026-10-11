@@ -1300,6 +1300,7 @@ private slots:
                      "checkpoint bundle");
       return {};
     };
+    config.checkpoint_delivery_threshold = 1;
     auto opened = DocumentSession::open(config);
     QVERIFY(opened.ok());
     auto session = std::move(opened).value();
@@ -1333,6 +1334,9 @@ private slots:
     auto polled = session->poll();
     QVERIFY(polled.ok());
     QCOMPARE(polled.value().quarantined, size_t(1));
+    auto due_before_publish = session->checkpoint_due();
+    QVERIFY(due_before_publish.ok());
+    QVERIFY(due_before_publish.value());
     auto after_poll = DocumentSessionTestAccess::checkpoint_core(
         *session, provider);
     QVERIFY2(after_poll.ok(), after_poll.error().message().data());
@@ -1375,6 +1379,9 @@ private slots:
              public_capture.value().shareable_artifact_bytes);
     QCOMPARE(published_capture.value().local_companion_artifact_bytes,
              public_capture.value().local_companion_artifact_bytes);
+    auto due_after_publish = session->checkpoint_due();
+    QVERIFY(due_after_publish.ok());
+    QVERIFY(!due_after_publish.value());
     {
       auto checkpoint_store = Storage::CheckpointStore::open(
           root / "checkpoint-store");
@@ -1590,9 +1597,13 @@ private slots:
         return Error(ErrorCode::malformed, "incomplete checkpoint bundle");
       return {};
     };
+    config.checkpoint_delivery_threshold = 1;
     auto opened = DocumentSession::open(config);
     QVERIFY(opened.ok());
     auto session = std::move(opened).value();
+    auto initially_due = session->checkpoint_due();
+    QVERIFY(initially_due.ok());
+    QVERIFY(!initially_due.value());
 
     const auto producer = Test::actor(188);
     Crdt::Buffer peer_engine(Test::test_counter(188));
@@ -1609,6 +1620,9 @@ private slots:
                         PushDurability::durable).ok());
       QVERIFY(peer.close().ok());
     }
+    auto delivery_due = session->checkpoint_due();
+    QVERIFY(delivery_due.ok());
+    QVERIFY(delivery_due.value());
     auto polled = session->poll();
     QVERIFY(polled.ok());
     QCOMPARE(polled.value().committed, size_t(1));
@@ -1623,6 +1637,9 @@ private slots:
     QVERIFY(published.ok());
     QCOMPARE(published.value().shareable_artifact_hash,
              captured.value().shareable_artifact_hash);
+    auto reset_due = session->checkpoint_due();
+    QVERIFY(reset_due.ok());
+    QVERIFY(!reset_due.value());
 
     std::string stream_component;
     static constexpr char hex[] = "0123456789abcdef";
