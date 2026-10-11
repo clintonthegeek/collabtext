@@ -124,6 +124,9 @@ Run `tst_wave_core` and public-header compilation in Debug/Release/ASan and relo
 - `libs/collabtext/tests/tst_position_token_reader.cpp`
 - `tests/consumer-smoke/wave-contract/probes.cpp`
 
+- `libs/collabtext/tests/tst_filesync.cpp`
+- `libs/collabtext/tests/tst_stream_sync.cpp`
+
 **Steps:**
 
 1. Keep literal CTBO/0002 insertion and undo archives independent of the current writer. Decode/apply through installed opaque operations and verify identity, visible text, attachment detachment and canonical encoding.

@@ -30,7 +30,7 @@ private slots:
         QVERIFY(receiver.start().ok());
         SegmentWriter writer(shared / "replicas" / "sender" / "log" / "ops", SegmentKind::Ops);
         QVERIFY(writer.start().ok());
-        const std::string unsupported = "CTBO0003:{}";
+        const std::string unsupported = "CTBO000f:{}";
         auto first = source.apply_local_edit({{0, 0}}, {"a"});
         QVERIFY(writer.append(checked_codec(encode_operation(first)), op_identity(first).counter).ok());
         QVERIFY(writer.append(unsupported, 3).ok());

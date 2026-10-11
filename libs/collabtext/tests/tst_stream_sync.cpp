@@ -18,7 +18,7 @@ private slots:
         sender.start(); receiver.start();
         int delivered = 0;
         receiver.set_on_inbound([&](const auto&, auto, const auto&) { ++delivered; });
-        sender.push("ops", std::string("CTBO0003:{}"));
+        sender.push("ops", std::string("CTBO000f:{}"));
         sender.flush();
         QCOMPARE(receiver.poll(), size_t(0));
         QCOMPARE(delivered, 0);
@@ -26,7 +26,7 @@ private slots:
         QVERIFY(receiver.last_error().has_value());
         QCOMPARE(receiver.last_error()->code(), CollabText::ErrorCode::unsupported_version);
         QCOMPARE(receiver.blocked_records("ops", "sender").size(), size_t(1));
-        QVERIFY(receiver.blocked_records("ops", "sender")[0].find("CTBO0003:") != std::string::npos);
+        QVERIFY(receiver.blocked_records("ops", "sender")[0].find("CTBO000f:") != std::string::npos);
         sender.push("ops", std::string("opaque application payload"));
         sender.flush();
         QCOMPARE(receiver.poll(), size_t(0));

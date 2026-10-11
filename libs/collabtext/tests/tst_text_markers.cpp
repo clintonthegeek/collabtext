@@ -18,7 +18,10 @@ void deliver(FR::Tree& model,const EditOperation& operation) {
   const auto scalars=QString::fromStdString(f.content).toUcs4();
   for(uint32_t k=0;k<f.length;++k) {
    FR::NodeMsg msg;msg.id=id({f.origin.actor,f.origin.counter+k});
-   msg.value=f.marker ? "" : QString::fromUcs4(std::u32string(1,static_cast<char32_t>(scalars[k]))).toStdString();
+   if (!f.marker) {
+    const char32_t scalar=static_cast<char32_t>(scalars[k]);
+    msg.value=QString::fromUcs4(&scalar,1).toStdString();
+   }
    const Link link=k ? Link{Identity(f.origin.actor,f.origin.counter+k-1),Side::Right,f.link.right_origin} : f.link;
    msg.parent_is_root=!link.parent;if(link.parent)msg.parent=id(*link.parent);
    msg.side=link.side==Side::Left ? FR::Side::Left : FR::Side::Right;
