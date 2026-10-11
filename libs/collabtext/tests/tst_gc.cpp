@@ -2,11 +2,18 @@
 #include "crdt/Buffer.h"
 #include "crdt/SequenceOrder.h"
 #include <random>
+#include <type_traits>
 #include "TestActor.h"
 
 using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
+
+template <typename T>
+concept HasRawWatermarkCompact = requires(T &value, const Global &watermark) {
+    value.compact(watermark);
+};
+static_assert(!HasRawWatermarkCompact<Buffer>);
 
 static void check_invariants(const Buffer& buf, const char* context) {
     auto frags = buf.fragments();
@@ -429,7 +436,7 @@ private slots:
     }
 
     // -----------------------------------------------------------------------
-    // Watermark-based compact()
+    // Raw watermark compaction is absent; uncertified GC remains inert.
     // -----------------------------------------------------------------------
 
     void compact_retains_remote_tombstones() {
@@ -449,12 +456,8 @@ private slots:
         QCOMPARE(bufA.collect_garbage(), size_t(0));
         QVERIFY(bufA.tombstone_count() > 0);
 
-        // An observation vector is insufficient even when it covers B's deletion.
-        Global watermark;
-        watermark.join(bufA.version());
-        watermark.meet(bufB.version());
         const auto tombstones_before = bufA.tombstone_count();
-        size_t removed = bufA.compact(watermark);
+        size_t removed = bufA.collect_garbage();
         QCOMPARE(removed, size_t(0));
         QCOMPARE(bufA.tombstone_count(), tombstones_before);
         QCOMPARE(bufA.text(), std::string(""));
@@ -479,7 +482,7 @@ private slots:
         watermark.meet(bufB.version());
 
         // A's deletion IS in A's undo stack — compact should NOT remove
-        QCOMPARE(bufA.compact(watermark), size_t(0));
+        QCOMPARE(bufA.collect_garbage(), size_t(0));
         QVERIFY(bufA.tombstone_count() > 0);
 
         // Undo the deletion — text comes back
@@ -493,17 +496,13 @@ private slots:
         bufB.apply_ops({op1});
 
         // Snapshot watermark BEFORE B deletes
-        Global watermark;
-        watermark.join(bufA.version());
-        watermark.meet(bufB.version());
-
         // B deletes — this deletion is NOT covered by the watermark
         auto op2 = bufB.apply_local_edit({{0, 5}}, {""});
         bufA.apply_ops({op2});
         QVERIFY((bufA.set_max_undo_depth(0)).ok());
 
-        // compact with old watermark should NOT remove (deletion > watermark)
-        QCOMPARE(bufA.compact(watermark), size_t(0));
+        // Without a certificate it must remain, regardless of observed versions.
+        QCOMPARE(bufA.collect_garbage(), size_t(0));
         QVERIFY(bufA.tombstone_count() > 0);
     }
 
@@ -519,18 +518,13 @@ private slots:
         bufB.apply_ops({op2});
         QCOMPARE(bufA.text(), bufB.text());
 
-        // Compute watermark = meet of both versions
-        Global watermark;
-        watermark.join(bufA.version());
-        watermark.meet(bufB.version());
-
-        // Both compact at the same watermark
+        // Neither replica has a certified reclamation frontier.
         QVERIFY((bufA.set_max_undo_depth(0)).ok());
         QVERIFY((bufB.set_max_undo_depth(0)).ok());
         const auto tombstones_a = bufA.tombstone_count();
         const auto tombstones_b = bufB.tombstone_count();
-        QCOMPARE(bufA.compact(watermark), size_t(0));
-        QCOMPARE(bufB.compact(watermark), size_t(0));
+        QCOMPARE(bufA.collect_garbage(), size_t(0));
+        QCOMPARE(bufB.collect_garbage(), size_t(0));
 
         QCOMPARE(bufA.text(), bufB.text());
         QCOMPARE(bufA.tombstone_count(), tombstones_a);
@@ -602,11 +596,8 @@ private slots:
                     bufA.apply_ops({});
                     bufB.apply_ops({});
                 }
-                Global watermark;
-                watermark.join(bufA.version());
-                watermark.meet(bufB.version());
-                bufA.compact(watermark);
-                bufB.compact(watermark);
+                bufA.collect_garbage();
+                bufB.collect_garbage();
                 check_invariants(bufA, qPrintable(QString("A_compact_%1").arg(i)));
                 check_invariants(bufB, qPrintable(QString("B_compact_%1").arg(i)));
             }
@@ -619,11 +610,8 @@ private slots:
             bufA.apply_ops({});
             bufB.apply_ops({});
         }
-        Global watermark;
-        watermark.join(bufA.version());
-        watermark.meet(bufB.version());
-        bufA.compact(watermark);
-        bufB.compact(watermark);
+        bufA.collect_garbage();
+        bufB.collect_garbage();
 
         check_invariants(bufA, "final_A");
         check_invariants(bufB, "final_B");

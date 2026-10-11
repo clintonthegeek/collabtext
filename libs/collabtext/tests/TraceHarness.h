@@ -779,10 +779,9 @@ inline ReplayResult replay_buffer(const Trace& trace) {
             ++result.applied;
             break;
         case EventKind::Compact: {
-            Crdt::Global watermark = world.replicas[0].version();
-            for (size_t r = 1; r < world.replicas.size(); ++r)
-                watermark.meet(world.replicas[r].version());
-            for (auto& buf : world.replicas) buf.compact(watermark);
+            // Legacy trace event retained for corpus compatibility. It is
+            // intentionally inert until a certified reclamation API exists.
+            for (auto& buf : world.replicas) buf.collect_garbage();
             ++result.applied;
             break;
         }
@@ -930,10 +929,9 @@ inline ReplayResult replay_idlist(const Trace& trace) {
             ++result.applied;
             break;
         case EventKind::Compact: {
-            Crdt::Global watermark = world.replicas[0].version();
-            for (size_t r = 1; r < world.replicas.size(); ++r)
-                watermark.meet(world.replicas[r].version());
-            for (auto& list : world.replicas) list.compact(watermark);
+            // Legacy trace event retained for corpus compatibility. It is
+            // intentionally inert until a certified reclamation API exists.
+            for (auto& list : world.replicas) list.collect_garbage();
             ++result.applied;
             break;
         }
@@ -1344,10 +1342,7 @@ public:
         Event e;
         e.kind = EventKind::Compact;
         m_trace.events.push_back(e);
-        Crdt::Global watermark = m_world.replicas[0].version();
-        for (size_t r = 1; r < m_world.replicas.size(); ++r)
-            watermark.meet(m_world.replicas[r].version());
-        for (auto& buf : m_world.replicas) buf.compact(watermark);
+        for (auto& buf : m_world.replicas) buf.collect_garbage();
     }
 
     /// Deliver an operation to every replica except its producer.
@@ -1542,10 +1537,7 @@ public:
         Event e;
         e.kind = EventKind::Compact;
         m_trace.events.push_back(e);
-        Crdt::Global watermark = m_world.replicas[0].version();
-        for (size_t r = 1; r < m_world.replicas.size(); ++r)
-            watermark.meet(m_world.replicas[r].version());
-        for (auto& list : m_world.replicas) list.compact(watermark);
+        for (auto& list : m_world.replicas) list.collect_garbage();
     }
 
     std::string save(std::string_view suffix) const { return save_trace(m_trace, suffix); }

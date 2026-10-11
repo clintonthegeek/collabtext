@@ -438,12 +438,6 @@ size_t Buffer::collect_garbage() {
     return 0;
 }
 
-size_t Buffer::compact(const Global& /*watermark*/) {
-    // Observing a deletion does not release a replica's undo/redo obligations.
-    // A raw clock is not a reclamation certificate; retain identities and data.
-    return 0;
-}
-
 // ---------------------------------------------------------------------------
 // edits_since — compute visible text changes between two versions
 // ---------------------------------------------------------------------------

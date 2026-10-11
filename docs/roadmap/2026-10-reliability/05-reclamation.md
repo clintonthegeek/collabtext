@@ -136,6 +136,9 @@ Run `./tools/verify-roadmap.sh debug 'tst_gc_certificate|tst_transport_commit_co
 - `docs/specs/vnext-checkpoint.md`
 - `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/src/crdt/NetworkSim.cpp`
+- `libs/collabtext/src/crdt/NetworkSim.h`
+- `libs/collabtext/tests/TraceHarness.h`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/tests/fuzz_decode.cpp`
 - `libs/collabtext/tests/tst_checkpoint_codec.cpp`
@@ -187,13 +190,18 @@ Run `./tools/verify-roadmap.sh debug 'tst_checkpoint_recovery|tst_store_lifecycl
 ## G06 — Implement certificate-based tombstone and UndoMap reclamation
 
 **Status:** see TASKS.json (in progress)  
-**Depends on:** G03, G05, S05, V03  
+**Depends on:** G03, G05, S05, V03
+
+**Implementation note (2026-10-11):** Removed `compact(Global)` from Buffer and IdList and added compile-time absence checks. Legacy trace events remain parseable but run only inert local collection; NetworkSim no longer computes a watermark. The focused six-suite Debug, Release, and ASan/UBSan gates passed (ASan with leak detection disabled; the realistic sustained-convergence test took about 55 seconds). Shared eligibility and all actual certified reclamation work remain open.
 **Coverage:** F1, F2, F3, F7, R7, R10  
 
 **Files / scope:**
 
 - `libs/collabtext/src/crdt/ReclamationPolicy.h`
 - `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/src/crdt/NetworkSim.cpp`
+- `libs/collabtext/src/crdt/NetworkSim.h`
+- `libs/collabtext/tests/TraceHarness.h`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/src/crdt/UndoMap.cpp`
 - `libs/collabtext/tests/tst_gc.cpp`

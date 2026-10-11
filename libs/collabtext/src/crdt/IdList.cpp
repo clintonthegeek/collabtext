@@ -696,12 +696,6 @@ size_t IdList::collect_garbage() {
     return 0;
 }
 
-size_t IdList::compact(const Global& /*watermark*/) {
-    // Observing a deletion does not release a replica's undo/redo obligations.
-    // A raw clock is not a reclamation certificate; retain identities and data.
-    return 0;
-}
-
 std::vector<IdListEntry> IdList::entries() const {
     return m_entry_tree.items();
 }

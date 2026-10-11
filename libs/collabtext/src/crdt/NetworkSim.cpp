@@ -260,13 +260,9 @@ size_t NetworkSim::collect_garbage(int replica) {
 }
 
 size_t NetworkSim::compact_all() {
-    if (m_replicas.empty()) return 0;
-    Global watermark = m_replicas[0].version();
-    for (size_t r = 1; r < m_replicas.size(); ++r)
-        watermark.meet(m_replicas[r].version());
     size_t total = 0;
     for (auto& buf : m_replicas)
-        total += buf.compact(watermark);
+        total += buf.collect_garbage();
     return total;
 }
 

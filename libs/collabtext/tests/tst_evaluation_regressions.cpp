@@ -124,8 +124,8 @@ private slots:
         }
     }
 
-    void f2_compact_preserves_remote_delete_undo_data() { primitive_rows(); }
-    void f2_compact_preserves_remote_delete_undo() {
+    void f2_uncertified_gc_preserves_remote_delete_undo_data() { primitive_rows(); }
+    void f2_uncertified_gc_preserves_remote_delete_undo() {
         QFETCH(bool, idlist);
         if (idlist) {
             IdList a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
@@ -135,9 +135,7 @@ private slots:
             QVERIFY(b.ids().empty());
             // Remove A's incidental local-insertion pin; B still retains deletion undo.
             QVERIFY((a.set_max_undo_depth(0)).ok());
-            Global watermark = a.version();
-            watermark.meet(b.version());
-            a.compact(watermark);
+            a.collect_garbage();
             auto undo = b.undo();
             QVERIFY(undo.has_value());
             a.apply_ops({*undo});
@@ -149,9 +147,7 @@ private slots:
             a.apply_ops({b.apply_local_edit({{0, 3}}, {""})});
             QCOMPARE(a.text(), std::string());
             QCOMPARE(b.text(), std::string());
-            Global watermark = a.version();
-            watermark.meet(b.version());
-            a.compact(watermark);
+            a.collect_garbage();
             auto undo = b.undo();
             QVERIFY(undo.has_value());
             a.apply_ops({*undo});

@@ -6,6 +6,12 @@ using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
+template <typename T>
+concept HasRawWatermarkCompact = requires(T &value, const Global &watermark) {
+    value.compact(watermark);
+};
+static_assert(!HasRawWatermarkCompact<IdList>);
+
 class TestIdListGc : public QObject {
     Q_OBJECT
 private slots:
@@ -32,20 +38,16 @@ private slots:
         QCOMPARE(alice.collect_garbage(), size_t{0});  // remote deletion remains restorable
     }
 
-    void compact_with_watermark_preserves_remote_undo() {
+    void uncertified_gc_preserves_remote_undo() {
         IdList alice(CollabText::Test::test_counter(1)), bob(CollabText::Test::test_counter(2));
         auto op_a = alice.insert_after(Anchor::min(), 0xAA);
         bob.apply_ops({op_a});
         auto rm_b = bob.remove_at(Anchor(Identity(actor(1), 1), Bias::Left));
         alice.apply_ops({rm_b});
 
-        // Watermark = meet of all replicas' versions (everything everyone has seen).
-        Global wm = alice.version();
-        wm.meet(bob.version());
-
         QVERIFY((alice.set_max_undo_depth(0)).ok());
         QVERIFY((alice.set_max_undo_depth(1000)).ok());
-        size_t reclaimed = alice.compact(wm);
+        size_t reclaimed = alice.collect_garbage();
         QCOMPARE(reclaimed, size_t{0});
         QCOMPARE(alice.tombstone_count(), size_t{1});
         auto undo = bob.undo();

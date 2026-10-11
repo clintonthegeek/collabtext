@@ -3042,7 +3042,10 @@
         "libs/collabtext/src/crdt/UndoMap.cpp",
         "libs/collabtext/tests/tst_gc.cpp",
         "libs/collabtext/tests/tst_idlist_gc.cpp",
-        "docs/specs/vnext-external-position-contract.md"
+        "docs/specs/vnext-external-position-contract.md",
+        "libs/collabtext/src/crdt/NetworkSim.cpp",
+        "libs/collabtext/src/crdt/NetworkSim.h",
+        "libs/collabtext/tests/TraceHarness.h"
       ],
       "steps": [
         "Remove public compact(Global) as a destructive entry point and expose DocumentSession-managed certificate reclamation only; no compatibility wrapper is required.",
@@ -3065,10 +3068,11 @@
         "R10"
       ],
       "gate": null,
-      "status": "not_started",
+      "status": "in_progress",
       "consumer_requirements": [
         "W3"
-      ]
+      ],
+      "notes": "Started after G03 library acceptance on 2026-10-11. Removed `Buffer::compact(Global)` and `IdList::compact(Global)` completely; compile-time concepts assert both APIs are absent. Legacy versioned trace `Compact` events remain readable for corpus compatibility but only invoke the inert `collect_garbage()` path. `NetworkSim::compact_all()` likewise no longer computes a Global watermark and only invokes inert local collection. The G06 focused Debug gate (`tst_gc|tst_idlist_gc|tst_evaluation_regressions|tst_realistic`, also selecting `tst_gc_model` and `tst_gc_certificate`) passed 6/6 in 9.27 seconds (20261011T063937Z-2). This is only the unsafe-entrypoint removal; shared Buffer/IdList eligibility, DocumentSession certificate orchestration, UndoMap reclamation, W3 token preservation after actual reclamation, and differential certified post-GC testing remain open. The follow-up triad also passed Release 6/6 (20261011T064027Z-2) and ASan/UBSan 6/6 with leak detection disabled (20261011T064100Z-2; the realistic sustained-convergence test took 54.99 seconds). Raw `compact(Global)` no longer exists anywhere outside the deliberate compile-time absence concepts in the two regression files."
     },
     {
       "id": "G07",

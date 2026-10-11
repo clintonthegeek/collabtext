@@ -193,10 +193,6 @@ public:
     /// Returns zero until certified reclamation is implemented.
     size_t collect_garbage();
 
-    /// Temporarily retains all entries and returns zero. Observation in a
-    /// raw watermark does not establish safe reclamation or release remote undo.
-    size_t compact(const Global& watermark);
-
     std::vector<IdListEntry> entries() const;
     [[nodiscard]] IdListCheckpointState checkpoint_state() const;
     [[nodiscard]] Result<void>

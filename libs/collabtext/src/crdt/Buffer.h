@@ -254,10 +254,6 @@ public:
     /// Returns zero until certified reclamation is implemented.
     size_t collect_garbage();
 
-    /// Temporarily retains all fragments and returns zero. Observation in a
-    /// raw watermark does not establish safe reclamation or release remote undo.
-    size_t compact(const Global& watermark);
-
     /// Discard local buffer view state while detached. Preserves allocator,
     /// observed version, limits, callbacks and pending undo-retirement records;
     /// drops CRDT content, undo/redo, deferred and quarantined input. No
