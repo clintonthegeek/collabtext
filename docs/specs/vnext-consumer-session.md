@@ -61,6 +61,13 @@ Rejected envelopes are retained in the bounded quarantine snapshot and do not
 advance receipts. Without these callbacks, `DocumentSession` is deliberately
 uncoordinated and must not be treated as enforcing epoch membership itself.
 
+If an owner delivery is denied during recovery, the session keeps it quarantined
+and defers restoring owner undo metadata that refers to that operation. The
+session remains incomplete and read-only, while `export_local_branch()` can
+still stream the original durable branch with its original epoch and bytes. A
+consumer must stage and explicitly reconcile that branch before replaying it in
+a later epoch; the library does not rebase it automatically.
+
 `MembershipCoordinator` provides the shared-lock leases for that composition.
 Create it with the active document/stream epochs and member sets, then capture
 the shared coordinator in both session callbacks:

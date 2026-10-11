@@ -752,6 +752,74 @@ private slots:
     QVERIFY(local->close().ok());
   }
 
+  void retiredReturningBranchStaysExportableButCannotResumeOldEpoch() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const auto root = std::filesystem::path(tmp.path().toStdString());
+    DocumentSessionConfig old_config{root / "shared", root / "returning-device",
+                                     "doc-returning-branch", "text", 4};
+    old_config.initial_text = "base";
+    auto original_opened = DocumentSession::open(old_config);
+    QVERIFY(original_opened.ok());
+    auto original = std::move(original_opened).value();
+    const auto returning_actor = original->actor();
+    auto local = original->apply_local({{4, 4}}, {" offline"});
+    QVERIFY(local.ok());
+    auto local_bytes = Crdt::encode_operation(local.value());
+    QVERIFY(local_bytes.ok());
+    QVERIFY(original->close().ok());
+
+    const auto remaining_actor = Test::actor(231);
+    auto coordinator_result = MembershipCoordinator::create({
+        {old_config.document, old_config.stream, 5, {remaining_actor}}});
+    QVERIFY(coordinator_result.ok());
+    auto coordinator = std::move(coordinator_result).value();
+    old_config.authorize_local_mutation =
+        [coordinator](const DocumentId &document, const StreamId &stream,
+                      uint64_t epoch, const ActorId &producer) {
+          return coordinator->authorize_local_mutation(
+              document, stream, epoch, producer);
+        };
+    old_config.authorize_inbound_delivery =
+        [coordinator](const DocumentId &document, const StreamId &stream,
+                      uint64_t epoch, const DeliveryToken &token) {
+          return coordinator->authorize_inbound_delivery(
+              document, stream, epoch, token);
+        };
+    auto returning_opened = DocumentSession::open(old_config);
+    const std::string open_error = returning_opened.ok()
+        ? std::string{} : std::string(returning_opened.error().message());
+    QVERIFY2(returning_opened.ok(), open_error.c_str());
+    auto returning = std::move(returning_opened).value();
+    QVERIFY(!returning->ready());
+    auto refused_edit = returning->apply_local({{4, 4}}, {"!"});
+    QVERIFY(!refused_edit.ok());
+
+    auto quarantined = returning->quarantined_deliveries();
+    QVERIFY(quarantined.ok());
+    QCOMPARE(quarantined.value().size(), size_t(1));
+    QCOMPARE(quarantined.value().front().delivery.token.epoch, uint64_t(4));
+    QCOMPARE(quarantined.value().front().delivery.token.producer, returning_actor);
+
+    LocalBranchExport metadata;
+    std::vector<OutboundDelivery> exported;
+    auto export_result = returning->export_local_branch(
+        metadata, [&](const OutboundDelivery &delivery) -> Result<void> {
+          exported.push_back(delivery);
+          return {};
+        });
+    QVERIFY(export_result.ok());
+    QCOMPARE(metadata.document, old_config.document);
+    QCOMPARE(metadata.scope.stream, old_config.stream);
+    QCOMPARE(metadata.scope.epoch, uint64_t(4));
+    QCOMPARE(metadata.producer, returning_actor);
+    QCOMPARE(exported.size(), size_t(1));
+    QCOMPARE(exported.front().token.epoch, uint64_t(4));
+    QCOMPARE(exported.front().token.producer, returning_actor);
+    QCOMPARE(exported.front().payload, local_bytes.value());
+    QVERIFY(returning->close().ok());
+  }
+
   void localBranchExportVisitorFailureLeavesSourceRetryable() {
     QTemporaryDir tmp; QVERIFY(tmp.isValid());
     const auto root = std::filesystem::path(tmp.path().toStdString());

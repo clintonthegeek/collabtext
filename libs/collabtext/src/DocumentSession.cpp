@@ -592,6 +592,15 @@ struct DocumentSession::Impl {
     }
   }
 
+  bool owner_delivery_quarantined() const {
+    const ActorId owner = replica->actor();
+    return std::any_of(quarantined_deliveries.begin(),
+                       quarantined_deliveries.end(),
+                       [&](const SessionQuarantinedDelivery &entry) {
+                         return entry.delivery.token.producer == owner;
+                       });
+  }
+
   Result<void> replay_delivery(const InboundDelivery &delivery) {
     if (delivery.token.producer == replica->actor()) {
       if (delivery.token.sequence == UINT64_MAX)
@@ -745,15 +754,18 @@ DocumentSession::open_with_writer_config(
     }
     if (!replayed.ok())
       return replayed.error();
-    auto history_snapshot = impl->local_history->recover();
-    if (!history_snapshot.ok()) return history_snapshot.error();
-    if (history_snapshot.value()) {
-      auto restored = impl->buffer->restore_local_history(*history_snapshot.value());
-      if (!restored.ok()) return restored.error();
-    } else if (impl->checkpoint_local_history) {
-      auto restored = impl->buffer->restore_local_history(
-          *impl->checkpoint_local_history);
-      if (!restored.ok()) return restored.error();
+    if (!impl->owner_delivery_quarantined()) {
+      auto history_snapshot = impl->local_history->recover();
+      if (!history_snapshot.ok()) return history_snapshot.error();
+      if (history_snapshot.value()) {
+        auto restored = impl->buffer->restore_local_history(
+            *history_snapshot.value());
+        if (!restored.ok()) return restored.error();
+      } else if (impl->checkpoint_local_history) {
+        auto restored = impl->buffer->restore_local_history(
+            *impl->checkpoint_local_history);
+        if (!restored.ok()) return restored.error();
+      }
     }
     impl->update_completeness();
 
@@ -859,15 +871,18 @@ Result<SessionRecoveryReport> DocumentSession::recover() {
         });
     if (!replayed.ok())
       return replayed.error();
-    auto history_snapshot = m_impl->local_history->recover();
-    if (!history_snapshot.ok()) return history_snapshot.error();
-    if (history_snapshot.value()) {
-      auto restored = m_impl->buffer->restore_local_history(*history_snapshot.value());
-      if (!restored.ok()) return restored.error();
-    } else if (m_impl->checkpoint_local_history) {
-      auto restored = m_impl->buffer->restore_local_history(
-          *m_impl->checkpoint_local_history);
-      if (!restored.ok()) return restored.error();
+    if (!m_impl->owner_delivery_quarantined()) {
+      auto history_snapshot = m_impl->local_history->recover();
+      if (!history_snapshot.ok()) return history_snapshot.error();
+      if (history_snapshot.value()) {
+        auto restored = m_impl->buffer->restore_local_history(
+            *history_snapshot.value());
+        if (!restored.ok()) return restored.error();
+      } else if (m_impl->checkpoint_local_history) {
+        auto restored = m_impl->buffer->restore_local_history(
+            *m_impl->checkpoint_local_history);
+        if (!restored.ok()) return restored.error();
+      }
     }
     m_impl->update_completeness();
     return m_impl->report;
