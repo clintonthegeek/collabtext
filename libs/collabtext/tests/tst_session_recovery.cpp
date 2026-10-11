@@ -2453,6 +2453,12 @@ private slots:
     QVERIFY(pinned_position.ok());
     auto pinned_position_bytes = encode_position(PositionToken{pinned_position.value()});
     QVERIFY(pinned_position_bytes.ok());
+    auto unregistered_position =
+        peer_engine.value()->boundary_at(3, Affinity::right);
+    QVERIFY(unregistered_position.ok());
+    auto unregistered_position_bytes =
+        encode_position(PositionToken{unregistered_position.value()});
+    QVERIFY(unregistered_position_bytes.ok());
     auto old_pinned_position =
         old_epoch_engine.value()->boundary_at(2, Affinity::left);
     QVERIFY(old_pinned_position.ok());
@@ -2745,6 +2751,9 @@ private slots:
     auto before_current_pin = resolve_text_token_on_buffer(
         before_gc, pinned_position_bytes.value());
     QVERIFY(before_current_pin.ok());
+    auto before_unregistered = resolve_text_token_on_buffer(
+        before_gc, unregistered_position_bytes.value());
+    QVERIFY(before_unregistered.ok());
 
     *lease_enabled = true;
     auto reclaimed = bound_session->collect_garbage(
@@ -2788,6 +2797,9 @@ private slots:
     auto after_current_pin = resolve_text_token_on_buffer(
         after_partial_gc, pinned_position_bytes.value());
     QVERIFY(after_current_pin.ok());
+    auto after_unregistered = resolve_text_token_on_buffer(
+        after_partial_gc, unregistered_position_bytes.value());
+    QVERIFY(after_unregistered.ok());
     QCOMPARE(after_old_pin.value().byte_offset,
              before_old_pin.value().byte_offset);
     QCOMPARE(after_old_pin.value().lost_left, before_old_pin.value().lost_left);
@@ -2798,6 +2810,12 @@ private slots:
              before_current_pin.value().lost_left);
     QCOMPARE(after_current_pin.value().lost_right,
              before_current_pin.value().lost_right);
+    QCOMPARE(after_unregistered.value().byte_offset,
+             before_unregistered.value().byte_offset);
+    QCOMPARE(after_unregistered.value().lost_left,
+             before_unregistered.value().lost_left);
+    QCOMPARE(after_unregistered.value().lost_right,
+             before_unregistered.value().lost_right);
 
     provider.projected_pin_frontier = 2;
     provider.canonical_pin_frontier = 2;
@@ -2837,6 +2855,32 @@ private slots:
         Storage::decode_checkpoint_core(after_collection_artifact.value());
     QVERIFY(after_collection_core.ok());
     QVERIFY(after_collection_core.value().engine.fragments.empty());
+    QVERIFY(std::none_of(
+        after_collection_core.value().translations.entries.begin(),
+        after_collection_core.value().translations.entries.end(),
+        [&](const auto &translation) {
+          return translation.reference_id == "reply-old" &&
+                 translation.source_token_bytes ==
+                     old_pinned_position_bytes.value();
+        }));
+    Crdt::Buffer after_full_gc(Test::test_counter(194));
+    Crdt::BufferCheckpointState after_full_gc_state;
+    after_full_gc_state.version = after_collection_core.value().causal.version;
+    after_full_gc_state.fragments =
+        after_collection_core.value().engine.fragments;
+    after_full_gc_state.undo_entries =
+        after_collection_core.value().causal.undo_entries;
+    after_full_gc_state.reclamation =
+        after_collection_core.value().engine.reclamation;
+    QVERIFY(after_full_gc.restore_checkpoint_state(after_full_gc_state).ok());
+    for (const auto *token_bytes : {&pinned_position_bytes.value(),
+                                    &unregistered_position_bytes.value(),
+                                    &old_pinned_position_bytes.value()}) {
+      const auto unavailable =
+          resolve_text_token_on_buffer(after_full_gc, *token_bytes);
+      QVERIFY(!unavailable.ok());
+      QCOMPARE(unavailable.error().code(), ErrorCode::history_unavailable);
+    }
     auto unavailable_history = bound_session->edits_since(Crdt::Global{});
     QVERIFY(!unavailable_history.ok());
     QCOMPARE(unavailable_history.error().code(), ErrorCode::history_unavailable);
