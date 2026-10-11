@@ -133,7 +133,8 @@ void check_installed_membership_coordinator() {
     using namespace CollabText;
     const auto member = actor(8);
     auto created = MembershipCoordinator::create(
-        {{"consumer-membership-doc", "text", 1, {member}}});
+        {{"consumer-membership-doc", "text", 1, {member}},
+         {"consumer-membership-doc", "comments", 1, {member}}});
     check(created.ok(), "installed membership coordinator factory is available");
     if (!created.ok()) return;
     auto coordinator = std::move(created).value();
@@ -142,20 +143,27 @@ void check_installed_membership_coordinator() {
     check(permit.ok(), "installed coordinator issues a scoped mutation permit");
     if (permit.ok()) permit.value().reset();
     bool durable_commit = false;
-    const auto transition = coordinator->commit_transition(
-        "consumer-membership-doc", "text", 1, 2,
-        "consumer-membership-transition-v1", {member}, [&] {
+    const auto transition = coordinator->commit_transitions(
+        "consumer-membership-transition-batch-v1",
+        {{"consumer-membership-doc", "text", 1, 2, {member}},
+         {"consumer-membership-doc", "comments", 1, 2, {member}}}, [&] {
             durable_commit = true;
             return Result<void>{};
         });
     check(transition.ok() && durable_commit,
-          "installed coordinator runs the durable transition before advancing");
+          "installed coordinator runs one durable callback before advancing the batch");
     check(!coordinator->authorize_local_mutation(
               "consumer-membership-doc", "text", 1, member).ok(),
-          "installed coordinator refuses the retired epoch");
+          "installed coordinator refuses the old text epoch");
+    check(!coordinator->authorize_local_mutation(
+              "consumer-membership-doc", "comments", 1, member).ok(),
+          "installed coordinator refuses the old comments epoch");
     check(coordinator->authorize_local_mutation(
               "consumer-membership-doc", "text", 2, member).ok(),
-          "installed coordinator authorizes the committed epoch");
+          "installed coordinator authorizes the committed text epoch");
+    check(coordinator->authorize_local_mutation(
+              "consumer-membership-doc", "comments", 2, member).ok(),
+          "installed coordinator authorizes the committed comments epoch");
 }
 
 /// A consumer-owned transport implementing the installed interface with stable

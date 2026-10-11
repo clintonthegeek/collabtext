@@ -20,6 +20,16 @@ struct MembershipScope {
   std::vector<ActorId> members;
 };
 
+/// One scope participating in an atomic multi-stream or multi-document epoch
+/// transition.
+struct MembershipScopeTransition {
+  DocumentId document;
+  StreamId stream;
+  uint64_t expected_epoch = 0;
+  uint64_t next_epoch = 0;
+  std::vector<ActorId> next_members;
+};
+
 /// Thread-safe membership gate for composing document sessions with durable
 /// membership transitions. Authorization results are RAII leases: retain the
 /// returned shared_ptr through the session's durable write/application. Epoch
@@ -37,12 +47,7 @@ public:
       const DeliveryToken &token) const;
 
   /// Persist and publish exactly one next-epoch membership while holding the
-  /// exclusive gate. The callback must commit the matching durable transition
-  /// and must be idempotent when retrying an uncertain publication. It must
-  /// not reenter any MembershipCoordinator. A refusal
-  /// known to precede publication leaves active membership unchanged. An
-  /// ambiguous result or exception blocks authorization for that scope until
-  /// the exact transition is retried or state is reconstructed durably.
+  /// exclusive gate. This is the single-scope form of commit_transitions().
   [[nodiscard]] Result<void> commit_transition(
       const DocumentId &document, const StreamId &stream,
       uint64_t expected_epoch, uint64_t next_epoch,
@@ -50,6 +55,19 @@ public:
       /// the same identity only when retrying those exact inputs.
       std::string transition_identity,
       std::vector<ActorId> next_members,
+      const std::function<Result<void>()> &durable_commit);
+
+  /// Persist and publish a set of immediate next-epoch scope memberships
+  /// atomically under one exclusive gate. The durable callback runs once for
+  /// the whole batch and must be idempotent when retrying an uncertain
+  /// publication. It must not reenter any MembershipCoordinator. A known
+  /// prepublication refusal leaves every scope unchanged. An ambiguous result
+  /// or callback exception blocks every scope in the batch until that exact
+  /// identity and complete transition set is retried or state is reconstructed
+  /// from durable state. Partial-batch retries are refused.
+  [[nodiscard]] Result<void> commit_transitions(
+      std::string transition_identity,
+      std::vector<MembershipScopeTransition> transitions,
       const std::function<Result<void>()> &durable_commit);
 
 private:

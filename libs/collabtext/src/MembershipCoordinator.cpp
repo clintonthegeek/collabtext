@@ -4,6 +4,7 @@
 #include <exception>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 
 namespace CollabText {
@@ -54,12 +55,21 @@ struct MembershipCoordinator::Impl {
     uint64_t epoch = 0;
     std::vector<ActorId> members;
     bool transition_uncertain = false;
-    uint64_t pending_epoch = 0;
-    std::string pending_identity;
-    std::vector<ActorId> pending_members;
+  };
+  struct Update {
+    ScopeKey key;
+    uint64_t expected_epoch = 0;
+    uint64_t next_epoch = 0;
+    std::vector<ActorId> next_members;
+    bool operator==(const Update &) const = default;
+  };
+  struct PendingBatch {
+    std::string identity;
+    std::vector<Update> updates;
   };
   mutable std::shared_mutex mutex;
   std::map<ScopeKey, State> scopes;
+  std::optional<PendingBatch> pending;
 };
 
 Result<std::shared_ptr<MembershipCoordinator>> MembershipCoordinator::create(
@@ -123,65 +133,104 @@ Result<void> MembershipCoordinator::commit_transition(
     std::string transition_identity,
     std::vector<ActorId> next_members,
     const std::function<Result<void>()> &durable_commit) {
+  std::vector<MembershipScopeTransition> transitions;
+  transitions.push_back({document, stream, expected_epoch, next_epoch,
+                         std::move(next_members)});
+  return commit_transitions(std::move(transition_identity),
+                            std::move(transitions), durable_commit);
+}
+
+Result<void> MembershipCoordinator::commit_transitions(
+    std::string transition_identity,
+    std::vector<MembershipScopeTransition> transitions,
+    const std::function<Result<void>()> &durable_commit) {
   if (inside_transition_callback())
     return Error(ErrorCode::reentrant_mutation,
                  "membership transition callback reentered its coordinator");
-  if (!durable_commit || transition_identity.empty() ||
+  if (!durable_commit || transitions.empty() || transitions.size() > 4096 ||
+      transition_identity.empty() ||
       transition_identity.size() > 256 ||
-      transition_identity.find('\0') != std::string::npos ||
-      expected_epoch == UINT64_MAX ||
-      next_epoch != expected_epoch + 1)
+      transition_identity.find('\0') != std::string::npos)
     return Error(ErrorCode::malformed,
-                 "membership transition identity or next epoch is invalid");
-  auto members_valid = validate_members(next_members);
-  if (!members_valid.ok()) return members_valid.error();
-  auto pending_members = next_members;
+                 "membership transition identity or scope set is invalid");
+  std::vector<Impl::Update> updates;
+  updates.reserve(transitions.size());
+  for (auto &transition : transitions) {
+    if (transition.document.empty() || transition.document.size() > 4096 ||
+        transition.stream.empty() || transition.stream.size() > 4096 ||
+        transition.expected_epoch == UINT64_MAX ||
+        transition.next_epoch != transition.expected_epoch + 1)
+      return Error(ErrorCode::malformed,
+                   "membership transition scope or next epoch is invalid");
+    auto members_valid = validate_members(transition.next_members);
+    if (!members_valid.ok()) return members_valid.error();
+    updates.push_back({{std::move(transition.document),
+                        std::move(transition.stream)},
+                       transition.expected_epoch, transition.next_epoch,
+                       std::move(transition.next_members)});
+  }
+  std::sort(updates.begin(), updates.end(),
+            [](const Impl::Update &left, const Impl::Update &right) {
+              return left.key < right.key;
+            });
+  if (std::adjacent_find(updates.begin(), updates.end(),
+          [](const Impl::Update &left, const Impl::Update &right) {
+            return left.key == right.key;
+          }) != updates.end())
+    return Error(ErrorCode::malformed,
+                 "membership transition repeats a document stream scope");
 
   std::unique_lock lock(m_impl->mutex);
-  const auto found = m_impl->scopes.find({document, stream});
-  if (found == m_impl->scopes.end() || found->second.epoch != expected_epoch)
+  if (m_impl->pending &&
+      (m_impl->pending->identity != transition_identity ||
+       m_impl->pending->updates != updates))
     return Error(ErrorCode::wrong_epoch,
-                 "membership transition parent does not match active scope");
-  if (found->second.transition_uncertain &&
-      (found->second.pending_epoch != next_epoch ||
-       found->second.pending_identity != transition_identity ||
-       found->second.pending_members != next_members))
-    return Error(ErrorCode::wrong_epoch,
-                 "uncertain membership publication can only be retried exactly");
+                 "uncertain membership batch can only be retried exactly");
+  for (const auto &update : updates) {
+    const auto found = m_impl->scopes.find(update.key);
+    if (found == m_impl->scopes.end() ||
+        found->second.epoch != update.expected_epoch)
+      return Error(ErrorCode::wrong_epoch,
+                   "membership transition parent does not match every active scope");
+    if (found->second.transition_uncertain && !m_impl->pending)
+      return Error(ErrorCode::commit_uncertain,
+                   "membership scope is blocked pending durable recovery");
+  }
+
+  // Allocate the recovery record before invoking a callback that may publish
+  // durably. Marking an uncertain result must not itself require copying the
+  // complete batch after publication may already have happened.
+  Impl::PendingBatch pending_candidate{transition_identity, updates};
+  const auto mark_uncertain = [&] {
+    m_impl->pending = std::move(pending_candidate);
+    for (const auto &update : updates)
+      m_impl->scopes.at(update.key).transition_uncertain = true;
+  };
   Result<void> committed;
   try {
     ReentrancyScope callback_scope;
     committed = durable_commit();
   } catch (const std::exception &error) {
-    found->second.transition_uncertain = true;
-    found->second.pending_epoch = next_epoch;
-    found->second.pending_identity = std::move(transition_identity);
-    found->second.pending_members = std::move(pending_members);
+    mark_uncertain();
     return Error(ErrorCode::io_error, error.what(),
-                 "committing durable membership transition");
+                 "committing durable membership batch");
   } catch (...) {
-    found->second.transition_uncertain = true;
-    found->second.pending_epoch = next_epoch;
-    found->second.pending_identity = std::move(transition_identity);
-    found->second.pending_members = std::move(pending_members);
+    mark_uncertain();
     return Error(ErrorCode::io_error,
-                 "durable membership transition callback threw an unknown exception");
+                 "durable membership batch callback threw an unknown exception");
   }
   if (!committed.ok()) {
-    if (committed.error().code() == ErrorCode::commit_uncertain) {
-      found->second.transition_uncertain = true;
-      found->second.pending_epoch = next_epoch;
-      found->second.pending_identity = std::move(transition_identity);
-      found->second.pending_members = std::move(pending_members);
-    }
+    if (committed.error().code() == ErrorCode::commit_uncertain)
+      mark_uncertain();
     return committed.error();
   }
-  found->second.members = std::move(next_members);
-  found->second.epoch = next_epoch;
-  found->second.transition_uncertain = false;
-  found->second.pending_epoch = 0;
-  found->second.pending_identity.clear();
-  found->second.pending_members.clear();
+  for (auto &update : updates) {
+    auto &state = m_impl->scopes.at(update.key);
+    state.members = std::move(update.next_members);
+    state.epoch = update.next_epoch;
+    state.transition_uncertain = false;
+  }
+  m_impl->pending.reset();
   return {};
 }
 

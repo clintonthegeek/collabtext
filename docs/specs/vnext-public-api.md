@@ -303,15 +303,16 @@ compose membership with `DocumentSession`. Initialize one `MembershipScope` per
 document/stream with the recovered epoch and sorted or unsorted member IDs (the
 factory canonicalizes them). Its local-mutation and inbound-delivery methods
 return RAII permits suitable for the corresponding session authorization
-callbacks. `commit_transition()` runs the caller's durable commit under the
-exclusive gate and changes the active membership only after success. Its
-callback must not reenter a membership coordinator. Supply a stable transition
-identity that covers the full event and checkpoint inputs; an uncertain
-publication or callback exception blocks that scope until the same identity
-and values are retried or state is recovered durably. The caller remains
-responsible for authenticating acknowledgements and validating the journal
-event and checkpoint; this helper supplies concurrency control, not a
-membership database.
+callbacks. `commit_transition()` handles one scope; `commit_transitions()` atomically
+advances a batch of document/stream scopes under one exclusive gate and invokes
+one durable callback for the whole batch. The callback must not reenter a
+membership coordinator. Supply a stable transition identity that covers the
+full event and checkpoint inputs. An uncertain publication or callback
+exception blocks every scope in the batch until the same identity and complete
+scope set are retried or state is recovered durably; partial-batch retries are
+refused. The caller remains responsible for authenticating acknowledgements
+and validating the journal event and checkpoint; this helper supplies
+concurrency control, not a membership database.
 
 `DocumentSession::quarantined_deliveries()` exposes exact rejected inbound
 tokens, payload bytes, and reasons for checkpoint/provider diagnostics. Its

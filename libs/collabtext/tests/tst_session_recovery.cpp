@@ -455,6 +455,113 @@ private slots:
     lease_outliving_coordinator.reset();
   }
 
+  void membershipCoordinatorTransitionsMultipleScopesAsOneGate() {
+    const auto member_a = Test::actor(224);
+    const auto member_b = Test::actor(225);
+    auto created = MembershipCoordinator::create({
+        {"batch-doc", "text", 2, {member_a, member_b}},
+        {"batch-doc", "comments", 2, {member_a, member_b}}});
+    QVERIFY(created.ok());
+    auto coordinator = std::move(created).value();
+    auto in_flight = coordinator->authorize_local_mutation(
+        "batch-doc", "comments", 2, member_a);
+    QVERIFY(in_flight.ok());
+
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool attempted = false;
+    std::atomic<bool> durable_callback_entered{false};
+    bool committed = false;
+    std::thread transition([&] {
+      {
+        std::lock_guard lock(mutex);
+        attempted = true;
+      }
+      changed.notify_all();
+      committed = coordinator->commit_transitions(
+          "batch-doc-retirement-v2",
+          {{"batch-doc", "comments", 2, 3, {member_a}},
+           {"batch-doc", "text", 2, 3, {member_a}}},
+          [&]() -> Result<void> {
+            durable_callback_entered = true;
+            return {};
+          }).ok();
+    });
+    bool saw_attempted = false;
+    {
+      std::unique_lock lock(mutex);
+      saw_attempted = changed.wait_for(lock, std::chrono::seconds(5),
+                                       [&] { return attempted; });
+    }
+    const bool waited_for_lease = !durable_callback_entered.load();
+    in_flight.value().reset();
+    transition.join();
+
+    QVERIFY(saw_attempted);
+    QVERIFY(waited_for_lease);
+    QVERIFY(committed);
+    QVERIFY(durable_callback_entered.load());
+    for (const auto &stream : {StreamId("text"), StreamId("comments")}) {
+      QVERIFY(!coordinator->authorize_local_mutation(
+          "batch-doc", stream, 2, member_a));
+      QVERIFY(!coordinator->authorize_local_mutation(
+          "batch-doc", stream, 3, member_b));
+      QVERIFY(coordinator->authorize_local_mutation(
+          "batch-doc", stream, 3, member_a));
+    }
+  }
+
+  void uncertainMembershipBatchRequiresExactWholeBatchRetry() {
+    const auto member_a = Test::actor(226);
+    const auto member_b = Test::actor(227);
+    auto created = MembershipCoordinator::create({
+        {"batch-retry-doc", "text", 5, {member_a, member_b}},
+        {"batch-retry-doc", "comments", 5, {member_a, member_b}}});
+    QVERIFY(created.ok());
+    auto coordinator = std::move(created).value();
+    const std::vector<MembershipScopeTransition> batch{
+        {"batch-retry-doc", "text", 5, 6, {member_a}},
+        {"batch-retry-doc", "comments", 5, 6, {member_a}}};
+    unsigned durable_calls = 0;
+    auto uncertain = coordinator->commit_transitions(
+        "cross-stream-retirement-v5-v1", batch, [&]() -> Result<void> {
+          ++durable_calls;
+          return Error(ErrorCode::commit_uncertain,
+                       "checkpoint directory sync is uncertain");
+        });
+    QVERIFY(!uncertain.ok());
+    QCOMPARE(durable_calls, 1u);
+    for (const auto &stream : {StreamId("text"), StreamId("comments")}) {
+      auto blocked = coordinator->authorize_local_mutation(
+          "batch-retry-doc", stream, 5, member_a);
+      QVERIFY(!blocked.ok());
+      QCOMPARE(blocked.error().code(), ErrorCode::commit_uncertain);
+    }
+
+    auto partial_retry = coordinator->commit_transitions(
+        "cross-stream-retirement-v5-v1", {batch.front()}, [&] {
+          ++durable_calls;
+          return Result<void>{};
+        });
+    QVERIFY(!partial_retry.ok());
+    QCOMPARE(partial_retry.error().code(), ErrorCode::wrong_epoch);
+    QCOMPARE(durable_calls, 1u);
+
+    auto exact_retry = coordinator->commit_transitions(
+        "cross-stream-retirement-v5-v1", batch, [&] {
+          ++durable_calls;
+          return Result<void>{};
+        });
+    QVERIFY(exact_retry.ok());
+    QCOMPARE(durable_calls, 2u);
+    for (const auto &stream : {StreamId("text"), StreamId("comments")}) {
+      QVERIFY(coordinator->authorize_local_mutation(
+          "batch-retry-doc", stream, 6, member_a));
+      QVERIFY(!coordinator->authorize_local_mutation(
+          "batch-retry-doc", stream, 5, member_a));
+    }
+  }
+
   void external_token_roundtrip_reopen_durable_file_replay() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
