@@ -64,6 +64,13 @@ public:
   [[nodiscard]] const std::string &checkpoint_hash() const { return m_checkpoint_hash; }
   [[nodiscard]] const OperationCoverage &common_operation() const { return m_common_operation; }
   [[nodiscard]] const DeliveryCoverage &common_delivery() const { return m_common_delivery; }
+  /// Return the certified operation frontier for one exact stream. Missing
+  /// streams have no reclamation authority and return nullptr.
+  [[nodiscard]] const std::map<ActorId, uint64_t> *
+  operation_frontier(std::string_view stream) const {
+    const auto found = m_common_operation.find(std::string(stream));
+    return found == m_common_operation.end() ? nullptr : &found->second;
+  }
 
 private:
   GcCertificate(std::string descriptor_hash, std::string checkpoint_hash,

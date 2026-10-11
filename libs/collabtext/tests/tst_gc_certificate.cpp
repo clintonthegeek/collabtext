@@ -1,6 +1,7 @@
 #include <QTest>
 #include <QTemporaryDir>
 
+#include "crdt/ReclamationPolicy.h"
 #include "storage/CoverageStore.h"
 #include "storage/CheckpointCodec.h"
 #include "storage/GcCertificate.h"
@@ -176,6 +177,18 @@ private slots:
     QCOMPARE(delivery.at("text").at(p), uint64_t(20));
     QCOMPARE(delivery.at("comments").at(p), uint64_t(10));
     QCOMPARE(delivery.at("ids").at(p), uint64_t(13));
+
+    const std::vector<Crdt::Identity> deletion{Crdt::Identity(p, 9)};
+    const auto *text_frontier = certificate.value().operation_frontier("text");
+    QVERIFY(text_frontier);
+    QVERIFY(Crdt::tombstone_is_covered(*text_frontier, Crdt::Identity(p, 8),
+                                       2, deletion));
+    const auto *comments_frontier =
+        certificate.value().operation_frontier("comments");
+    QVERIFY(comments_frontier);
+    QVERIFY(!Crdt::tombstone_is_covered(*comments_frontier,
+                                        Crdt::Identity(p, 8), 2, deletion));
+    QVERIFY(!certificate.value().operation_frontier("unknown"));
   }
 
   void missingStaleAndUnverifiedMembersCannotCertify() {
