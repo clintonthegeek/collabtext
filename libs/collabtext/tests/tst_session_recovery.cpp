@@ -1511,6 +1511,30 @@ private slots:
     QVERIFY(copy_tree(root / "source-shared", full_shared));
     QVERIFY(copy_tree(root / "source-device", full_device));
 
+    auto peer_config = source_config;
+    peer_config.private_state = root / "peer-device";
+    auto peer_open = DocumentSession::open(peer_config);
+    QVERIFY(peer_open.ok());
+    auto peer = std::move(peer_open).value();
+    QCOMPARE(peer->text(), std::string("base"));
+    auto peer_edit = peer->apply_local({{0, 0}}, {"peer"});
+    QVERIFY(peer_edit.ok());
+    const auto peer_actor = peer->actor();
+    auto peer_bytes = encode_operation(peer_edit.value());
+    QVERIFY(peer_bytes.ok());
+    QVERIFY(peer->close().ok());
+    {
+      Crdt::FileOpStream full_branch_writer(full_shared, peer_actor);
+      QVERIFY(full_branch_writer.start().ok());
+      const StreamScope branch_scope{source_config.stream, source_config.epoch};
+      QVERIFY(full_branch_writer.register_stream(branch_scope).ok());
+      QVERIFY(full_branch_writer.push(
+          {{branch_scope.stream, branch_scope.epoch, peer_actor, 1},
+           peer_bytes.value()},
+          PushDurability::durable).ok());
+      QVERIFY(full_branch_writer.close().ok());
+    }
+
     auto checkpoint_config = source_config;
     checkpoint_config.checkpoint_store = root / "source-checkpoint";
     checkpoint_config.validate_checkpoint_candidate =
@@ -1523,13 +1547,14 @@ private slots:
     auto checkpoint_open = DocumentSession::open(checkpoint_config);
     QVERIFY(checkpoint_open.ok());
     auto checkpointed = std::move(checkpoint_open).value();
-    QCOMPARE(checkpointed->text(), std::string("base"));
-    auto checkpoint_edit = checkpointed->apply_local({{4, 4}}, {"!"});
+    const auto checkpoint_base_text = checkpointed->text();
+    QCOMPARE(checkpoint_base_text.size(), size_t(8));
+    auto checkpoint_edit = checkpointed->apply_local({{8, 8}}, {"!"});
     QVERIFY(checkpoint_edit.ok());
     auto checkpoint_bytes = encode_operation(checkpoint_edit.value());
     QVERIFY(checkpoint_bytes.ok());
     const auto checkpoint_text = checkpointed->text();
-    QVERIFY(checkpoint_text == "base!");
+    QCOMPARE(checkpoint_text.size(), size_t(9));
     QVERIFY(checkpointed->close().ok());
 
     auto full_config = source_config;
@@ -1538,8 +1563,9 @@ private slots:
     auto full_open = DocumentSession::open(full_config);
     QVERIFY(full_open.ok());
     auto replayed = std::move(full_open).value();
-    QCOMPARE(replayed->text(), std::string("base"));
-    auto full_edit = replayed->apply_local({{4, 4}}, {"!"});
+    QCOMPARE(replayed->text().size(), size_t(8));
+    QCOMPARE(replayed->text(), checkpoint_base_text);
+    auto full_edit = replayed->apply_local({{8, 8}}, {"!"});
     QVERIFY(full_edit.ok());
     auto full_bytes = encode_operation(full_edit.value());
     QVERIFY(full_bytes.ok());
