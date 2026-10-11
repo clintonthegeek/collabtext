@@ -6,6 +6,7 @@
 #include "storage/MembershipStore.h"
 #include "storage/CheckpointStore.h"
 #include "core/Sha256.h"
+#include <collabtext/MembershipCoordinator.h>
 
 #include <fstream>
 #include <iostream>
@@ -905,6 +906,49 @@ private slots:
     QVERIFY(!throwing_verifier.ok());
     QCOMPARE(throwing_verifier.error().code(),ErrorCode::io_error);
     QCOMPARE(store.last_sequence(),uint64_t(0));
+  }
+
+  void coordinatorPublishesOnlyAfterMembershipJournalCommit() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const auto producer = actor(71);
+    const auto retired = actor(72);
+    auto store_result = MembershipStore::open(
+        std::filesystem::path(tmp.path().toStdString()) / "membership.log",
+        producer);
+    QVERIFY(store_result.ok());
+    auto store = std::move(store_result).value();
+    auto coordinator_result = MembershipCoordinator::create(
+        {{"coordinated-doc", "text", 4, {producer, retired}}});
+    QVERIFY(coordinator_result.ok());
+    auto coordinator = std::move(coordinator_result).value();
+
+    MembershipEvent event{1, 5, retired, MembershipEvent::Kind::Retired,
+                           sha256_hex("parent-descriptor"), "durable-evidence"};
+    auto transitioned = coordinator->commit_transition(
+        "coordinated-doc", "text", 4, 5, "transition-event-1-v1", {producer},
+        [&] { return store.append(event); });
+    QVERIFY(transitioned.ok());
+    QCOMPARE(store.last_sequence(), uint64_t(1));
+    auto recovered = store.recover();
+    QVERIFY(recovered.ok());
+    QCOMPARE(recovered.value().size(), size_t(1));
+    QCOMPARE(recovered.value().front().sequence, event.sequence);
+    QCOMPARE(recovered.value().front().epoch, event.epoch);
+    QCOMPARE(recovered.value().front().subject, event.subject);
+    QCOMPARE(recovered.value().front().kind, event.kind);
+    QCOMPARE(recovered.value().front().parent_descriptor_hash,
+             event.parent_descriptor_hash);
+    QCOMPARE(recovered.value().front().evidence, event.evidence);
+
+    QVERIFY(coordinator->authorize_local_mutation(
+        "coordinated-doc", "text", 5, producer));
+    auto old_member = coordinator->authorize_local_mutation(
+        "coordinated-doc", "text", 5, retired);
+    QVERIFY(!old_member.ok());
+    auto old_epoch = coordinator->authorize_local_mutation(
+        "coordinated-doc", "text", 4, producer);
+    QVERIFY(!old_epoch.ok());
   }
 
   void deterministicMembershipChurnSurvivesAdversarialCallsAndRestart() {
