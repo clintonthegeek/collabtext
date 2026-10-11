@@ -111,6 +111,9 @@ void CollabDocument::applySessionEdits(
   edit_block.endEditBlock();
   m_backendText = m_session->text();
   m_suppressQtSignals = false;
+  if (m_qtDoc->toPlainText() != QString::fromUtf8(
+          m_backendText.data(), static_cast<qsizetype>(m_backendText.size())))
+    syncBackendToQt();
 }
 
 bool CollabDocument::undo() {

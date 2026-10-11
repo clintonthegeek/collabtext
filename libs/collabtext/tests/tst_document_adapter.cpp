@@ -276,6 +276,33 @@ private slots:
              QString::fromUtf8("paste 🌿Ra🌊z"));
     QCOMPARE(session->text(), std::string("paste 🌿Ra🌊z"));
   }
+
+  void staleSessionDeltaCannotLeaveQtDifferentFromDurableState() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const std::filesystem::path root(temporary.path().toStdString());
+    DocumentSessionConfig config{root / "shared", root / "private",
+                                 "stale-delta-session", "text", 1};
+    config.initial_text = "abc";
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    QVERIFY(session->ready());
+
+    CollabDocument adapter(*session);
+    QSignalSpy local_edits(&adapter, &CollabDocument::localEditApplied);
+    QVERIFY(local_edits.isValid());
+    auto edit = session->apply_local({{0, 0}}, {"X"});
+    QVERIFY(edit.ok());
+    const auto emitted = local_edits.size();
+
+    // This range is valid against the adapter's old text, but this replacement
+    // does not describe the durable session delta.
+    adapter.applySessionEdits({SessionTextEdit{0, 1, "wrong"}});
+    QCOMPARE(session->text(), std::string("Xabc"));
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QStringLiteral("Xabc"));
+    QCOMPARE(local_edits.size(), emitted);
+  }
 };
 
 QTEST_MAIN(DocumentAdapterTest)
