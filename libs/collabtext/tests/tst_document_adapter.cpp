@@ -156,7 +156,7 @@ private slots:
     const std::filesystem::path root(temporary.path().toStdString());
     DocumentSessionConfig config{root / "shared", root / "private",
                                  "ime-session", "text", 1};
-    config.initial_text = "a";
+    config.initial_text = "ab";
     auto opened = DocumentSession::open(config);
     QVERIFY(opened.ok());
     auto session = std::move(opened).value();
@@ -177,12 +177,12 @@ private slots:
 
     QInputMethodEvent preedit(QString::fromUtf8("かな"), {});
     QApplication::sendEvent(&editor, &preedit);
-    QCOMPARE(adapter.qtDocument()->toPlainText(), QStringLiteral("a"));
-    QCOMPARE(session->text(), std::string("a"));
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QStringLiteral("ab"));
+    QCOMPARE(session->text(), std::string("ab"));
     QCOMPARE(local_edits.size(), 0);
 
     QInputMethodEvent commit;
-    commit.setCommitString(QString::fromUtf8("é🧭"));
+    commit.setCommitString(QString::fromUtf8("é🧭"), -1, 1);
     QApplication::sendEvent(&editor, &commit);
 
     QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("aé🧭"));
