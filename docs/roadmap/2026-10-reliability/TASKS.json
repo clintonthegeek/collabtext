@@ -4036,7 +4036,10 @@
         "libs/collabtext/tests/tst_position_token_reader.cpp",
         "tests/consumer-smoke/wave-contract/probes.cpp",
         "libs/collabtext/tests/tst_filesync.cpp",
-        "libs/collabtext/tests/tst_stream_sync.cpp"
+        "libs/collabtext/tests/tst_stream_sync.cpp",
+        "tests/consumer-smoke/markdown-contract/cases.json",
+        "tests/consumer-smoke/markdown-contract/run.py",
+        "tests/consumer-smoke/wave-contract/run.py"
       ],
       "steps": [
         "Keep literal CTBO/0002 insertion and undo archives independent of the current writer. Decode/apply through installed opaque operations and verify identity, visible text, attachment detachment and canonical encoding.",

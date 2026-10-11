@@ -8,7 +8,7 @@
       "capability": "consumer_markdown_composition",
       "requirement": "W3",
       "formats": [
-        "CTBO/1"
+        "CTBO/2"
       ],
       "expected": {
         "exact": true,
@@ -27,7 +27,7 @@
       "capability": "consumer_markdown_composition",
       "requirement": "W3",
       "formats": [
-        "CTBO/1"
+        "CTBO/2"
       ],
       "expected": {
         "seed_frames": 3,
@@ -47,7 +47,7 @@
       "capability": "consumer_markdown_composition",
       "requirement": "W2",
       "formats": [
-        "CTBO/1",
+        "CTBO/2",
         "CTPT/1"
       ],
       "expected": {

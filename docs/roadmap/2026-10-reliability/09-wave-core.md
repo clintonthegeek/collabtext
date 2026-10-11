@@ -127,6 +127,10 @@ Run `tst_wave_core` and public-header compilation in Debug/Release/ASan and relo
 - `libs/collabtext/tests/tst_filesync.cpp`
 - `libs/collabtext/tests/tst_stream_sync.cpp`
 
+- `tests/consumer-smoke/markdown-contract/cases.json`
+- `tests/consumer-smoke/markdown-contract/run.py`
+- `tests/consumer-smoke/wave-contract/run.py`
+
 **Steps:**
 
 1. Keep literal CTBO/0002 insertion and undo archives independent of the current writer. Decode/apply through installed opaque operations and verify identity, visible text, attachment detachment and canonical encoding.

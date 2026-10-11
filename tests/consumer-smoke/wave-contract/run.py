@@ -56,7 +56,7 @@ def main():
             raise ValueError(f'no case declares a {prefix} format; declared: {declared}')
         return found
     formats = {
-        'position': 'CTPT/1 experimental unpublished' if family('CTPT') == 'CTPT/1' else family('CTPT'),
+        'position': family('CTPT'),
         'text': family('CTBO'),
         'list': family('CTLO'),
     }

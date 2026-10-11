@@ -38,6 +38,12 @@ def main():
         raise ValueError('missing/versioned cases')
     if len({row['id'] for row in rows}) != len(rows):
         raise ValueError('duplicate case IDs')
+    declared = sorted({f for row in rows for f in row.get('formats', [])})
+    def family(prefix):
+        value = next((f for f in declared if f.startswith(prefix)), None)
+        if value is None:
+            raise ValueError(f'missing {prefix} format declaration')
+        return value
     results = []
     for index, row in enumerate(rows):
         expected = row['expected']
@@ -79,7 +85,7 @@ def main():
     passed = all(row['accepted'] for row in results)
     report = dict(schema='collabtext-markdown-probe-results/1', producer_revision=args.revision,
                   mode=args.mode, seed=specification['seed'], case_spec_sha256=digest(args.cases),
-                  formats={'text': 'CTBO/1', 'position': 'CTPT/1 experimental unpublished'},
+                  formats={'text': family('CTBO'), 'position': family('CTPT')},
                   cases=results, case_count=len(results),
                   strict_pass_count=sum(row['outcome'] == 'pass' for row in results),
                   exit_status=0 if passed else 1)
