@@ -6,6 +6,7 @@
 
 #include <QPlainTextEdit>
 #include <QClipboard>
+#include <QInputMethodEvent>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -147,6 +148,40 @@ private slots:
     controller->insertText(QStringLiteral("X"));
     QCOMPARE(document.engine()->text(),
              document.qtDocument()->toPlainText().toUtf8().toStdString());
+  }
+
+  void inputMethodCommitReachesDurableSessionExactlyOnce() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const std::filesystem::path root(temporary.path().toStdString());
+    DocumentSessionConfig config{root / "shared", root / "private",
+                                 "ime-session", "text", 1};
+    config.initial_text = "a";
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    QVERIFY(session->ready());
+
+    CollabDocument adapter(*session);
+    QSignalSpy local_edits(&adapter, &CollabDocument::localEditApplied);
+    QVERIFY(local_edits.isValid());
+    Ui::CollabPlainTextEdit editor;
+    editor.setDocument(adapter.qtDocument());
+    editor.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&editor));
+    editor.setFocus();
+    QCoreApplication::processEvents();
+    QTextCursor cursor(adapter.qtDocument());
+    cursor.movePosition(QTextCursor::End);
+    editor.setTextCursor(cursor);
+
+    QInputMethodEvent commit;
+    commit.setCommitString(QString::fromUtf8("é🧭"));
+    QApplication::sendEvent(&editor, &commit);
+
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("aé🧭"));
+    QCOMPARE(session->text(), std::string("aé🧭"));
+    QCOMPARE(local_edits.size(), 1);
   }
 
   void undoRedoAndProgrammaticAdapterCallsUseTheSameEnginePath() {
