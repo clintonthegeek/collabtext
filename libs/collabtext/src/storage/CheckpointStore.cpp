@@ -135,6 +135,50 @@ Result<void> store_immutable(const std::filesystem::path &path,
   return replace_atomically(path, expected, hook);
 }
 
+Result<void> validate_local_bundle(const CheckpointShareableCore &shareable,
+                                   const CheckpointLocalCore &local,
+                                   const ActorId &owner) {
+  const uint64_t observed = shareable.causal.version.get(owner);
+  if (local.writer.next_identity_counter <= observed)
+    return Error(ErrorCode::counter_regression,
+                 "local writer counter does not cover its shareable causal frontier",
+                 "checkpoint.local.writer");
+
+  const auto delivery = shareable.coverage.delivery.find(owner);
+  const uint64_t delivery_frontier = delivery == shareable.coverage.delivery.end()
+      ? 0 : delivery->second;
+  if (local.writer.durable_delivery_frontier != delivery_frontier)
+    return Error(ErrorCode::corrupt_record,
+                 "local writer delivery frontier differs from shareable coverage",
+                 "checkpoint.local.writer");
+
+  const auto history_is_covered = [&](const Crdt::LocalUndoEntrySnapshot &entry) {
+    const auto covered = [&](const Crdt::Identity &identity) {
+      return identity.actor == owner &&
+             shareable.causal.version.observed(identity);
+    };
+    if (!covered(entry.group_id)) return false;
+    for (const auto &identity : entry.operation_ids)
+      if (!covered(identity)) return false;
+    for (const auto &identity : entry.inserted_items)
+      if (!covered(identity)) return false;
+    for (const auto &identity : entry.deletion_operations)
+      if (!covered(identity)) return false;
+    return true;
+  };
+  for (const auto &entry : local.history.entries)
+    if (!history_is_covered(entry))
+      return Error(ErrorCode::corrupt_record,
+                   "local undo history exceeds the shareable causal frontier",
+                   "checkpoint.local.history");
+  for (const auto &entry : local.history.retired_entries)
+    if (!history_is_covered(entry))
+      return Error(ErrorCode::corrupt_record,
+                   "retired undo history exceeds the shareable causal frontier",
+                   "checkpoint.local.history");
+  return {};
+}
+
 } // namespace
 
 Result<CheckpointStore> CheckpointStore::open(std::filesystem::path directory,
@@ -167,6 +211,9 @@ Result<StoredCheckpoint> CheckpointStore::publish(
     auto local_core = decode_checkpoint_local_core(
         local_artifact.value(), local_owner, shareable_hash, core.value().context);
     if (!local_core.ok()) return local_core.error();
+    auto local_binding = validate_local_bundle(core.value(), local_core.value(),
+                                               local_owner);
+    if (!local_binding.ok()) return local_binding.error();
   }
 
   auto share_stored = store_immutable(
@@ -271,6 +318,9 @@ Result<std::optional<StoredCheckpoint>> CheckpointStore::recover(
           local_frame.value(), local_owner, manifest.shareable_hash,
           core.value().context);
       if (!local_core.ok()) { last_error = local_core.error(); continue; }
+      auto local_binding = validate_local_bundle(core.value(), local_core.value(),
+                                                 local_owner);
+      if (!local_binding.ok()) { last_error = local_binding.error(); continue; }
       local_bytes = std::move(*local.value());
     }
     try {

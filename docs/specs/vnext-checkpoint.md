@@ -247,7 +247,13 @@ then u64 epoch, next identity counter, and durable delivery frontier. Its scope
 must equal the shareable Context and its actor must equal the owner section.
 The codec preserves this state for validation; import compares it to the
 owner's durable identity state and operation log. It never adopts counters from
-the artifact as authority.
+the artifact as authority. CheckpointStore also validates cross-artifact
+consistency before publication and recovery: the reserved identity counter must
+be greater than the owner's shareable causal frontier, the local durable
+delivery frontier must equal the owner's shareable delivery coverage, and every
+active or retired local history identity must be represented in the shareable
+causal vector. These checks establish internal consistency; they do not replace
+the caller's comparison against durable owner state during import.
 
 Undo/redo groups, cursor position, pending trim obligations, pending local
 operation intent, writer identity, and counter-reservation state stay in the

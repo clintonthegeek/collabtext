@@ -93,6 +93,78 @@ private slots:
              std::optional<std::string>(local_bytes.value()));
   }
 
+  void localCompanionMustMatchShareableOwnerFrontiersAndHistory() {
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto actor = Test::actor(116);
+    const CheckpointContext context{"bound-local-document", "main", 1, "",
+                                    CheckpointEngineKind::Text};
+    CheckpointShareableCore core;
+    core.context = context;
+    core.causal.version.observe(Crdt::Identity(actor, 4));
+    core.coverage.operation[actor] = 4;
+    core.coverage.delivery[actor] = 9;
+    core.pins.canonical_projection_hash = sha256_hex("");
+    core.translations.supported_token_versions = {1};
+    const auto shareable = encode_checkpoint_core(core);
+    QVERIFY(shareable);
+
+    CheckpointLocalCore local;
+    local.owner = {actor, sha256_hex(shareable.value())};
+    const auto identity = Crdt::Identity(actor, 3);
+    local.history.entries.push_back(
+        {identity, {identity}, {}, {}, 42});
+    local.history.cursor = 1;
+    local.writer = {actor, context.document, context.stream, context.epoch, 5, 9};
+    auto local_bytes = encode_checkpoint_local_core(
+        local, context, shareable.value());
+    QVERIFY(local_bytes);
+
+    auto store = CheckpointStore::open(temp.path().toStdString());
+    QVERIFY(store);
+    QVERIFY(store.value().publish(shareable.value(), local_bytes.value(), actor));
+
+    auto stale_counter = local;
+    stale_counter.writer.next_identity_counter = 4;
+    auto stale_counter_bytes = encode_checkpoint_local_core(
+        stale_counter, context, shareable.value());
+    QVERIFY(stale_counter_bytes);
+    auto counter_rejected = store.value().publish(
+        shareable.value(), stale_counter_bytes.value(), actor);
+    QVERIFY(!counter_rejected);
+    QCOMPARE(counter_rejected.error().code(), ErrorCode::counter_regression);
+
+    auto stale_delivery = local;
+    stale_delivery.writer.durable_delivery_frontier = 8;
+    auto stale_delivery_bytes = encode_checkpoint_local_core(
+        stale_delivery, context, shareable.value());
+    QVERIFY(stale_delivery_bytes);
+    auto delivery_rejected = store.value().publish(
+        shareable.value(), stale_delivery_bytes.value(), actor);
+    QVERIFY(!delivery_rejected);
+    QCOMPARE(delivery_rejected.error().code(), ErrorCode::corrupt_record);
+
+    auto uncovered_history = local;
+    const auto uncovered = Crdt::Identity(actor, 5);
+    uncovered_history.history.entries[0].group_id = uncovered;
+    uncovered_history.history.entries[0].operation_ids = {uncovered};
+    auto uncovered_bytes = encode_checkpoint_local_core(
+        uncovered_history, context, shareable.value());
+    QVERIFY(uncovered_bytes);
+    auto history_rejected = store.value().publish(
+        shareable.value(), uncovered_bytes.value(), actor);
+    QVERIFY(!history_rejected);
+    QCOMPARE(history_rejected.error().code(), ErrorCode::corrupt_record);
+
+    auto recovered = store.value().recover(actor, accept_checkpoint, context);
+    QVERIFY(recovered);
+    QVERIFY(recovered.value());
+    QCOMPARE(recovered.value()->generation, uint64_t{1});
+    QCOMPARE(recovered.value()->shareable_bytes, shareable.value());
+    QCOMPARE(recovered.value()->local_bytes,
+             std::optional<std::string>(local_bytes.value()));
+  }
+
   void failedPublicationKeepsPreviousManifestAndCorruptNewestFallsBack() {
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
