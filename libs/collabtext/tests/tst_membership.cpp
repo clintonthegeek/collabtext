@@ -557,6 +557,16 @@ private slots:
     QVERIFY(!stale.ok()); QCOMPARE(stale.error().code(),ErrorCode::wrong_epoch);
     QCOMPARE(store.last_sequence(),uint64_t(0));
 
+    auto throwing_verifier = store.commit_enrollment(
+        preview.value(), descriptor,
+        {{member_a,"durable-ack"},{member_b,"durable-ack"},{joining,"durable-ack"}},
+        [](const ActorId &, std::string_view, std::string_view) -> Result<void> {
+          throw std::runtime_error("simulated acknowledgement storage failure");
+        });
+    QVERIFY(!throwing_verifier.ok());
+    QCOMPARE(throwing_verifier.error().code(),ErrorCode::io_error);
+    QCOMPARE(store.last_sequence(),uint64_t(0));
+
     auto committed=store.commit_enrollment(preview.value(),descriptor,
         {{member_a,"durable-ack"},{member_b,"durable-ack"},{joining,"durable-ack"}},verifier);
     QVERIFY(committed.ok()); QCOMPARE(verified,3);
@@ -617,6 +627,14 @@ private slots:
     auto result=store.commit_retirement(preview.value(),two_members,impacts,
         {{actor(23),"ack"}},"",verifier);
     QVERIFY(!result.ok()); QCOMPARE(store.last_sequence(),uint64_t(0));
+    auto throwing_verifier=store.commit_retirement(preview.value(),two_members,impacts,
+        {{actor(23),"ack"}},"confirm",
+        [](const ActorId &,std::string_view,std::string_view)->Result<void>{
+          throw std::runtime_error("simulated acknowledgement storage failure");
+        });
+    QVERIFY(!throwing_verifier.ok());
+    QCOMPARE(throwing_verifier.error().code(),ErrorCode::io_error);
+    QCOMPARE(store.last_sequence(),uint64_t(0));
   }
 
   void deterministicMembershipChurnSurvivesAdversarialCallsAndRestart() {

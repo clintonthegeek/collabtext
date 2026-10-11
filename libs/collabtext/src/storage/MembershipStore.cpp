@@ -15,6 +15,20 @@ constexpr size_t kMaxLogBytes = 64 * 1024 * 1024;
 constexpr size_t kMaxEvidenceBytes = 1024 * 1024;
 constexpr size_t kMaxDescriptorFrontierCells = 262144;
 
+Result<void> verify_durable_acknowledgement(
+    const DurableAcknowledgementVerifier &verifier, const ActorId &actor,
+    std::string_view digest, std::string_view signature) {
+  try {
+    return verifier(actor, digest, signature);
+  } catch (const std::exception &error) {
+    return Error(ErrorCode::io_error, error.what(),
+                 "verifying durable membership acknowledgement");
+  } catch (...) {
+    return Error(ErrorCode::io_error,
+                 "acknowledgement verifier threw an unknown exception");
+  }
+}
+
 std::string hex(std::string_view input) {
   static constexpr char digits[] = "0123456789abcdef";
   std::string out;
@@ -628,7 +642,8 @@ Result<MembershipEvent> MembershipStore::commit_retirement(
     if (ack == signatures.end())
       return Error(ErrorCode::awaiting_state,
                    "retirement acknowledgement set does not match remaining members");
-    auto verified = verify_acknowledgement(member, preview.digest, ack->second);
+    auto verified = verify_durable_acknowledgement(
+        verify_acknowledgement, member, preview.digest, ack->second);
     if (!verified.ok()) return verified.error();
   }
   if (m_last_sequence == UINT64_MAX)
@@ -691,7 +706,8 @@ Result<MembershipEvent> MembershipStore::commit_enrollment(
     if (ack == signatures.end())
       return Error(ErrorCode::awaiting_state,
                    "enrollment acknowledgement set does not match current membership and joining device");
-    auto verified = verify_acknowledgement(member, preview.digest, ack->second);
+    auto verified = verify_durable_acknowledgement(
+        verify_acknowledgement, member, preview.digest, ack->second);
     if (!verified.ok()) return verified.error();
   }
   if (m_last_sequence == UINT64_MAX)
