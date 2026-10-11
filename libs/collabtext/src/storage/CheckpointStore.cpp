@@ -126,6 +126,21 @@ std::filesystem::path artifact_path(const std::filesystem::path &directory,
   return directory / (std::string(kind) + "-" + std::string(hash));
 }
 
+bool is_hex_hash(std::string_view hash) {
+  return hash.size() == 64 && std::all_of(hash.begin(), hash.end(),
+      [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
+}
+
+Result<void> resync_immutable_artifact(const fs::path &path,
+                                       const fs::path &directory,
+                                       const StepHook *hook) {
+  auto file = DurableAppendFile::open(path, hook);
+  if (!file.ok()) return file.error();
+  auto synced = file.value().sync();
+  if (!synced.ok()) return synced.error();
+  return sync_directory(directory, hook);
+}
+
 Result<void> store_immutable(const std::filesystem::path &path,
                              std::string_view expected,
                              const StepHook *hook) {
@@ -341,6 +356,43 @@ Result<std::optional<StoredCheckpoint>> CheckpointStore::recover(
   }
   return last_error.value_or(Error(ErrorCode::corrupt_record,
                                    "no valid checkpoint manifest candidate"));
+}
+
+Result<void> CheckpointStore::publish_membership_bundle(
+    const MembershipDescriptor &descriptor, std::string_view bundle_bytes) {
+  auto valid = validate_membership_checkpoint_bundle(bundle_bytes, descriptor);
+  if (!valid.ok()) return valid.error();
+  const auto path = artifact_path(m_directory, "membership",
+                                  descriptor.base_checkpoint_hash);
+  auto existing = read_bounded(path, kCheckpointMaxBytes);
+  if (!existing.ok()) return existing.error();
+  if (existing.value()) {
+    if (*existing.value() != bundle_bytes)
+      return Error(ErrorCode::corrupt_record,
+                   "content-addressed membership checkpoint path has conflicting bytes",
+                   path.string());
+    return resync_immutable_artifact(path, m_directory, m_hook);
+  }
+  return replace_atomically(path, bundle_bytes, m_hook);
+}
+
+Result<std::string>
+CheckpointStore::resolve_membership_bundle(std::string_view checkpoint_hash) const {
+  if (!is_hex_hash(checkpoint_hash))
+    return Error(ErrorCode::malformed,
+                 "membership checkpoint hash is not canonical lowercase hex");
+  const auto path = artifact_path(m_directory, "membership", checkpoint_hash);
+  auto stored = read_bounded(path, kCheckpointMaxBytes);
+  if (!stored.ok()) return stored.error();
+  if (!stored.value())
+    return Error(ErrorCode::awaiting_state,
+                 "content-addressed membership checkpoint bundle is missing",
+                 path.string());
+  if (sha256_hex(*stored.value()) != checkpoint_hash)
+    return Error(ErrorCode::corrupt_record,
+                 "membership checkpoint bytes do not match their content address",
+                 path.string());
+  return std::move(*stored.value());
 }
 
 } // namespace CollabText::Storage

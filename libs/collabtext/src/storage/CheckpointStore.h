@@ -55,6 +55,18 @@ public:
           const CheckpointCandidateValidator &validate_candidate,
           const std::optional<CheckpointContext> &expected_context = {}) const;
 
+  /// Durably retain a validated content-addressed multi-stream membership
+  /// checkpoint bundle. Bundles remain immutable; cleanup belongs to the
+  /// reclamation layer after it proves no descriptor still references them.
+  [[nodiscard]] Result<void> publish_membership_bundle(
+      const MembershipDescriptor &descriptor, std::string_view bundle_bytes);
+
+  /// Resolve a previously published bundle by its descriptor checkpoint hash.
+  /// Missing artifacts return awaiting_state; corrupt or mismatched artifacts
+  /// fail closed.
+  [[nodiscard]] Result<std::string>
+  resolve_membership_bundle(std::string_view checkpoint_hash) const;
+
 private:
   CheckpointStore(std::filesystem::path directory, const StepHook *hook,
                   ProcessLease lease)

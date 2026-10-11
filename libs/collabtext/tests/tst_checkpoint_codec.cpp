@@ -1,4 +1,5 @@
 #include "storage/CheckpointCodec.h"
+#include "storage/CheckpointStore.h"
 #include "crdt/Buffer.h"
 #include "crdt/IdList.h"
 #include <collabtext/CrdtEngine.h>
@@ -8,6 +9,7 @@
 #include "core/Sha256.h"
 
 #include <QtTest>
+#include <fstream>
 
 using namespace CollabText;
 using namespace CollabText::Storage;
@@ -366,6 +368,65 @@ private slots:
     QVERIFY(sealed);
     QVERIFY(
         validate_membership_checkpoint_bundle(bundle.value(), sealed.value()));
+
+    QTemporaryDir checkpoint_dir;
+    QVERIFY(checkpoint_dir.isValid());
+    {
+      bool fail_directory_sync_once = true;
+      StepHook hook;
+      hook.fail = [&](Step step, const std::filesystem::path &)
+          -> std::optional<Error> {
+        if (step == Step::DirSync && fail_directory_sync_once) {
+          fail_directory_sync_once = false;
+          return Error(ErrorCode::io_error,
+                       "injected membership bundle directory sync failure");
+        }
+        return std::nullopt;
+      };
+      auto durable_store = CheckpointStore::open(
+          checkpoint_dir.path().toStdString(), &hook);
+      QVERIFY(durable_store);
+      auto missing = durable_store.value().resolve_membership_bundle(
+          sealed.value().base_checkpoint_hash);
+      QVERIFY(!missing);
+      QCOMPARE(missing.error().code(), ErrorCode::awaiting_state);
+      auto uncertain = durable_store.value().publish_membership_bundle(
+          sealed.value(), bundle.value());
+      QVERIFY(!uncertain);
+      QCOMPARE(uncertain.error().code(), ErrorCode::commit_uncertain);
+      QVERIFY(durable_store.value().publish_membership_bundle(
+          sealed.value(), bundle.value()));
+    }
+    auto reopened_store = CheckpointStore::open(
+        checkpoint_dir.path().toStdString());
+    QVERIFY(reopened_store);
+    auto resolved = reopened_store.value().resolve_membership_bundle(
+        sealed.value().base_checkpoint_hash);
+    QVERIFY(resolved);
+    QCOMPARE(resolved.value(), bundle.value());
+    auto durable_resolver = make_membership_checkpoint_verifier(
+        [&](std::string_view hash) {
+          return reopened_store.value().resolve_membership_bundle(hash);
+        });
+    QVERIFY(durable_resolver(sealed_parent.value(), sealed.value()));
+    const auto artifact_path = std::filesystem::path(
+        checkpoint_dir.path().toStdString()) /
+        ("membership-" + sealed.value().base_checkpoint_hash);
+    {
+      std::ofstream damaged(artifact_path, std::ios::binary | std::ios::trunc);
+      QVERIFY(damaged.good());
+      damaged << "damaged";
+      QVERIFY(damaged.good());
+    }
+    auto corrupt = reopened_store.value().resolve_membership_bundle(
+        sealed.value().base_checkpoint_hash);
+    QVERIFY(!corrupt);
+    QCOMPARE(corrupt.error().code(), ErrorCode::corrupt_record);
+    auto malformed_hash = reopened_store.value().resolve_membership_bundle(
+        "../../manifest-1");
+    QVERIFY(!malformed_hash);
+    QCOMPARE(malformed_hash.error().code(), ErrorCode::malformed);
+
     for (size_t length = 0; length < bundle.value().size(); ++length) {
       const auto truncated = std::string_view(bundle.value()).substr(0, length);
       QVERIFY2(!decode_membership_checkpoint_bundle(truncated),
