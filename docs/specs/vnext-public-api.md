@@ -288,6 +288,32 @@ only after the method succeeds. This is an explicit rescue/export seam: it does
 not authorize the old actor to mutate a new epoch, validate a membership
 transition, or automatically replay/rebase the branch into a later descriptor.
 
+### Qt presence and document-operation composition
+
+`SyncManager` handles presence and ephemeral state only. It does not publish or
+apply CRDT operations. For a file-backed document, compose `DocumentSession`
+with its durable `FileOpStream` path and keep presence as a separate helper:
+
+```cpp
+DocumentSessionConfig config{shared_store, private_state, document_id,
+                             stream_id, epoch};
+auto opened = DocumentSession::open(std::move(config));
+if (!opened.ok()) return report(opened.error());
+auto session = std::move(opened).value();
+
+// QTextDocument positions are UTF-16 code units. Convert them to UTF-8 byte
+// ranges before submitting through DocumentSession.
+auto operation = session->apply_local({{start_byte, end_byte}}, {replacement_utf8});
+if (!operation.ok()) return report(operation.error());
+
+auto incoming = session->poll();
+if (!incoming.ok()) return report(incoming.error());
+```
+
+Construct `SyncManager` separately for peer presence/ephemeral state. Consumers
+with a different operation transport can implement `OpStream` and provide that
+composition without using `SyncManager` as a document-transport shortcut.
+
 ```cpp
 class Buffer {
 public:

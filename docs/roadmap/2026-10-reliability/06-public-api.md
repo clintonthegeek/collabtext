@@ -125,6 +125,7 @@ Compile each installed header in a separate translation unit and run the externa
 - `libs/collabtext/CMakeLists.txt`
 - `app/collabedit/CollabPane.h`
 - `app/collabedit/CollabPane.cpp`
+- `docs/specs/vnext-public-api.md`
 
 **Steps:**
 
