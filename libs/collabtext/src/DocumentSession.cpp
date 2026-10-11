@@ -593,6 +593,10 @@ struct DocumentSession::Impl {
   }
 
   bool owner_delivery_quarantined() const {
+    // If the bounded snapshot overflowed, a rejected owner delivery may be
+    // among the records that could not be retained. Do not restore history
+    // whose operation references therefore cannot be checked.
+    if (!quarantine_snapshot_complete) return true;
     const ActorId owner = replica->actor();
     return std::any_of(quarantined_deliveries.begin(),
                        quarantined_deliveries.end(),

@@ -62,7 +62,9 @@ advance receipts. Without these callbacks, `DocumentSession` is deliberately
 uncoordinated and must not be treated as enforcing epoch membership itself.
 
 If an owner delivery is denied during recovery, the session keeps it quarantined
-and defers restoring owner undo metadata that refers to that operation. The
+and defers restoring owner undo metadata that refers to that operation. If the
+bounded quarantine snapshot overflows, it conservatively defers restoration too,
+since the omitted record could belong to the owner. The
 session remains incomplete and read-only, while `export_local_branch()` can
 still stream the original durable branch with its original epoch and bytes. A
 consumer must stage and explicitly reconcile that branch before replaying it in

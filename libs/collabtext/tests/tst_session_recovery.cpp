@@ -818,6 +818,24 @@ private slots:
     QCOMPARE(exported.front().token.producer, returning_actor);
     QCOMPARE(exported.front().payload, local_bytes.value());
     QVERIFY(returning->close().ok());
+
+    old_config.max_quarantined_deliveries = 0;
+    auto bounded_opened = DocumentSession::open(old_config);
+    QVERIFY(bounded_opened.ok());
+    auto bounded = std::move(bounded_opened).value();
+    QVERIFY(!bounded->ready());
+    auto incomplete_snapshot = bounded->quarantined_deliveries();
+    QVERIFY(!incomplete_snapshot.ok());
+    QCOMPARE(incomplete_snapshot.error().code(), ErrorCode::limit_exceeded);
+    std::vector<OutboundDelivery> bounded_export;
+    QVERIFY(bounded->export_local_branch(metadata,
+        [&](const OutboundDelivery &delivery) -> Result<void> {
+          bounded_export.push_back(delivery);
+          return {};
+        }).ok());
+    QCOMPARE(bounded_export.size(), size_t(1));
+    QCOMPARE(bounded_export.front().payload, local_bytes.value());
+    QVERIFY(bounded->close().ok());
   }
 
   void localBranchExportVisitorFailureLeavesSourceRetryable() {
