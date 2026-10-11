@@ -59,14 +59,6 @@ struct DocumentSessionConfig {
   std::function<Result<std::shared_ptr<void>>(
       const DocumentId &, const StreamId &, uint64_t, const ActorId &)>
       authorize_local_mutation;
-  /// Optional live membership check for each inbound producer delivery, during
-  /// startup replay and while polling. Return a nonnull lease that holds the
-  /// membership coordinator stable through application. Consumers enforcing
-  /// epoch retirement should reject deliveries outside the active membership;
-  /// rejected bytes are quarantined intact and do not advance the receipt.
-  std::function<Result<std::shared_ptr<void>>(
-      const DocumentId &, const StreamId &, uint64_t, const DeliveryToken &)>
-      authorize_inbound_delivery;
   /// Optional durable checkpoint bundle directory. When set, startup first
   /// validates its candidate with `validate_checkpoint_candidate`, restores
   /// the shareable state, and replays retained deliveries beyond its coverage.
@@ -76,6 +68,14 @@ struct DocumentSessionConfig {
   /// disables threshold advice; callers still control provider state and
   /// explicitly publish with `publish_checkpoint()`.
   uint64_t checkpoint_delivery_threshold = 0;
+  /// Optional live membership check for each inbound producer delivery, during
+  /// startup replay and while polling. Return a nonnull lease that holds the
+  /// membership coordinator stable through application. Consumers enforcing
+  /// epoch retirement should reject deliveries outside the active membership;
+  /// rejected bytes are quarantined intact and do not advance the receipt.
+  std::function<Result<std::shared_ptr<void>>(
+      const DocumentId &, const StreamId &, uint64_t, const DeliveryToken &)>
+      authorize_inbound_delivery;
 };
 
 /// Local producer deliveries retained for one original document epoch.
