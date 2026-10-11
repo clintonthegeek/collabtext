@@ -33,6 +33,9 @@ struct DocumentSession::Impl {
   uint64_t next_envelope = 1;
   std::unordered_set<std::string> replayed_tokens;
   std::unordered_map<std::string, DeferredState> deferred_tokens;
+  std::vector<SessionQuarantinedDelivery> quarantined_deliveries;
+  size_t quarantined_bytes = 0;
+  bool quarantine_snapshot_complete = true;
   bool closed = false;
   bool poisoned = false;
 
@@ -135,6 +138,44 @@ struct DocumentSession::Impl {
     }
   }
 
+  void retain_quarantine(const InboundDelivery &delivery, const Error &reason) {
+    const auto duplicate = std::find_if(
+        quarantined_deliveries.begin(), quarantined_deliveries.end(),
+        [&](const SessionQuarantinedDelivery &record) {
+          return record.delivery.token == delivery.token &&
+                 record.delivery.payload == delivery.payload &&
+                 record.reason == reason;
+        });
+    if (duplicate == quarantined_deliveries.end()) {
+      size_t record_bytes = delivery.payload.size();
+      const auto add_bytes = [&record_bytes](size_t amount) {
+        if (amount > std::numeric_limits<size_t>::max() - record_bytes)
+          return false;
+        record_bytes += amount;
+        return true;
+      };
+      const auto context = reason.context();
+      const bool size_valid = add_bytes(reason.message().size()) &&
+          (!context || add_bytes(context->size()));
+      if (quarantined_deliveries.size() >=
+              config.max_quarantined_deliveries ||
+          !size_valid || record_bytes > config.max_quarantined_bytes -
+              std::min(quarantined_bytes, config.max_quarantined_bytes)) {
+        quarantine_snapshot_complete = false;
+      } else {
+        quarantined_deliveries.push_back({delivery, reason});
+        quarantined_bytes += record_bytes;
+      }
+    }
+  }
+
+  void quarantine(const InboundDelivery &delivery, const Error &reason) {
+    report.complete = false;
+    ++report.rejected;
+    if (!report.issue) report.issue = reason;
+    retain_quarantine(delivery, reason);
+  }
+
   static std::string token_key(const DeliveryToken &token) {
     return token.producer.to_string() + ":" + std::to_string(token.sequence);
   }
@@ -195,19 +236,13 @@ struct DocumentSession::Impl {
       return {};
     auto decoded = decode_operation(delivery.payload);
     if (!decoded.ok()) {
-      report.complete = false;
-      ++report.rejected;
-      if (!report.issue)
-        report.issue = decoded.error().with_context("full session replay");
+      quarantine(delivery, decoded.error().with_context("full session replay"));
       return {};
     }
     if (op_identity(decoded.value()).actor != delivery.token.producer) {
-      report.complete = false;
-      ++report.rejected;
-      if (!report.issue)
-        report.issue =
-            Error(ErrorCode::actor_conflict,
-                  "operation identity does not match its delivery producer");
+      quarantine(delivery,
+                 Error(ErrorCode::actor_conflict,
+                       "operation identity does not match its delivery producer"));
       return {};
     }
     ++report.envelopes;
@@ -216,6 +251,9 @@ struct DocumentSession::Impl {
       classify(outcomes.front());
       if (outcomes.front().kind() != ApplyOutcomeKind::rejected)
         replayed_tokens.insert(key);
+      else
+        retain_quarantine(delivery, outcomes.front().error().value_or(
+            Error(ErrorCode::malformed, "operation was rejected during recovery")));
       if (outcomes.front().kind() == ApplyOutcomeKind::deferred)
         deferred_tokens.emplace(
             key, DeferredState{delivery.token, decoded.value(), delivery.payload});
@@ -303,18 +341,14 @@ DocumentSession::open_with_writer_config(
         scope, [raw](const InboundDelivery &delivery) {
           auto decoded = decode_operation(delivery.payload);
           if (!decoded.ok()) {
-            raw->report.complete = false;
-            ++raw->report.rejected;
-            raw->report.issue = decoded.error();
+            raw->quarantine(delivery, decoded.error());
             return DeliveryDecision::quarantine(decoded.error());
           }
           if (op_identity(decoded.value()).actor != delivery.token.producer) {
             auto error = Error(
                 ErrorCode::actor_conflict,
                 "operation identity does not match its delivery producer");
-            raw->report.complete = false;
-            ++raw->report.rejected;
-            raw->report.issue = error;
+            raw->quarantine(delivery, error);
             return DeliveryDecision::quarantine(error);
           }
           const auto token_key = Impl::token_key(delivery.token);
@@ -324,9 +358,7 @@ DocumentSession::open_with_writer_config(
               auto error = Error(
                   ErrorCode::corrupt_record,
                   "deferred delivery token was reused with different payload bytes");
-              raw->report.complete = false;
-              ++raw->report.rejected;
-              if (!raw->report.issue) raw->report.issue = error;
+              raw->quarantine(delivery, error);
               return DeliveryDecision::quarantine(std::move(error));
             }
             if (!raw->buffer->version().observed(
@@ -358,8 +390,10 @@ DocumentSession::open_with_writer_config(
             raw->replayed_tokens.insert(token_key);
             return DeliveryDecision::retry();
           }
-          return DeliveryDecision::quarantine(outcome.error().value_or(
-              Error(ErrorCode::malformed, "operation was rejected")));
+          const auto error = outcome.error().value_or(
+              Error(ErrorCode::malformed, "operation was rejected"));
+          raw->retain_quarantine(delivery, error);
+          return DeliveryDecision::quarantine(error);
         });
     if (!subscribed.ok())
       return subscribed.error();
@@ -683,6 +717,32 @@ std::vector<InboundDelivery> DocumentSession::deferred_deliveries() const {
               if (left.token.producer != right.token.producer)
                 return left.token.producer < right.token.producer;
               return left.token.sequence < right.token.sequence;
+            });
+  return deliveries;
+}
+Result<std::vector<SessionQuarantinedDelivery>>
+DocumentSession::quarantined_deliveries() const {
+  if (!m_impl)
+    return Error(ErrorCode::writer_conflict,
+                 "session is unavailable for quarantine inspection");
+  if (!m_impl->quarantine_snapshot_complete)
+    return Error(ErrorCode::limit_exceeded,
+                 "quarantined delivery snapshot exceeded its configured budget");
+  auto deliveries = m_impl->quarantined_deliveries;
+  std::sort(deliveries.begin(), deliveries.end(),
+            [](const SessionQuarantinedDelivery &left,
+               const SessionQuarantinedDelivery &right) {
+              if (left.delivery.token.stream != right.delivery.token.stream)
+                return left.delivery.token.stream < right.delivery.token.stream;
+              if (left.delivery.token.epoch != right.delivery.token.epoch)
+                return left.delivery.token.epoch < right.delivery.token.epoch;
+              if (left.delivery.token.producer != right.delivery.token.producer)
+                return left.delivery.token.producer < right.delivery.token.producer;
+              if (left.delivery.token.sequence != right.delivery.token.sequence)
+                return left.delivery.token.sequence < right.delivery.token.sequence;
+              if (left.delivery.payload != right.delivery.payload)
+                return left.delivery.payload < right.delivery.payload;
+              return left.reason.message() < right.reason.message();
             });
   return deliveries;
 }

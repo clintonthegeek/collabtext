@@ -35,6 +35,10 @@ struct DocumentSessionConfig {
   uint64_t epoch = 1;
   size_t max_undo_steps = 1000;
   size_t max_undo_bytes = 16 * 1024 * 1024;
+  /// Bounds the exact rejected-envelope snapshot available to checkpoint
+  /// providers. Exceeding either limit makes snapshot retrieval fail closed.
+  size_t max_quarantined_deliveries = 1024;
+  size_t max_quarantined_bytes = 16 * 1024 * 1024;
   /// Deterministic baseline content reconstructed locally before log replay.
   std::string initial_text;
   /// Optional live membership check invoked before each local document or
@@ -71,6 +75,18 @@ struct SessionTextEdit {
   uint32_t old_start = 0;
   uint32_t old_end = 0;
   std::string new_text;
+};
+
+/// Exact inbound bytes retained after the session rejects a delivery. The
+/// token and reason are checkpoint/provider input; this record does not imply
+/// that the transport receipt advanced.
+struct SessionQuarantinedDelivery {
+  InboundDelivery delivery;
+  Error reason;
+  bool operator==(const SessionQuarantinedDelivery &other) const {
+    return delivery.token == other.delivery.token &&
+           delivery.payload == other.delivery.payload && reason == other.reason;
+  }
 };
 
 /// Stable actor-local grouping metadata for correlating undo with consumer events.
@@ -133,6 +149,10 @@ public:
   /// arrive. The stable token and original payload bytes are suitable for a
   /// checkpoint or provider reconciliation snapshot.
   [[nodiscard]] std::vector<InboundDelivery> deferred_deliveries() const;
+  /// Rejected inbound envelopes retained verbatim for checkpoint or provider
+  /// diagnostics. Repeated scans of the same token and bytes are deduplicated.
+  [[nodiscard]] Result<std::vector<SessionQuarantinedDelivery>>
+  quarantined_deliveries() const;
   [[nodiscard]] const ActorId &actor() const noexcept;
   [[nodiscard]] bool ready() const noexcept;
 

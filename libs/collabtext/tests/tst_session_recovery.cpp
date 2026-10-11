@@ -1173,6 +1173,60 @@ private slots:
     QVERIFY(c->close().ok());
   }
 
+  void malformed_inbound_deliveryRetainsExactBytesAndReasonAcrossReopen() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const auto producer = Test::actor(137);
+    const StreamScope scope{"quarantine-stream", 1};
+    const std::string payload{static_cast<char>(0xff), 'x', '\0', 'y'};
+    const InboundDelivery expected{
+        DeliveryToken{scope.stream, scope.epoch, producer, 1}, payload};
+    {
+      Crdt::FileOpStream writer(root / "shared", producer);
+      QVERIFY(writer.start().ok());
+      QVERIFY(writer.register_stream(scope).ok());
+      QVERIFY(writer.push(OutboundDelivery{expected.token, payload},
+                          PushDurability::durable).ok());
+      QVERIFY(writer.close().ok());
+    }
+
+    const DocumentSessionConfig config{root / "shared", root / "device",
+                                       "quarantine-doc", scope.stream,
+                                       scope.epoch};
+    std::optional<Error> expected_reason;
+    for (int reopen = 0; reopen != 2; ++reopen) {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QVERIFY(!session->ready());
+      QCOMPARE(session->recovery_report().rejected, size_t(1));
+      auto quarantined = session->quarantined_deliveries();
+      QVERIFY(quarantined.ok());
+      QCOMPARE(quarantined.value().size(), size_t(1));
+      QCOMPARE(quarantined.value().front().delivery.token, expected.token);
+      QCOMPARE(quarantined.value().front().delivery.payload, expected.payload);
+      QVERIFY(!quarantined.value().front().reason.message().empty());
+      if (expected_reason)
+        QCOMPARE(quarantined.value().front().reason, *expected_reason);
+      else
+        expected_reason = quarantined.value().front().reason;
+      QVERIFY(session->close().ok());
+    }
+
+    auto limited_config = config;
+    limited_config.private_state = root / "limited-device";
+    limited_config.max_quarantined_deliveries = 0;
+    auto limited_open = DocumentSession::open(limited_config);
+    QVERIFY(limited_open.ok());
+    auto limited = std::move(limited_open).value();
+    QVERIFY(!limited->ready());
+    auto omitted = limited->quarantined_deliveries();
+    QVERIFY(!omitted.ok());
+    QCOMPARE(omitted.error().code(), ErrorCode::limit_exceeded);
+    QVERIFY(limited->close().ok());
+  }
+
   void consumer_event_log_correlates_undo_and_redo_groups_append_only() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());

@@ -288,6 +288,13 @@ only after the method succeeds. This is an explicit rescue/export seam: it does
 not authorize the old actor to mutate a new epoch, validate a membership
 transition, or automatically replay/rebase the branch into a later descriptor.
 
+`DocumentSession::quarantined_deliveries()` exposes exact rejected inbound
+tokens, payload bytes, and reasons for checkpoint/provider diagnostics. Its
+count and byte budgets default to 1,024 records and 16 MiB. If either budget is
+exceeded, retrieval returns `limit_exceeded` rather than presenting an
+incomplete snapshot as complete. Quarantined input does not advance transport
+receipts and keeps session recovery incomplete.
+
 ### Qt presence and document-operation composition
 
 `SyncManager` handles presence and ephemeral state only. It does not publish or

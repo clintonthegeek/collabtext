@@ -134,6 +134,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_gc_certificate|tst_transport_commit_co
 - `libs/collabtext/tests/fuzz_decode.cpp`
 - `libs/collabtext/tests/tst_checkpoint_codec.cpp`
 - `libs/collabtext/tests/tst_session_recovery.cpp`
+- `tests/consumer-smoke/main.cpp`
 
 **Steps:**
 

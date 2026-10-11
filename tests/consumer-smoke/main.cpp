@@ -76,6 +76,9 @@ void check_installed_branch_export() {
     check(opened.ok(), "installed file-transport consumer opens a DocumentSession");
     if (!opened.ok()) return;
     auto session = std::move(opened).value();
+    auto quarantined = session->quarantined_deliveries();
+    check(quarantined.ok() && quarantined.value().empty(),
+          "installed session exposes an empty quarantine snapshot initially");
     auto edit = session->apply_local({{0, 0}}, {"branch"});
     check(edit.ok(), "installed session accepts a local branch edit");
     LocalBranchExport metadata;
