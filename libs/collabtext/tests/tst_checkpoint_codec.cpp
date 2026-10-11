@@ -302,8 +302,159 @@ private slots:
         corrupted_frame, sealed_corrupted.value()));
   }
 
+  void membershipCheckpointBundleValidatesEveryStreamAndResolvesByDigest() {
+    const auto actor_a = Test::actor(231);
+    const auto actor_b = Test::actor(232);
+    MembershipDescriptor parent;
+    parent.epoch = 1;
+    parent.base_checkpoint_hash =
+        sha256_hex("membership bundle parent checkpoint");
+    parent.members = {actor_a};
+    parent.base_frontiers = {{"text", {{actor_a, 0}}, {{actor_a, 0}}}};
+    parent.supported_token_versions = {1};
+    parent.translation_manifest_hash =
+        sha256_hex("parent translation manifest");
+    auto sealed_parent = seal_membership_descriptor(parent);
+    QVERIFY(sealed_parent);
+    const auto parent_hash = sealed_parent.value().hash;
+    const auto transition_hash = sha256_hex("membership bundle transition");
+    std::vector<MembershipCheckpointBundleEntry> entries;
+    std::string manifest_hash;
+    for (const std::string stream : {"comments", "text"}) {
+      CheckpointShareableCore core;
+      core.context = CheckpointContext{"bundle-doc", stream, 2, parent_hash,
+                                       CheckpointEngineKind::Text};
+      core.pins.canonical_projection_hash = sha256_hex("");
+      core.translations.supported_token_versions = {1};
+      core.coverage.operation = {{actor_a, 0}, {actor_b, 0}};
+      core.coverage.delivery = {{actor_a, 0}, {actor_b, 0}};
+      auto encoded = encode_checkpoint_core(core);
+      QVERIFY(encoded);
+      auto artifact =
+          decode_checkpoint(encoded.value(), CheckpointKind::Shareable);
+      QVERIFY(artifact);
+      auto decoded = decode_checkpoint_core(artifact.value());
+      QVERIFY(decoded);
+      if (manifest_hash.empty())
+        manifest_hash = decoded.value().translations.manifest_hash;
+      QCOMPARE(decoded.value().translations.manifest_hash, manifest_hash);
+      entries.push_back({stream, encoded.value()});
+    }
+
+    auto bundle = encode_membership_checkpoint_bundle(entries);
+    QVERIFY(bundle);
+    auto decoded_bundle = decode_membership_checkpoint_bundle(bundle.value());
+    QVERIFY(decoded_bundle);
+    QCOMPARE(decoded_bundle.value().size(), size_t(2));
+    QCOMPARE(decoded_bundle.value()[0].stream, std::string("comments"));
+    QCOMPARE(decoded_bundle.value()[1].stream, std::string("text"));
+
+    MembershipDescriptor descriptor;
+    descriptor.epoch = 2;
+    descriptor.parent_hash = parent_hash;
+    descriptor.transition_event_hash = transition_hash;
+    descriptor.base_checkpoint_hash = sha256_hex(bundle.value());
+    descriptor.members = {actor_a, actor_b};
+    descriptor.base_frontiers = {
+        {"comments",
+         {{actor_a, 0}, {actor_b, 0}},
+         {{actor_a, 0}, {actor_b, 0}}},
+        {"text", {{actor_a, 0}, {actor_b, 0}}, {{actor_a, 0}, {actor_b, 0}}}};
+    descriptor.supported_token_versions = {1};
+    descriptor.translation_manifest_hash = manifest_hash;
+    auto sealed = seal_membership_descriptor(descriptor);
+    QVERIFY(sealed);
+    QVERIFY(
+        validate_membership_checkpoint_bundle(bundle.value(), sealed.value()));
+    for (size_t length = 0; length < bundle.value().size(); ++length) {
+      const auto truncated = std::string_view(bundle.value()).substr(0, length);
+      QVERIFY2(!decode_membership_checkpoint_bundle(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    auto resolver = make_membership_checkpoint_verifier(
+        [&](std::string_view hash) -> Result<std::string> {
+          if (hash != sealed.value().base_checkpoint_hash)
+            return Error(ErrorCode::corrupt_record,
+                         "unexpected checkpoint hash");
+          return bundle.value();
+        });
+    QVERIFY(resolver);
+    QVERIFY(resolver(sealed_parent.value(), sealed.value()));
+    auto forked_parent = parent;
+    forked_parent.base_checkpoint_hash = sha256_hex("forked parent checkpoint");
+    auto sealed_forked_parent = seal_membership_descriptor(forked_parent);
+    QVERIFY(sealed_forked_parent);
+    QVERIFY(!resolver(sealed_forked_parent.value(), sealed.value()));
+
+    auto wrong_frontier = descriptor;
+    ++wrong_frontier.base_frontiers[1].delivery[actor_a];
+    auto wrong_frontier_sealed = seal_membership_descriptor(wrong_frontier);
+    QVERIFY(wrong_frontier_sealed);
+    QVERIFY(!validate_membership_checkpoint_bundle(
+        bundle.value(), wrong_frontier_sealed.value()));
+
+    auto partial = encode_membership_checkpoint_bundle({entries.front()});
+    QVERIFY(partial);
+    auto partial_descriptor = descriptor;
+    partial_descriptor.base_checkpoint_hash = sha256_hex(partial.value());
+    auto partial_sealed = seal_membership_descriptor(partial_descriptor);
+    QVERIFY(partial_sealed);
+    QVERIFY(!validate_membership_checkpoint_bundle(partial.value(),
+                                                   partial_sealed.value()));
+
+    auto corrupted = bundle.value();
+    corrupted[10] ^= 1;
+    QVERIFY(!decode_membership_checkpoint_bundle(corrupted));
+    QVERIFY(!encode_membership_checkpoint_bundle({entries[0], entries[0]}));
+    QVERIFY(!encode_membership_checkpoint_bundle(
+        {{"comments", "not a checkpoint"}}));
+    std::string unsorted("CTMB\0\1\0\2", 8);
+    const auto append_u32 = [&](uint32_t value) {
+      for (int shift = 24; shift >= 0; shift -= 8)
+        unsorted.push_back(static_cast<char>(value >> shift));
+    };
+    const auto append_u64 = [&](uint64_t value) {
+      for (int shift = 56; shift >= 0; shift -= 8)
+        unsorted.push_back(static_cast<char>(value >> shift));
+    };
+    for (auto it = decoded_bundle.value().rbegin();
+         it != decoded_bundle.value().rend(); ++it) {
+      append_u32(static_cast<uint32_t>(it->stream.size()));
+      append_u64(static_cast<uint64_t>(it->artifact_bytes.size()));
+      unsorted.append(it->stream);
+      unsorted.append(it->artifact_bytes);
+    }
+    unsorted.append(sha256_hex(unsorted));
+    QVERIFY(!decode_membership_checkpoint_bundle(unsorted));
+
+    const std::string high_byte_stream("\xC3\xA9", 2);
+    const auto make_stream_artifact = [&](const std::string &stream) {
+      CheckpointShareableCore core;
+      core.context = CheckpointContext{"bundle-doc", stream, 2, parent_hash,
+                                       CheckpointEngineKind::Text};
+      core.pins.canonical_projection_hash = sha256_hex("");
+      core.translations.supported_token_versions = {1};
+      return encode_checkpoint_core(core);
+    };
+    auto high_byte_artifact = make_stream_artifact(high_byte_stream);
+    auto ascii_artifact = make_stream_artifact("z");
+    QVERIFY(high_byte_artifact);
+    QVERIFY(ascii_artifact);
+    auto byte_sorted = encode_membership_checkpoint_bundle(
+        {{high_byte_stream, high_byte_artifact.value()},
+         {"z", ascii_artifact.value()}});
+    QVERIFY(byte_sorted);
+    auto byte_sorted_entries =
+        decode_membership_checkpoint_bundle(byte_sorted.value());
+    QVERIFY(byte_sorted_entries);
+    QCOMPARE(byte_sorted_entries.value()[0].stream, std::string("z"));
+    QCOMPARE(byte_sorted_entries.value()[1].stream, high_byte_stream);
+  }
+
   void engineSectionRoundTripsTextAndIdList() {
-    const auto actor = ActorId::parse("11000000000000000000000000000001").value();
+    const auto actor =
+        ActorId::parse("11000000000000000000000000000001").value();
     CheckpointEngineState text;
     Crdt::Fragment fragment{Crdt::Identity(actor, 1), {}, 3, 1, "雪"};
     text.fragments.push_back(fragment);

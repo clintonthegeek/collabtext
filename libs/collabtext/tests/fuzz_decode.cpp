@@ -46,6 +46,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     (void)decode_sealed_segment(bytes);
     (void)base64_decode(bytes);
     (void)zstd_decompress(bytes, kMaxDecompressedBytes);
+    (void)CollabText::Storage::decode_membership_checkpoint_bundle(bytes);
     // Checkpoint parsing accepts at most 256 MiB in production. Keep libFuzzer
     // inputs much smaller while exercising both independent artifact magics.
     const auto shareable = CollabText::Storage::decode_checkpoint(

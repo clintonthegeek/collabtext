@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <compare>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -167,10 +168,31 @@ decode_checkpoint_coverage(const CheckpointSection &section);
 validate_checkpoint_coverage(const CheckpointContext &context,
                              const CheckpointShareableCore::Coverage &coverage,
                              const MembershipDescriptor &descriptor);
-[[nodiscard]] Result<void>
-validate_checkpoint_artifact_membership(
+[[nodiscard]] Result<void> validate_checkpoint_artifact_membership(
     std::string_view checkpoint_artifact_bytes,
     const MembershipDescriptor &descriptor);
+/// A transition base may span several independently checkpointed streams.
+/// The bundle order is canonical by stream ID; the outer membership descriptor
+/// hash names the complete bundle bytes.
+struct MembershipCheckpointBundleEntry {
+  std::string stream;
+  std::string artifact_bytes;
+  auto operator<=>(const MembershipCheckpointBundleEntry &) const = default;
+};
+[[nodiscard]] Result<std::string> encode_membership_checkpoint_bundle(
+    std::vector<MembershipCheckpointBundleEntry> entries);
+[[nodiscard]] Result<std::vector<MembershipCheckpointBundleEntry>>
+decode_membership_checkpoint_bundle(std::string_view bytes);
+[[nodiscard]] Result<void>
+validate_membership_checkpoint_bundle(std::string_view bundle_bytes,
+                                      const MembershipDescriptor &descriptor);
+using MembershipCheckpointBundleResolver =
+    std::function<Result<std::string>(std::string_view checkpoint_hash)>;
+/// Build the durable-checkpoint callback used by MembershipStore from an
+/// application resolver. Empty resolver returns an empty callback and remains
+/// fail-closed in validate_transition().
+[[nodiscard]] MembershipCheckpointVerifier make_membership_checkpoint_verifier(
+    MembershipCheckpointBundleResolver resolve_bundle);
 [[nodiscard]] Result<CheckpointSection>
 encode_checkpoint_pins(const CheckpointShareableCore::Pins &pins,
                        const CheckpointContext &context);

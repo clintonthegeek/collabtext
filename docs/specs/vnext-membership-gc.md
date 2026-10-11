@@ -47,6 +47,26 @@ An epoch descriptor is immutable and content addressed. It contains:
 - the supported token versions and the translation manifest hash carried from
   the parent epoch.
 
+`base_checkpoint_hash` is the SHA-256 of a canonical `CTMB/1` membership
+checkpoint bundle. The bundle contains exactly one validated shareable `CTCK`
+artifact per descriptor stream, in sorted stream-ID order. Each artifact binds
+the same epoch and parent descriptor and must match that stream's exact
+operation and delivery frontiers and the descriptor's token translation
+metadata. A single-stream artifact cannot stand in for a multi-stream bundle.
+Actor-local `CTCL` history remains separately owned and durably acknowledged;
+it is not folded into this shared bundle.
+
+The `CTMB/1` byte layout is: four ASCII magic bytes `CTMB`; big-endian `u16`
+version `1`; big-endian `u16` entry count; then entries sorted by raw stream-ID
+bytes, each containing big-endian `u32` stream-ID byte length, big-endian `u64`
+artifact byte length, stream-ID bytes, and the complete CTCK artifact bytes.
+The final 64 ASCII lowercase hexadecimal bytes are the SHA-256 digest of the
+preceding bundle payload. Counts are in `1..4096`, stream IDs are in
+`1..128` bytes with no NUL, and the complete bundle is at most 256 MiB. Readers
+reject duplicates, unsorted entries, unknown versions, digest mismatch,
+trailing bytes, and truncated or out-of-bound lengths. `base_checkpoint_hash`
+is SHA-256 over the complete bundle including this inner digest.
+
 The actor set is nonempty. Every stream in the descriptor has an explicit base
 frontier, including zero. A member omitted from a descriptor is not considered
 retired because it went quiet; omission is valid only as the result of the
