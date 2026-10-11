@@ -12,6 +12,7 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <stdexcept>
 #include <type_traits>
 
@@ -198,6 +199,49 @@ private slots:
     QVERIFY(!Crdt::tombstone_is_covered(comments_frontier->counters(),
                                         Crdt::Identity(p, 8), 2, deletion));
     QVERIFY(!certificate.value().operation_frontier("unknown").has_value());
+  }
+
+  void randomizedCoverageIntersectionsMatchReferenceModel() {
+    const auto d = descriptor();
+    const std::array<ActorId, 4> producers{
+        actor(20), actor(21), d.members[0], d.members[1]};
+    std::mt19937 random(0x6c656e74U);
+    std::uniform_int_distribution<unsigned> present(0, 3);
+    std::uniform_int_distribution<uint64_t> counter(1, 1000000);
+
+    for (unsigned trial = 0; trial < 256; ++trial) {
+      const auto checkpoint = sha256_hex("coverage-model-checkpoint-" +
+                                         std::to_string(trial));
+      std::vector<PeerCoverageEvidence> peers;
+      for (const auto &member : d.members) {
+        auto peer = evidence(d, member);
+        peer.checkpoint_hash = checkpoint;
+        for (const auto *stream : {"text", "comments", "ids"}) {
+          for (const auto &producer : producers) {
+            if (present(random) == 0) continue;
+            peer.operation[stream][producer] = counter(random);
+            if (present(random) != 0)
+              peer.delivery[stream][producer] = counter(random);
+          }
+        }
+        peers.push_back(std::move(peer));
+      }
+
+      std::vector<GcReference::Coverage> operation_vectors;
+      std::vector<GcReference::Coverage> delivery_vectors;
+      for (const auto &peer : peers) {
+        operation_vectors.push_back(reference_coverage(peer.operation));
+        delivery_vectors.push_back(reference_coverage(peer.delivery));
+      }
+      auto certificate = certify_common_coverage(
+          d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+          model_eligibility());
+      QVERIFY2(certificate.ok(), "valid generated evidence must certify");
+      QCOMPARE(reference_coverage(certificate.value().common_operation()),
+               GcReference::meet(operation_vectors));
+      QCOMPARE(reference_coverage(certificate.value().common_delivery()),
+               GcReference::meet(delivery_vectors));
+    }
   }
 
   void missingStaleAndUnverifiedMembersCannotCertify() {
