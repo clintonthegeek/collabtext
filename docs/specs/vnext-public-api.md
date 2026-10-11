@@ -310,9 +310,11 @@ auto incoming = session->poll();
 if (!incoming.ok()) return report(incoming.error());
 ```
 
-Construct `SyncManager` separately for peer presence/ephemeral state. Consumers
-with a different operation transport can implement `OpStream` and provide that
-composition without using `SyncManager` as a document-transport shortcut.
+Construct `SyncManager` separately for peer presence/ephemeral state. A consumer
+with a different operation transport owns its session composition around the
+Core engine and `OpStream`; `DocumentSession` currently composes the file-backed
+`FileOpStream` internally. Neither route uses `SyncManager` as a document-
+transport shortcut.
 
 ```cpp
 class Buffer {

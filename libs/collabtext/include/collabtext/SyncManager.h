@@ -16,8 +16,10 @@
 namespace CollabText {
 
 // Presence and ephemeral-state helper. This class does not transport CRDT
-// operations. Use DocumentSession with an OpStream for durable edits; the
-// retained `engine` constructor parameter is ignored for source compatibility.
+// operations. File-backed durable edits use DocumentSession, which composes
+// FileOpStream internally; other transports need a consumer-owned composition
+// around Core and OpStream. The retained `engine` constructor parameter is
+// ignored for source compatibility.
 class SyncManager : public QObject {
     Q_OBJECT
 
