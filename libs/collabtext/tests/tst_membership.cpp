@@ -673,24 +673,22 @@ private slots:
         const ActorId &event_producer) -> Result<void> {
       auto evidence = decode_membership_transition_evidence(event);
       if (!evidence.ok()) return evidence.error();
-      if (event_producer != producer || evidence.value().kind != event.kind)
+      if (event_producer != producer)
         return Error(ErrorCode::corrupt_record,
-                     "recovered transition evidence has the wrong owner or kind");
-      std::vector<ActorId> expected;
-      for (const auto &member : parent.members)
-        if (member != retiring) expected.push_back(member);
-      if (evidence.value().acknowledgements.size() != expected.size())
-        return Error(ErrorCode::corrupt_record,
-                     "recovered acknowledgement set is incomplete");
-      for (size_t i = 0; i < expected.size(); ++i) {
-        const auto &ack = evidence.value().acknowledgements[i];
-        const auto durable = retirement_ack_log.find(ack.actor);
-        if (ack.actor != expected[i] || durable == retirement_ack_log.end() ||
-            durable->second != ack.signature)
-          return Error(ErrorCode::corrupt_record,
-                       "recovered acknowledgement differs from durable caller state");
-      }
-      return {};
+                     "recovered transition evidence has the wrong owner");
+      return validate_membership_evidence(
+          evidence.value(), retirement_preview.value(),
+          "confirmed by operator",
+          [&](const ActorId &ack_actor, std::string_view digest,
+              std::string_view signature) -> Result<void> {
+            const auto durable = retirement_ack_log.find(ack_actor);
+            if (digest != retirement_preview.value().digest ||
+                durable == retirement_ack_log.end() ||
+                durable->second != signature)
+              return Error(ErrorCode::corrupt_record,
+                           "recovered acknowledgement differs from durable caller state");
+            return {};
+          });
     };
     QVERIFY(retirement_store.validate_transition(
         parent, sealed_retirement_child.value(), revalidate_retirement_evidence,
@@ -785,17 +783,21 @@ private slots:
         const ActorId &event_producer) -> Result<void> {
       auto evidence = decode_membership_transition_evidence(event);
       if (!evidence.ok()) return evidence.error();
-      if (event_producer != producer || evidence.value().kind != event.kind ||
-          evidence.value().acknowledgements.size() != enrollment_ack_log.size())
+      if (event_producer != producer)
         return Error(ErrorCode::corrupt_record,
-                     "recovered enrollment evidence is incomplete");
-      for (const auto &ack : evidence.value().acknowledgements) {
-        const auto durable = enrollment_ack_log.find(ack.actor);
-        if (durable == enrollment_ack_log.end() || durable->second != ack.signature)
-          return Error(ErrorCode::corrupt_record,
-                       "recovered enrollment acknowledgement is not durable");
-      }
-      return {};
+                     "recovered enrollment evidence has the wrong owner");
+      return validate_membership_evidence(
+          evidence.value(), enrollment_preview.value(),
+          [&](const ActorId &ack_actor, std::string_view digest,
+              std::string_view signature) -> Result<void> {
+            const auto durable = enrollment_ack_log.find(ack_actor);
+            if (digest != enrollment_preview.value().digest ||
+                durable == enrollment_ack_log.end() ||
+                durable->second != signature)
+              return Error(ErrorCode::corrupt_record,
+                           "recovered enrollment acknowledgement is not durable");
+            return {};
+          });
     };
     QVERIFY(enrollment_store.validate_transition(
         enrollment_parent, sealed_enrollment_child.value(),
