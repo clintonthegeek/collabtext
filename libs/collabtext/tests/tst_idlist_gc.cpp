@@ -193,6 +193,23 @@ private slots:
                  CollabText::ApplyOutcomeKind::applied);
         const std::vector<uint64_t> expected_ids{0xAA, 0xBB};
         QCOMPARE(unreclaimed.ids(), expected_ids);
+
+        IdList removal_peer(CollabText::Test::test_counter(6));
+        const auto removal_history = removal_peer.apply_ops(
+            {inserted, removed, *undo, *redo});
+        QCOMPARE(removal_history.size(), size_t(4));
+        for (const auto &outcome : removal_history)
+            QCOMPARE(outcome.kind(), CollabText::ApplyOutcomeKind::applied);
+        const auto late_remove =
+            removal_peer.remove_at(Anchor(origin, Bias::Left));
+        const auto refused_remove =
+            collected.apply_remote_op_checked(late_remove);
+        QCOMPARE(refused_remove.kind(), CollabText::ApplyOutcomeKind::rejected);
+        QVERIFY(refused_remove.error().has_value());
+        QCOMPARE(refused_remove.error()->code(),
+                 CollabText::ErrorCode::history_unavailable);
+        QCOMPARE(unreclaimed.apply_remote_op_checked(late_remove).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
     }
 
     void certified_collection_preserves_local_history_and_live_placements() {
