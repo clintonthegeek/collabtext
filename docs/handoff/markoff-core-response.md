@@ -73,7 +73,13 @@ An uncertain append must inspect/recover its exact original bundle before any
 gap decision. On definitive failure, discard/rebuild the tentative CRDT view
 from the accepted prefix; do not apply a gap over the operation in that view.
 Durably reserve the full interval, prove the bundle absent, commit the gap, apply
-it to the rebuilt writer, then resume writes. Restart replays gaps and operations
+it to the rebuilt writer, then resume writes.
+Capture `prior` from the accepted per-stream prefix before the tentative action.
+The host can track it with Global::observe(op_identity) /
+Global::observe(idlist_op_identity), and each accepted gap
+`{actor, first + count - 1}`. Instrument successful reserve_run calls to retain
+the exact `(first, count)`; do not infer unused intervals from a largest counter.
+Uncertain reservation durability also requires recovery before a gap decision. Restart replays gaps and operations
 in accepted order before writes or receipts. Never fabricate a placeholder edit.
 
 Terminal evidence is bounded to 4096 records/8 MiB per stream; reaching the bound
@@ -117,3 +123,9 @@ Markoff must integrate these APIs into its real BlockId/routing/persistence seam
 and record exact-candidate production acceptance in M06. Wave's Q06 remains open;
 final same-candidate checks and explicit merge authorization still govern master.
 Nothing here changes Markoff's pin or authorizes a production cutover.
+
+Terminal unused identities cannot be insertion parents/right origins, deletion
+referents or compensation targets. Core rejects these document records with
+actor_conflict and refuses abandoned tentative undo metadata with
+history_unavailable. Rebuild from the accepted prefix and restore only accepted
+owner history after a definitive append failure.

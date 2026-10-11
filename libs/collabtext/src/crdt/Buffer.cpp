@@ -10,6 +10,31 @@
 
 namespace CollabText::Crdt {
 
+namespace {
+bool gap_conflicts(const CounterGapLedger& gaps, const Operation& op) {
+    if (gaps.records().empty() || !op_identity(op).actor.valid()) return false;
+    if (gaps.conflicts(op)) return true;
+    return visit_operation([&](const auto& value) {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, EditOperation>) {
+            for (const auto& fragment : value.inserted_fragments)
+                if ((fragment.link.parent && gaps.contains(*fragment.link.parent)) ||
+                    (fragment.link.right_origin && gaps.contains(*fragment.link.right_origin))) return true;
+            for (const auto& run : value.deletion_runs)
+                if (run.count && run.count - 1 <= UINT64_MAX - run.first.counter &&
+                    gaps.overlaps(run.first.actor, run.first.counter, run.first.counter + run.count - 1)) return true;
+        } else {
+            for (const auto& [target, count] : value.counts) {
+                (void)count;
+                if (gaps.contains(target)) return true;
+            }
+        }
+        return false;
+    }, op);
+}
+}
+
+
 Buffer::Buffer(SharedIdentityAllocator allocator)
     : m_allocator(std::move(allocator))
 {
@@ -203,7 +228,7 @@ Result<void> Buffer::restore_checkpoint_state(
     std::optional<Identity> previous_deferred;
     std::set<Identity> deferred_and_quarantined_ids;
     for (const auto &entry : snapshot.deferred) {
-        if (rebuilt.m_counter_gaps.conflicts(entry.op)) return CounterGapLedger::conflict();
+        if (gap_conflicts(rebuilt.m_counter_gaps, entry.op)) return CounterGapLedger::conflict();
         const auto timestamp = get_op_timestamp(entry.op);
         if (timestamp != entry.timestamp || !valid_identity(timestamp) ||
             snapshot.version.observed(timestamp) ||
@@ -236,7 +261,7 @@ Result<void> Buffer::restore_checkpoint_state(
 
     size_t quarantine_bytes = 0;
     for (const auto &entry : snapshot.quarantined) {
-        if (rebuilt.m_counter_gaps.conflicts(entry.op)) return CounterGapLedger::conflict();
+        if (gap_conflicts(rebuilt.m_counter_gaps, entry.op)) return CounterGapLedger::conflict();
         const auto timestamp = get_op_timestamp(entry.op);
         if (!valid_identity(timestamp) || snapshot.version.observed(timestamp) ||
             entry.reason.empty() ||
@@ -1499,8 +1524,8 @@ ApplyOutcome Buffer::apply_counter_gap(const CounterGap& gap) {
     if (outcome.kind() != ApplyOutcomeKind::applied) return outcome;
     CounterGapLedger offered; Global prior = gap.prior; offered.commit(gap, prior);
     bool conflict = false;
-    m_deferred_queue.for_each([&](const auto& entry) { conflict |= offered.conflicts(entry.op); });
-    for (const auto& entry : m_quarantined) conflict |= offered.conflicts(entry.op);
+    m_deferred_queue.for_each([&](const auto& entry) { conflict |= gap_conflicts(offered, entry.op); });
+    for (const auto& entry : m_quarantined) conflict |= gap_conflicts(offered, entry.op);
     if (conflict) return ApplyOutcome::rejected(CounterGapLedger::conflict());
     m_counter_gaps.commit(gap, m_version);
     observe_remote({gap.actor, gap.first + gap.count - 1});
@@ -1523,7 +1548,7 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
     // Duplicate. Idempotence has to hold even for an operation we could not
     // fully validate, because the commonest cause of an unexpected record is a
     // transport re-delivering one we already applied.
-    if (m_counter_gaps.conflicts(op)) return ApplyOutcome::rejected(CounterGapLedger::conflict());
+    if (gap_conflicts(m_counter_gaps, op)) return ApplyOutcome::rejected(CounterGapLedger::conflict());
     if (m_version.observed(ts)) return ApplyOutcome::duplicate();
 
     // Validity before causality: a record that can never be applied is refused
@@ -1759,7 +1784,7 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
     size_t restored_bytes = 0;
     auto valid_local_identity = [&](const Identity &id) {
         return id.actor == owner && id.counter != 0 &&
-               id.counter <= m_version.get(owner);
+               id.counter <= m_version.get(owner) && !m_counter_gaps.contains(id);
     };
     for (const auto &saved : snapshot.entries) {
         if (saved.retained_bytes > m_max_undo_bytes -

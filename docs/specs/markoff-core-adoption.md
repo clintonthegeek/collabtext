@@ -75,3 +75,14 @@ fixtures. New writer versions do not authorize rewriting old host rows/hashes.
 Unknown versions return `unsupported_version`; keep original bytes. Alpha ABI,
 general private-store migration and cross-version newly generated operation
 byte determinism are separate and are not promised.
+
+Terminal unused identities cannot be insertion parents/right origins, deletion
+referents or compensation targets. Core rejects these document records with
+actor_conflict and refuses abandoned tentative undo metadata with
+history_unavailable. Rebuild from the accepted prefix and restore only accepted
+owner history after a definitive append failure.
+
+The host captures causal prior from its accepted per-stream prefix before
+tentative mutation, observing full operation identities and terminal interval
+ends. Record successful reserve_run intervals exactly. Reservation durability
+uncertainty, like append uncertainty, requires recovery before gap publication.

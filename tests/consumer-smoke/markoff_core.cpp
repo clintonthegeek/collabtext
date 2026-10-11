@@ -129,6 +129,24 @@ void gap_semantics(){
   }
  }
 }
+void unused_references(){
+ for(bool is_text:{false,true}){
+  auto scope=is_text?text_scope:list_scope;auto writer_text=text(1),peer_text=text(2);auto writer_list=list(1),peer_list=list(2);
+  CounterGap gap{actor(1),1,4,{}};
+  require((is_text?peer_text->apply_counter_gap(scope,gap):peer_list->apply_counter_gap(scope,gap)).kind()==ApplyOutcomeKind::applied,"reference gap setup");
+  std::string frame=R"(CTLO0002:{"t":"il-u","ts":["00000000000000000000000000000009","0000000000000008"],"v":{"00000000000000000000000000000001":"0000000000000004"},"a":["0000000000000008","0000000000000001"],"c":[[["00000000000000000000000000000001","0000000000000002"],"0000000000000001"]]})";
+  if(is_text){frame.replace(0,4,"CTBO");frame.replace(frame.find("il-u"),4,"u");}
+  auto outcome=is_text?peer_text->apply_remote(take(decode_operation(frame))):peer_list->apply_ops({take(decode_idlist_operation(frame))})[0];
+  require(outcome.kind()==ApplyOutcomeKind::rejected && outcome.error()->code()==ErrorCode::actor_conflict,"undo names a terminal unused identity");
+  std::string deletion=R"(CTLO0002:{"t":"il-r","ts":["00000000000000000000000000000009","0000000000000008"],"v":{"00000000000000000000000000000001":"0000000000000004"},"a":["0000000000000008","0000000000000001"],"to":["00000000000000000000000000000001","0000000000000002"]})";
+  if(is_text) deletion=R"(CTBO0002:{"t":"e","ts":["00000000000000000000000000000009","0000000000000008"],"v":{"00000000000000000000000000000001":"0000000000000004"},"a":["0000000000000008","0000000000000001"],"did":["00000000000000000000000000000009","0000000000000008"],"r":[],"nt":[],"if":[],"dr":[[["00000000000000000000000000000001","0000000000000002"],"0000000000000001"]]})";
+  outcome=is_text?peer_text->apply_remote(take(decode_operation(deletion))):peer_list->apply_ops({take(decode_idlist_operation(deletion))})[0];
+  require(outcome.kind()==ApplyOutcomeKind::rejected && outcome.error()->code()==ErrorCode::actor_conflict,"deletion names a terminal unused identity");
+  // Undo metadata from an abandoned tentative edit must not survive gap replay.
+  if(is_text){take(writer_text->try_insert(0,"abc"));auto snapshot=writer_text->local_history_snapshot();auto rebuilt=text(1,5);require(rebuilt->apply_counter_gap(scope,gap).kind()==ApplyOutcomeKind::applied,"text history gap");auto restored=rebuilt->restore_local_history(snapshot);require(!restored && restored.error().code()==ErrorCode::history_unavailable,"abandoned text history restored");}
+  else{take(writer_list->try_insert_after(Anchor::min(),7));auto snapshot=writer_list->local_history_snapshot();auto rebuilt=list(1,5);require(rebuilt->apply_counter_gap(scope,gap).kind()==ApplyOutcomeKind::applied,"list history gap");auto restored=rebuilt->restore_local_history(snapshot);require(!restored && restored.error().code()==ErrorCode::history_unavailable,"abandoned list history restored");}
+ }
+}
 class DurableCounter final:public IdentityAllocator {
  std::shared_ptr<ReplicaState> state;PositionScope scope;
 public:
@@ -185,4 +203,4 @@ void durable_restart(){
  }
 }
 }
-int main(){try{identities();archives();gap_semantics();durable_restart();std::cout<<"Markoff Core trace passed\n";return 0;}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}
+int main(){try{identities();archives();gap_semantics();unused_references();durable_restart();std::cout<<"Markoff Core trace passed\n";return 0;}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

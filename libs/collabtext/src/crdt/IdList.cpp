@@ -7,6 +7,29 @@
 
 namespace CollabText::Crdt {
 
+namespace {
+bool gap_conflicts(const CounterGapLedger& gaps, const IdListOperation& op) {
+    if (gaps.records().empty() || !idlist_op_identity(op).actor.valid()) return false;
+    if (gaps.conflicts(op)) return true;
+    return visit_operation([&](const auto& value) {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, IdListInsertOp>) {
+            return (value.link.parent && gaps.contains(*value.link.parent)) ||
+                   (value.link.right_origin && gaps.contains(*value.link.right_origin));
+        } else if constexpr (std::is_same_v<T, IdListRemoveOp>) {
+            return gaps.contains(value.target_origin);
+        } else {
+            for (const auto& [target, count] : value.counts) {
+                (void)count;
+                if (gaps.contains(target)) return true;
+            }
+            return false;
+        }
+    }, op);
+}
+}
+
+
 Result<std::vector<CollabText::detail::PositionItem>> IdList::position_items() const {
     std::vector<CollabText::detail::PositionItem> items;
     for (const auto& entry : get_entries()) {
@@ -543,7 +566,7 @@ Result<void> IdList::restore_local_history(const LocalHistorySnapshot &snapshot)
     size_t retired_bytes = 0;
     auto valid_local_id = [&](const Identity &id) {
         return id.actor == owner && id.counter != 0 &&
-               id.counter <= m_version.get(owner);
+               id.counter <= m_version.get(owner) && !m_counter_gaps.contains(id);
     };
     for (const auto &saved : snapshot.entries) {
         if (saved.retained_bytes > m_max_undo_bytes -
@@ -895,7 +918,7 @@ Result<void> IdList::restore_checkpoint_state(
     size_t deferred_bytes = 0;
     std::set<Identity> deferred_identities;
     for (const auto &entry : snapshot.deferred) {
-        if (rebuilt.m_counter_gaps.conflicts(entry.op)) return CounterGapLedger::conflict();
+        if (gap_conflicts(rebuilt.m_counter_gaps, entry.op)) return CounterGapLedger::conflict();
         const auto timestamp = get_idlist_op_identity(entry.op);
         if (timestamp != entry.timestamp || !valid_identity(timestamp) ||
             snapshot.version.observed(timestamp) ||
@@ -925,7 +948,7 @@ Result<void> IdList::restore_checkpoint_state(
 
     size_t quarantine_bytes = 0;
     for (const auto &entry : snapshot.quarantined) {
-        if (rebuilt.m_counter_gaps.conflicts(entry.op)) return CounterGapLedger::conflict();
+        if (gap_conflicts(rebuilt.m_counter_gaps, entry.op)) return CounterGapLedger::conflict();
         const auto timestamp = get_idlist_op_identity(entry.op);
         if (!valid_identity(timestamp) || snapshot.version.observed(timestamp) ||
             entry.reason.empty() || !deferred_identities.insert(timestamp).second)
@@ -1032,8 +1055,8 @@ ApplyOutcome IdList::apply_counter_gap(const CounterGap& gap) {
     if (outcome.kind() != ApplyOutcomeKind::applied) return outcome;
     CounterGapLedger offered; Global prior = gap.prior; offered.commit(gap, prior);
     bool conflict = false;
-    m_deferred_queue.for_each([&](const auto& entry) { conflict |= offered.conflicts(entry.op); });
-    for (const auto& entry : m_quarantined) conflict |= offered.conflicts(entry.op);
+    m_deferred_queue.for_each([&](const auto& entry) { conflict |= gap_conflicts(offered, entry.op); });
+    for (const auto& entry : m_quarantined) conflict |= gap_conflicts(offered, entry.op);
     if (conflict) return ApplyOutcome::rejected(CounterGapLedger::conflict());
     m_counter_gaps.commit(gap, m_version);
     observe_remote({gap.actor, gap.first + gap.count - 1});
@@ -1052,7 +1075,7 @@ ApplyOutcome IdList::apply_one(const IdListOperation& op) {
         return ApplyOutcome::rejected(identity.error);
     }
 
-    if (m_counter_gaps.conflicts(op)) return ApplyOutcome::rejected(CounterGapLedger::conflict());
+    if (gap_conflicts(m_counter_gaps, op)) return ApplyOutcome::rejected(CounterGapLedger::conflict());
     if (m_version.observed(ts)) return ApplyOutcome::duplicate();
 
     // Validity before causality: an operation that can never be applied is
