@@ -141,6 +141,23 @@ private slots:
     QCOMPARE(document.qtDocument()->toPlainText(), QStringLiteral("sd"));
     QCOMPARE(updates.size(), 4);
   }
+
+  void engineRejectsOutOfRangeAndSurrogateSplittingReplacements() {
+    CrdtEngine engine(Test::test_counter(129));
+    engine.insert(0, "a😀b");
+    const std::string before = engine.text();
+
+    QVERIFY(!engine.try_replace(-1, 0, "x"));
+    QVERIFY(!engine.try_replace(0, 5, "x"));
+    QVERIFY(!engine.try_replace(2, 0, "x"));
+    QVERIFY(!engine.try_replace(1, 1, "x"));
+    QVERIFY(!engine.try_replace(2, 1, "x"));
+    QCOMPARE(engine.text(), before);
+
+    auto valid = engine.try_replace(1, 2, "🌊");
+    QVERIFY(valid);
+    QCOMPARE(engine.text(), std::string("a🌊b"));
+  }
 };
 
 QTEST_MAIN(DocumentAdapterTest)
