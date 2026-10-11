@@ -4,14 +4,15 @@
 codecs, private companion section codecs, the combined core validator, and
 in-memory engine snapshot adapters are implemented. Content-addressed artifact
 storage and alternating atomic manifests are implemented. DocumentSession now
-exposes a text checkpoint capture API that returns separate shareable and
-actor-private artifacts; startup restore, provider validation, and replay from
-checkpoint coverage remain in progress.
+exposes capture and explicit publication APIs for separate shareable and
+actor-private artifacts, and can restore a provider-validated text checkpoint
+at startup before replaying uncovered retained deliveries. Full-replay future
+edit equivalence is covered by a focused continuation fixture.
 
 This format defines a validated shareable snapshot and a separately bound
 actor-local companion. It is not a replacement for the retained operation log
 or writer state. G05 owns atomic publication, recovery selection, and replay
-after the checkpoint frontier.
+after the checkpoint frontier; session APIs now compose those first two paths.
 
 ## 1. Artifact framing
 
@@ -341,10 +342,11 @@ The bounded framing codec, every typed shareable and local section codec, the
 cross-section validator, and in-memory text/IdList logical snapshot and
 failure-atomic restore adapters are implemented. Session deferred envelopes
 retain original bytes and delivery tokens. Focused Debug, Release, and
-ASan/UBSan tests cover the codecs and engine continuation behavior. The
-DocumentSession does not yet capture or restore these complete structures, and
-provider-owned pin/translation state is not yet gathered or checked as part of
-session startup.
+ASan/UBSan tests cover codecs, session capture/publication, provider rejection,
+startup restore, quarantine recovery, and continuation equivalence. The
+DocumentSession path remains text-only; providers still own canonical pin,
+translation, and membership validation and supply it through the required
+validator callback.
 
 ## 7. Durable store and remaining recovery work
 
@@ -383,9 +385,19 @@ producer’s log (including a missing producer) fails with `corrupt_record`.
 This checks retained-log availability only. It does not prove that checkpoint
 engine state represents the covered deliveries or authenticate the checkpoint.
 
-This storage layer does not yet let `DocumentSession` capture a checkpoint,
-restore local history and allocator state, advance transport cursors only after
-checkpoint publication, or replay only uncovered records. Full-log replay
-remains the recovery path until those behaviors and full-replay equivalence are
-implemented and tested. Threshold/manual creation and separate recovery-time
-measurement are also outstanding.
+`DocumentSession::publish_checkpoint` captures the current validated provider
+projection, calls the provider validator before writing, and atomically
+publishes the bundle through `CheckpointStore`. Startup validates a candidate,
+restores shareable engine state and available actor-local history, and replays
+only deliveries beyond recorded coverage. If uncovered replay fails after the
+checkpoint state was installed, it rebuilds the initial engine state before
+retrying the full retained log. A focused fixture proves the next local edit
+envelope and resulting text match between checkpoint startup and full replay.
+
+Transport cursors are not advanced or persisted by this path, so covered log
+prefixes are still scanned and validated. Session-level recovery points are not
+yet bound to persisted transport receipts, and equivalent behavior across
+broader edit sequences, remote interleavings, and undo/redo remains to be
+verified. Automatic size/time threshold scheduling and recovery-time
+measurement are also outstanding. Previous checkpoints and covered logs remain
+retained for G06.

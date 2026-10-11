@@ -14,6 +14,7 @@
 #include <collabtext/Serialization.h>
 
 #include <algorithm>
+#include <exception>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -967,6 +968,48 @@ DocumentSession::capture_checkpoint(
       std::move(captured.value().coverage.delivery),
       std::move(captured.value().pins.canonical_projection_hash),
       std::move(captured.value().translations.manifest_hash)};
+}
+
+Result<SessionCheckpointCapture> DocumentSession::publish_checkpoint(
+    const SessionCheckpointProviderState &provider) {
+  if (!m_impl || m_impl->closed)
+    return Error(ErrorCode::writer_conflict,
+                 "session is unavailable for checkpoint publication");
+  if (m_impl->config.checkpoint_store.empty())
+    return Error(ErrorCode::awaiting_state,
+                 "checkpoint publication requires a configured store");
+  if (!m_impl->config.validate_checkpoint_candidate)
+    return Error(ErrorCode::awaiting_state,
+                 "checkpoint publication requires a provider validator");
+
+  auto capture = capture_checkpoint(provider);
+  if (!capture.ok()) return capture.error();
+  Result<void> validated;
+  try {
+    validated = m_impl->config.validate_checkpoint_candidate(
+        capture.value().shareable_artifact_bytes,
+        capture.value().local_companion_artifact_bytes);
+  } catch (const std::exception &error) {
+    return Error(ErrorCode::malformed, error.what(),
+                 "checkpoint provider validation");
+  } catch (...) {
+    return Error(ErrorCode::malformed,
+                 "checkpoint provider validator threw an unknown exception",
+                 "checkpoint provider validation");
+  }
+  if (!validated.ok())
+    return validated.error().with_context(
+        "provider rejected checkpoint publication candidate");
+
+  auto opened = Storage::CheckpointStore::open(m_impl->config.checkpoint_store);
+  if (!opened.ok()) return opened.error();
+  auto store = std::move(opened).value();
+  auto published = store.publish(
+      capture.value().shareable_artifact_bytes,
+      capture.value().local_companion_artifact_bytes,
+      m_impl->replica->actor());
+  if (!published.ok()) return published.error();
+  return std::move(capture).value();
 }
 
 Result<void> DocumentSession::save() {

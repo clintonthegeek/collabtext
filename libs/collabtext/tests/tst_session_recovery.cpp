@@ -1288,6 +1288,18 @@ private slots:
     DocumentSessionConfig config{root / "shared", root / "device",
                                  "checkpoint-capture-doc", scope.stream,
                                  scope.epoch};
+    config.checkpoint_store = root / "checkpoint-store";
+    bool provider_accepts_checkpoint = true;
+    config.validate_checkpoint_candidate =
+        [&provider_accepts_checkpoint](
+            std::string_view shareable,
+            const std::optional<std::string> &local) -> Result<void> {
+      if (!provider_accepts_checkpoint || shareable.empty() || !local)
+        return Error(ErrorCode::malformed,
+                     "provider rejected or received an incomplete "
+                     "checkpoint bundle");
+      return {};
+    };
     auto opened = DocumentSession::open(config);
     QVERIFY(opened.ok());
     auto session = std::move(opened).value();
@@ -1357,15 +1369,16 @@ private slots:
     QCOMPARE(local_core.value().writer.durable_delivery_frontier, uint64_t(1));
     QCOMPARE(local_core.value().writer.next_identity_counter,
              public_capture.value().operation_coverage.at(session->actor()) + 1);
+    auto published_capture = session->publish_checkpoint(public_provider);
+    QVERIFY(published_capture.ok());
+    QCOMPARE(published_capture.value().shareable_artifact_bytes,
+             public_capture.value().shareable_artifact_bytes);
+    QCOMPARE(published_capture.value().local_companion_artifact_bytes,
+             public_capture.value().local_companion_artifact_bytes);
     {
       auto checkpoint_store = Storage::CheckpointStore::open(
           root / "checkpoint-store");
       QVERIFY(checkpoint_store.ok());
-      auto published = checkpoint_store.value().publish(
-          public_capture.value().shareable_artifact_bytes,
-          public_capture.value().local_companion_artifact_bytes,
-          session->actor());
-      QVERIFY(published.ok());
       auto stored = checkpoint_store.value().recover(
           session->actor(),
           [](std::string_view,
@@ -1380,6 +1393,22 @@ private slots:
       QCOMPARE(stored.value()->local_bytes,
                std::optional<std::string>(
                    public_capture.value().local_companion_artifact_bytes));
+      provider_accepts_checkpoint = false;
+      auto rejected_publication = session->publish_checkpoint(public_provider);
+      QVERIFY(!rejected_publication.ok());
+      QCOMPARE(rejected_publication.error().code(), ErrorCode::malformed);
+      provider_accepts_checkpoint = true;
+      auto still_stored = checkpoint_store.value().recover(
+          session->actor(),
+          [](std::string_view,
+             const std::optional<std::string> &) -> Result<void> {
+            return {};
+          },
+          after_poll.value().context);
+      QVERIFY(still_stored.ok());
+      QVERIFY(still_stored.value().has_value());
+      QCOMPARE(still_stored.value()->shareable_bytes,
+               public_capture.value().shareable_artifact_bytes);
     }
     auto incomplete_provider = public_provider;
     incomplete_provider.pin_projection_complete = false;

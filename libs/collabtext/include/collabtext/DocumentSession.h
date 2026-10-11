@@ -182,6 +182,11 @@ public:
   /// before publishing this bundle.
   [[nodiscard]] Result<SessionCheckpointCapture>
   capture_checkpoint(const SessionCheckpointProviderState &) const;
+  /// Validate and atomically publish a freshly captured bundle through the
+  /// configured CheckpointStore. Requires a provider validator that checks
+  /// membership and other canonical provider-owned state.
+  [[nodiscard]] Result<SessionCheckpointCapture>
+  publish_checkpoint(const SessionCheckpointProviderState &);
   /// Stream this actor's durable operations in their original scope, including
   /// a durable pending local commit if its log append failed. The visitor may
   /// receive a prefix before an error; stage output and publish it only on
