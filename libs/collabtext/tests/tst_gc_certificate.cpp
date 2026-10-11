@@ -184,6 +184,12 @@ private slots:
     QCOMPARE(text_frontier->stream(), std::string("text"));
     QCOMPARE(text_frontier->descriptor_hash(), d.hash);
     QCOMPARE(text_frontier->checkpoint_hash(), candidate_checkpoint);
+    QVERIFY(text_frontier->matches_context("text", d.hash,
+                                           candidate_checkpoint));
+    QVERIFY(!text_frontier->matches_context("comments", d.hash,
+                                            candidate_checkpoint));
+    QVERIFY(!text_frontier->matches_context("text", d.hash,
+                                            sha256_hex("stale checkpoint")));
     QVERIFY(Crdt::tombstone_is_covered(text_frontier->counters(),
                                        Crdt::Identity(p, 8), 2, deletion));
     const auto comments_frontier =

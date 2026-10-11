@@ -40,6 +40,12 @@ public:
   [[nodiscard]] const std::string &descriptor_hash() const { return m_descriptor_hash; }
   [[nodiscard]] const std::string &checkpoint_hash() const { return m_checkpoint_hash; }
   [[nodiscard]] const std::map<ActorId, uint64_t> &counters() const { return m_counters; }
+  [[nodiscard]] bool matches_context(std::string_view stream,
+                                     std::string_view descriptor_hash,
+                                     std::string_view checkpoint_hash) const {
+    return stream == m_stream && descriptor_hash == m_descriptor_hash &&
+           checkpoint_hash == m_checkpoint_hash;
+  }
 
 private:
   CertifiedOperationFrontier(std::string stream, std::string descriptor_hash,
