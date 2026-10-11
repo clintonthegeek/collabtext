@@ -6,6 +6,7 @@
 #include "crdt/Clock.h"
 #include "crdt/Placement.h"
 #include "crdt/OperationValidation.h"
+#include "crdt/ReclamationPolicy.h"
 #include "crdt/SumTree.h"
 #include "crdt/UndoMap.h"
 #include "crdt/IdListOperations.h"
@@ -102,6 +103,7 @@ struct IdListCheckpointState {
     std::vector<UndoMapEntry> undo_entries;
     std::vector<IdListOpEntry> deferred;
     std::vector<QuarantinedIdListOp> quarantined;
+    ReclamationBinding reclamation;
 };
 
 class IdList {
@@ -233,6 +235,7 @@ private:
     SharedIdentityAllocator m_allocator;
     Global m_version;
     UndoMap m_undo_map;
+    ReclamationBinding m_reclamation;
     IdListTree m_entry_tree;
 
     struct UndoEntry {

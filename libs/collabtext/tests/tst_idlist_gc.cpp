@@ -85,6 +85,36 @@ private slots:
         QCOMPARE(list.collect_garbage(), size_t{0});
         QCOMPARE(list.tombstone_count(), size_t{1});
     }
+
+    void restored_reclamation_frontier_rejects_late_remote_undo() {
+        IdList alice(CollabText::Test::test_counter(1));
+        IdList bob(CollabText::Test::test_counter(2));
+        auto insert = alice.insert_after(Anchor::min(), 0xAA);
+        QCOMPARE(bob.apply_remote_op_checked(insert).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+
+        auto state = bob.checkpoint_state();
+        state.reclamation = {
+            "id-list-stream", std::string(64, 'a'), std::string(64, 'b'),
+            {{actor(1), 1}}};
+        QVERIFY(bob.restore_checkpoint_state(state).ok());
+        QCOMPARE(bob.checkpoint_state().reclamation, state.reclamation);
+        auto beyond_causal = state;
+        beyond_causal.reclamation.operation_frontier[actor(1)] = 2;
+        auto invalid_restore = bob.restore_checkpoint_state(beyond_causal);
+        QVERIFY(!invalid_restore.ok());
+        QCOMPARE(invalid_restore.error().code(),
+                 CollabText::ErrorCode::counter_regression);
+
+        auto undo = alice.undo();
+        QVERIFY(undo.has_value());
+        const auto rejected = bob.apply_remote_op_checked(*undo);
+        QCOMPARE(rejected.kind(), CollabText::ApplyOutcomeKind::rejected);
+        QVERIFY(rejected.error().has_value());
+        QCOMPARE(rejected.error()->code(),
+                 CollabText::ErrorCode::history_unavailable);
+        QCOMPARE(bob.ids(), std::vector<uint64_t>{0xAA});
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIdListGc)

@@ -97,6 +97,15 @@ BufferCheckpointState Buffer::checkpoint_state() const {
 
 Result<void> Buffer::restore_checkpoint_state(
     const BufferCheckpointState &snapshot) {
+    if (!reclamation_binding_is_well_formed(snapshot.reclamation))
+        return Error(ErrorCode::malformed,
+                     "checkpoint reclamation binding is incomplete or invalid",
+                     "checkpoint.engine.reclamation");
+    for (const auto &[actor, through] : snapshot.reclamation.operation_frontier)
+        if (snapshot.version.get(actor) < through)
+            return Error(ErrorCode::counter_regression,
+                         "checkpoint reclamation frontier exceeds causal state",
+                         "checkpoint.engine.reclamation");
     if (snapshot.version.get(actor_id()) >= m_allocator->peek())
         return Error(ErrorCode::counter_regression,
                      "checkpoint exceeds the owner's durable identity reservation",

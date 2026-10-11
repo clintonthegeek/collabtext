@@ -2,10 +2,12 @@
 
 #include "crdt/Clock.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace CollabText::Crdt {
@@ -29,6 +31,28 @@ struct ReclamationBinding {
   }
   bool operator==(const ReclamationBinding &) const = default;
 };
+
+[[nodiscard]] inline bool is_sha256_hex(std::string_view value) {
+  return value.size() == 64 &&
+         std::all_of(value.begin(), value.end(), [](char c) {
+           return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+         });
+}
+
+[[nodiscard]] inline bool reclamation_binding_is_well_formed(
+    const ReclamationBinding &binding) {
+  if (binding.empty()) return true;
+  if (binding.stream.empty() || binding.stream.size() > 4096 ||
+      !is_sha256_hex(binding.descriptor_hash) ||
+      !is_sha256_hex(binding.certificate_checkpoint_hash) ||
+      binding.operation_frontier.empty())
+    return false;
+  return std::all_of(binding.operation_frontier.begin(),
+                     binding.operation_frontier.end(), [](const auto &entry) {
+                       return entry.first.valid() && entry.second != 0 &&
+                              entry.second != UINT64_MAX;
+                     });
+}
 
 /// Whether an identity is within the certified operation frontier for its
 /// stream. Missing actors, invalid identities and zero counters fail closed.

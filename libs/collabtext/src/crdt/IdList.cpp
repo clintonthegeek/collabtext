@@ -703,6 +703,7 @@ std::vector<IdListEntry> IdList::entries() const {
 IdListCheckpointState IdList::checkpoint_state() const {
     IdListCheckpointState snapshot;
     snapshot.version = m_version;
+    snapshot.reclamation = m_reclamation;
     snapshot.entries = get_entries();
     snapshot.undo_entries = m_undo_map.entries();
     snapshot.deferred = m_deferred_queue.items();
@@ -712,6 +713,15 @@ IdListCheckpointState IdList::checkpoint_state() const {
 
 Result<void> IdList::restore_checkpoint_state(
     const IdListCheckpointState &snapshot) {
+    if (!reclamation_binding_is_well_formed(snapshot.reclamation))
+        return Error(ErrorCode::malformed,
+                     "checkpoint reclamation binding is incomplete or invalid",
+                     "checkpoint.engine.reclamation");
+    for (const auto &[actor, through] : snapshot.reclamation.operation_frontier)
+        if (snapshot.version.get(actor) < through)
+            return Error(ErrorCode::counter_regression,
+                         "checkpoint reclamation frontier exceeds causal state",
+                         "checkpoint.engine.reclamation");
     if (snapshot.version.get(actor_id()) >= m_allocator->peek())
         return Error(ErrorCode::counter_regression,
                      "checkpoint exceeds the owner's durable identity reservation",
@@ -726,6 +736,7 @@ Result<void> IdList::restore_checkpoint_state(
     rebuilt.m_quarantine_budget = m_quarantine_budget;
     rebuilt.m_max_undo_depth = m_max_undo_depth;
     rebuilt.m_max_undo_bytes = m_max_undo_bytes;
+    rebuilt.m_reclamation = snapshot.reclamation;
 
     auto valid_identity = [](const Identity &id) {
         return id.actor.valid() && id.counter != 0 && id.counter != UINT64_MAX;
@@ -1034,6 +1045,17 @@ bool IdList::apply_concrete(const IdListRemoveOp& op) {
 }
 
 bool IdList::apply_concrete(const IdListUndoOpVariant& op) {
+    for (const auto &[edit_id, count] : op.counts) {
+        (void)count;
+        if (operation_is_covered(m_reclamation.operation_frontier, edit_id)) {
+            m_apply_error = Error(
+                ErrorCode::history_unavailable,
+                "undo targets an operation at or below the certified reclamation frontier",
+                "undo target " + edit_id.actor.to_string() + "/" +
+                    std::to_string(edit_id.counter));
+            return false;
+        }
+    }
     for (auto& [edit_id, count] : op.counts) {
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
     }
