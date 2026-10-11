@@ -20,10 +20,15 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace CollabText {
+
+using SessionCheckpointCandidateValidator = std::function<Result<void>(
+    std::string_view shareable_artifact,
+    const std::optional<std::string> &local_companion)>;
 
 #ifdef COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS
 namespace Crdt { struct WriterConfig; }
@@ -51,6 +56,11 @@ struct DocumentSessionConfig {
   std::function<Result<std::shared_ptr<void>>(
       const DocumentId &, const StreamId &, uint64_t, const ActorId &)>
       authorize_local_mutation;
+  /// Optional durable checkpoint bundle directory. When set, startup first
+  /// validates its candidate with `validate_checkpoint_candidate`, restores
+  /// the shareable state, and replays retained deliveries beyond its coverage.
+  std::filesystem::path checkpoint_store;
+  SessionCheckpointCandidateValidator validate_checkpoint_candidate;
 };
 
 /// Local producer deliveries retained for one original document epoch.
@@ -71,6 +81,8 @@ struct SessionRecoveryReport {
   size_t rejected = 0;
   bool complete = true;
   std::optional<Error> issue;
+  /// Nonfatal checkpoint selection/restore failures followed by log fallback.
+  std::vector<Error> diagnostics;
 };
 
 struct SessionTextEdit {

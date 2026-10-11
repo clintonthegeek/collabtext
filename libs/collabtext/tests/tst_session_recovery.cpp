@@ -1357,26 +1357,30 @@ private slots:
     QCOMPARE(local_core.value().writer.durable_delivery_frontier, uint64_t(1));
     QCOMPARE(local_core.value().writer.next_identity_counter,
              public_capture.value().operation_coverage.at(session->actor()) + 1);
-    auto checkpoint_store = Storage::CheckpointStore::open(
-        root / "checkpoint-store");
-    QVERIFY(checkpoint_store.ok());
-    auto published = checkpoint_store.value().publish(
-        public_capture.value().shareable_artifact_bytes,
-        public_capture.value().local_companion_artifact_bytes, session->actor());
-    QVERIFY(published.ok());
-    auto stored = checkpoint_store.value().recover(
-        session->actor(),
-        [](std::string_view, const std::optional<std::string> &) -> Result<void> {
-          return {};
-        },
-        after_poll.value().context);
-    QVERIFY(stored.ok());
-    QVERIFY(stored.value().has_value());
-    QCOMPARE(stored.value()->shareable_bytes,
-             public_capture.value().shareable_artifact_bytes);
-    QCOMPARE(stored.value()->local_bytes,
-             std::optional<std::string>(
-                 public_capture.value().local_companion_artifact_bytes));
+    {
+      auto checkpoint_store = Storage::CheckpointStore::open(
+          root / "checkpoint-store");
+      QVERIFY(checkpoint_store.ok());
+      auto published = checkpoint_store.value().publish(
+          public_capture.value().shareable_artifact_bytes,
+          public_capture.value().local_companion_artifact_bytes,
+          session->actor());
+      QVERIFY(published.ok());
+      auto stored = checkpoint_store.value().recover(
+          session->actor(),
+          [](std::string_view,
+             const std::optional<std::string> &) -> Result<void> {
+            return {};
+          },
+          after_poll.value().context);
+      QVERIFY(stored.ok());
+      QVERIFY(stored.value().has_value());
+      QCOMPARE(stored.value()->shareable_bytes,
+               public_capture.value().shareable_artifact_bytes);
+      QCOMPARE(stored.value()->local_bytes,
+               std::optional<std::string>(
+                   public_capture.value().local_companion_artifact_bytes));
+    }
     auto incomplete_provider = public_provider;
     incomplete_provider.pin_projection_complete = false;
     auto incomplete_capture = session->capture_checkpoint(
@@ -1400,6 +1404,41 @@ private slots:
     QCOMPARE(decoded.value().coverage.delivery,
              after_poll.value().coverage.delivery);
     QVERIFY(session->close().ok());
+
+    auto checkpointed_config = config;
+    checkpointed_config.checkpoint_store = root / "checkpoint-store";
+    checkpointed_config.validate_checkpoint_candidate =
+        [](std::string_view shareable,
+           const std::optional<std::string> &local) -> Result<void> {
+          if (shareable.empty() || !local)
+            return Error(ErrorCode::malformed,
+                         "expected a complete local checkpoint bundle");
+          return {};
+        };
+    auto checkpointed_open = DocumentSession::open(checkpointed_config);
+    QVERIFY(checkpointed_open.ok());
+    auto checkpointed = std::move(checkpointed_open).value();
+    QCOMPARE(checkpointed->text(), std::string("local"));
+    QCOMPARE(checkpointed->actor(), local_core.value().writer.actor);
+    QVERIFY(checkpointed->recovery_report().diagnostics.empty());
+    auto restored_quarantine = checkpointed->quarantined_deliveries();
+    QVERIFY(restored_quarantine.ok());
+    QCOMPARE(restored_quarantine.value().size(), size_t(1));
+    QCOMPARE(restored_quarantine.value().front().delivery.payload, payload);
+    QVERIFY(checkpointed->close().ok());
+
+    auto rejected_config = checkpointed_config;
+    rejected_config.validate_checkpoint_candidate =
+        [](std::string_view, const std::optional<std::string> &) -> Result<void> {
+      return Error(ErrorCode::malformed,
+                   "provider rejected checkpoint candidate");
+    };
+    auto rejected_open = DocumentSession::open(rejected_config);
+    QVERIFY(rejected_open.ok());
+    auto rejected = std::move(rejected_open).value();
+    QCOMPARE(rejected->text(), std::string("local"));
+    QVERIFY(!rejected->recovery_report().diagnostics.empty());
+    QVERIFY(rejected->close().ok());
   }
 
   void consumer_event_log_correlates_undo_and_redo_groups_append_only() {

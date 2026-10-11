@@ -5,6 +5,7 @@
 #include "core/Sha256.h"
 #include "identity/ReplicaAllocator.h"
 #include "storage/CheckpointCodec.h"
+#include "storage/CheckpointStore.h"
 #include "storage/LocalHistoryLog.h"
 #include "transport/StreamSync.h"
 #ifdef COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS
@@ -37,6 +38,8 @@ struct DocumentSession::Impl {
   uint64_t next_envelope = 1;
   std::unordered_map<std::string, std::string> replayed_payload_hashes;
   std::unordered_map<std::string, DeferredState> deferred_tokens;
+  std::map<ActorId, uint64_t> checkpointed_delivery_frontiers;
+  std::optional<Crdt::LocalHistorySnapshot> checkpoint_local_history;
   std::vector<SessionQuarantinedDelivery> quarantined_deliveries;
   size_t quarantined_bytes = 0;
   bool quarantine_snapshot_complete = true;
@@ -272,8 +275,13 @@ struct DocumentSession::Impl {
           }
           bool represented = false;
           if (!checkpointed_outstanding) {
-            if (const auto applied = replayed_payload_hashes.find(key);
-                applied != replayed_payload_hashes.end()) {
+            const auto baseline =
+                checkpointed_delivery_frontiers.find(delivery.token.producer);
+            if (baseline != checkpointed_delivery_frontiers.end() &&
+                delivery.token.sequence <= baseline->second) {
+              represented = true;
+            } else if (const auto applied = replayed_payload_hashes.find(key);
+                       applied != replayed_payload_hashes.end()) {
               if (applied->second != sha256_hex(delivery.payload))
                 return Error(ErrorCode::corrupt_record,
                              "checkpoint log payload differs from replayed session input");
@@ -291,6 +299,179 @@ struct DocumentSession::Impl {
         });
     if (!scanned.ok()) return scanned.error();
     return core;
+  }
+
+  bool restore_checkpoint_if_available() {
+    if (config.checkpoint_store.empty()) return false;
+    auto diagnose = [this](Error error) {
+      report.diagnostics.push_back(std::move(error));
+    };
+    if (!config.validate_checkpoint_candidate) {
+      diagnose(Error(ErrorCode::awaiting_state,
+                     "checkpoint store ignored without a provider validator"));
+      return false;
+    }
+    auto opened = Storage::CheckpointStore::open(config.checkpoint_store);
+    if (!opened.ok()) {
+      diagnose(opened.error().with_context("checkpoint store ignored"));
+      return false;
+    }
+    auto store = std::move(opened).value();
+    auto validator = [this](
+        std::string_view shareable,
+        const std::optional<std::string> &local) -> Result<void> {
+      auto artifact = Storage::decode_checkpoint(
+          shareable, Storage::CheckpointKind::Shareable);
+      if (!artifact.ok()) return artifact.error();
+      auto core = Storage::decode_checkpoint_core(artifact.value());
+      if (!core.ok()) return core.error();
+      if (core.value().context.document != config.document ||
+          core.value().context.stream != config.stream ||
+          core.value().context.epoch != config.epoch ||
+          core.value().context.engine != Storage::CheckpointEngineKind::Text)
+        return Error(ErrorCode::wrong_epoch,
+                     "checkpoint candidate does not match this text session");
+      return config.validate_checkpoint_candidate(shareable, local);
+    };
+    auto recovered = store.recover(replica->actor(), validator);
+    if (!recovered.ok()) {
+      diagnose(recovered.error().with_context(
+          "checkpoint rejected; falling back to retained log replay"));
+      return false;
+    }
+    if (!recovered.value()) return false;
+
+    const auto &candidate = *recovered.value();
+    auto artifact = Storage::decode_checkpoint(
+        candidate.shareable_bytes, Storage::CheckpointKind::Shareable);
+    if (!artifact.ok()) {
+      diagnose(artifact.error());
+      return false;
+    }
+    auto decoded = Storage::decode_checkpoint_core(artifact.value());
+    if (!decoded.ok()) {
+      diagnose(decoded.error());
+      return false;
+    }
+    auto &core = decoded.value();
+    Crdt::BufferCheckpointState state;
+    state.version = core.causal.version;
+    state.fragments = core.engine.fragments;
+    state.undo_entries = core.causal.undo_entries;
+    std::unordered_map<std::string, DeferredState> restored_deferred;
+    std::unordered_map<std::string, std::string> restored_payload_hashes;
+    std::vector<SessionQuarantinedDelivery> restored_quarantine;
+    for (const auto &record : core.deferred) {
+      InboundDelivery delivery{record.token, record.operation_bytes};
+      if (record.quarantined) {
+        restored_quarantine.push_back(
+            {std::move(delivery), Error(ErrorCode::malformed, record.reason,
+                                        "checkpoint.quarantine")});
+        continue;
+      }
+      auto operation = decode_operation(record.operation_bytes);
+      if (!operation.ok()) {
+        diagnose(operation.error().with_context(
+            "checkpoint rejected; falling back to retained log replay"));
+        return false;
+      }
+      const auto identity = op_identity(operation.value());
+      state.deferred.push_back({identity, operation.value()});
+      const auto key = token_key(record.token);
+      restored_deferred.emplace(
+          key, DeferredState{record.token, operation.value(),
+                             record.operation_bytes});
+      restored_payload_hashes.emplace(key,
+                                      sha256_hex(record.operation_bytes));
+    }
+
+    std::optional<Storage::CheckpointLocalCore> local_core;
+    if (candidate.local_bytes) {
+      auto local_artifact = Storage::decode_checkpoint(
+          *candidate.local_bytes, Storage::CheckpointKind::Local);
+      if (!local_artifact.ok()) {
+        diagnose(local_artifact.error());
+        return false;
+      }
+      auto local = Storage::decode_checkpoint_local_core(
+          local_artifact.value(), replica->actor(), candidate.checkpoint_id,
+          core.context);
+      if (!local.ok()) {
+        diagnose(local.error());
+        return false;
+      }
+      auto durable_next = replica->peek_stream(config.stream);
+      if (!durable_next.ok() ||
+          local.value().writer.next_identity_counter > durable_next.value()) {
+        diagnose(durable_next.ok()
+                     ? Error(ErrorCode::counter_regression,
+                             "checkpoint writer counter exceeds durable owner state")
+                     : durable_next.error());
+        return false;
+      }
+      local_core.emplace(std::move(local).value());
+    }
+
+    uint64_t restored_next_envelope = next_envelope;
+    if (const auto frontier = core.coverage.delivery.find(replica->actor());
+        frontier != core.coverage.delivery.end()) {
+      if (frontier->second == UINT64_MAX) {
+        diagnose(Error(ErrorCode::counter_exhausted,
+                       "checkpoint local delivery frontier is exhausted"));
+        return false;
+      }
+      restored_next_envelope =
+          std::max(restored_next_envelope, frontier->second + 1);
+    }
+
+    auto restored = buffer->restore_checkpoint_state(state);
+    if (!restored.ok()) {
+      diagnose(restored.error().with_context(
+          "checkpoint rejected; falling back to retained log replay"));
+      return false;
+    }
+    deferred_tokens = std::move(restored_deferred);
+    replayed_payload_hashes = std::move(restored_payload_hashes);
+    checkpointed_delivery_frontiers = core.coverage.delivery;
+    checkpoint_local_history = local_core
+                                   ? std::optional<Crdt::LocalHistorySnapshot>(
+                                         local_core->history)
+                                   : std::nullopt;
+    next_envelope = restored_next_envelope;
+    history_floor = state.version;
+    report.deferred = state.deferred.size();
+    report.complete = report.deferred == 0;
+    if (report.deferred && !report.issue)
+      report.issue = Error(ErrorCode::awaiting_state,
+                           "checkpoint contains causally deferred operations");
+    for (auto &record : restored_quarantine)
+      quarantine(record.delivery, record.reason);
+    return true;
+  }
+
+  Result<void> reset_for_full_replay() {
+    auto rebuilt = std::make_unique<Crdt::Buffer>(allocator);
+    auto depth_limit = rebuilt->set_max_undo_depth(config.max_undo_steps);
+    if (!depth_limit.ok()) return depth_limit.error();
+    auto byte_limit = rebuilt->set_max_undo_bytes(config.max_undo_bytes);
+    if (!byte_limit.ok()) return byte_limit.error();
+    if (!config.initial_text.empty())
+      rebuilt->apply_ops({Crdt::op_for_seed(config.initial_text)});
+    buffer = std::move(rebuilt);
+    history_floor = buffer->version();
+    auto diagnostics = std::move(report.diagnostics);
+    report = SessionRecoveryReport{};
+    report.diagnostics = std::move(diagnostics);
+    next_envelope = 1;
+    replayed_payload_hashes.clear();
+    deferred_tokens.clear();
+    checkpointed_delivery_frontiers.clear();
+    checkpoint_local_history.reset();
+    quarantined_deliveries.clear();
+    quarantined_bytes = 0;
+    quarantine_snapshot_complete = true;
+    poisoned = false;
+    return {};
   }
 
   static std::filesystem::path history_path(const DocumentSessionConfig &config) {
@@ -455,16 +636,35 @@ DocumentSession::open_with_writer_config(
         !reconciled.ok())
       return reconciled.error();
 
-    auto replayed = impl->transport->replay_all(
-        scope, [&](const InboundDelivery &delivery) {
-          return impl->replay_delivery(delivery);
-        });
+    const bool checkpoint_loaded = impl->restore_checkpoint_if_available();
+    auto replayed = checkpoint_loaded
+        ? impl->transport->replay_uncovered(
+              scope, impl->checkpointed_delivery_frontiers,
+              [&](const InboundDelivery &delivery) {
+                return impl->replay_delivery(delivery);
+              })
+        : impl->transport->replay_all(
+              scope, [&](const InboundDelivery &delivery) {
+                return impl->replay_delivery(delivery);
+              });
+    if (!replayed.ok() && checkpoint_loaded) {
+      impl->report.diagnostics.push_back(replayed.error().with_context(
+          "uncovered checkpoint replay failed; retrying a full retained-log scan"));
+      replayed = impl->transport->replay_all(
+          scope, [&](const InboundDelivery &delivery) {
+            return impl->replay_delivery(delivery);
+          });
+    }
     if (!replayed.ok())
       return replayed.error();
     auto history_snapshot = impl->local_history->recover();
     if (!history_snapshot.ok()) return history_snapshot.error();
     if (history_snapshot.value()) {
       auto restored = impl->buffer->restore_local_history(*history_snapshot.value());
+      if (!restored.ok()) return restored.error();
+    } else if (impl->checkpoint_local_history) {
+      auto restored = impl->buffer->restore_local_history(
+          *impl->checkpoint_local_history);
       if (!restored.ok()) return restored.error();
     }
     impl->update_completeness();
@@ -569,6 +769,10 @@ Result<SessionRecoveryReport> DocumentSession::recover() {
     if (!history_snapshot.ok()) return history_snapshot.error();
     if (history_snapshot.value()) {
       auto restored = m_impl->buffer->restore_local_history(*history_snapshot.value());
+      if (!restored.ok()) return restored.error();
+    } else if (m_impl->checkpoint_local_history) {
+      auto restored = m_impl->buffer->restore_local_history(
+          *m_impl->checkpoint_local_history);
       if (!restored.ok()) return restored.error();
     }
     m_impl->update_completeness();
