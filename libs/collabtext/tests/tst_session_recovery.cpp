@@ -1574,6 +1574,81 @@ private slots:
     QVERIFY(replayed->close().ok());
   }
 
+  void sessionCheckpointBindsCoveredPeerReceiptToPublishedDigest() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const StreamScope scope{"checkpoint-receipt-stream", 1};
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "checkpoint-receipt-doc", scope.stream,
+                                 scope.epoch};
+    config.checkpoint_store = root / "checkpoints";
+    config.validate_checkpoint_candidate =
+        [](std::string_view shareable,
+           const std::optional<std::string> &local) -> Result<void> {
+      if (shareable.empty() || !local)
+        return Error(ErrorCode::malformed, "incomplete checkpoint bundle");
+      return {};
+    };
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+
+    const auto producer = Test::actor(188);
+    Crdt::Buffer peer_engine(Test::test_counter(188));
+    auto peer_operation = peer_engine.try_apply_local_edit({{0, 0}}, {"peer"});
+    QVERIFY(peer_operation.ok());
+    auto peer_payload = encode_operation(peer_operation.value());
+    QVERIFY(peer_payload.ok());
+    {
+      Crdt::FileOpStream peer(root / "shared", producer);
+      QVERIFY(peer.start().ok());
+      QVERIFY(peer.register_stream(scope).ok());
+      QVERIFY(peer.push({{scope.stream, scope.epoch, producer, 1},
+                         peer_payload.value()},
+                        PushDurability::durable).ok());
+      QVERIFY(peer.close().ok());
+    }
+    auto polled = session->poll();
+    QVERIFY(polled.ok());
+    QCOMPARE(polled.value().committed, size_t(1));
+    QCOMPARE(session->text(), std::string("peer"));
+
+    SessionCheckpointProviderState provider;
+    provider.canonical_pin_projection_hash = sha256_hex("");
+    auto captured = session->capture_checkpoint(provider);
+    QVERIFY(captured.ok());
+    QCOMPARE(captured.value().delivery_coverage.at(producer), uint64_t(1));
+    auto published = session->publish_checkpoint(provider);
+    QVERIFY(published.ok());
+    QCOMPARE(published.value().shareable_artifact_hash,
+             captured.value().shareable_artifact_hash);
+
+    std::string stream_component;
+    static constexpr char hex[] = "0123456789abcdef";
+    for (unsigned char byte : scope.stream) {
+      stream_component.push_back(hex[byte >> 4]);
+      stream_component.push_back(hex[byte & 15]);
+    }
+    const auto receipt_path = root / "shared" / "local"
+        / session->actor().to_string() / "receipts" / stream_component
+        / std::to_string(scope.epoch) / producer.to_string();
+    std::ifstream input(receipt_path, std::ios::binary);
+    QVERIFY(input.good());
+    const std::string actual(std::istreambuf_iterator<char>(input), {});
+    std::string expected("CTRC\1", 5);
+    const auto append_u64 = [&expected](uint64_t value) {
+      for (int shift = 56; shift >= 0; shift -= 8)
+        expected.push_back(static_cast<char>(value >> shift));
+    };
+    append_u64(1);
+    expected.push_back(1);
+    append_u64(published.value().shareable_artifact_hash.size());
+    expected += published.value().shareable_artifact_hash;
+    QCOMPARE(actual, expected);
+    QVERIFY(session->close().ok());
+  }
+
   void invalidCheckpointCoverageResetsBeforeFullReplayFallback() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
