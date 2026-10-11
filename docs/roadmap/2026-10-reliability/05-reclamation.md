@@ -85,7 +85,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_per
 
 **Status:** see TASKS.json (in progress)
 
-**Implementation note (2026-10-11):** G02 provides contiguous per-producer delivery frontier scans and checkpoint coverage encoding/binding, but those records are not yet accumulated into certified peer coverage. G03 must add durable epoch-scoped evidence and compute true intersection over the active membership; a missing peer or stream must contribute zero. Engine operation vectors and envelope delivery counters remain separate spaces.  
+**Implementation note (2026-10-11):** G02 provides contiguous per-producer delivery frontier scans and checkpoint coverage encoding/binding. The first `GcCertificate` slice now requires exact current-member evidence bound to the descriptor and base checkpoint, mandatory durable checkpoint verification, declared streams/producers, and computes the per-stream/per-producer minimum. Debug, Release, and ASan/UBSan certificate tests agree with the independent GcModel, including silent members and cross-stream counter reuse. Durable evidence publication/recovery, authenticated peer evidence, and post-restart certificate revalidation remain open. Engine operation vectors and envelope delivery counters remain separate spaces.
 **Depends on:** G02, L04, P03  
 **Coverage:** F2, F3, F5  
 
@@ -94,6 +94,8 @@ Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_per
 - `libs/collabtext/src/storage/CoverageStore.cpp`
 - `libs/collabtext/src/crdt/StreamSync.cpp`
 - `libs/collabtext/src/storage/GcCertificate.cpp`
+- `libs/collabtext/src/storage/GcCertificate.h`
+- `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/tests/tst_gc_certificate.cpp`
 
 **Steps:**
