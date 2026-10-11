@@ -85,6 +85,7 @@ add_library(collabtext_core STATIC
     src/storage/CheckpointLocalCodec.cpp
     src/storage/CheckpointMembershipCodec.cpp
     src/storage/CheckpointPinsCodec.cpp
+    src/storage/CheckpointStore.cpp
     src/storage/CheckpointTranslationCodec.cpp
     src/storage/LocalHistoryLog.cpp
     src/storage/MembershipStore.cpp
@@ -371,6 +372,7 @@ add_crdt_test(tst_trace_reduction)
 add_crdt_test(tst_network_sim)
 add_crdt_test(tst_store_fault_harness)
 add_crdt_test(tst_checkpoint_codec)
+add_crdt_test(tst_checkpoint_recovery)
 
 # Behaviour fixtures (V08). The fixture directory is compiled in, so the suite
 # reads the same files a reviewer reads rather than a copy.
