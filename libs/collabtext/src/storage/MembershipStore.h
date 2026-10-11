@@ -109,6 +109,22 @@ struct MembershipAcknowledgement {
   std::string signature;
 };
 
+/// Strictly decoded commit-time evidence retained in a membership event.
+/// Durable acknowledgement records and their signatures must still be
+/// revalidated by the caller after recovery.
+struct DecodedMembershipEvidence {
+  MembershipEvent::Kind kind = MembershipEvent::Kind::Enrolled;
+  std::string transition_digest;
+  std::string preview_material;
+  std::optional<std::string> explicit_confirmation;
+  std::vector<MembershipAcknowledgement> acknowledgements;
+};
+
+/// Decode bounded, canonical enrollment-v1 or retirement-v1 evidence and
+/// verify that its digest names the included preview material.
+[[nodiscard]] Result<DecodedMembershipEvidence>
+decode_membership_transition_evidence(const MembershipEvent &event);
+
 struct EnrollmentPreview {
   ActorId device;
   uint64_t parent_epoch = 0;

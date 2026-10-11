@@ -313,6 +313,90 @@ Result<MembershipEvent> find_transition_event(
 }
 } // namespace
 
+Result<DecodedMembershipEvidence>
+decode_membership_transition_evidence(const MembershipEvent &event) {
+  if (event.evidence.empty() || event.evidence.size() > kMaxEvidenceBytes)
+    return Error(ErrorCode::limit_exceeded,
+                 "membership transition evidence is empty or exceeds its bound");
+
+  std::istringstream input(event.evidence);
+  std::string version, digest_hex, material_hex, confirmation_hex, count_text;
+  if (!(input >> version >> digest_hex >> material_hex))
+    return Error(ErrorCode::malformed,
+                 "membership transition evidence header is truncated");
+  const bool retirement = event.kind == MembershipEvent::Kind::Retired;
+  const std::string_view expected_version = retirement
+      ? "retirement-v1" : "enrollment-v1";
+  if (version != expected_version)
+    return Error(ErrorCode::malformed,
+                 "membership evidence version does not match event kind");
+
+  std::string digest, material;
+  if (!unhex(digest_hex, digest) || !is_hash(digest) ||
+      !unhex(material_hex, material))
+    return Error(ErrorCode::malformed,
+                 "membership evidence digest or preview material is invalid");
+  const std::string_view expected_material = retirement
+      ? "retirement-preview-v1" : "enrollment-preview-v1";
+  if (!std::string_view(material).starts_with(expected_material) ||
+      sha256_hex(material) != digest)
+    return Error(ErrorCode::corrupt_record,
+                 "membership evidence digest does not match its preview material");
+
+  std::optional<std::string> confirmation;
+  if (retirement) {
+    if (!(input >> confirmation_hex))
+      return Error(ErrorCode::malformed,
+                   "retirement evidence confirmation is missing");
+    std::string decoded;
+    if (!unhex(confirmation_hex, decoded) || decoded.empty() || decoded.size() > 4096)
+      return Error(ErrorCode::malformed,
+                   "retirement evidence confirmation is invalid");
+    confirmation = std::move(decoded);
+  }
+  if (!(input >> count_text))
+    return Error(ErrorCode::malformed,
+                 "membership evidence acknowledgement count is missing");
+  uint64_t count = 0;
+  if (!parse_u64(count_text, count) || count == 0 || count > 4096)
+    return Error(ErrorCode::limit_exceeded,
+                 "membership evidence acknowledgement count is invalid");
+
+  DecodedMembershipEvidence decoded;
+  decoded.kind = event.kind;
+  decoded.transition_digest = std::move(digest);
+  decoded.preview_material = std::move(material);
+  decoded.explicit_confirmation = std::move(confirmation);
+  decoded.acknowledgements.reserve(static_cast<size_t>(count));
+  std::string canonical = version + " " + hex(decoded.transition_digest) + " " +
+      hex(decoded.preview_material);
+  if (retirement)
+    canonical += " " + hex(*decoded.explicit_confirmation);
+  canonical += " " + std::to_string(count);
+  std::optional<ActorId> previous_actor;
+  for (uint64_t i = 0; i < count; ++i) {
+    std::string actor_text, signature_hex, signature;
+    if (!(input >> actor_text >> signature_hex))
+      return Error(ErrorCode::malformed,
+                   "membership evidence acknowledgement is truncated");
+    auto actor = ActorId::parse(actor_text);
+    if (!actor.ok() || !unhex(signature_hex, signature) || signature.empty() ||
+        signature.size() > 4096 ||
+        (previous_actor && !(previous_actor.value() < actor.value())))
+      return Error(ErrorCode::malformed,
+                   "membership evidence acknowledgement is invalid or unordered");
+    canonical += " " + actor.value().to_string() + " " + hex(signature);
+    previous_actor = actor.value();
+    decoded.acknowledgements.push_back(
+        MembershipAcknowledgement{actor.value(), std::move(signature)});
+  }
+  std::string trailing;
+  if (input >> trailing || canonical != event.evidence)
+    return Error(ErrorCode::malformed,
+                 "membership transition evidence is not canonical");
+  return decoded;
+}
+
 Result<MembershipDescriptor> seal_membership_descriptor(
     MembershipDescriptor descriptor) {
   if (descriptor.members.empty() || descriptor.base_frontiers.empty())

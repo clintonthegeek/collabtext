@@ -581,6 +581,190 @@ private slots:
     QCOMPARE(recovered.value().size(),size_t(1));
   }
 
+  void membershipTransitionEvidenceDecodesCanonicallyAfterRecovery() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto producer = actor(90), retiring = actor(91);
+    const auto member_a = actor(92), member_b = actor(93), joining = actor(94);
+    const auto verifier = [](const ActorId &, std::string_view,
+                             std::string_view) -> Result<void> { return {}; };
+    const std::map<ActorId, std::string> retirement_ack_log{
+        {member_a, "signed-a"}, {member_b, "signed-b"}};
+    auto parent = fixture_descriptor(12, {retiring, member_a, member_b});
+    const std::vector<RetirementImpact> impacts{
+        {"document", "text", 12, 2, 1, "branch-hash"}};
+
+    auto retirement_open = MembershipStore::open(
+        std::filesystem::path(dir.path().toStdString()) / "retirement-evidence.log",
+        producer);
+    QVERIFY(retirement_open.ok());
+    auto retirement_store = std::move(retirement_open).value();
+    auto retirement_preview = preview_retirement(parent, retiring, impacts);
+    QVERIFY(retirement_preview.ok());
+    const std::vector<MembershipAcknowledgement> retirement_acks{
+        {member_a, "signed-a"}, {member_b, "signed-b"}};
+    auto committed_retirement = retirement_store.commit_retirement(
+        retirement_preview.value(), parent, impacts, retirement_acks,
+        "confirmed by operator", verifier);
+    QVERIFY(committed_retirement.ok());
+    auto retirement_events = retirement_store.recover();
+    QVERIFY(retirement_events.ok());
+    auto decoded_retirement = decode_membership_transition_evidence(
+        retirement_events.value().front());
+    QVERIFY(decoded_retirement.ok());
+    QCOMPARE(decoded_retirement.value().kind, MembershipEvent::Kind::Retired);
+    QCOMPARE(decoded_retirement.value().transition_digest,
+             retirement_preview.value().digest);
+    QCOMPARE(decoded_retirement.value().explicit_confirmation,
+             std::optional<std::string>("confirmed by operator"));
+    QCOMPARE(decoded_retirement.value().acknowledgements.size(), size_t(2));
+    QCOMPARE(decoded_retirement.value().acknowledgements[0].actor, member_a);
+    QCOMPARE(decoded_retirement.value().acknowledgements[0].signature,
+             std::string("signed-a"));
+    const auto complete_evidence = retirement_events.value().front().evidence;
+    const auto version_end = complete_evidence.find(' ');
+    const auto evidence_digest_end = complete_evidence.find(' ', version_end + 1);
+    const auto material_end = complete_evidence.find(' ', evidence_digest_end + 1);
+    const auto confirmation_end = complete_evidence.find(' ', material_end + 1);
+    const auto count_end = complete_evidence.find(' ', confirmation_end + 1);
+    auto truncated_digest = retirement_events.value().front();
+    truncated_digest.evidence.resize(version_end + 2); // odd-length digest hex
+    QVERIFY(!decode_membership_transition_evidence(truncated_digest).ok());
+    auto missing_acknowledgements = retirement_events.value().front();
+    missing_acknowledgements.evidence.resize(count_end);
+    QVERIFY(!decode_membership_transition_evidence(missing_acknowledgements).ok());
+
+    auto retirement_child = parent;
+    retirement_child.epoch = 13;
+    retirement_child.parent_hash = parent.hash;
+    retirement_child.transition_event_hash = membership_event_hash(
+        retirement_events.value().front(), producer);
+    retirement_child.members.erase(
+        std::find(retirement_child.members.begin(), retirement_child.members.end(), retiring));
+    retirement_child.base_checkpoint_hash = sha256_hex("retirement-checkpoint");
+    retirement_child.hash.clear();
+    auto sealed_retirement_child = seal_membership_descriptor(
+        std::move(retirement_child));
+    QVERIFY(sealed_retirement_child.ok());
+    auto revalidate_retirement_evidence = [&](const MembershipDescriptor &,
+        const MembershipDescriptor &, const MembershipEvent &event,
+        const ActorId &event_producer) -> Result<void> {
+      auto evidence = decode_membership_transition_evidence(event);
+      if (!evidence.ok()) return evidence.error();
+      if (event_producer != producer || evidence.value().kind != event.kind)
+        return Error(ErrorCode::corrupt_record,
+                     "recovered transition evidence has the wrong owner or kind");
+      std::vector<ActorId> expected;
+      for (const auto &member : parent.members)
+        if (member != retiring) expected.push_back(member);
+      if (evidence.value().acknowledgements.size() != expected.size())
+        return Error(ErrorCode::corrupt_record,
+                     "recovered acknowledgement set is incomplete");
+      for (size_t i = 0; i < expected.size(); ++i) {
+        const auto &ack = evidence.value().acknowledgements[i];
+        const auto durable = retirement_ack_log.find(ack.actor);
+        if (ack.actor != expected[i] || durable == retirement_ack_log.end() ||
+            durable->second != ack.signature)
+          return Error(ErrorCode::corrupt_record,
+                       "recovered acknowledgement differs from durable caller state");
+      }
+      return {};
+    };
+    QVERIFY(retirement_store.validate_transition(
+        parent, sealed_retirement_child.value(), revalidate_retirement_evidence,
+        [](const MembershipDescriptor &, const MembershipDescriptor &) {
+          return Result<void>{};
+        }).ok());
+
+    auto bad_digest = retirement_events.value().front();
+    const auto digest_start = bad_digest.evidence.find(' ') + 1;
+    const auto digest_end = bad_digest.evidence.find(' ', digest_start);
+    std::string wrong_digest_hex;
+    for (size_t i = 0; i < 64; ++i) wrong_digest_hex += "62"; // 64 ASCII 'b' bytes
+    bad_digest.evidence.replace(digest_start, digest_end - digest_start,
+                                wrong_digest_hex);
+    auto tampered = decode_membership_transition_evidence(bad_digest);
+    QVERIFY(!tampered.ok());
+    QCOMPARE(tampered.error().code(), ErrorCode::corrupt_record);
+    auto noncanonical = retirement_events.value().front();
+    noncanonical.evidence += " trailing";
+    QVERIFY(!decode_membership_transition_evidence(noncanonical).ok());
+    auto wrong_kind = retirement_events.value().front();
+    wrong_kind.kind = MembershipEvent::Kind::Enrolled;
+    QVERIFY(!decode_membership_transition_evidence(wrong_kind).ok());
+    auto oversized = retirement_events.value().front();
+    oversized.evidence.resize((1u << 20) + 1, 'x');
+    auto over_limit = decode_membership_transition_evidence(oversized);
+    QVERIFY(!over_limit.ok());
+    QCOMPARE(over_limit.error().code(), ErrorCode::limit_exceeded);
+
+    auto enrollment_parent = fixture_descriptor(20, {member_a, member_b});
+    auto enrollment_open = MembershipStore::open(
+        std::filesystem::path(dir.path().toStdString()) / "enrollment-evidence.log",
+        producer);
+    QVERIFY(enrollment_open.ok());
+    auto enrollment_store = std::move(enrollment_open).value();
+    auto enrollment_preview = preview_enrollment(enrollment_parent, joining);
+    QVERIFY(enrollment_preview.ok());
+    auto committed_enrollment = enrollment_store.commit_enrollment(
+        enrollment_preview.value(), enrollment_parent,
+        {{member_a, "signed-a"}, {member_b, "signed-b"}, {joining, "signed-joining"}},
+        verifier);
+    QVERIFY(committed_enrollment.ok());
+    auto enrollment_events = enrollment_store.recover();
+    QVERIFY(enrollment_events.ok());
+    auto decoded_enrollment = decode_membership_transition_evidence(
+        enrollment_events.value().front());
+    QVERIFY(decoded_enrollment.ok());
+    QCOMPARE(decoded_enrollment.value().kind, MembershipEvent::Kind::Enrolled);
+    QCOMPARE(decoded_enrollment.value().transition_digest,
+             enrollment_preview.value().digest);
+    QVERIFY(!decoded_enrollment.value().explicit_confirmation.has_value());
+    QCOMPARE(decoded_enrollment.value().acknowledgements.size(), size_t(3));
+    QCOMPARE(decoded_enrollment.value().acknowledgements[2].actor, joining);
+    const auto enrollment_ack_log = std::map<ActorId, std::string>{
+        {member_a, "signed-a"}, {member_b, "signed-b"},
+        {joining, "signed-joining"}};
+    auto enrollment_child = enrollment_parent;
+    enrollment_child.epoch = 21;
+    enrollment_child.parent_hash = enrollment_parent.hash;
+    enrollment_child.transition_event_hash = membership_event_hash(
+        enrollment_events.value().front(), producer);
+    enrollment_child.members.push_back(joining);
+    std::sort(enrollment_child.members.begin(), enrollment_child.members.end());
+    for (auto &frontier : enrollment_child.base_frontiers) {
+      frontier.operation.emplace(joining, 0);
+      frontier.delivery.emplace(joining, 0);
+    }
+    enrollment_child.base_checkpoint_hash = sha256_hex("enrollment-checkpoint");
+    enrollment_child.hash.clear();
+    auto sealed_enrollment_child = seal_membership_descriptor(
+        std::move(enrollment_child));
+    QVERIFY(sealed_enrollment_child.ok());
+    auto revalidate_enrollment_evidence = [&](const MembershipDescriptor &,
+        const MembershipDescriptor &, const MembershipEvent &event,
+        const ActorId &event_producer) -> Result<void> {
+      auto evidence = decode_membership_transition_evidence(event);
+      if (!evidence.ok()) return evidence.error();
+      if (event_producer != producer || evidence.value().kind != event.kind ||
+          evidence.value().acknowledgements.size() != enrollment_ack_log.size())
+        return Error(ErrorCode::corrupt_record,
+                     "recovered enrollment evidence is incomplete");
+      for (const auto &ack : evidence.value().acknowledgements) {
+        const auto durable = enrollment_ack_log.find(ack.actor);
+        if (durable == enrollment_ack_log.end() || durable->second != ack.signature)
+          return Error(ErrorCode::corrupt_record,
+                       "recovered enrollment acknowledgement is not durable");
+      }
+      return {};
+    };
+    QVERIFY(enrollment_store.validate_transition(
+        enrollment_parent, sealed_enrollment_child.value(),
+        revalidate_enrollment_evidence,
+        [](const MembershipDescriptor &, const MembershipDescriptor &) {
+          return Result<void>{};
+        }).ok());
+  }
+
   void transitionMustExtendLatestJournalEpoch() {
     QTemporaryDir dir; QVERIFY(dir.isValid());
     const auto producer=actor(40), retiring=actor(41), remaining=actor(42), joining=actor(43);

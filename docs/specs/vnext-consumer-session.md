@@ -61,6 +61,16 @@ Rejected envelopes are retained in the bounded quarantine snapshot and do not
 advance receipts. Without these callbacks, `DocumentSession` is deliberately
 uncoordinated and must not be treated as enforcing epoch membership itself.
 
+After recovering a membership journal, consumers can call
+`decode_membership_transition_evidence()` on the linked event. It strictly
+checks the enrollment/retirement version, canonical actor ordering, bounded
+signatures and confirmation, and that the recorded transition digest matches
+the embedded preview material. The caller still checks that the preview
+material and acknowledgement actors match its current canonical membership and
+proposal, and verifies every signature against its durable acknowledgement
+ledger before `MembershipStore::validate_transition()` may accept the change.
+The decoder does not authenticate keys or replace caller-owned durable state.
+
 `DocumentSessionConfig::initial_text` supplies deterministic seed content for
 sidecar formats that reconstruct their seed locally instead of storing it as a
 normal operation. The session applies that content-derived seed operation
