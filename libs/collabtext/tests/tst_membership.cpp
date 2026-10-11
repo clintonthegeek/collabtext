@@ -4,6 +4,7 @@
 #include <QTest>
 
 #include "storage/MembershipStore.h"
+#include "storage/CheckpointStore.h"
 #include "core/Sha256.h"
 
 #include <fstream>
@@ -587,6 +588,47 @@ private slots:
     const auto member_a = actor(92), member_b = actor(93), joining = actor(94);
     const auto verifier = [](const ActorId &, std::string_view,
                              std::string_view) -> Result<void> { return {}; };
+    auto checkpoint_store_open = CheckpointStore::open(
+        std::filesystem::path(dir.path().toStdString()) / "checkpoints");
+    QVERIFY(checkpoint_store_open.ok());
+    auto checkpoint_store = std::move(checkpoint_store_open).value();
+    const auto make_checkpoint_bundle = [](MembershipDescriptor &descriptor)
+        -> Result<std::string> {
+      std::vector<MembershipCheckpointBundleEntry> entries;
+      std::string manifest_hash;
+      for (const auto &frontier : descriptor.base_frontiers) {
+        CheckpointShareableCore core;
+        core.context = CheckpointContext{
+            "membership-recovery-document", frontier.stream, descriptor.epoch,
+            descriptor.parent_hash, CheckpointEngineKind::Text};
+        core.pins.canonical_projection_hash = sha256_hex("");
+        core.translations.supported_token_versions =
+            descriptor.supported_token_versions;
+        core.coverage.operation = frontier.operation;
+        core.coverage.delivery = frontier.delivery;
+        auto artifact = encode_checkpoint_core(core);
+        if (!artifact) return artifact.error();
+        auto frame = decode_checkpoint(artifact.value(), CheckpointKind::Shareable);
+        if (!frame) return frame.error();
+        auto decoded = decode_checkpoint_core(frame.value());
+        if (!decoded) return decoded.error();
+        if (manifest_hash.empty())
+          manifest_hash = decoded.value().translations.manifest_hash;
+        else if (manifest_hash != decoded.value().translations.manifest_hash)
+          return Error(ErrorCode::corrupt_record,
+                       "checkpoint streams produced different translation manifests");
+        entries.push_back({frontier.stream, std::move(artifact).value()});
+      }
+      auto bundle = encode_membership_checkpoint_bundle(std::move(entries));
+      if (!bundle) return bundle.error();
+      descriptor.translation_manifest_hash = std::move(manifest_hash);
+      descriptor.base_checkpoint_hash = sha256_hex(bundle.value());
+      return bundle;
+    };
+    auto checkpoint_verifier = make_membership_checkpoint_verifier(
+        [&](std::string_view hash) {
+          return checkpoint_store.resolve_membership_bundle(hash);
+        });
     const std::map<ActorId, std::string> retirement_ack_log{
         {member_a, "signed-a"}, {member_b, "signed-b"}};
     auto parent = fixture_descriptor(12, {retiring, member_a, member_b});
@@ -663,11 +705,14 @@ private slots:
         retirement_events.value().front(), producer);
     retirement_child.members.erase(
         std::find(retirement_child.members.begin(), retirement_child.members.end(), retiring));
-    retirement_child.base_checkpoint_hash = sha256_hex("retirement-checkpoint");
+    auto retirement_bundle = make_checkpoint_bundle(retirement_child);
+    QVERIFY(retirement_bundle.ok());
     retirement_child.hash.clear();
     auto sealed_retirement_child = seal_membership_descriptor(
         std::move(retirement_child));
     QVERIFY(sealed_retirement_child.ok());
+    QVERIFY(checkpoint_store.publish_membership_bundle(
+        sealed_retirement_child.value(), retirement_bundle.value()));
     auto revalidate_retirement_evidence = [&](const MembershipDescriptor &,
         const MembershipDescriptor &, const MembershipEvent &event,
         const ActorId &event_producer) -> Result<void> {
@@ -692,9 +737,7 @@ private slots:
     };
     QVERIFY(retirement_store.validate_transition(
         parent, sealed_retirement_child.value(), revalidate_retirement_evidence,
-        [](const MembershipDescriptor &, const MembershipDescriptor &) {
-          return Result<void>{};
-        }).ok());
+        checkpoint_verifier).ok());
 
     auto bad_digest = retirement_events.value().front();
     const auto digest_start = bad_digest.evidence.find(' ') + 1;
@@ -773,11 +816,14 @@ private slots:
       frontier.operation.emplace(joining, 0);
       frontier.delivery.emplace(joining, 0);
     }
-    enrollment_child.base_checkpoint_hash = sha256_hex("enrollment-checkpoint");
+    auto enrollment_bundle = make_checkpoint_bundle(enrollment_child);
+    QVERIFY(enrollment_bundle.ok());
     enrollment_child.hash.clear();
     auto sealed_enrollment_child = seal_membership_descriptor(
         std::move(enrollment_child));
     QVERIFY(sealed_enrollment_child.ok());
+    QVERIFY(checkpoint_store.publish_membership_bundle(
+        sealed_enrollment_child.value(), enrollment_bundle.value()));
     auto revalidate_enrollment_evidence = [&](const MembershipDescriptor &,
         const MembershipDescriptor &, const MembershipEvent &event,
         const ActorId &event_producer) -> Result<void> {
@@ -802,9 +848,7 @@ private slots:
     QVERIFY(enrollment_store.validate_transition(
         enrollment_parent, sealed_enrollment_child.value(),
         revalidate_enrollment_evidence,
-        [](const MembershipDescriptor &, const MembershipDescriptor &) {
-          return Result<void>{};
-        }).ok());
+        checkpoint_verifier).ok());
   }
 
   void transitionMustExtendLatestJournalEpoch() {
