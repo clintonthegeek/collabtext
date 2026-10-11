@@ -202,6 +202,7 @@ private:
     void refresh_receipts_(ScopeState& state);
     SubscriptionId m_next_subscription = 1;
     bool m_started = false;
+    mutable bool m_callback_active = false;
 };
 
 } // namespace CollabText::Crdt

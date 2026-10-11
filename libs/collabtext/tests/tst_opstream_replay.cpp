@@ -38,6 +38,54 @@ class TestOpStreamReplay : public QObject {
 
 private slots:
 
+    void file_opstream_rejects_reentrant_mutations_from_delivery_callback() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const std::filesystem::path shared = tmp.path().toStdString();
+        const auto sender_id = actor(39), receiver_id = actor(40);
+        const StreamScope scope{"buffer:reentrant", 2};
+        FileOpStream sender(shared, sender_id), receiver(shared, receiver_id);
+        QVERIFY(sender.start().ok()); QVERIFY(receiver.start().ok());
+        QVERIFY(sender.register_stream(scope).ok()); QVERIFY(receiver.register_stream(scope).ok());
+        QVERIFY(sender.push({{scope.stream, scope.epoch, sender_id, 1}, "incoming"},
+                            PushDurability::durable).ok());
+
+        bool replay_callback_rejected = false;
+        auto replay = receiver.replay_producer(scope, sender_id, [&](const InboundDelivery&) {
+            auto nested_push = receiver.push(
+                {{scope.stream, scope.epoch, receiver_id, 1}, "replay-outgoing"}, PushDurability::durable);
+            replay_callback_rejected = !nested_push.ok()
+                && nested_push.error().code() == ErrorCode::writer_conflict;
+            return Result<void>{};
+        });
+        QVERIFY(replay.ok());
+        QVERIFY(replay_callback_rejected);
+
+        bool nested_poll_rejected = false;
+        bool nested_push_rejected = false;
+        int calls = 0;
+        auto subscription = receiver.subscribe(scope, [&](const InboundDelivery&) {
+            ++calls;
+            auto nested_poll = receiver.poll(scope);
+            nested_poll_rejected = !nested_poll.ok()
+                && nested_poll.error().code() == ErrorCode::writer_conflict;
+            auto nested_push = receiver.push(
+                {{scope.stream, scope.epoch, receiver_id, 1}, "outgoing"}, PushDurability::durable);
+            nested_push_rejected = !nested_push.ok()
+                && nested_push.error().code() == ErrorCode::writer_conflict;
+            return DeliveryDecision::commit(RecoveryPoint::replay_from_beginning());
+        });
+        QVERIFY(subscription.ok());
+        auto outer = receiver.poll(scope);
+        QVERIFY(outer.ok()); QCOMPARE(outer.value().committed, size_t(1));
+        QCOMPARE(calls, 1);
+        QVERIFY(nested_poll_rejected);
+        QVERIFY(nested_push_rejected);
+        auto again = receiver.poll(scope);
+        QVERIFY(again.ok()); QCOMPARE(again.value().committed, size_t(0));
+        QCOMPARE(calls, 1);
+    }
+
     void file_opstream_scopes_retry_and_durable_receipt() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());

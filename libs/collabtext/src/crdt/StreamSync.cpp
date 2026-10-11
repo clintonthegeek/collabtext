@@ -16,6 +16,12 @@ namespace fs = std::filesystem;
 namespace CollabText::Crdt {
 
 namespace {
+struct CallbackScope {
+    explicit CallbackScope(bool& active) : flag(active) { flag = true; }
+    ~CallbackScope() { flag = false; }
+    bool& flag;
+};
+
 std::string scope_key(const StreamScope& s) { return s.stream + "\n" + std::to_string(s.epoch); }
 bool valid_scope(const StreamScope& s) {
     if (s.stream.empty() || s.stream == "." || s.stream == ".." || s.stream.size() > 128 || s.epoch == 0) return false;
@@ -101,6 +107,7 @@ FileOpStream::FileOpStream(fs::path folder, ActorId actor, WriterConfig cfg)
 FileOpStream::~FileOpStream() = default;
 
 Result<void> FileOpStream::start() {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport mutation from callback is not allowed");
     if (m_started) return {};
     if (!m_local_actor.valid()) return Error(ErrorCode::invalid_identity, "file transport requires a valid actor");
     auto local = m_shared_folder / "local" / m_local_actor.to_string();
@@ -114,6 +121,7 @@ Result<void> FileOpStream::start() {
 Result<void> FileOpStream::replay_all(
     const StreamScope& scope,
     const std::function<Result<void>(const InboundDelivery&)>& visitor) const {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport callback reentrancy is not allowed");
     if (!m_scopes.contains(scope_key(scope)))
         return Error(ErrorCode::unknown_stream, "stream scope is not registered");
     if (!visitor) return Error(ErrorCode::malformed, "full replay visitor is empty");
@@ -147,7 +155,8 @@ Result<void> FileOpStream::replay_all(
                 const auto sequence = delivery->token.sequence;
                 if (sequence == expected) {
                     ++expected; last_payload = delivery->payload;
-                    auto visited = visitor(*delivery);
+                    Result<void> visited;
+                    { CallbackScope callback_scope(m_callback_active); visited = visitor(*delivery); }
                     if (!visited.ok()) return visited.error();
                 } else if (sequence == expected - 1 && delivery->payload == last_payload) {
                     // A retry after an uncertain append can leave an identical frame.
@@ -183,6 +192,7 @@ Result<void> FileOpStream::persist_checkpoint_receipts(
     const StreamScope &scope,
     const std::map<ActorId, uint64_t> &delivery_frontiers,
     const RecoveryPoint &point) {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport mutation from callback is not allowed");
     auto state_it = m_scopes.find(scope_key(scope));
     if (state_it == m_scopes.end())
         return Error(ErrorCode::unknown_stream,
@@ -235,6 +245,7 @@ Result<void> FileOpStream::replay_uncovered(
     const StreamScope &scope,
     const std::map<ActorId, uint64_t> &delivery_frontiers,
     const std::function<Result<void>(const InboundDelivery &)> &visitor) const {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport callback reentrancy is not allowed");
     if (!visitor)
         return Error(ErrorCode::malformed, "uncovered replay visitor is empty");
     for (const auto &[producer, through] : delivery_frontiers) {
@@ -265,6 +276,7 @@ Result<void> FileOpStream::replay_uncovered(
 Result<void> FileOpStream::replay_producer(
     const StreamScope& scope, const ActorId& producer,
     const std::function<Result<void>(const InboundDelivery&)>& visitor) const {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport callback reentrancy is not allowed");
     if (!m_scopes.contains(scope_key(scope)))
         return Error(ErrorCode::unknown_stream, "stream scope is not registered");
     if (!producer.valid() || !visitor)
@@ -300,7 +312,8 @@ Result<void> FileOpStream::replay_producer(
             if (sequence == expected) {
                 ++expected;
                 last_payload = delivery->payload;
-                auto visited = visitor(*delivery);
+                Result<void> visited;
+                { CallbackScope callback_scope(m_callback_active); visited = visitor(*delivery); }
                 if (!visited.ok()) return visited.error();
             } else if (sequence == expected - 1 && delivery->payload == last_payload) {
                 // An uncertain append retry may leave an identical frame.
@@ -318,6 +331,7 @@ Result<void> FileOpStream::replay_producer(
 }
 
 Result<void> FileOpStream::flush() {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport mutation from callback is not allowed");
     for (auto& [key, state] : m_writers) {
         (void)key;
         auto result = state->writer->flush();
@@ -327,6 +341,7 @@ Result<void> FileOpStream::flush() {
 }
 
 Result<void> FileOpStream::close() {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport mutation from callback is not allowed");
     for (auto& [key, state] : m_writers) {
         (void)key;
         auto result = state->writer->close();
@@ -340,6 +355,7 @@ Result<void> FileOpStream::close() {
 }
 
 Result<void> FileOpStream::register_stream(const StreamScope& scope) {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport mutation from callback is not allowed");
     if (!valid_scope(scope)) return Error(ErrorCode::malformed, "invalid stream scope");
     auto key = scope_key(scope); auto found = m_scopes.find(key);
     if (found != m_scopes.end()) return {};
@@ -358,6 +374,7 @@ Result<void> FileOpStream::register_stream(const StreamScope& scope) {
 }
 
 Result<void> FileOpStream::push(const OutboundDelivery& d, PushDurability durability) {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport mutation from callback is not allowed");
     if (!m_started || !m_lease) return Error(ErrorCode::writer_conflict, "file transport is not started");
     if (!d.token.producer.valid() || d.token.producer != m_local_actor || d.token.sequence == 0)
         return Error(ErrorCode::invalid_identity, "outbound token producer or sequence is invalid");
@@ -417,12 +434,14 @@ Result<void> FileOpStream::push(const OutboundDelivery& d, PushDurability durabi
 }
 
 Result<SubscriptionId> FileOpStream::subscribe(const StreamScope& scope, InboundHandler handler) {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport mutation from callback is not allowed");
     auto r = register_stream(scope); if (!r.ok()) return r.error();
     if (!handler) return Error(ErrorCode::malformed, "inbound handler is empty");
     auto& state = *m_scopes.at(scope_key(scope)); if (state.handler) return Error(ErrorCode::writer_conflict, "scope already has an inbound handler");
     auto id = m_next_subscription++; state.handler = std::move(handler); m_subscriptions.emplace(id, scope); return id;
 }
 Result<SubscriptionId> FileOpStream::subscribe_receipts(ReceiptHandler handler) {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport mutation from callback is not allowed");
     if (!handler) return Error(ErrorCode::malformed, "receipt handler is empty");
     auto id = m_next_subscription++; m_receipt_subscriptions.emplace(id, std::move(handler)); return id;
 }
@@ -460,11 +479,12 @@ void FileOpStream::refresh_receipts_(ScopeState& state) {
         std::vector<ReceiptHandler> handlers;
         handlers.reserve(m_receipt_subscriptions.size());
         for (const auto& [id, cb] : m_receipt_subscriptions) { (void)id; handlers.push_back(cb); }
-        for (auto& cb : handlers) try { cb(receipt); } catch (...) { /* observation cannot roll back a remote receipt */ }
+        for (auto& cb : handlers) try { CallbackScope scope(m_callback_active); cb(receipt); } catch (...) { /* observation cannot roll back a remote receipt */ }
     }
 }
 
 Result<PollReport> FileOpStream::poll(const StreamScope& scope, PollBudget budget) {
+    if (m_callback_active) return Error(ErrorCode::writer_conflict, "file transport mutation from callback is not allowed");
     auto si = m_scopes.find(scope_key(scope)); if (si == m_scopes.end()) return Error(ErrorCode::unknown_stream, "stream scope is not registered");
     auto& state = *si->second; refresh_receipts_(state);
     PollReport report; if (!state.handler) return report;
@@ -497,7 +517,7 @@ Result<PollReport> FileOpStream::poll(const StreamScope& scope, PollBudget budge
                 if (d->token.sequence != accepted + 1) return Error(ErrorCode::counter_regression, "delivery log has a sequence gap");
                 ++report.offered; report.payload_bytes += d->payload.size();
                 auto decision = [&] {
-                    try { return handler(*d); }
+                    try { CallbackScope scope(m_callback_active); return handler(*d); }
                     catch (...) { return DeliveryDecision::retry(); }
                 }();
                 if (decision.kind() == DeliveryDecision::Kind::retry) { ++report.retried; stop_peer = true; break; }
