@@ -221,6 +221,27 @@ private slots:
           world.acknowledgements.begin()->second.private_history_durable = false;
         }));
     QVERIFY(!private_undo_unverified.ok());
+    auto missing_candidate_ack = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+        model_eligibility([](auto &world) {
+          world.acknowledgements.erase(world.acknowledgements.begin());
+        }));
+    QVERIFY(!missing_candidate_ack.ok());
+    auto stale_candidate_ack = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+        model_eligibility([](auto &world) {
+          world.acknowledgements.begin()->second.proposal_id = "older-candidate";
+        }));
+    QVERIFY(!stale_candidate_ack.ok());
+    auto overclaimed_candidate_ack = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+        model_eligibility([](auto &world) {
+          for (auto &[member, acknowledgement] : world.acknowledgements) {
+            (void)member;
+            acknowledgement.durable_coverage["text"][actor(20).to_string()] = 1;
+          }
+        }));
+    QVERIFY(!overclaimed_candidate_ack.ok());
     auto incomplete_pins = certify_common_coverage(
         d, peers, [](const auto &, const auto &) { return Result<void>{}; },
         model_eligibility([](auto &world) { world.pins.complete = false; }));
