@@ -150,7 +150,8 @@ public:
   /// checkpoint or provider reconciliation snapshot.
   [[nodiscard]] std::vector<InboundDelivery> deferred_deliveries() const;
   /// Rejected inbound envelopes retained verbatim for checkpoint or provider
-  /// diagnostics. Repeated scans of the same token and bytes are deduplicated.
+  /// diagnostics. Repeated scans with the same token and bytes are deduplicated;
+  /// the first rejection reason is retained.
   [[nodiscard]] Result<std::vector<SessionQuarantinedDelivery>>
   quarantined_deliveries() const;
   [[nodiscard]] const ActorId &actor() const noexcept;

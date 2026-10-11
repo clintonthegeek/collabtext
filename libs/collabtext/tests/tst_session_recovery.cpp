@@ -1212,9 +1212,14 @@ private slots:
       else
         expected_reason = quarantined.value().front().reason;
       if (reopen == 0) {
+        auto polled = session->poll();
+        QVERIFY(polled.ok());
+        auto after_poll = session->quarantined_deliveries();
+        QVERIFY(after_poll.ok());
+        QCOMPARE(after_poll.value().size(), size_t(1));
         auto retried = session->recover();
         QVERIFY(retried.ok());
-        QCOMPARE(session->recovery_report().rejected, size_t(2));
+        QCOMPARE(session->recovery_report().rejected, size_t(3));
         auto deduplicated = session->quarantined_deliveries();
         QVERIFY(deduplicated.ok());
         QCOMPARE(deduplicated.value().size(), size_t(1));

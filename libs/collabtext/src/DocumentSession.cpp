@@ -143,8 +143,7 @@ struct DocumentSession::Impl {
         quarantined_deliveries.begin(), quarantined_deliveries.end(),
         [&](const SessionQuarantinedDelivery &record) {
           return record.delivery.token == delivery.token &&
-                 record.delivery.payload == delivery.payload &&
-                 record.reason == reason;
+                 record.delivery.payload == delivery.payload;
         });
     if (duplicate == quarantined_deliveries.end()) {
       size_t record_bytes = delivery.payload.size();
