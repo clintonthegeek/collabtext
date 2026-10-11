@@ -165,6 +165,9 @@ private slots:
     QVERIFY(text_replay.ok());
     QCOMPARE(recovered_text_count, size_t(2));
     QCOMPARE(recovered_text.text(), std::string("seed!"));
+    auto text_frontiers = receiver.delivery_frontiers(text_scope);
+    QVERIFY(text_frontiers.ok());
+    QCOMPARE(text_frontiers.value(), (std::map<ActorId, uint64_t>{{producer, 2}}));
     Crdt::IdList recovered_list(CollabText::Test::test_counter(98));
     size_t recovered_list_count = 0;
     auto list_replay = receiver.replay_all(list_scope, [&](const InboundDelivery &d) -> Result<void> {
@@ -178,6 +181,9 @@ private slots:
     });
     QVERIFY(list_replay.ok());
     QCOMPARE(recovered_list_count, size_t(2));
+    auto list_frontiers = receiver.delivery_frontiers(list_scope);
+    QVERIFY(list_frontiers.ok());
+    QCOMPARE(list_frontiers.value(), (std::map<ActorId, uint64_t>{{producer, 2}}));
     // Full replay reconstructs state without a durable checkpoint, so it must
     // not create receiver cursors that could later be mistaken for coverage.
     const auto replay_cursors = receiver_root / "local"
@@ -384,6 +390,7 @@ private slots:
         });
     QVERIFY(!covered_corruption.ok());
     QCOMPARE(covered_corrupt_callbacks, size_t(0));
+    QVERIFY(!receiver.delivery_frontiers(scope).ok());
     fs::copy_file(segments.front(), older_copy, fs::copy_options::overwrite_existing);
     auto recovered = receiver.replay_all(scope, [&](const InboundDelivery &d) -> Result<void> {
       seen.push_back(d.payload);

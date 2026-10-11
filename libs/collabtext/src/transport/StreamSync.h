@@ -153,6 +153,12 @@ public:
     /// receipts or advancing cursors. Used by full-replay session recovery.
     [[nodiscard]] Result<void> replay_all(
         const StreamScope&, const std::function<Result<void>(const InboundDelivery&)>& visitor) const;
+    /// Scan and validate the complete retained delivery log, returning each
+    /// producer's highest contiguous sequence. This describes log coverage
+    /// only; callers must separately prove that their checkpoint represents
+    /// every covered delivery.
+    [[nodiscard]] Result<std::map<ActorId, uint64_t>>
+    delivery_frontiers(const StreamScope &) const;
     /// Validate the complete retained log but visit only records beyond the
     /// checkpoint's per-producer delivery frontiers. Covered records are still
     /// scanned for gaps/corruption; this does not persist reader cursors.

@@ -164,6 +164,21 @@ Result<void> FileOpStream::replay_all(
     return {};
 }
 
+Result<std::map<ActorId, uint64_t>>
+FileOpStream::delivery_frontiers(const StreamScope &scope) const {
+    std::map<ActorId, uint64_t> frontiers;
+    auto scanned = replay_all(scope, [&](const InboundDelivery &delivery) {
+        if (delivery.token.sequence == UINT64_MAX)
+            return Result<void>(Error(
+                ErrorCode::counter_exhausted,
+                "delivery sequence cannot be represented by a resumable frontier"));
+        frontiers[delivery.token.producer] = delivery.token.sequence;
+        return Result<void>{};
+    });
+    if (!scanned.ok()) return scanned.error();
+    return frontiers;
+}
+
 Result<void> FileOpStream::replay_uncovered(
     const StreamScope &scope,
     const std::map<ActorId, uint64_t> &delivery_frontiers,
