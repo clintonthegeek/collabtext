@@ -11,11 +11,14 @@
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <type_traits>
 
 using namespace CollabText;
 using namespace CollabText::Storage;
 
 namespace {
+static_assert(!std::is_same_v<OperationCoverage, DeliveryCoverage>);
+
 ActorId actor(uint8_t seed) {
   std::array<uint8_t, ActorId::kBytes> bytes{};
   bytes[0] = seed;
@@ -52,10 +55,11 @@ MembershipDescriptor descriptor() {
 }
 
 PeerCoverageEvidence evidence(const MembershipDescriptor &d, const ActorId &member) {
-  return {member, d.epoch, d.hash, d.base_checkpoint_hash, {}};
+  return {member, d.epoch, d.hash, d.base_checkpoint_hash, {}, {}};
 }
 
-GcReference::Coverage reference_coverage(const DeliveryCoverage &coverage) {
+template <typename Coverage>
+GcReference::Coverage reference_coverage(const Coverage &coverage) {
   GcReference::Coverage result;
   for (const auto &[stream, frontier] : coverage)
     for (const auto &[producer, counter] : frontier)
@@ -67,7 +71,8 @@ GcEligibilityVerifier model_eligibility(
     std::function<void(GcReference::World &)> alter = {}) {
   return [alter = std::move(alter)](
       const MembershipDescriptor &descriptor, std::string_view checkpoint_hash,
-      const DeliveryCoverage &common,
+      const OperationCoverage &common,
+      const DeliveryCoverage &,
       const std::vector<PeerCoverageEvidence> &evidence) {
     GcReference::World world;
     world.epoch.number = descriptor.epoch;
@@ -94,7 +99,7 @@ GcEligibilityVerifier model_eligibility(
           [&](const auto &candidate) { return candidate.member == member_id; });
       if (item == evidence.end()) continue;
       GcReference::Member member;
-      member.durable_coverage = reference_coverage(item->delivery);
+      member.durable_coverage = reference_coverage(item->operation);
       member.retired_undo_sequence = retired_undo;
       world.members.emplace(name, member);
       world.acknowledgements.emplace(name, GcReference::PeerAck{
@@ -121,15 +126,21 @@ private slots:
     std::vector<PeerCoverageEvidence> peers;
     for (const auto &member : d.members) peers.push_back(evidence(d, member));
     for (auto &peer : peers) peer.checkpoint_hash = candidate_checkpoint;
-    peers[0].delivery = {{"text", {{p, 12}, {q, 2}}},
+    peers[0].operation = {{"text", {{p, 12}, {q, 2}}},
                          {"comments", {{p, 8}}},
                          {"ids", {{p, 5}}}};
-    peers[1].delivery = {{"text", {{p, 9}, {q, 4}}},
+    peers[1].operation = {{"text", {{p, 9}, {q, 4}}},
                          {"comments", {{p, 10}}},
                          {"ids", {{p, 3}}}};
-    peers[2].delivery = {{"text", {{p, 11}}},
+    peers[2].operation = {{"text", {{p, 11}}},
                          {"comments", {{p, 7}}},
                          {"ids", {{p, 6}}}};
+    peers[0].delivery = {{"text", {{p, 30}, {q, 2}}},
+                         {"comments", {{p, 18}}}, {"ids", {{p, 15}}}};
+    peers[1].delivery = {{"text", {{p, 20}, {q, 4}}},
+                         {"comments", {{p, 10}}}, {"ids", {{p, 13}}}};
+    peers[2].delivery = {{"text", {{p, 25}}},
+                         {"comments", {{p, 17}}}, {"ids", {{p, 16}}}};
     const DurableCoverageVerifier verify = [](const auto &, const auto &) {
       return Result<void>{};
     };
@@ -140,7 +151,7 @@ private slots:
     std::vector<GcReference::Coverage> vectors;
     for (const auto &peer : peers) {
       GcReference::Coverage item;
-      for (const auto &[stream, frontier] : peer.delivery) {
+      for (const auto &[stream, frontier] : peer.operation) {
         auto &dest = item[stream];
         for (const auto &[producer, count] : frontier)
           dest.emplace(producer.to_string(), count);
@@ -150,7 +161,7 @@ private slots:
     const auto expected = GcReference::meet(vectors);
     QCOMPARE(certificate.value().descriptor_hash(), d.hash);
     QCOMPARE(certificate.value().checkpoint_hash(), candidate_checkpoint);
-    const auto &actual = certificate.value().common_delivery();
+    const auto &actual = certificate.value().common_operation();
     QCOMPARE(actual.at("text").at(p), uint64_t(9));
     QCOMPARE(actual.at("text").find(q), actual.at("text").end());
     QCOMPARE(actual.at("comments").at(p), uint64_t(7));
@@ -160,6 +171,10 @@ private slots:
       for (const auto &[producer, count] : frontier)
         converted[stream].emplace(producer.to_string(), count);
     QCOMPARE(converted, expected);
+    const auto &delivery = certificate.value().common_delivery();
+    QCOMPARE(delivery.at("text").at(p), uint64_t(20));
+    QCOMPARE(delivery.at("comments").at(p), uint64_t(10));
+    QCOMPARE(delivery.at("ids").at(p), uint64_t(13));
   }
 
   void missingStaleAndUnverifiedMembersCannotCertify() {
@@ -189,7 +204,8 @@ private slots:
     QVERIFY(!incomplete_pins.ok());
     auto eligibility_threw = certify_common_coverage(
         d, peers, [](const auto &, const auto &) { return Result<void>{}; },
-        [](const auto &, std::string_view, const DeliveryCoverage &,
+        [](const auto &, std::string_view, const OperationCoverage &,
+           const DeliveryCoverage &,
            const std::vector<PeerCoverageEvidence> &) -> Result<void> {
           throw std::runtime_error("eligibility verifier fault");
         });
@@ -228,6 +244,16 @@ private slots:
       return Result<void>{};
     }, model_eligibility()).ok());
     peers.front().delivery.clear();
+    peers.front().operation["not-in-descriptor"][actor(9)] = 1;
+    QVERIFY(!certify_common_coverage(d, peers, [](const auto &, const auto &) {
+      return Result<void>{};
+    }, model_eligibility()).ok());
+    peers.front().operation.clear();
+    peers.front().operation["text"][actor(9)] = 1;
+    QVERIFY(!certify_common_coverage(d, peers, [](const auto &, const auto &) {
+      return Result<void>{};
+    }, model_eligibility()).ok());
+    peers.front().operation.clear();
     peers.front().delivery["text"][ActorId{}] = 1;
     QVERIFY(!certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>{};
@@ -264,13 +290,16 @@ private slots:
     const auto candidate_checkpoint = sha256_hex("stored candidate checkpoint");
     const DeliveryCoverage coverage{{"text", {{actor(20), 9}}},
                                     {"ids", {{actor(21), 3}}}};
+    const OperationCoverage operations{{"text", {{actor(20), 5}}},
+                                       {"ids", {{actor(21), 2}}}};
     size_t validations = 0;
     const CheckpointCoverageVerifier valid_checkpoint =
         [&](const auto &checked_descriptor, std::string_view checked_hash,
-            const auto &checked_coverage) {
+            const auto &checked_operations, const auto &checked_coverage) {
           ++validations;
           if (checked_descriptor.hash != d.hash ||
-              checked_hash != candidate_checkpoint || checked_coverage != coverage)
+              checked_hash != candidate_checkpoint || checked_operations != operations ||
+              checked_coverage != coverage)
             return Result<void>(Error(ErrorCode::corrupt_record,
                                       "checkpoint coverage mismatch"));
           return Result<void>{};
@@ -288,22 +317,29 @@ private slots:
       auto opened = CoverageStore::open(root, owner, &hook);
       QVERIFY(opened.ok());
       auto uncertain = opened.value().publish(d, candidate_checkpoint,
-                                              coverage, valid_checkpoint);
+                                              operations, coverage, valid_checkpoint);
       QVERIFY(!uncertain.ok());
       auto retried = opened.value().publish(d, candidate_checkpoint,
-                                            coverage, valid_checkpoint);
+                                            operations, coverage, valid_checkpoint);
       QVERIFY(retried.ok());
       QCOMPARE(retried.value().delivery, coverage);
       auto conflicting = coverage;
       conflicting["text"][actor(20)] = 10;
       QVERIFY(!opened.value().publish(
-          d, candidate_checkpoint, conflicting,
-          [](const auto &, std::string_view, const auto &) {
+          d, candidate_checkpoint, operations, conflicting,
+          [](const auto &, std::string_view, const auto &, const auto &) {
+            return Result<void>{};
+          }).ok());
+      auto conflicting_operations = operations;
+      conflicting_operations["text"][actor(20)] = 6;
+      QVERIFY(!opened.value().publish(
+          d, candidate_checkpoint, conflicting_operations, coverage,
+          [](const auto &, std::string_view, const auto &, const auto &) {
             return Result<void>{};
           }).ok());
       auto refused = opened.value().publish(
-          d, sha256_hex("bad candidate"), coverage,
-          [](const auto &, std::string_view, const auto &) {
+          d, sha256_hex("bad candidate"), operations, coverage,
+          [](const auto &, std::string_view, const auto &, const auto &) {
             return Result<void>(Error(ErrorCode::corrupt_record,
                                       "checkpoint was not durable"));
           });
@@ -318,10 +354,11 @@ private slots:
       QVERIFY(recovered.ok());
       QVERIFY(recovered.value().has_value());
       QCOMPARE(recovered.value()->delivery, coverage);
+      QCOMPARE(recovered.value()->operation, operations);
       QVERIFY(!reopened.value().recover(d, candidate_checkpoint, {}).ok());
       auto stale_checkpoint = reopened.value().recover(
           d, candidate_checkpoint, [](const auto &, std::string_view,
-                                      const auto &) {
+                                      const auto &, const auto &) {
             return Result<void>(Error(ErrorCode::corrupt_record,
                                       "checkpoint no longer validates"));
           });
@@ -365,18 +402,22 @@ private slots:
     const auto d = descriptor();
     const auto candidate_checkpoint = sha256_hex("shared certificate checkpoint");
     std::map<ActorId, DeliveryCoverage> expected;
+    std::map<ActorId, OperationCoverage> expected_operations;
     for (size_t i = 0; i < d.members.size(); ++i) {
       const auto member = d.members[i];
       expected[member] = {{"text", {{actor(20), 10 - i}}},
                           {"ids", {{actor(21), 6 - i}}}};
+      expected_operations[member] = {{"text", {{actor(20), 5 - i}}},
+                                     {"ids", {{actor(21), 3 - i}}}};
       auto store = CoverageStore::open(root, member);
       QVERIFY(store.ok());
       auto published = store.value().publish(
-          d, candidate_checkpoint, expected.at(member),
+          d, candidate_checkpoint, expected_operations.at(member), expected.at(member),
           [&](const auto &checked_descriptor, std::string_view checked_hash,
-              const auto &coverage) {
+              const auto &operation, const auto &coverage) {
             if (checked_descriptor.hash != d.hash ||
                 checked_hash != candidate_checkpoint ||
+                operation != expected_operations.at(member) ||
                 coverage != expected.at(member))
               return Result<void>(Error(ErrorCode::corrupt_record,
                                         "durable candidate does not match"));
@@ -391,9 +432,10 @@ private slots:
       auto recovered = store.value().recover(
           d, candidate_checkpoint,
           [&](const auto &checked_descriptor, std::string_view checked_hash,
-              const auto &coverage) {
+              const auto &operation, const auto &coverage) {
             if (checked_descriptor.hash != d.hash ||
                 checked_hash != candidate_checkpoint ||
+                operation != expected_operations.at(member) ||
                 coverage != expected.at(member))
               return Result<void>(Error(ErrorCode::corrupt_record,
                                         "recovered checkpoint does not match"));
@@ -407,7 +449,8 @@ private slots:
         d, recovered_evidence,
         [&](const auto &checked_descriptor, const auto &item) {
           if (checked_descriptor.hash != d.hash ||
-              expected.at(item.member) != item.delivery)
+              expected.at(item.member) != item.delivery ||
+              expected_operations.at(item.member) != item.operation)
             return Result<void>(Error(ErrorCode::corrupt_record,
                                       "peer evidence differs from durable copy"));
           return Result<void>{};
@@ -419,6 +462,10 @@ private slots:
              uint64_t(8));
     QCOMPARE(certificate.value().common_delivery().at("ids").at(actor(21)),
              uint64_t(4));
+    QCOMPARE(certificate.value().common_operation().at("text").at(actor(20)),
+             uint64_t(3));
+    QCOMPARE(certificate.value().common_operation().at("ids").at(actor(21)),
+             uint64_t(1));
   }
 };
 

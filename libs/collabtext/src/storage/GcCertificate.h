@@ -11,17 +11,31 @@
 
 namespace CollabText::Storage {
 
-/// Per-stream producer delivery sequence coverage. This is deliberately not
-/// an engine operation vector: the outer key prevents counters from different
-/// streams (including IdList streams) from being conflated.
-using DeliveryCoverage =
-    std::map<std::string, std::map<ActorId, uint64_t>>;
+template <typename Tag>
+class StreamCoverage : public std::map<std::string, std::map<ActorId, uint64_t>> {
+  using Base = std::map<std::string, std::map<ActorId, uint64_t>>;
+
+public:
+  using Base::Base;
+  using Base::operator=;
+};
+
+struct OperationCoverageTag;
+/// Per-stream engine operation frontiers. These counters are distinct from
+/// envelope delivery sequence numbers and must never be substituted for them.
+using OperationCoverage = StreamCoverage<OperationCoverageTag>;
+
+struct DeliveryCoverageTag;
+/// Per-stream producer delivery sequence coverage. The outer key preserves
+/// stream identity, including IdList streams, when actors reuse counters.
+using DeliveryCoverage = StreamCoverage<DeliveryCoverageTag>;
 
 struct PeerCoverageEvidence {
   ActorId member;
   uint64_t epoch = 0;
   std::string descriptor_hash;
   std::string checkpoint_hash;
+  OperationCoverage operation;
   DeliveryCoverage delivery;
 };
 
@@ -36,6 +50,7 @@ using DurableCoverageVerifier = std::function<Result<void>(
 /// and required token translations. Coverage alone can never authorize GC.
 using GcEligibilityVerifier = std::function<Result<void>(
     const MembershipDescriptor &, std::string_view checkpoint_hash,
+    const OperationCoverage &common_operation,
     const DeliveryCoverage &common_delivery,
     const std::vector<PeerCoverageEvidence> &evidence)>;
 
@@ -47,17 +62,21 @@ class GcCertificate {
 public:
   [[nodiscard]] const std::string &descriptor_hash() const { return m_descriptor_hash; }
   [[nodiscard]] const std::string &checkpoint_hash() const { return m_checkpoint_hash; }
+  [[nodiscard]] const OperationCoverage &common_operation() const { return m_common_operation; }
   [[nodiscard]] const DeliveryCoverage &common_delivery() const { return m_common_delivery; }
 
 private:
   GcCertificate(std::string descriptor_hash, std::string checkpoint_hash,
+                OperationCoverage common_operation,
                 DeliveryCoverage common_delivery)
       : m_descriptor_hash(std::move(descriptor_hash)),
         m_checkpoint_hash(std::move(checkpoint_hash)),
+        m_common_operation(std::move(common_operation)),
         m_common_delivery(std::move(common_delivery)) {}
 
   std::string m_descriptor_hash;
   std::string m_checkpoint_hash;
+  OperationCoverage m_common_operation;
   DeliveryCoverage m_common_delivery;
   friend Result<GcCertificate> certify_common_coverage(
       const MembershipDescriptor &, const std::vector<PeerCoverageEvidence> &,

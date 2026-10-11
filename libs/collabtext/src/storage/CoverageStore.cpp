@@ -62,32 +62,42 @@ Error malformed(std::string message) {
   return Error(ErrorCode::corrupt_record, std::move(message), "coverage.store");
 }
 
-Result<std::string> encode(const PeerCoverageEvidence &evidence) {
-  if (!evidence.member.valid() || evidence.epoch == 0 ||
-      !is_sha256(evidence.descriptor_hash) || !is_sha256(evidence.checkpoint_hash) ||
-      evidence.delivery.size() > kMaxStreams)
-    return Error(ErrorCode::malformed, "coverage evidence header is invalid");
-  size_t cells = 0;
-  std::ostringstream body;
-  body.imbue(std::locale::classic());
-  body << "CCOV1 " << evidence.member.to_string() << ' ' << evidence.epoch << ' '
-       << evidence.descriptor_hash << ' ' << evidence.checkpoint_hash << ' '
-       << evidence.delivery.size() << '\n';
-  for (const auto &[stream, frontier] : evidence.delivery) {
+template <typename Coverage>
+Result<void> encode_frontiers(std::ostringstream &body, char tag,
+                              const Coverage &coverage, size_t &cells) {
+  for (const auto &[stream, frontier] : coverage) {
     if (stream.empty() || stream.size() > 4096 || frontier.empty() ||
         frontier.size() > kMaxCells - cells)
       return Error(ErrorCode::limit_exceeded, "coverage stream or cell limit exceeded");
     cells += frontier.size();
-    body << "S " << hex(stream) << ' ' << frontier.size() << '\n';
+    body << "S " << tag << ' ' << hex(stream) << ' ' << frontier.size() << '\n';
     for (const auto &[producer, through] : frontier) {
       if (!producer.valid() || through == 0 || through == UINT64_MAX)
         return Error(ErrorCode::malformed,
                      "coverage contains an invalid producer or zero frontier");
       body << "A " << producer.to_string() << ' ' << through << '\n';
     }
-    if (body.tellp() > static_cast<std::streamoff>(kMaxCoverageBytes))
-      return Error(ErrorCode::limit_exceeded, "coverage evidence exceeds byte limit");
   }
+  return {};
+}
+
+Result<std::string> encode(const PeerCoverageEvidence &evidence) {
+  if (!evidence.member.valid() || evidence.epoch == 0 ||
+      !is_sha256(evidence.descriptor_hash) || !is_sha256(evidence.checkpoint_hash) ||
+      evidence.operation.size() > kMaxStreams || evidence.delivery.size() > kMaxStreams)
+    return Error(ErrorCode::malformed, "coverage evidence header is invalid");
+  size_t cells = 0;
+  std::ostringstream body;
+  body.imbue(std::locale::classic());
+  body << "CCOV2 " << evidence.member.to_string() << ' ' << evidence.epoch << ' '
+       << evidence.descriptor_hash << ' ' << evidence.checkpoint_hash << ' '
+       << evidence.operation.size() << ' ' << evidence.delivery.size() << '\n';
+  if (auto encoded = encode_frontiers(body, 'O', evidence.operation, cells); !encoded)
+    return encoded.error();
+  if (auto encoded = encode_frontiers(body, 'D', evidence.delivery, cells); !encoded)
+    return encoded.error();
+  if (body.tellp() > static_cast<std::streamoff>(kMaxCoverageBytes))
+    return Error(ErrorCode::limit_exceeded, "coverage evidence exceeds byte limit");
   std::string bytes = body.str();
   if (bytes.size() > kMaxCoverageBytes - 68)
     return Error(ErrorCode::limit_exceeded, "coverage evidence exceeds byte limit");
@@ -105,15 +115,17 @@ Result<PeerCoverageEvidence> decode(std::string_view bytes) {
     return malformed("coverage evidence checksum is invalid");
   std::istringstream input(std::string(bytes.substr(0, hash_start)));
   std::string magic, owner_text, epoch_text, descriptor_hash, checkpoint_hash;
-  std::string stream_count_text;
+  std::string operation_count_text, delivery_count_text;
   if (!(input >> magic >> owner_text >> epoch_text >> descriptor_hash >>
-        checkpoint_hash >> stream_count_text) || magic != "CCOV1")
+        checkpoint_hash >> operation_count_text >> delivery_count_text) || magic != "CCOV2")
     return malformed("coverage evidence header is invalid");
-  uint64_t stream_count_value = 0;
-  if (!number(stream_count_text, stream_count_value) ||
-      stream_count_value > kMaxStreams)
+  uint64_t operation_count_value = 0, delivery_count_value = 0;
+  if (!number(operation_count_text, operation_count_value) ||
+      !number(delivery_count_text, delivery_count_value) ||
+      operation_count_value > kMaxStreams || delivery_count_value > kMaxStreams)
     return malformed("coverage stream count is invalid");
-  const auto stream_count = static_cast<size_t>(stream_count_value);
+  const auto operation_count = static_cast<size_t>(operation_count_value);
+  const auto delivery_count = static_cast<size_t>(delivery_count_value);
   std::string remainder;
   std::getline(input, remainder);
   if (!remainder.empty()) return malformed("coverage header has trailing data");
@@ -124,40 +136,50 @@ Result<PeerCoverageEvidence> decode(std::string_view bytes) {
       epoch == 0 || !is_sha256(descriptor_hash) || !is_sha256(checkpoint_hash))
     return malformed("coverage evidence identity or hashes are invalid");
   PeerCoverageEvidence result{owner.value(), epoch, descriptor_hash,
-                              checkpoint_hash, {}};
+                              checkpoint_hash, {}, {}};
   size_t cells = 0;
-  std::string previous_stream;
-  for (size_t s = 0; s < stream_count; ++s) {
-    std::string kind, stream_hex, count_text;
-    if (!(input >> kind >> stream_hex >> count_text) || kind != "S")
-      return malformed("coverage stream record is truncated");
-    std::string stream;
-    uint64_t count = 0;
-    if (!unhex(stream_hex, stream) || stream.empty() || stream.size() > 4096 ||
-        (!previous_stream.empty() && !(previous_stream < stream)) ||
-        !number(count_text, count) || count == 0 || count > kMaxCells - cells)
-      return malformed("coverage stream is noncanonical or exceeds limits");
-    cells += static_cast<size_t>(count);
-    previous_stream = stream;
-    auto &frontier = result.delivery[stream];
-    ActorId previous_actor;
-    bool have_previous = false;
-    for (uint64_t i = 0; i < count; ++i) {
-      std::string actor_kind, actor_text, through_text;
-      if (!(input >> actor_kind >> actor_text >> through_text) || actor_kind != "A")
-        return malformed("coverage actor record is truncated");
-      auto producer = ActorId::parse(actor_text);
-      uint64_t through = 0;
-      if (!producer.ok() || !producer.value().valid() ||
-          producer.value().to_string() != actor_text ||
-          !number(through_text, through) || through == 0 || through == UINT64_MAX ||
-          (have_previous && !(previous_actor < producer.value())))
-        return malformed("coverage actor frontier is invalid or noncanonical");
-      frontier.emplace(producer.value(), through);
-      previous_actor = producer.value();
-      have_previous = true;
+  auto read_frontiers = [&](char expected_tag, size_t count,
+                            auto &destination) -> Result<void> {
+    std::string previous_stream;
+    for (size_t s = 0; s < count; ++s) {
+      std::string kind, tag_text, stream_hex, count_text;
+      if (!(input >> kind >> tag_text >> stream_hex >> count_text) ||
+          kind != "S" || tag_text.size() != 1 || tag_text[0] != expected_tag)
+        return malformed("coverage stream record is truncated or mistagged");
+      std::string stream;
+      uint64_t cell_count = 0;
+      if (!unhex(stream_hex, stream) || stream.empty() || stream.size() > 4096 ||
+          (!previous_stream.empty() && !(previous_stream < stream)) ||
+          !number(count_text, cell_count) || cell_count == 0 ||
+          cell_count > kMaxCells - cells)
+        return malformed("coverage stream is noncanonical or exceeds limits");
+      cells += static_cast<size_t>(cell_count);
+      previous_stream = stream;
+      auto &frontier = destination[stream];
+      ActorId previous_actor;
+      bool have_previous = false;
+      for (uint64_t i = 0; i < cell_count; ++i) {
+        std::string actor_kind, actor_text, through_text;
+        if (!(input >> actor_kind >> actor_text >> through_text) || actor_kind != "A")
+          return malformed("coverage actor record is truncated");
+        auto producer = ActorId::parse(actor_text);
+        uint64_t through = 0;
+        if (!producer.ok() || !producer.value().valid() ||
+            producer.value().to_string() != actor_text ||
+            !number(through_text, through) || through == 0 || through == UINT64_MAX ||
+            (have_previous && !(previous_actor < producer.value())))
+          return malformed("coverage actor frontier is invalid or noncanonical");
+        frontier.emplace(producer.value(), through);
+        previous_actor = producer.value();
+        have_previous = true;
+      }
     }
-  }
+    return {};
+  };
+  if (auto read = read_frontiers('O', operation_count, result.operation); !read)
+    return read.error();
+  if (auto read = read_frontiers('D', delivery_count, result.delivery); !read)
+    return read.error();
   std::string extra;
   if (input >> extra) return malformed("coverage evidence has trailing records");
   auto canonical = encode(result);
@@ -176,31 +198,39 @@ Result<void> validate_coverage(
                           evidence.member))
     return Error(ErrorCode::wrong_epoch,
                  "coverage evidence does not belong to this membership descriptor");
-  for (const auto &[stream, frontier] : evidence.delivery) {
-    const auto declared = std::lower_bound(
-        descriptor.base_frontiers.begin(), descriptor.base_frontiers.end(), stream,
-        [](const auto &entry, const auto &name) { return entry.stream < name; });
-    if (declared == descriptor.base_frontiers.end() || declared->stream != stream)
-      return Error(ErrorCode::corrupt_record,
-                   "coverage names a stream absent from membership descriptor", stream);
-    for (const auto &[producer, through] : frontier) {
-      if (!producer.valid() || through == 0 || !declared->delivery.contains(producer))
+  const auto validate = [&](const auto &coverage, bool operation) -> Result<void> {
+    for (const auto &[stream, frontier] : coverage) {
+      const auto declared = std::lower_bound(
+          descriptor.base_frontiers.begin(), descriptor.base_frontiers.end(), stream,
+          [](const auto &entry, const auto &name) { return entry.stream < name; });
+      if (declared == descriptor.base_frontiers.end() || declared->stream != stream)
         return Error(ErrorCode::corrupt_record,
-                     "coverage producer is absent from descriptor frontier", stream);
+                     "coverage names a stream absent from membership descriptor", stream);
+      const auto &producers = operation ? declared->operation : declared->delivery;
+      for (const auto &[producer, through] : frontier) {
+        if (!producer.valid() || through == 0 || through == UINT64_MAX ||
+            !producers.contains(producer))
+          return Error(ErrorCode::corrupt_record,
+                       "coverage producer is absent from descriptor frontier", stream);
+      }
     }
-  }
+    return {};
+  };
+  if (auto valid = validate(evidence.operation, true); !valid) return valid.error();
+  if (auto valid = validate(evidence.delivery, false); !valid) return valid.error();
   return {};
 }
 
 Result<void> verify_checkpoint(const CheckpointCoverageVerifier &verify,
                                const MembershipDescriptor &descriptor,
                                std::string_view checkpoint_hash,
+                               const OperationCoverage &operation,
                                const DeliveryCoverage &delivery) {
   if (!verify)
     return Error(ErrorCode::awaiting_state,
                  "coverage requires a durable checkpoint verifier");
   try {
-    return verify(descriptor, checkpoint_hash, delivery);
+    return verify(descriptor, checkpoint_hash, operation, delivery);
   } catch (const std::exception &error) {
     return Error(ErrorCode::io_error, error.what(), "coverage checkpoint verifier threw");
   } catch (...) {
@@ -233,16 +263,16 @@ std::filesystem::path CoverageStore::record_path(
 
 Result<PeerCoverageEvidence> CoverageStore::publish(
     const MembershipDescriptor &descriptor, std::string_view checkpoint_hash,
-    const DeliveryCoverage &delivery,
+    const OperationCoverage &operation, const DeliveryCoverage &delivery,
     const CheckpointCoverageVerifier &verify_checkpoint_callback) {
   if (!is_sha256(checkpoint_hash))
     return Error(ErrorCode::malformed, "coverage checkpoint hash is invalid");
   PeerCoverageEvidence evidence{m_owner, descriptor.epoch, descriptor.hash,
-                               std::string(checkpoint_hash), delivery};
+                               std::string(checkpoint_hash), operation, delivery};
   if (auto valid = validate_coverage(descriptor, evidence); !valid)
     return valid.error();
   auto verified = verify_checkpoint(verify_checkpoint_callback, descriptor,
-                                    checkpoint_hash, delivery);
+                                    checkpoint_hash, operation, delivery);
   if (!verified.ok()) return verified.error();
   auto bytes = encode(evidence);
   if (!bytes.ok()) return bytes.error();
@@ -312,7 +342,8 @@ Result<std::optional<PeerCoverageEvidence>> CoverageStore::recover(
   if (auto valid = validate_coverage(descriptor, evidence.value()); !valid)
     return valid.error();
   auto verified = verify_checkpoint(verify_checkpoint_callback, descriptor,
-                                    checkpoint_hash, evidence.value().delivery);
+                                    checkpoint_hash, evidence.value().operation,
+                                    evidence.value().delivery);
   if (!verified.ok()) return verified.error();
   return std::optional<PeerCoverageEvidence>(std::move(evidence.value()));
 }

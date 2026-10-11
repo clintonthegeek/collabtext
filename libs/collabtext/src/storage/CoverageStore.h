@@ -11,7 +11,7 @@ namespace CollabText::Storage {
 
 using CheckpointCoverageVerifier = std::function<Result<void>(
     const MembershipDescriptor &, std::string_view checkpoint_hash,
-    const DeliveryCoverage &)>;
+    const OperationCoverage &, const DeliveryCoverage &)>;
 
 /// Durable, owner-local coverage for immutable membership/checkpoint pairs.
 /// Every read revalidates the named checkpoint through the caller's resolver.
@@ -29,7 +29,7 @@ public:
   /// Exact retries rewrite and sync the same immutable evidence.
   [[nodiscard]] Result<PeerCoverageEvidence> publish(
       const MembershipDescriptor &descriptor, std::string_view checkpoint_hash,
-      const DeliveryCoverage &delivery,
+      const OperationCoverage &operation, const DeliveryCoverage &delivery,
       const CheckpointCoverageVerifier &verify_checkpoint);
 
   /// Recover only the exact membership/checkpoint pair. Missing evidence is an
