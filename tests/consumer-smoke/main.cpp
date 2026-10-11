@@ -81,6 +81,21 @@ void check_installed_branch_export() {
           "installed session exposes an empty quarantine snapshot initially");
     auto edit = session->apply_local({{0, 0}}, {"branch"});
     check(edit.ok(), "installed session accepts a local branch edit");
+    SessionCheckpointProviderState checkpoint_provider;
+    checkpoint_provider.canonical_pin_projection_hash =
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    auto checkpoint = session->capture_shareable_checkpoint(checkpoint_provider);
+    check(checkpoint.ok() && !checkpoint.value().artifact_bytes.empty(),
+          "installed session captures a provider-bound shareable checkpoint");
+    if (checkpoint.ok()) {
+        const auto own_coverage =
+            checkpoint.value().delivery_coverage.find(session->actor());
+        check(own_coverage != checkpoint.value().delivery_coverage.end() &&
+                  own_coverage->second == 1 &&
+                  checkpoint.value().artifact_hash.size() == 64 &&
+                  checkpoint.value().translation_manifest_hash.size() == 64,
+              "installed checkpoint returns publication coverage and hash metadata");
+    }
     LocalBranchExport metadata;
     size_t deliveries = 0;
     const auto exported = session->export_local_branch(

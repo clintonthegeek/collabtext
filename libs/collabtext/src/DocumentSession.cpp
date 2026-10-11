@@ -290,8 +290,6 @@ struct DocumentSession::Impl {
           return {};
         });
     if (!scanned.ok()) return scanned.error();
-    auto encoded = Storage::encode_checkpoint_core(core);
-    if (!encoded.ok()) return encoded.error();
     return core;
   }
 
@@ -397,7 +395,11 @@ DocumentSessionTestAccess::checkpoint_core(
   if (!session.m_impl)
     return Error(ErrorCode::writer_conflict,
                  "session is unavailable for checkpoint capture");
-  return session.m_impl->checkpoint_core(std::move(core));
+  auto captured = session.m_impl->checkpoint_core(std::move(core));
+  if (!captured.ok()) return captured.error();
+  auto encoded = Storage::encode_checkpoint_core(captured.value());
+  if (!encoded.ok()) return encoded.error();
+  return std::move(captured).value();
 }
 
 Result<std::unique_ptr<DocumentSession>>
@@ -685,6 +687,64 @@ Result<PollReport> DocumentSession::poll(PollBudget budget) {
   } catch (const std::filesystem::filesystem_error &error) {
     return Error(ErrorCode::io_error, error.what(), "polling document session");
   }
+}
+
+Result<SessionShareableCheckpoint>
+DocumentSession::capture_shareable_checkpoint(
+    const SessionCheckpointProviderState &provider) const {
+  if (!m_impl)
+    return Error(ErrorCode::writer_conflict,
+                 "session is unavailable for checkpoint capture");
+  if (!provider.pin_projection_complete ||
+      provider.projected_pin_frontier != provider.canonical_pin_frontier)
+    return Error(ErrorCode::awaiting_state,
+                 "provider pin projection is incomplete");
+
+  Storage::CheckpointShareableCore core;
+  core.context.document = m_impl->config.document;
+  core.context.stream = m_impl->config.stream;
+  core.context.epoch = m_impl->config.epoch;
+  core.context.parent_descriptor_hash = provider.parent_descriptor_hash;
+  core.context.engine = Storage::CheckpointEngineKind::Text;
+  core.pins.projected_frontier = provider.projected_pin_frontier;
+  core.pins.canonical_frontier = provider.canonical_pin_frontier;
+  core.pins.complete = provider.pin_projection_complete;
+  core.pins.canonical_projection_hash =
+      provider.canonical_pin_projection_hash;
+  core.pins.live_pins = provider.live_pins;
+  core.translations.supported_token_versions =
+      provider.supported_token_versions;
+  core.translations.manifest_hash =
+      provider.expected_translation_manifest_hash;
+  core.translations.entries.reserve(provider.translations.size());
+  for (const auto &translation : provider.translations) {
+    core.translations.entries.push_back({
+        translation.reference_id, translation.source_epoch,
+        translation.source_token_bytes, translation.current_token_bytes});
+  }
+
+  auto captured = m_impl->checkpoint_core(std::move(core));
+  if (!captured.ok()) return captured.error();
+  auto translation_section = Storage::encode_checkpoint_translations(
+      captured.value().translations, captured.value().context,
+      captured.value().pins);
+  if (!translation_section.ok()) return translation_section.error();
+  auto canonical_translations = Storage::decode_checkpoint_translations(
+      translation_section.value(), captured.value().context,
+      captured.value().pins);
+  if (!canonical_translations.ok()) return canonical_translations.error();
+  captured.value().translations.manifest_hash =
+      canonical_translations.value().manifest_hash;
+  auto encoded = Storage::encode_checkpoint_core(captured.value());
+  if (!encoded.ok()) return encoded.error();
+  auto artifact_bytes = std::move(encoded).value();
+  auto artifact_hash = sha256_hex(artifact_bytes);
+  return SessionShareableCheckpoint{
+      std::move(artifact_bytes), std::move(artifact_hash),
+      std::move(captured.value().coverage.operation),
+      std::move(captured.value().coverage.delivery),
+      std::move(captured.value().pins.canonical_projection_hash),
+      std::move(captured.value().translations.manifest_hash)};
 }
 
 Result<void> DocumentSession::save() {

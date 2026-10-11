@@ -6,6 +6,7 @@
 #pragma once
 
 #include <collabtext/ActorId.h>
+#include <collabtext/AnchorPins.h>
 #include <collabtext/Engine.h>
 #include <collabtext/OpStream.h>
 #include <collabtext/Operations.h>
@@ -15,6 +16,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -89,6 +91,43 @@ struct SessionQuarantinedDelivery {
   }
 };
 
+/// Provider-owned state needed to bind a shareable checkpoint to the
+/// consumer's recovered membership and anchor-pin projection. The caller must
+/// supply pins from its canonical event log and verify the projection hash;
+/// the session validates their scope and the translation records' structure.
+struct SessionCheckpointTranslation {
+  std::string reference_id;
+  uint64_t source_epoch = 0;
+  std::string source_token_bytes;
+  std::string current_token_bytes;
+};
+
+struct SessionCheckpointProviderState {
+  std::string parent_descriptor_hash;
+  uint64_t projected_pin_frontier = 0;
+  uint64_t canonical_pin_frontier = 0;
+  bool pin_projection_complete = true;
+  std::string canonical_pin_projection_hash;
+  std::vector<RetainedAnchorPin> live_pins;
+  std::vector<uint32_t> supported_token_versions{1};
+  /// Optional descriptor value to check against the canonical translations.
+  /// Leave empty to receive the computed hash in SessionShareableCheckpoint.
+  std::string expected_translation_manifest_hash;
+  std::vector<SessionCheckpointTranslation> translations;
+};
+
+/// Encoded shareable state and metadata for constructing the corresponding
+/// membership descriptor and publishing the artifact atomically.
+struct SessionShareableCheckpoint {
+  std::string artifact_bytes;
+  /// SHA-256 of the complete encoded artifact, matching CheckpointStore's key.
+  std::string artifact_hash;
+  std::map<ActorId, uint64_t> operation_coverage;
+  std::map<ActorId, uint64_t> delivery_coverage;
+  std::string canonical_pin_projection_hash;
+  std::string translation_manifest_hash;
+};
+
 /// Stable actor-local grouping metadata for correlating undo with consumer events.
 struct LocalUndoGroupMetadata {
   Crdt::Identity id;
@@ -123,6 +162,11 @@ public:
       const std::vector<Crdt::Identity> &group_ids);
   [[nodiscard]] Result<PollReport> poll(PollBudget budget = {});
   [[nodiscard]] Result<void> save();
+  /// Capture the current text engine plus a complete provider projection.
+  /// The caller must validate provider state against its canonical durable
+  /// records and membership descriptor before publishing this artifact.
+  [[nodiscard]] Result<SessionShareableCheckpoint>
+  capture_shareable_checkpoint(const SessionCheckpointProviderState &) const;
   /// Stream this actor's durable operations in their original scope, including
   /// a durable pending local commit if its log append failed. The visitor may
   /// receive a prefix before an error; stage output and publish it only on

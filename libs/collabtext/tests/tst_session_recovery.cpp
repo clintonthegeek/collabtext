@@ -1329,6 +1329,32 @@ private slots:
     QCOMPARE(after_poll.value().deferred.front().operation_bytes, payload);
     QVERIFY(after_poll.value().deferred.front().quarantined);
 
+    SessionCheckpointProviderState public_provider;
+    public_provider.canonical_pin_projection_hash = sha256_hex("");
+    auto public_capture = session->capture_shareable_checkpoint(public_provider);
+    QVERIFY(public_capture.ok());
+    QVERIFY(!public_capture.value().artifact_bytes.empty());
+    QCOMPARE(public_capture.value().artifact_hash,
+             sha256_hex(public_capture.value().artifact_bytes));
+    QCOMPARE(public_capture.value().operation_coverage,
+             after_poll.value().coverage.operation);
+    QCOMPARE(public_capture.value().delivery_coverage,
+             after_poll.value().coverage.delivery);
+    QCOMPARE(public_capture.value().canonical_pin_projection_hash,
+             public_provider.canonical_pin_projection_hash);
+    QCOMPARE(public_capture.value().translation_manifest_hash.size(), size_t(64));
+    auto incomplete_provider = public_provider;
+    incomplete_provider.pin_projection_complete = false;
+    auto incomplete_capture = session->capture_shareable_checkpoint(
+        incomplete_provider);
+    QVERIFY(!incomplete_capture.ok());
+    QCOMPARE(incomplete_capture.error().code(), ErrorCode::awaiting_state);
+    auto mismatched_manifest = public_provider;
+    mismatched_manifest.expected_translation_manifest_hash = std::string(64, '0');
+    auto rejected_manifest = session->capture_shareable_checkpoint(
+        mismatched_manifest);
+    QVERIFY(!rejected_manifest.ok());
+
     auto encoded = Storage::encode_checkpoint_core(after_poll.value());
     QVERIFY(encoded.ok());
     auto artifact = Storage::decode_checkpoint(
