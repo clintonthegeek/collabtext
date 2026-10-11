@@ -1,11 +1,15 @@
 #include <QTest>
+#include <QTemporaryDir>
 
+#include "storage/CoverageStore.h"
 #include "storage/GcCertificate.h"
 #include "core/Sha256.h"
 #include "reference/GcModel.h"
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 
 using namespace CollabText;
@@ -50,6 +54,14 @@ MembershipDescriptor descriptor() {
 PeerCoverageEvidence evidence(const MembershipDescriptor &d, const ActorId &member) {
   return {member, d.epoch, d.hash, d.base_checkpoint_hash, {}};
 }
+
+GcEligibilityVerifier allow_test_eligibility() {
+  return [](const MembershipDescriptor &, std::string_view,
+            const DeliveryCoverage &,
+            const std::vector<PeerCoverageEvidence> &) {
+    return Result<void>{};
+  };
+}
 }
 
 class TestGcCertificate final : public QObject {
@@ -57,10 +69,12 @@ class TestGcCertificate final : public QObject {
 private slots:
   void intersectionMatchesReferenceAcrossStreamsAndCounterReuse() {
     const auto d = descriptor();
+    const auto candidate_checkpoint = sha256_hex("candidate checkpoint");
     const auto p = actor(20);
     const auto q = actor(21);
     std::vector<PeerCoverageEvidence> peers;
     for (const auto &member : d.members) peers.push_back(evidence(d, member));
+    for (auto &peer : peers) peer.checkpoint_hash = candidate_checkpoint;
     peers[0].delivery = {{"text", {{p, 12}, {q, 2}}},
                          {"comments", {{p, 8}}},
                          {"ids", {{p, 5}}}};
@@ -73,7 +87,8 @@ private slots:
     const DurableCoverageVerifier verify = [](const auto &, const auto &) {
       return Result<void>{};
     };
-    auto certificate = certify_common_coverage(d, peers, verify);
+    auto certificate = certify_common_coverage(d, peers, verify,
+                                               allow_test_eligibility());
     QVERIFY(certificate.ok());
 
     std::vector<GcReference::Coverage> vectors;
@@ -88,7 +103,7 @@ private slots:
     }
     const auto expected = GcReference::meet(vectors);
     QCOMPARE(certificate.value().descriptor_hash(), d.hash);
-    QCOMPARE(certificate.value().checkpoint_hash(), d.base_checkpoint_hash);
+    QCOMPARE(certificate.value().checkpoint_hash(), candidate_checkpoint);
     const auto &actual = certificate.value().common_delivery();
     QCOMPARE(actual.at("text").at(p), uint64_t(9));
     QCOMPARE(actual.at("text").find(q), actual.at("text").end());
@@ -105,26 +120,50 @@ private slots:
     const auto d = descriptor();
     std::vector<PeerCoverageEvidence> peers;
     for (const auto &member : d.members) peers.push_back(evidence(d, member));
-    auto no_verifier = certify_common_coverage(d, peers, {});
+    auto no_verifier = certify_common_coverage(d, peers, {},
+                                               allow_test_eligibility());
     QVERIFY(!no_verifier.ok());
+    auto no_eligibility_verifier = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; }, {});
+    QVERIFY(!no_eligibility_verifier.ok());
+    auto deferred_input = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+        [](const auto &, std::string_view, const DeliveryCoverage &,
+           const std::vector<PeerCoverageEvidence> &) {
+          return Result<void>(Error(ErrorCode::awaiting_state,
+                                    "checkpoint has deferred input"));
+        });
+    QVERIFY(!deferred_input.ok());
+    auto eligibility_threw = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+        [](const auto &, std::string_view, const DeliveryCoverage &,
+           const std::vector<PeerCoverageEvidence> &) -> Result<void> {
+          throw std::runtime_error("eligibility verifier fault");
+        });
+    QVERIFY(!eligibility_threw.ok());
     auto missing = peers;
     missing.pop_back();
     QVERIFY(!certify_common_coverage(d, missing, [](const auto &, const auto &) {
       return Result<void>{};
-    }).ok());
+    }, allow_test_eligibility()).ok());
     auto stale = peers;
     stale.front().descriptor_hash = sha256_hex("old membership");
     QVERIFY(!certify_common_coverage(d, stale, [](const auto &, const auto &) {
       return Result<void>{};
-    }).ok());
+    }, allow_test_eligibility()).ok());
     auto rejected = certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>(Error(ErrorCode::corrupt_record, "checkpoint not durable"));
-    });
+    }, allow_test_eligibility());
     QVERIFY(!rejected.ok());
     auto throwing = certify_common_coverage(d, peers, [](const auto &, const auto &) -> Result<void> {
       throw std::runtime_error("verifier fault");
-    });
+    }, allow_test_eligibility());
     QVERIFY(!throwing.ok());
+    auto mixed_checkpoint = peers;
+    mixed_checkpoint.back().checkpoint_hash = sha256_hex("different checkpoint");
+    QVERIFY(!certify_common_coverage(d, mixed_checkpoint,
+        [](const auto &, const auto &) { return Result<void>{}; },
+        allow_test_eligibility()).ok());
   }
 
   void unsupportedStreamAndDuplicateMemberAreRejected() {
@@ -134,17 +173,17 @@ private slots:
     peers.front().delivery["not-in-descriptor"][actor(9)] = 1;
     QVERIFY(!certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>{};
-    }).ok());
+    }, allow_test_eligibility()).ok());
     peers.front().delivery.clear();
     peers.front().delivery["text"][ActorId{}] = 1;
     QVERIFY(!certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>{};
-    }).ok());
+    }, allow_test_eligibility()).ok());
     peers.front().delivery.clear();
     peers.back().member = peers.front().member;
     QVERIFY(!certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>{};
-    }).ok());
+    }, allow_test_eligibility()).ok());
   }
 
   void silentCurrentMemberConstrainsCoverageToZero() {
@@ -157,9 +196,179 @@ private slots:
     // this producer. It stays in membership, so the common frontier is zero.
     auto certificate = certify_common_coverage(d, peers, [](const auto &, const auto &) {
       return Result<void>{};
-    });
+    }, allow_test_eligibility());
     QVERIFY(certificate.ok());
     QVERIFY(!certificate.value().common_delivery().contains("text"));
+  }
+
+  void coveragePublicationRecoversOnlyAfterCheckpointRevalidation() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    namespace fs = std::filesystem;
+    const auto root = fs::path(temporary.path().toStdString());
+    const auto d = descriptor();
+    const auto owner = d.members.front();
+    const auto candidate_checkpoint = sha256_hex("stored candidate checkpoint");
+    const DeliveryCoverage coverage{{"text", {{actor(20), 9}}},
+                                    {"ids", {{actor(21), 3}}}};
+    size_t validations = 0;
+    const CheckpointCoverageVerifier valid_checkpoint =
+        [&](const auto &checked_descriptor, std::string_view checked_hash,
+            const auto &checked_coverage) {
+          ++validations;
+          if (checked_descriptor.hash != d.hash ||
+              checked_hash != candidate_checkpoint || checked_coverage != coverage)
+            return Result<void>(Error(ErrorCode::corrupt_record,
+                                      "checkpoint coverage mismatch"));
+          return Result<void>{};
+        };
+    bool fail_directory_sync = true;
+    StepHook hook;
+    hook.fail = [&](Step step, const fs::path &) -> std::optional<Error> {
+      if (step == Step::DirSync && fail_directory_sync) {
+        fail_directory_sync = false;
+        return Error(ErrorCode::io_error, "injected directory sync failure");
+      }
+      return std::nullopt;
+    };
+    {
+      auto opened = CoverageStore::open(root, owner, &hook);
+      QVERIFY(opened.ok());
+      auto uncertain = opened.value().publish(d, candidate_checkpoint,
+                                              coverage, valid_checkpoint);
+      QVERIFY(!uncertain.ok());
+      auto retried = opened.value().publish(d, candidate_checkpoint,
+                                            coverage, valid_checkpoint);
+      QVERIFY(retried.ok());
+      QCOMPARE(retried.value().delivery, coverage);
+      auto conflicting = coverage;
+      conflicting["text"][actor(20)] = 10;
+      QVERIFY(!opened.value().publish(
+          d, candidate_checkpoint, conflicting,
+          [](const auto &, std::string_view, const auto &) {
+            return Result<void>{};
+          }).ok());
+      auto refused = opened.value().publish(
+          d, sha256_hex("bad candidate"), coverage,
+          [](const auto &, std::string_view, const auto &) {
+            return Result<void>(Error(ErrorCode::corrupt_record,
+                                      "checkpoint was not durable"));
+          });
+      QVERIFY(!refused.ok());
+    }
+    QCOMPARE(validations, size_t(2));
+    {
+      auto reopened = CoverageStore::open(root, owner);
+      QVERIFY(reopened.ok());
+      auto recovered = reopened.value().recover(d, candidate_checkpoint,
+                                                valid_checkpoint);
+      QVERIFY(recovered.ok());
+      QVERIFY(recovered.value().has_value());
+      QCOMPARE(recovered.value()->delivery, coverage);
+      QVERIFY(!reopened.value().recover(d, candidate_checkpoint, {}).ok());
+      auto stale_checkpoint = reopened.value().recover(
+          d, candidate_checkpoint, [](const auto &, std::string_view,
+                                      const auto &) {
+            return Result<void>(Error(ErrorCode::corrupt_record,
+                                      "checkpoint no longer validates"));
+          });
+      QVERIFY(!stale_checkpoint.ok());
+      auto absent = reopened.value().recover(
+          d, sha256_hex("missing checkpoint"), valid_checkpoint);
+      QVERIFY(absent.ok());
+      QVERIFY(!absent.value().has_value());
+    }
+    QCOMPARE(validations, size_t(3));
+
+    fs::path record;
+    for (const auto &entry : fs::recursive_directory_iterator(root))
+      if (entry.is_regular_file() && entry.path().extension() == ".coverage")
+        record = entry.path();
+    QVERIFY(!record.empty());
+    {
+      std::fstream file(record, std::ios::binary | std::ios::in | std::ios::out);
+      QVERIFY(file.good());
+      file.seekg(-2, std::ios::end);
+      char byte = 0;
+      file.read(&byte, 1);
+      QVERIFY(file.good());
+      file.seekp(-2, std::ios::end);
+      const char changed = byte == '0' ? '1' : '0';
+      file.write(&changed, 1);
+      QVERIFY(file.good());
+    }
+    auto reopened = CoverageStore::open(root, owner);
+    QVERIFY(reopened.ok());
+    auto corrupt = reopened.value().recover(d, candidate_checkpoint,
+                                            valid_checkpoint);
+    QVERIFY(!corrupt.ok());
+  }
+
+  void recoveredDurablePeerEvidenceFeedsCertificateConstruction() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    namespace fs = std::filesystem;
+    const auto root = fs::path(temporary.path().toStdString());
+    const auto d = descriptor();
+    const auto candidate_checkpoint = sha256_hex("shared certificate checkpoint");
+    std::map<ActorId, DeliveryCoverage> expected;
+    for (size_t i = 0; i < d.members.size(); ++i) {
+      const auto member = d.members[i];
+      expected[member] = {{"text", {{actor(20), 10 - i}}},
+                          {"ids", {{actor(21), 6 - i}}}};
+      auto store = CoverageStore::open(root, member);
+      QVERIFY(store.ok());
+      auto published = store.value().publish(
+          d, candidate_checkpoint, expected.at(member),
+          [&](const auto &checked_descriptor, std::string_view checked_hash,
+              const auto &coverage) {
+            if (checked_descriptor.hash != d.hash ||
+                checked_hash != candidate_checkpoint ||
+                coverage != expected.at(member))
+              return Result<void>(Error(ErrorCode::corrupt_record,
+                                        "durable candidate does not match"));
+            return Result<void>{};
+          });
+      QVERIFY(published.ok());
+    }
+    std::vector<PeerCoverageEvidence> recovered_evidence;
+    for (const auto &member : d.members) {
+      auto store = CoverageStore::open(root, member);
+      QVERIFY(store.ok());
+      auto recovered = store.value().recover(
+          d, candidate_checkpoint,
+          [&](const auto &checked_descriptor, std::string_view checked_hash,
+              const auto &coverage) {
+            if (checked_descriptor.hash != d.hash ||
+                checked_hash != candidate_checkpoint ||
+                coverage != expected.at(member))
+              return Result<void>(Error(ErrorCode::corrupt_record,
+                                        "recovered checkpoint does not match"));
+            return Result<void>{};
+          });
+      QVERIFY(recovered.ok());
+      QVERIFY(recovered.value().has_value());
+      recovered_evidence.push_back(std::move(*recovered.value()));
+    }
+    auto certificate = certify_common_coverage(
+        d, recovered_evidence,
+        [&](const auto &checked_descriptor, const auto &item) {
+          if (checked_descriptor.hash != d.hash ||
+              expected.at(item.member) != item.delivery)
+            return Result<void>(Error(ErrorCode::corrupt_record,
+                                      "peer evidence differs from durable copy"));
+          return Result<void>{};
+        },
+        [](const auto &, std::string_view, const DeliveryCoverage &,
+           const std::vector<PeerCoverageEvidence> &) {
+          return Result<void>{};
+        });
+    QVERIFY(certificate.ok());
+    QCOMPARE(certificate.value().checkpoint_hash(), candidate_checkpoint);
+    QCOMPARE(certificate.value().common_delivery().at("text").at(actor(20)),
+             uint64_t(8));
+    QCOMPARE(certificate.value().common_delivery().at("ids").at(actor(21)),
+             uint64_t(4));
   }
 };
 

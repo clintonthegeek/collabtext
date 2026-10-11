@@ -5,19 +5,28 @@
 #include <set>
 
 namespace CollabText::Storage {
+namespace {
+bool is_sha256(std::string_view value) {
+  return value.size() == 64 && std::all_of(value.begin(), value.end(), [](char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+  });
+}
+} // namespace
 
 Result<GcCertificate> certify_common_coverage(
     const MembershipDescriptor &descriptor,
     const std::vector<PeerCoverageEvidence> &evidence,
-    const DurableCoverageVerifier &verify_durable) {
+    const DurableCoverageVerifier &verify_durable,
+    const GcEligibilityVerifier &verify_g01_eligibility) {
   if (auto valid = validate_membership_descriptor(descriptor); !valid)
     return valid.error().with_context("GC coverage certificate");
   if (descriptor.members.empty() || evidence.size() != descriptor.members.size() ||
-      !verify_durable)
+      !verify_durable || !verify_g01_eligibility)
     return Error(ErrorCode::awaiting_state,
-                 "certificate requires durable evidence from every current member");
+                 "certificate requires durable evidence and full G01 eligibility verification");
 
   std::set<ActorId> seen;
+  std::string checkpoint_hash;
   std::vector<const PeerCoverageEvidence *> ordered;
   ordered.reserve(evidence.size());
   for (const auto &item : evidence) {
@@ -26,9 +35,11 @@ Result<GcCertificate> certify_common_coverage(
                             item.member) ||
         item.epoch != descriptor.epoch ||
         item.descriptor_hash != descriptor.hash ||
-        item.checkpoint_hash != descriptor.base_checkpoint_hash)
+        !is_sha256(item.checkpoint_hash) ||
+        (!checkpoint_hash.empty() && item.checkpoint_hash != checkpoint_hash))
       return Error(ErrorCode::wrong_epoch,
                    "coverage evidence is duplicate, stale, or outside membership");
+    checkpoint_hash = item.checkpoint_hash;
     for (const auto &[stream, frontier] : item.delivery) {
       const auto declared = std::lower_bound(
           descriptor.base_frontiers.begin(), descriptor.base_frontiers.end(), stream,
@@ -39,7 +50,8 @@ Result<GcCertificate> certify_common_coverage(
                      stream);
       for (const auto &[producer, through] : frontier) {
         if (!producer.valid() ||
-            !declared->delivery.contains(producer))
+            !declared->delivery.contains(producer) || through == 0 ||
+            through == UINT64_MAX)
           return Error(ErrorCode::corrupt_record,
                        "coverage producer is absent from the descriptor frontier",
                        stream);
@@ -87,7 +99,18 @@ Result<GcCertificate> certify_common_coverage(
     }
     if (frontier.empty()) common.erase(stream_frontier.stream);
   }
-  return GcCertificate(descriptor.hash, descriptor.base_checkpoint_hash,
+  Result<void> eligible;
+  try {
+    eligible = verify_g01_eligibility(descriptor, checkpoint_hash, common, evidence);
+  } catch (const std::exception &error) {
+    return Error(ErrorCode::io_error, error.what(),
+                 "G01 reclamation eligibility verifier threw");
+  } catch (...) {
+    return Error(ErrorCode::io_error,
+                 "G01 reclamation eligibility verifier threw an unknown exception");
+  }
+  if (!eligible.ok()) return eligible.error().with_context("G01 reclamation eligibility");
+  return GcCertificate(descriptor.hash, std::move(checkpoint_hash),
                        std::move(common));
 }
 

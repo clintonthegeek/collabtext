@@ -30,9 +30,19 @@ struct PeerCoverageEvidence {
 using DurableCoverageVerifier = std::function<Result<void>(
     const MembershipDescriptor &, const PeerCoverageEvidence &)>;
 
+/// Must re-evaluate every G01 eligibility condition for the exact common
+/// frontier: complete checkpoint state, deferred input, epoch/proposal and
+/// acknowledgement set, durable private history/undo retirement, live pins,
+/// and required token translations. Coverage alone can never authorize GC.
+using GcEligibilityVerifier = std::function<Result<void>(
+    const MembershipDescriptor &, std::string_view checkpoint_hash,
+    const DeliveryCoverage &common_delivery,
+    const std::vector<PeerCoverageEvidence> &evidence)>;
+
 /// Immutable result for one exact membership descriptor and checkpoint.
 /// Instances can only be created by certify_common_coverage after every
-/// current member's durable evidence has been revalidated.
+/// current member's durable evidence and the complete G01 eligibility contract
+/// have been revalidated.
 class GcCertificate {
 public:
   [[nodiscard]] const std::string &descriptor_hash() const { return m_descriptor_hash; }
@@ -51,7 +61,7 @@ private:
   DeliveryCoverage m_common_delivery;
   friend Result<GcCertificate> certify_common_coverage(
       const MembershipDescriptor &, const std::vector<PeerCoverageEvidence> &,
-      const DurableCoverageVerifier &);
+      const DurableCoverageVerifier &, const GcEligibilityVerifier &);
 };
 
 /// Certify the true per-stream intersection for the exact current membership.
@@ -60,6 +70,7 @@ private:
 [[nodiscard]] Result<GcCertificate> certify_common_coverage(
     const MembershipDescriptor &descriptor,
     const std::vector<PeerCoverageEvidence> &evidence,
-    const DurableCoverageVerifier &verify_durable);
+    const DurableCoverageVerifier &verify_durable,
+    const GcEligibilityVerifier &verify_g01_eligibility);
 
 } // namespace CollabText::Storage

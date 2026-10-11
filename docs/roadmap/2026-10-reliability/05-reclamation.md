@@ -85,13 +85,14 @@ Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_per
 
 **Status:** see TASKS.json (in progress)
 
-**Implementation note (2026-10-11):** G02 provides contiguous per-producer delivery frontier scans and checkpoint coverage encoding/binding. The first `GcCertificate` slice now requires exact current-member evidence bound to the descriptor and base checkpoint, mandatory durable checkpoint verification, declared streams/producers, and computes the per-stream/per-producer minimum. Debug, Release, and ASan/UBSan certificate tests agree with the independent GcModel, including silent members and cross-stream counter reuse. Durable evidence publication/recovery, authenticated peer evidence, and post-restart certificate revalidation remain open. Engine operation vectors and envelope delivery counters remain separate spaces.
+**Implementation note (2026-10-11):** G02 provides contiguous per-producer delivery frontier scans and checkpoint coverage encoding/binding. `CoverageStore` durably publishes owner-local evidence keyed by membership and candidate checkpoint hashes, verifies checkpoints before publication and on recovery, uses atomic checksummed canonical records, and rejects conflicting evidence for immutable keys. The `GcCertificate` factory requires evidence from every current member against one exact candidate checkpoint, computes true per-stream/per-producer intersection, and then requires a separate full G01 eligibility verifier; a silent member contributes zero. That verifier must check checkpoint completeness, deferred input, epoch/proposal and acknowledgements, private undo retirement, and pins/translations. Common coverage is recomputed per certification attempt instead of cached. Tests cover uncertain directory sync, exact retry, restart and verifier revalidation, missing evidence, stale checkpoint, callback refusal/absence, conflicting publication and checksum corruption; recovered durable evidence also feeds certificate construction after reopening each member store. The per-stream intersection matches GcModel, including cross-stream counter reuse. Focused Debug, Release, and ASan/UBSan gates pass. External peer authentication, linking delivery coverage to complete engine/checkpoint/deferred-input semantics, pin and undo eligibility, and independent revalidation of every certificate requirement after restart remain open. Engine operation vectors and envelope delivery counters remain separate spaces.
 **Depends on:** G02, L04, P03  
 **Coverage:** F2, F3, F5  
 
 **Files / scope:**
 
 - `libs/collabtext/src/storage/CoverageStore.cpp`
+- `libs/collabtext/src/storage/CoverageStore.h`
 - `libs/collabtext/src/crdt/StreamSync.cpp`
 - `libs/collabtext/src/storage/GcCertificate.cpp`
 - `libs/collabtext/src/storage/GcCertificate.h`
@@ -101,7 +102,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_per
 **Steps:**
 
 1. Publish only delivery-token coverage tied to durable local state; enforce contiguous producer envelope coverage separately from engine operation vectors. Include IdList streams.
-2. Compute common coverage over the current certified epoch membership using true intersection. Missing/stale/unsupported peer data constrains eligibility; cache by membership hash and invalidate on epoch changes.
+2. Compute common coverage over the current certified epoch membership using true intersection. Missing/stale/unsupported peer data constrains eligibility. Recompute on each certification attempt instead of caching, so a membership change cannot reuse stale coverage.
 3. Construct an immutable internal certificate only after all G01 requirements are satisfied. Public callers cannot forge a certificate from a Global or integer.
 
 **Acceptance:**

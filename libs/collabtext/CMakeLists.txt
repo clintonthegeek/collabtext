@@ -87,6 +87,7 @@ add_library(collabtext_core STATIC
     src/storage/CheckpointMembershipCodec.cpp
     src/storage/CheckpointPinsCodec.cpp
     src/storage/CheckpointStore.cpp
+    src/storage/CoverageStore.cpp
     src/storage/GcCertificate.cpp
     src/storage/CheckpointTranslationCodec.cpp
     src/storage/LocalHistoryLog.cpp
