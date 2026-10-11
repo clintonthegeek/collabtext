@@ -11,6 +11,7 @@
 #include "storage/DurableFile.h"
 #include "storage/CheckpointStore.h"
 #include "storage/LocalHistoryLog.h"
+#include "storage/MembershipStore.h"
 #include "storage/RetentionState.h"
 #include "transport/StreamSync.h"
 #include <collabtext/DocumentSession.h>
@@ -1309,6 +1310,247 @@ private slots:
     auto retention = Storage::RetentionState::open(retention_path, session->actor());
     QVERIFY(retention.ok());
     QVERIFY(retention.value().is_retired(config.stream, group));
+  }
+
+  void multiStreamRetirementPublishesAllHistoryBeforeMembership() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const auto root = std::filesystem::path(tmp.path().toStdString());
+    DocumentSessionConfig text_config{root / "shared", root / "device",
+                                      "doc-multistream-retirement", "text", 1};
+    DocumentSessionConfig comments_config{root / "shared", root / "device",
+                                          text_config.document, "comments", 1};
+    text_config.max_undo_steps = comments_config.max_undo_steps = 1;
+
+    ActorId owner;
+    {
+      auto seeded = DocumentSession::open(text_config);
+      QVERIFY(seeded.ok());
+      auto session = std::move(seeded).value();
+      owner = session->actor();
+      QVERIFY(session->close().ok());
+    }
+    {
+      auto seeded = DocumentSession::open(comments_config);
+      QVERIFY(seeded.ok());
+      auto session = std::move(seeded).value();
+      QCOMPARE(session->actor(), owner);
+      QVERIFY(session->close().ok());
+    }
+    const auto retired_device = Test::actor(232);
+    auto coordinator_result = MembershipCoordinator::create({
+        {text_config.document, text_config.stream, 1, {owner, retired_device}},
+        {comments_config.document, comments_config.stream, 1, {owner, retired_device}}});
+    QVERIFY(coordinator_result.ok());
+    auto coordinator = std::move(coordinator_result).value();
+    const auto configure_membership = [coordinator](DocumentSessionConfig &config) {
+      config.authorize_local_mutation =
+          [coordinator](const DocumentId &document, const StreamId &stream,
+                        uint64_t epoch, const ActorId &actor) {
+            return coordinator->authorize_local_mutation(
+                document, stream, epoch, actor);
+          };
+      config.authorize_inbound_delivery =
+          [coordinator](const DocumentId &document, const StreamId &stream,
+                        uint64_t epoch, const DeliveryToken &token) {
+            return coordinator->authorize_inbound_delivery(
+                document, stream, epoch, token);
+          };
+    };
+    configure_membership(text_config);
+    configure_membership(comments_config);
+
+    Crdt::Identity text_group, comments_group;
+    {
+      auto opened = DocumentSession::open(text_config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QCOMPARE(session->actor(), owner);
+      QVERIFY(session->apply_local({{0, 0}}, {"a"}).ok());
+      QVERIFY(session->apply_local({{1, 1}}, {"b"}).ok());
+      QCOMPARE(session->pending_undo_retirements().size(), size_t(1));
+      text_group = session->pending_undo_retirements().front().group_id;
+      QVERIFY(session->close().ok());
+    }
+    {
+      auto opened = DocumentSession::open(comments_config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QCOMPARE(session->actor(), owner);
+      QVERIFY(session->apply_local({{0, 0}}, {"c"}).ok());
+      QVERIFY(session->apply_local({{1, 1}}, {"d"}).ok());
+      QCOMPARE(session->pending_undo_retirements().size(), size_t(1));
+      comments_group = session->pending_undo_retirements().front().group_id;
+      QVERIFY(session->close().ok());
+    }
+
+    const auto save_both_stream_histories = [&]() -> Result<void> {
+      auto text_opened = DocumentSession::open(text_config);
+      if (!text_opened.ok()) return text_opened.error();
+      auto text_session = std::move(text_opened).value();
+      auto text_saved = text_session->save();
+      if (!text_saved.ok()) return text_saved.error();
+      auto text_closed = text_session->close();
+      if (!text_closed.ok()) return text_closed.error();
+
+      auto comments_opened = DocumentSession::open(comments_config);
+      if (!comments_opened.ok()) return comments_opened.error();
+      auto comments_session = std::move(comments_opened).value();
+      auto comments_saved = comments_session->save();
+      if (!comments_saved.ok()) return comments_saved.error();
+      return comments_session->close();
+    };
+
+    Storage::MembershipDescriptor descriptor;
+    descriptor.epoch = 1;
+    descriptor.base_checkpoint_hash = sha256_hex("multistream-base-checkpoint");
+    descriptor.members = {owner, retired_device};
+    std::sort(descriptor.members.begin(), descriptor.members.end());
+    for (const auto &stream : {comments_config.stream, text_config.stream}) {
+      Storage::MembershipDescriptor::StreamFrontier frontier;
+      frontier.stream = stream;
+      for (const auto &member : descriptor.members) {
+        frontier.operation.emplace(member, 0);
+        frontier.delivery.emplace(member, 0);
+      }
+      descriptor.base_frontiers.push_back(std::move(frontier));
+    }
+    descriptor.supported_token_versions = {1};
+    descriptor.translation_manifest_hash = sha256_hex("multistream-token-manifest");
+    auto sealed = Storage::seal_membership_descriptor(std::move(descriptor));
+    QVERIFY(sealed.ok());
+    descriptor = std::move(sealed).value();
+
+    const std::vector<Storage::RetirementImpact> impacts{
+        {text_config.document, comments_config.stream, 1, 2, 1,
+         sha256_hex("comments-branch")},
+        {text_config.document, text_config.stream, 1, 2, 1,
+         sha256_hex("text-branch")}};
+    auto preview = Storage::preview_retirement(descriptor, retired_device, impacts);
+    QVERIFY(preview.ok());
+    const std::vector<Storage::MembershipAcknowledgement> acknowledgements{
+        {owner, "durable-retirement-ack"}};
+    const Storage::DurableAcknowledgementVerifier verify_ack =
+        [owner, digest = preview.value().digest](
+            const ActorId &actor, std::string_view supplied_digest,
+            std::string_view signature) -> Result<void> {
+      if (actor != owner || supplied_digest != digest ||
+          signature != "durable-retirement-ack")
+        return Error(ErrorCode::corrupt_record,
+                     "multi-stream retirement acknowledgement does not match");
+      return {};
+    };
+    auto membership_opened = Storage::MembershipStore::open(
+        root / "device" / "membership.log", owner);
+    QVERIFY(membership_opened.ok());
+    auto membership = std::move(membership_opened).value();
+
+    const std::vector<Storage::StreamUndoRetirement> retirements{
+        {comments_config.stream, {comments_group}},
+        {text_config.stream, {text_group}}};
+    const auto retention_path = root / "device" / "retention.log";
+    unsigned writes = 0;
+    Storage::StepHook failure;
+    failure.fail = [&](Storage::Step step, const std::filesystem::path &)
+        -> std::optional<Error> {
+      if (step == Storage::Step::Write && ++writes == 2)
+        return Error(ErrorCode::io_error,
+                     "injected failure before second stream retirement record");
+      return std::nullopt;
+    };
+    {
+      auto retention_opened = Storage::RetentionState::open(
+          retention_path, owner, &failure);
+      QVERIFY(retention_opened.ok());
+      auto retention = std::move(retention_opened).value();
+      auto partial = retention.publish_after_durable_trim(
+          retirements, save_both_stream_histories);
+      QVERIFY(!partial.ok());
+      QVERIFY(retention.is_retired(comments_config.stream, comments_group));
+      QVERIFY(!retention.is_retired(text_config.stream, text_group));
+      auto before_membership = membership.recover();
+      QVERIFY(before_membership.ok());
+      QVERIFY(before_membership.value().empty());
+      QVERIFY(coordinator->authorize_local_mutation(
+          text_config.document, text_config.stream, 1, retired_device));
+      QVERIFY(coordinator->authorize_local_mutation(
+          comments_config.document, comments_config.stream, 1, retired_device));
+    }
+
+    {
+      auto opened = DocumentSession::open(text_config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QCOMPARE(session->pending_undo_retirements().size(), size_t(1));
+      QCOMPARE(session->pending_undo_retirements().front().group_id, text_group);
+      QVERIFY(session->close().ok());
+    }
+    {
+      auto opened = DocumentSession::open(comments_config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QCOMPARE(session->pending_undo_retirements().size(), size_t(1));
+      QCOMPARE(session->pending_undo_retirements().front().group_id, comments_group);
+      QVERIFY(session->close().ok());
+    }
+
+    auto retention_opened = Storage::RetentionState::open(retention_path, owner);
+    QVERIFY(retention_opened.ok());
+    auto retention = std::move(retention_opened).value();
+    QVERIFY(retention.is_retired(comments_config.stream, comments_group));
+    QVERIFY(!retention.is_retired(text_config.stream, text_group));
+    QVERIFY(retention.publish_after_durable_trim(
+        retirements, save_both_stream_histories).ok());
+    QVERIFY(retention.is_retired(text_config.stream, text_group));
+    auto before_membership = membership.recover();
+    QVERIFY(before_membership.ok());
+    QVERIFY(before_membership.value().empty());
+
+    // The consumer may checkpoint the local acknowledgment only after both
+    // stream retirement records have crossed their durability barriers.
+    {
+      auto opened = DocumentSession::open(text_config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QVERIFY(session->acknowledge_undo_retirements({text_group}).ok());
+      QVERIFY(session->pending_undo_retirements().empty());
+      QVERIFY(session->close().ok());
+    }
+    {
+      auto opened = DocumentSession::open(comments_config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      QVERIFY(session->acknowledge_undo_retirements({comments_group}).ok());
+      QVERIFY(session->pending_undo_retirements().empty());
+      QVERIFY(session->close().ok());
+    }
+
+    std::optional<Storage::MembershipEvent> retired_event;
+    auto membership_transition = coordinator->commit_transitions(
+        "retirement-" + preview.value().digest,
+        {{text_config.document, text_config.stream, 1, 2, {owner}},
+         {comments_config.document, comments_config.stream, 1, 2, {owner}}},
+        [&]() -> Result<void> {
+          auto event = membership.commit_retirement(
+              preview.value(), descriptor, impacts, acknowledgements,
+              "explicit two-stream retirement confirmation", verify_ack);
+          if (!event.ok()) return event.error();
+          retired_event = event.value();
+          return {};
+        });
+    QVERIFY(membership_transition.ok());
+    QVERIFY(retired_event.has_value());
+    QCOMPARE(retired_event->epoch, uint64_t(2));
+    const auto events = membership.recover();
+    QVERIFY(events.ok());
+    QCOMPARE(events.value().size(), size_t(1));
+
+    for (const auto &stream : {text_config.stream, comments_config.stream}) {
+      QVERIFY(!coordinator->authorize_local_mutation(
+          text_config.document, stream, 1, retired_device));
+      QVERIFY(coordinator->authorize_local_mutation(
+          text_config.document, stream, 2, owner));
+    }
   }
 
   void session_recovers_pending_intent_after_transport_sync_failure() {

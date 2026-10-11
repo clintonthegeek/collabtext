@@ -141,3 +141,15 @@ crash before the acknowledgment leaves the intent available for retry.
 pending retirements, for consumer-owned persistence. The consumer controls when
 that snapshot is checkpointed beside canonical events and owns any multi-block
 group policy.
+
+For a membership retirement spanning several streams, first durably save every
+affected session history, then publish each stream's undo-retirement set to the
+consumer's durable retirement journal. Treat a partial set as a retryable prefix:
+reopen affected sessions, repeat the idempotent publication, and do not advance
+membership until every stream record is durable. Each session may acknowledge
+its pending undo groups after the complete retirement set is durable. Then commit
+the single membership event/checkpoint under
+`MembershipCoordinator::commit_transitions()` for all affected scopes. The
+coordinator publishes the new in-memory epochs together only after the durable
+callback succeeds. A restart before that callback succeeds leaves the previous
+membership active and the history-retirement records safe to retry.
