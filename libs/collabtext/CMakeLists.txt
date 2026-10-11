@@ -519,6 +519,10 @@ add_executable(tst_crdtengine_op_api tests/tst_crdtengine_op_api.cpp)
 target_link_libraries(tst_crdtengine_op_api PRIVATE CollabText::TestSupport Qt6::Test)
 add_test(NAME tst_crdtengine_op_api COMMAND tst_crdtengine_op_api)
 
+add_executable(tst_callbacks tests/tst_callbacks.cpp)
+target_link_libraries(tst_callbacks PRIVATE CollabText::TestSupport Qt6::Test)
+add_test(NAME tst_callbacks COMMAND tst_callbacks)
+
 # OpStream interface smoke test — excludes internal src/ include path to
 # prove that <collabtext/OpStream.h> is self-sufficient with no Qt or internal
 # dependencies.

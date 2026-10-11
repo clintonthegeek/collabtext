@@ -473,12 +473,16 @@ The rules, stated once for every callback in the library:
 
 1. **Single owner.** One callback per event. Registering a second replaces the
    first; there is no list and no fan-out inside the engine.
-2. **Non-reentrant mutation.** A04 must detect and reject mutation of the same
-   engine/transport during notification with a typed outcome before changing
-   state. Read-only inspection and callback removal are defined; dispatch uses a
-   stable callback snapshot. Defer follow-up mutation until notification returns.
-   A reentrant caller is not permitted to corrupt the engine through undefined
-   behavior. These checks are planned, not implemented by P05.
+2. **Non-reentrant mutation.** `CrdtEngine` rejects same-engine mutation from a
+   notification callback with `ErrorCode::reentrant_mutation` before changing
+   state. Checked local APIs (`try_insert`, `try_remove`, `try_replace`,
+   `try_undo`, and `try_redo`) expose that error; `apply_ops()` returns one
+   rejected outcome per offered operation. Legacy void `insert()` and
+   `remove()` and bool `undo()`/`redo()` leave state unchanged and cannot report
+   the typed error. Read-only inspection and callback replacement/removal remain
+   available; dispatch uses a stable callback snapshot, so self-removal affects
+   later notifications only. Defer follow-up mutation until notification
+   returns. Transport callback reentrancy follows its own `OpStream` contract.
 3. **Lifetimes.** The engine owns the `std::function`. A callback capturing a raw
    pointer to an object that dies first is a caller bug; the library does not
    keep the object alive and does not check.

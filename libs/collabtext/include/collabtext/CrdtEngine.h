@@ -51,8 +51,13 @@ public:
     CrdtEngine &operator=(const CrdtEngine &) = delete;
 
     // Text operations. Offsets are UTF-16 code unit positions.
+    // The legacy void wrappers leave state unchanged on failure; checked
+    // callers should use try_insert/try_remove/try_replace.
     void insert(int position, const std::string &text);
     void remove(int position, int length);
+    [[nodiscard]] Result<Crdt::Operation>
+    try_insert(int position, const std::string &text);
+    [[nodiscard]] Result<Crdt::Operation> try_remove(int position, int length);
     /// Replace one UTF-16 range as a single undoable CRDT operation. Positions
     /// inside a surrogate pair and ranges outside the text are rejected.
     [[nodiscard]] Result<Crdt::Operation>
@@ -72,7 +77,10 @@ public:
     [[nodiscard]] Result<void> set_max_undo_depth(size_t depth);
     [[nodiscard]] Result<void> set_max_undo_bytes(size_t bytes);
 
-    // Change notification
+    // Change notification. Callbacks run synchronously on the calling thread.
+    // Callback registration may be changed during dispatch; the active event
+    // uses a stable callback snapshot. Mutating this engine from either
+    // callback returns `reentrant_mutation` through checked APIs.
     using ChangeCallback = std::function<void()>;
     void setOnChange(ChangeCallback cb);
 

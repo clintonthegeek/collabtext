@@ -82,6 +82,8 @@ enum class ErrorCode {
     random_source_unavailable,
     // limits
     deferred_queue_full,
+    // callbacks
+    reentrant_mutation,
 };
 
 /// A typed error. Cheap to copy, safe to keep, and always carries where it

@@ -13,15 +13,28 @@ struct CrdtEngine::Impl {
     LocalOpCallback on_local_op;
     std::optional<PositionScope> scope;
     bool position_history_available = true;
+    bool callback_active = false;
+
+    struct CallbackScope {
+        bool &active;
+        explicit CallbackScope(bool &state) : active(state) { active = true; }
+        ~CallbackScope() { active = false; }
+    };
 
     explicit Impl(Crdt::SharedIdentityAllocator allocator) : buffer(std::move(allocator)) {}
 
     void notify() {
-        if (on_change) on_change();
+        auto callback = on_change;
+        if (!callback) return;
+        CallbackScope scope(callback_active);
+        callback();
     }
 
     void emit_op(const Crdt::Operation &op) {
-        if (on_local_op) on_local_op(op);
+        auto callback = on_local_op;
+        if (!callback) return;
+        CallbackScope scope(callback_active);
+        callback(op);
     }
 };
 
@@ -77,36 +90,36 @@ Result<int> CrdtEngine::compare(const TextBoundary& a, const TextBoundary& b) co
     return x.value().byte_offset < y.value().byte_offset ? -1 : x.value().byte_offset > y.value().byte_offset ? 1 : 0;
 }
 void CrdtEngine::discard_local_view() noexcept {
+    if (m_impl->callback_active) return;
     m_impl->buffer.discard_local_view();
     m_impl->position_history_available = false;
 }
 
 void CrdtEngine::insert(int position, const std::string &text)
 {
-    uint32_t byte_offset = static_cast<uint32_t>(
-        Crdt::utf16_to_byte_offset(m_impl->buffer.text(), position));
-    auto op = m_impl->buffer.apply_local_edit({{byte_offset, byte_offset}}, {text});
-    m_impl->emit_op(op);
-    m_impl->notify();
+    (void)try_insert(position, text);
 }
 
 void CrdtEngine::remove(int position, int length)
 {
-    const std::string current = m_impl->buffer.text();
-    if (current.size() > std::numeric_limits<uint32_t>::max())
-        return;
-    uint32_t byte_start = static_cast<uint32_t>(
-        Crdt::utf16_to_byte_offset(current, position));
-    uint32_t byte_end = static_cast<uint32_t>(
-        Crdt::utf16_to_byte_offset(current, position + length));
-    auto op = m_impl->buffer.apply_local_edit({{byte_start, byte_end}}, {""});
-    m_impl->emit_op(op);
-    m_impl->notify();
+    (void)try_remove(position, length);
+}
+
+Result<Crdt::Operation> CrdtEngine::try_insert(int position,
+                                               const std::string &text) {
+    return try_replace(position, 0, text);
+}
+
+Result<Crdt::Operation> CrdtEngine::try_remove(int position, int length) {
+    return try_replace(position, length, {});
 }
 
 Result<Crdt::Operation> CrdtEngine::try_replace(
     int position, int length, const std::string &text)
 {
+    if (m_impl->callback_active)
+        return Error(ErrorCode::reentrant_mutation,
+                     "cannot mutate an engine from its notification callback");
     const std::string current = m_impl->buffer.text();
     if (current.size() > std::numeric_limits<uint32_t>::max())
         return Error(ErrorCode::malformed,
@@ -162,6 +175,9 @@ bool CrdtEngine::redo()
 }
 
 Result<std::optional<Crdt::Operation>> CrdtEngine::try_undo() {
+    if (m_impl->callback_active)
+        return Error(ErrorCode::reentrant_mutation,
+                     "cannot mutate an engine from its notification callback");
     auto result = m_impl->buffer.try_undo();
     if (!result.ok()) return result.error();
     if (result.value()) {
@@ -172,6 +188,9 @@ Result<std::optional<Crdt::Operation>> CrdtEngine::try_undo() {
 }
 
 Result<std::optional<Crdt::Operation>> CrdtEngine::try_redo() {
+    if (m_impl->callback_active)
+        return Error(ErrorCode::reentrant_mutation,
+                     "cannot mutate an engine from its notification callback");
     auto result = m_impl->buffer.try_redo();
     if (!result.ok()) return result.error();
     if (result.value()) {
@@ -186,9 +205,15 @@ size_t CrdtEngine::undo_history_bytes() const { return m_impl->buffer.undo_histo
 size_t CrdtEngine::max_undo_depth() const { return m_impl->buffer.max_undo_depth(); }
 size_t CrdtEngine::max_undo_bytes() const { return m_impl->buffer.max_undo_bytes(); }
 Result<void> CrdtEngine::set_max_undo_depth(size_t depth) {
+    if (m_impl->callback_active)
+        return Error(ErrorCode::reentrant_mutation,
+                     "cannot mutate an engine from its notification callback");
     return m_impl->buffer.set_max_undo_depth(depth);
 }
 Result<void> CrdtEngine::set_max_undo_bytes(size_t bytes) {
+    if (m_impl->callback_active)
+        return Error(ErrorCode::reentrant_mutation,
+                     "cannot mutate an engine from its notification callback");
     return m_impl->buffer.set_max_undo_bytes(bytes);
 }
 
@@ -204,6 +229,15 @@ void CrdtEngine::setOnLocalOp(LocalOpCallback cb)
 
 std::vector<ApplyOutcome> CrdtEngine::apply_ops(
     const std::vector<Crdt::Operation>& operations) {
+    if (m_impl->callback_active) {
+        std::vector<ApplyOutcome> outcomes;
+        outcomes.reserve(operations.size());
+        for (size_t i = 0; i < operations.size(); ++i)
+            outcomes.push_back(ApplyOutcome::rejected(Error(
+                ErrorCode::reentrant_mutation,
+                "cannot mutate an engine from its notification callback")));
+        return outcomes;
+    }
     auto outcomes = m_impl->buffer.apply_ops(operations);
     if (std::any_of(outcomes.begin(), outcomes.end(), [](const ApplyOutcome& outcome) {
             return outcome.kind() == ApplyOutcomeKind::applied;

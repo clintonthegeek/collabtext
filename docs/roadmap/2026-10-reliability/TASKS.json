@@ -3237,7 +3237,12 @@
         "libs/collabtext/include/collabtext/CrdtEngine.h",
         "libs/collabtext/include/collabtext/DocumentSession.h",
         "libs/collabtext/src/DocumentSession.cpp",
-        "libs/collabtext/tests/tst_callbacks.cpp"
+        "libs/collabtext/tests/tst_callbacks.cpp",
+        "libs/collabtext/include/collabtext/ActorId.h",
+        "libs/collabtext/src/CrdtEngine.cpp",
+        "libs/collabtext/src/identity/ReplicaState.cpp",
+        "libs/collabtext/CMakeLists.txt",
+        "docs/specs/vnext-public-api.md"
       ],
       "steps": [
         "Provide batch remote application outcomes and one visible-change notification per applied batch, with exact deltas. Duplicate/deferred/rejected operations do not claim visible change.",
@@ -3248,12 +3253,12 @@
         "Callback order/count and invalid/deferred behavior match P01; remote ops never echo as local ops.",
         "Destroyed/unsubscribed listeners are not called; reentrant mutation has tested deterministic behavior."
       ],
-      "verification": "Run `./tools/verify-roadmap.sh debug 'tst_callbacks|tst_document_adapter|tst_transport_commit_contract'`; ASan verifies listener teardown/lifetime cases.",
+      "verification": "The focused callback group `tst_callbacks|tst_crdtengine_op_api|tst_document_adapter|tst_transport_commit_contract` passed in Debug (`20261011T044830Z-2`), Release (`20261011T044625Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T044722Z-2`). Remaining: session subscription teardown/lifetime, session mutation reentrancy, and bounded pending byte/count backpressure tests.",
       "addresses": [
         "R9"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "in_progress"
     },
     {
       "id": "A05",

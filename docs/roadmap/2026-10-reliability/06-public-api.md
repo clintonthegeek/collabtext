@@ -147,15 +147,20 @@ Run `./tools/verify-roadmap.sh {debug,release,asan} 'tst_document_adapter|tst_ed
 
 ## A04 — Implement batch outcomes, subscriptions, and safe notification policy
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** in progress
 **Depends on:** A03, P05  
 **Coverage:** R9  
 
 **Files / scope:**
 
 - `libs/collabtext/include/collabtext/CrdtEngine.h`
+- `libs/collabtext/include/collabtext/ActorId.h`
+- `libs/collabtext/src/CrdtEngine.cpp`
+- `libs/collabtext/src/identity/ReplicaState.cpp`
 - `libs/collabtext/include/collabtext/DocumentSession.h`
 - `libs/collabtext/src/DocumentSession.cpp`
+- `libs/collabtext/CMakeLists.txt`
+- `docs/specs/vnext-public-api.md`
 - `libs/collabtext/tests/tst_callbacks.cpp`
 
 **Steps:**
@@ -171,7 +176,9 @@ Run `./tools/verify-roadmap.sh {debug,release,asan} 'tst_document_adapter|tst_ed
 
 **Verification:**
 
-Run `./tools/verify-roadmap.sh debug 'tst_callbacks|tst_document_adapter|tst_transport_commit_contract'`; ASan verifies listener teardown/lifetime cases.
+The focused callback group `tst_callbacks|tst_crdtengine_op_api|tst_document_adapter|tst_transport_commit_contract` passed in Debug (`20261011T044830Z-2`), Release (`20261011T044625Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T044722Z-2`). Remaining: session subscription teardown/lifetime, session mutation reentrancy, and bounded pending byte/count backpressure tests.
+
+**Current implementation note:** CrdtEngine remote batches return one outcome per offered operation and notify once only if any operation applies. Callback dispatch holds a stable callback snapshot, and checked same-engine mutation is rejected with `ErrorCode::reentrant_mutation` before changing state. `tst_callbacks` covers mixed applied batches, duplicate/rejected-only batches, callback self-removal, and reentrant local/remote mutation. This closes only the engine callback slice; session listener lifetime and queue/backpressure policy remain open.
 
 ## A05 — Define discard_local_view and other reset semantics across epochs
 
