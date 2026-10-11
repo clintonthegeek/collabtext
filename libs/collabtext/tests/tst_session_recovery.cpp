@@ -1562,7 +1562,6 @@ private slots:
     QVERIFY(checkpoint_bytes.ok());
     const auto checkpoint_text = checkpointed->text();
     QCOMPARE(checkpoint_text.size(), size_t(9));
-    QVERIFY(checkpointed->close().ok());
 
     auto full_config = source_config;
     full_config.shared_store = full_shared;
@@ -1578,6 +1577,32 @@ private slots:
     QVERIFY(full_bytes.ok());
     QCOMPARE(checkpoint_bytes.value(), full_bytes.value());
     QCOMPARE(replayed->text(), checkpoint_text);
+
+    auto checkpoint_undo = checkpointed->undo();
+    QVERIFY(checkpoint_undo.ok());
+    auto checkpoint_undo_bytes = encode_operation(checkpoint_undo.value());
+    QVERIFY(checkpoint_undo_bytes.ok());
+    auto full_undo = replayed->undo();
+    QVERIFY(full_undo.ok());
+    auto full_undo_bytes = encode_operation(full_undo.value());
+    QVERIFY(full_undo_bytes.ok());
+    QCOMPARE(checkpoint_undo_bytes.value(), full_undo_bytes.value());
+    QCOMPARE(checkpointed->text(), checkpoint_base_text);
+    QCOMPARE(replayed->text(), checkpoint_base_text);
+
+    auto checkpoint_redo = checkpointed->redo();
+    QVERIFY(checkpoint_redo.ok());
+    auto checkpoint_redo_bytes = encode_operation(checkpoint_redo.value());
+    QVERIFY(checkpoint_redo_bytes.ok());
+    auto full_redo = replayed->redo();
+    QVERIFY(full_redo.ok());
+    auto full_redo_bytes = encode_operation(full_redo.value());
+    QVERIFY(full_redo_bytes.ok());
+    QCOMPARE(checkpoint_redo_bytes.value(), full_redo_bytes.value());
+    QCOMPARE(checkpointed->text(), checkpoint_text);
+    QCOMPARE(replayed->text(), checkpoint_text);
+
+    QVERIFY(checkpointed->close().ok());
     QVERIFY(replayed->close().ok());
   }
 
