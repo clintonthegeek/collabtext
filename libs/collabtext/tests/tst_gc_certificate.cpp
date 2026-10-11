@@ -274,9 +274,9 @@ private slots:
     peers[1].delivery["text"][actor(20)] = 8;
     // The third member has a valid durable checkpoint, but no delivery for
     // this producer. It stays in membership, so the common frontier is zero.
-    auto certificate = certify_common_coverage(d, peers, [](const auto &, const auto &) {
-      return Result<void>{};
-    }, model_eligibility());
+    auto certificate = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+        model_eligibility());
     QVERIFY(certificate.ok());
     QVERIFY(!certificate.value().common_delivery().contains("text"));
   }

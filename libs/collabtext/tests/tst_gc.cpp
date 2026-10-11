@@ -1,5 +1,6 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include "crdt/ReclamationPolicy.h"
 #include "crdt/SequenceOrder.h"
 #include <random>
 #include <type_traits>
@@ -44,6 +45,60 @@ static void check_invariants(const Buffer& buf, const char* context) {
 class TestGC : public QObject {
     Q_OBJECT
 private slots:
+
+    void reclamation_policy_requires_complete_item_and_delete_coverage() {
+        const auto owner = actor(1);
+        const auto deleter = actor(2);
+        const Identity first(owner, 4);
+        const std::vector<Identity> deletions{Identity(deleter, 7)};
+
+        ReclamationFrontier frontier{{owner, 5}, {deleter, 7}};
+        QVERIFY(tombstone_is_covered(frontier, first, 2, deletions));
+
+        frontier[owner] = 4;
+        QVERIFY(!tombstone_is_covered(frontier, first, 2, deletions));
+        frontier[owner] = 5;
+        frontier[deleter] = 6;
+        QVERIFY(!tombstone_is_covered(frontier, first, 2, deletions));
+    }
+
+    void reclamation_policy_fails_closed_for_missing_or_invalid_evidence() {
+        const auto owner = actor(1);
+        const auto deleter = actor(2);
+        const Identity first(owner, 4);
+        const std::vector<Identity> deletions{Identity(deleter, 7)};
+
+        ReclamationFrontier frontier_with_missing_deleter{{owner, 9}};
+        QVERIFY(!tombstone_is_covered(frontier_with_missing_deleter, first, 1,
+                                      deletions));
+        frontier_with_missing_deleter[deleter] = 9;
+        QVERIFY(!tombstone_is_covered(frontier_with_missing_deleter, first, 0,
+                                      deletions));
+        QVERIFY(!tombstone_is_covered(frontier_with_missing_deleter,
+                                      Identity(owner, 0), 1, deletions));
+        QVERIFY(!tombstone_is_covered(frontier_with_missing_deleter, first, 1,
+                                      {}));
+
+        const auto max_counter = std::numeric_limits<uint64_t>::max();
+        frontier_with_missing_deleter[owner] = max_counter;
+        QVERIFY(!item_interval_is_covered(
+            frontier_with_missing_deleter, Identity(owner, max_counter - 1), 3));
+    }
+
+    void reclamation_policy_checks_every_delete_operation() {
+        const auto owner = actor(1);
+        const auto deleter_a = actor(2);
+        const auto deleter_b = actor(3);
+        ReclamationFrontier frontier{{owner, 2}, {deleter_a, 4}};
+        const std::vector<Identity> deletions{
+            Identity(deleter_a, 4), Identity(deleter_b, 1)};
+
+        QVERIFY(!tombstone_is_covered(frontier, Identity(owner, 2), 1,
+                                      deletions));
+        frontier[deleter_b] = 1;
+        QVERIFY(tombstone_is_covered(frontier, Identity(owner, 2), 1,
+                                     deletions));
+    }
 
     void fragment_count_empty() {
         Buffer buf(CollabText::Test::test_counter(1));
