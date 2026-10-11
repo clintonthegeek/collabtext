@@ -164,6 +164,26 @@ Result<void> FileOpStream::replay_all(
     return {};
 }
 
+Result<void> FileOpStream::replay_uncovered(
+    const StreamScope &scope,
+    const std::map<ActorId, uint64_t> &delivery_frontiers,
+    const std::function<Result<void>(const InboundDelivery &)> &visitor) const {
+    if (!visitor)
+        return Error(ErrorCode::malformed, "uncovered replay visitor is empty");
+    for (const auto &[producer, through] : delivery_frontiers) {
+        (void)through;
+        if (!producer.valid())
+            return Error(ErrorCode::invalid_identity,
+                         "checkpoint delivery frontier has an invalid producer");
+    }
+    return replay_all(scope, [&](const InboundDelivery &delivery) -> Result<void> {
+        const auto it = delivery_frontiers.find(delivery.token.producer);
+        if (it != delivery_frontiers.end() && delivery.token.sequence <= it->second)
+            return {};
+        return visitor(delivery);
+    });
+}
+
 Result<void> FileOpStream::replay_producer(
     const StreamScope& scope, const ActorId& producer,
     const std::function<Result<void>(const InboundDelivery&)>& visitor) const {

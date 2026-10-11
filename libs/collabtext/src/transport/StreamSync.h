@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -152,6 +153,12 @@ public:
     /// receipts or advancing cursors. Used by full-replay session recovery.
     [[nodiscard]] Result<void> replay_all(
         const StreamScope&, const std::function<Result<void>(const InboundDelivery&)>& visitor) const;
+    /// Validate the complete retained log but visit only records beyond the
+    /// checkpoint's per-producer delivery frontiers. Covered records are still
+    /// scanned for gaps/corruption; this does not persist reader cursors.
+    [[nodiscard]] Result<void> replay_uncovered(
+        const StreamScope &, const std::map<ActorId, uint64_t> &delivery_frontiers,
+        const std::function<Result<void>(const InboundDelivery &)> &visitor) const;
     /// Read one producer's retained envelopes without consulting receiver
     /// receipts or persisting a read cursor. Used for explicit branch export.
     [[nodiscard]] Result<void> replay_producer(

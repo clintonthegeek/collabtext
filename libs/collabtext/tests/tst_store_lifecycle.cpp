@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -188,6 +189,33 @@ private slots:
             != recovered_ids.end());
     QVERIFY(std::find(recovered_ids.begin(), recovered_ids.end(), 202)
             != recovered_ids.end());
+
+    std::vector<uint64_t> uncovered_text;
+    auto text_delta = receiver.replay_uncovered(
+        text_scope, {{producer, 1}}, [&](const InboundDelivery &delivery) -> Result<void> {
+          uncovered_text.push_back(delivery.token.sequence);
+          return {};
+        });
+    QVERIFY(text_delta.ok());
+    QCOMPARE(uncovered_text, (std::vector<uint64_t>{2}));
+    std::vector<uint64_t> uncovered_list;
+    auto list_delta = receiver.replay_uncovered(
+        list_scope, {{producer, 1}}, [&](const InboundDelivery &delivery) -> Result<void> {
+          uncovered_list.push_back(delivery.token.sequence);
+          return {};
+        });
+    QVERIFY(list_delta.ok());
+    QCOMPARE(uncovered_list, (std::vector<uint64_t>{2}));
+    const std::map<ActorId, uint64_t> all_covered{{producer, 2}};
+    auto covered_only = receiver.replay_uncovered(
+        text_scope, all_covered, [](const InboundDelivery &) -> Result<void> {
+          return Error(ErrorCode::malformed, "covered delivery reached visitor");
+        });
+    QVERIFY(covered_only.ok());
+    const std::map<ActorId, uint64_t> invalid_frontier{{ActorId{}, 1}};
+    QVERIFY(!receiver.replay_uncovered(
+        text_scope, invalid_frontier,
+        [](const InboundDelivery &) -> Result<void> { return {}; }).ok());
     QVERIFY(receiver.close().ok());
   }
 
@@ -348,6 +376,14 @@ private slots:
     });
     QVERIFY(!corrupted.ok());
     QVERIFY(seen.empty());
+    size_t covered_corrupt_callbacks = 0;
+    auto covered_corruption = receiver.replay_uncovered(
+        scope, {{author, 2}}, [&](const InboundDelivery &) -> Result<void> {
+          ++covered_corrupt_callbacks;
+          return {};
+        });
+    QVERIFY(!covered_corruption.ok());
+    QCOMPARE(covered_corrupt_callbacks, size_t(0));
     fs::copy_file(segments.front(), older_copy, fs::copy_options::overwrite_existing);
     auto recovered = receiver.replay_all(scope, [&](const InboundDelivery &d) -> Result<void> {
       seen.push_back(d.payload);
