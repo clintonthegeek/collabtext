@@ -689,8 +689,8 @@ Result<PollReport> DocumentSession::poll(PollBudget budget) {
   }
 }
 
-Result<SessionShareableCheckpoint>
-DocumentSession::capture_shareable_checkpoint(
+Result<SessionCheckpointCapture>
+DocumentSession::capture_checkpoint(
     const SessionCheckpointProviderState &provider) const {
   if (!m_impl)
     return Error(ErrorCode::writer_conflict,
@@ -739,8 +739,26 @@ DocumentSession::capture_shareable_checkpoint(
   if (!encoded.ok()) return encoded.error();
   auto artifact_bytes = std::move(encoded).value();
   auto artifact_hash = sha256_hex(artifact_bytes);
-  return SessionShareableCheckpoint{
+  Storage::CheckpointLocalCore local;
+  local.owner = {m_impl->replica->actor(), artifact_hash};
+  local.history = m_impl->buffer->local_history_snapshot();
+  local.writer.actor = m_impl->replica->actor();
+  local.writer.document = m_impl->config.document;
+  local.writer.stream = m_impl->config.stream;
+  local.writer.epoch = m_impl->config.epoch;
+  auto next_identity = m_impl->replica->peek_stream(m_impl->config.stream);
+  if (!next_identity.ok()) return next_identity.error();
+  local.writer.next_identity_counter = next_identity.value();
+  if (const auto frontier = captured.value().coverage.delivery.find(
+          m_impl->replica->actor());
+      frontier != captured.value().coverage.delivery.end())
+    local.writer.durable_delivery_frontier = frontier->second;
+  auto local_artifact = Storage::encode_checkpoint_local_core(
+      local, captured.value().context, artifact_bytes);
+  if (!local_artifact.ok()) return local_artifact.error();
+  return SessionCheckpointCapture{
       std::move(artifact_bytes), std::move(artifact_hash),
+      std::move(local_artifact).value(),
       std::move(captured.value().coverage.operation),
       std::move(captured.value().coverage.delivery),
       std::move(captured.value().pins.canonical_projection_hash),

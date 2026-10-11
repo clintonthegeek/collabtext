@@ -111,17 +111,19 @@ struct SessionCheckpointProviderState {
   std::vector<RetainedAnchorPin> live_pins;
   std::vector<uint32_t> supported_token_versions{1};
   /// Optional descriptor value to check against the canonical translations.
-  /// Leave empty to receive the computed hash in SessionShareableCheckpoint.
+  /// Leave empty to receive the computed hash in SessionCheckpointCapture.
   std::string expected_translation_manifest_hash;
   std::vector<SessionCheckpointTranslation> translations;
 };
 
-/// Encoded shareable state and metadata for constructing the corresponding
-/// membership descriptor and publishing the artifact atomically.
-struct SessionShareableCheckpoint {
-  std::string artifact_bytes;
+/// Separately encoded shareable state and actor-private local companion for
+/// constructing the corresponding membership descriptor and checkpoint bundle.
+struct SessionCheckpointCapture {
+  std::string shareable_artifact_bytes;
   /// SHA-256 of the complete encoded artifact, matching CheckpointStore's key.
-  std::string artifact_hash;
+  std::string shareable_artifact_hash;
+  /// Actor-private undo/writer state bound to the shareable artifact above.
+  std::string local_companion_artifact_bytes;
   std::map<ActorId, uint64_t> operation_coverage;
   std::map<ActorId, uint64_t> delivery_coverage;
   std::string canonical_pin_projection_hash;
@@ -162,11 +164,12 @@ public:
       const std::vector<Crdt::Identity> &group_ids);
   [[nodiscard]] Result<PollReport> poll(PollBudget budget = {});
   [[nodiscard]] Result<void> save();
-  /// Capture the current text engine plus a complete provider projection.
-  /// The caller must validate provider state against its canonical durable
-  /// records and membership descriptor before publishing this artifact.
-  [[nodiscard]] Result<SessionShareableCheckpoint>
-  capture_shareable_checkpoint(const SessionCheckpointProviderState &) const;
+  /// Capture the current text engine, a complete provider projection, and the
+  /// actor-private undo/writer companion. The caller must validate provider
+  /// state against its canonical durable records and membership descriptor
+  /// before publishing this bundle.
+  [[nodiscard]] Result<SessionCheckpointCapture>
+  capture_checkpoint(const SessionCheckpointProviderState &) const;
   /// Stream this actor's durable operations in their original scope, including
   /// a durable pending local commit if its log append failed. The visitor may
   /// receive a prefix before an error; stage output and publish it only on

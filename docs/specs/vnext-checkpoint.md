@@ -4,9 +4,9 @@
 codecs, private companion section codecs, the combined core validator, and
 in-memory engine snapshot adapters are implemented. Content-addressed artifact
 storage and alternating atomic manifests are implemented. DocumentSession now
-exposes a text shareable-checkpoint capture API; actor-private capture/restore,
-provider validation during session startup, and replay from checkpoint coverage
-remain in progress.
+exposes a text checkpoint capture API that returns separate shareable and
+actor-private artifacts; startup restore, provider validation, and replay from
+checkpoint coverage remain in progress.
 
 This format defines a validated shareable snapshot and a separately bound
 actor-local companion. It is not a replacement for the retained operation log
@@ -71,16 +71,17 @@ order and validates cross-section causal references, coverage, and deferred
 delivery state before framing. `decode_checkpoint_core` applies the matching
 cross-section checks after decoding each bounded section.
 
-`DocumentSession::capture_shareable_checkpoint` assembles the current Buffer
-state and durable delivery coverage with a caller-supplied
-`SessionCheckpointProviderState`. The result contains the encoded artifact,
-its full-artifact SHA-256, operation and delivery coverage, the pin projection
-hash, and the canonical translation manifest hash. The caller owns recovery and
-validation of the canonical pin-event log and membership descriptor before
-publication; the session checks projection completeness, pin/token scopes,
-translation consistency, and exact represented log coverage. This API produces
-the shareable text artifact only; local writer/history companions are not
-included.
+`DocumentSession::capture_checkpoint` assembles the current Buffer state and
+durable delivery coverage with a caller-supplied
+`SessionCheckpointProviderState`. The result contains separate encoded
+shareable and actor-private artifacts, the shareable artifact's full SHA-256,
+operation and delivery coverage, the pin projection hash, and the canonical
+translation manifest hash. The local companion binds the actor's local history
+and writer reservation/frontier to that exact shareable artifact. The caller
+owns recovery and validation of the canonical pin-event log and membership
+descriptor before publication; the session checks projection completeness,
+pin/token scopes, translation consistency, local owner bindings, and exact
+represented log coverage.
 
 The context deliberately does not contain the child descriptor hash: that
 descriptor contains the checkpoint digest, so embedding it would create a hash

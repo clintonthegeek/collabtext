@@ -8,6 +8,7 @@
 #include "core/Sha256.h"
 #include "identity/ReplicaAllocator.h"
 #include "storage/DurableFile.h"
+#include "storage/CheckpointStore.h"
 #include "storage/LocalHistoryLog.h"
 #include "storage/RetentionState.h"
 #include "transport/StreamSync.h"
@@ -1331,11 +1332,12 @@ private slots:
 
     SessionCheckpointProviderState public_provider;
     public_provider.canonical_pin_projection_hash = sha256_hex("");
-    auto public_capture = session->capture_shareable_checkpoint(public_provider);
+    auto public_capture = session->capture_checkpoint(public_provider);
     QVERIFY(public_capture.ok());
-    QVERIFY(!public_capture.value().artifact_bytes.empty());
-    QCOMPARE(public_capture.value().artifact_hash,
-             sha256_hex(public_capture.value().artifact_bytes));
+    QVERIFY(!public_capture.value().shareable_artifact_bytes.empty());
+    QVERIFY(!public_capture.value().local_companion_artifact_bytes.empty());
+    QCOMPARE(public_capture.value().shareable_artifact_hash,
+             sha256_hex(public_capture.value().shareable_artifact_bytes));
     QCOMPARE(public_capture.value().operation_coverage,
              after_poll.value().coverage.operation);
     QCOMPARE(public_capture.value().delivery_coverage,
@@ -1343,15 +1345,47 @@ private slots:
     QCOMPARE(public_capture.value().canonical_pin_projection_hash,
              public_provider.canonical_pin_projection_hash);
     QCOMPARE(public_capture.value().translation_manifest_hash.size(), size_t(64));
+    auto local_artifact = Storage::decode_checkpoint(
+        public_capture.value().local_companion_artifact_bytes,
+        Storage::CheckpointKind::Local);
+    QVERIFY(local_artifact.ok());
+    auto local_core = Storage::decode_checkpoint_local_core(
+        local_artifact.value(), session->actor(),
+        public_capture.value().shareable_artifact_hash,
+        after_poll.value().context);
+    QVERIFY(local_core.ok());
+    QCOMPARE(local_core.value().writer.durable_delivery_frontier, uint64_t(1));
+    QCOMPARE(local_core.value().writer.next_identity_counter,
+             public_capture.value().operation_coverage.at(session->actor()) + 1);
+    auto checkpoint_store = Storage::CheckpointStore::open(
+        root / "checkpoint-store");
+    QVERIFY(checkpoint_store.ok());
+    auto published = checkpoint_store.value().publish(
+        public_capture.value().shareable_artifact_bytes,
+        public_capture.value().local_companion_artifact_bytes, session->actor());
+    QVERIFY(published.ok());
+    auto stored = checkpoint_store.value().recover(
+        session->actor(),
+        [](std::string_view, const std::optional<std::string> &) -> Result<void> {
+          return {};
+        },
+        after_poll.value().context);
+    QVERIFY(stored.ok());
+    QVERIFY(stored.value().has_value());
+    QCOMPARE(stored.value()->shareable_bytes,
+             public_capture.value().shareable_artifact_bytes);
+    QCOMPARE(stored.value()->local_bytes,
+             std::optional<std::string>(
+                 public_capture.value().local_companion_artifact_bytes));
     auto incomplete_provider = public_provider;
     incomplete_provider.pin_projection_complete = false;
-    auto incomplete_capture = session->capture_shareable_checkpoint(
+    auto incomplete_capture = session->capture_checkpoint(
         incomplete_provider);
     QVERIFY(!incomplete_capture.ok());
     QCOMPARE(incomplete_capture.error().code(), ErrorCode::awaiting_state);
     auto mismatched_manifest = public_provider;
     mismatched_manifest.expected_translation_manifest_hash = std::string(64, '0');
-    auto rejected_manifest = session->capture_shareable_checkpoint(
+    auto rejected_manifest = session->capture_checkpoint(
         mismatched_manifest);
     QVERIFY(!rejected_manifest.ok());
 
