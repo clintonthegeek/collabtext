@@ -232,6 +232,12 @@ public:
   /// verifier accepts it. This is an authorization check; it does not collect.
   [[nodiscard]] Result<void> validate_reclamation_frontier(
       const Storage::CertifiedOperationFrontier &) const;
+  /// Install a validated certificate frontier by durably publishing it in the
+  /// next shareable checkpoint. On a pre-commit failure the in-memory binding
+  /// is rolled back; an uncertain or durable publication keeps it installed.
+  [[nodiscard]] Result<SessionCheckpointCapture> install_reclamation_frontier(
+      const Storage::CertifiedOperationFrontier &,
+      const SessionCheckpointProviderState &);
   /// Report whether retained delivery coverage has grown by the configured
   /// threshold since the latest successfully published/selected checkpoint.
   [[nodiscard]] Result<bool> checkpoint_due() const;

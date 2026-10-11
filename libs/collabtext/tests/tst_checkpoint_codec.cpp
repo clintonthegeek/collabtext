@@ -542,6 +542,15 @@ private slots:
     QCOMPARE(text_decoded.value().fragments[0].link, fragment.link);
     QCOMPARE(text_decoded.value().fragments[0].text, fragment.text);
     QCOMPARE(text_decoded.value().fragments[0].length, uint32_t{1});
+    auto legacy_text_section = text_section.value();
+    QCOMPARE(legacy_text_section.version, uint16_t{2});
+    QVERIFY(!legacy_text_section.bytes.empty());
+    QCOMPARE(legacy_text_section.bytes.back(), '\0');
+    legacy_text_section.bytes.pop_back(); // v1 had no reclamation marker.
+    legacy_text_section.version = 1;
+    auto legacy_text_decoded = decode_checkpoint_engine(legacy_text_section);
+    QVERIFY(legacy_text_decoded);
+    QVERIFY(legacy_text_decoded.value().reclamation.empty());
     for (size_t length = 0; length < text_section.value().bytes.size(); ++length) {
       auto truncated = text_section.value();
       truncated.bytes.resize(length);

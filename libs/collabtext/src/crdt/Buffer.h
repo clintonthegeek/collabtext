@@ -23,6 +23,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace CollabText { class DocumentSession; }
+
 namespace CollabText::Crdt {
 
 // Branching factor for the fragment tree. 6 gives MaxChildren=12.
@@ -264,6 +266,11 @@ public:
     Result<std::vector<CollabText::detail::PositionItem>> position_items() const;
 
 private:
+    friend class ::CollabText::DocumentSession;
+    void set_reclamation_binding(ReclamationBinding binding) {
+        m_reclamation = std::move(binding);
+    }
+
     // ---- Fragment vector helpers ----
     // Operations modify fragments via a temporary vector, then rebuild the tree.
 

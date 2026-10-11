@@ -1247,6 +1247,40 @@ Result<void> DocumentSession::validate_reclamation_frontier(
   return {};
 }
 
+Result<SessionCheckpointCapture> DocumentSession::install_reclamation_frontier(
+    const Storage::CertifiedOperationFrontier &frontier,
+    const SessionCheckpointProviderState &provider) {
+  auto valid = validate_reclamation_frontier(frontier);
+  if (!valid.ok()) return valid.error();
+
+  const auto previous = m_impl->buffer->checkpoint_state().reclamation;
+  for (const auto &[actor, through] : previous.operation_frontier) {
+    if (frontier.counters().find(actor) == frontier.counters().end() ||
+        frontier.counters().at(actor) < through)
+      return Error(ErrorCode::counter_regression,
+                   "new reclamation frontier would move an installed cutoff backward");
+  }
+
+  ReclamationBinding binding;
+  binding.stream = frontier.stream();
+  binding.descriptor_hash = frontier.descriptor_hash();
+  binding.certificate_checkpoint_hash = frontier.checkpoint_hash();
+  binding.operation_frontier = frontier.counters();
+  const auto previous_checkpoint = m_impl->latest_shareable_checkpoint_hash;
+  m_impl->buffer->set_reclamation_binding(std::move(binding));
+
+  auto published = publish_checkpoint(provider);
+  if (!published.ok()) {
+    // CheckpointStore marks an uncertain manifest replacement explicitly.
+    // Keep the binding in that case because the manifest may already name it.
+    if (m_impl->latest_shareable_checkpoint_hash == previous_checkpoint &&
+        published.error().code() != ErrorCode::commit_uncertain)
+      m_impl->buffer->set_reclamation_binding(previous);
+    return published.error();
+  }
+  return std::move(published).value();
+}
+
 Result<bool> DocumentSession::checkpoint_due() const {
   if (!m_impl || m_impl->closed)
     return Error(ErrorCode::writer_conflict,

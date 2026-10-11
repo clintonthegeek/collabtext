@@ -193,6 +193,8 @@ Run `./tools/verify-roadmap.sh debug 'tst_checkpoint_recovery|tst_store_lifecycl
 **Depends on:** G03, G05, S05, V03
 
 **Implementation note (2026-10-11):** Removed `compact(Global)` from Buffer and IdList and added compile-time absence checks. Legacy trace events remain parseable but run only inert local collection; NetworkSim no longer computes a watermark. The focused six-suite Debug, Release, and ASan/UBSan gates passed (ASan with leak detection disabled; the realistic sustained-convergence test took about 55 seconds). Shared eligibility and all actual certified reclamation work remain open.
+
+**Implementation note (2026-10-11, continued):** Shareable engine section v2 now persists a stream-scoped reclamation binding and its certificate checkpoint provenance; v1 remains readable. DocumentSession requires provider revalidation before restoring a bound checkpoint and exposes `install_reclamation_frontier`, which validates the certified token, refuses frontier regression, and durably publishes the binding before returning success. Pre-commit publication failures restore the previous in-memory binding; uncertain or durable publication outcomes retain it. Recovery refusal follows CheckpointStore's older-manifest fallback. The focused checkpoint codec/recovery/session Debug gate passed 3/3 (20261011T072339Z-12), covering round-trip, installed provenance, capture-failure rollback, recovery revalidation, and provider refusal. A separate codec run explicitly verifies v1 engine payload decoding (20261011T072429Z-2). The binding is authorization state only at this point: late remote undo rejection and physical reclamation remain unimplemented.
 **Coverage:** F1, F2, F3, F7, R7, R10  
 
 **Files / scope:**

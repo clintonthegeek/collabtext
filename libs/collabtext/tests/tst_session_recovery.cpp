@@ -2496,6 +2496,23 @@ private slots:
     QCOMPARE(refused.error().code(), ErrorCode::awaiting_state);
     expected_binding->refuse = false;
 
+    auto incomplete_provider = provider;
+    incomplete_provider.pin_projection_complete = false;
+    auto refused_install = session->install_reclamation_frontier(
+        *certified_frontier, incomplete_provider);
+    QVERIFY(!refused_install.ok());
+    QCOMPARE(refused_install.error().code(), ErrorCode::awaiting_state);
+    auto unchanged_capture = session->capture_checkpoint(provider);
+    QVERIFY(unchanged_capture.ok());
+    auto unchanged_artifact = Storage::decode_checkpoint(
+        unchanged_capture.value().shareable_artifact_bytes,
+        Storage::CheckpointKind::Shareable);
+    QVERIFY(unchanged_artifact.ok());
+    auto unchanged_core =
+        Storage::decode_checkpoint_core(unchanged_artifact.value());
+    QVERIFY(unchanged_core.ok());
+    QVERIFY(unchanged_core.value().engine.reclamation.empty());
+
     auto reset_due = session->checkpoint_due();
     QVERIFY(reset_due.ok());
     QVERIFY(!reset_due.value());
@@ -2527,39 +2544,6 @@ private slots:
     QVERIFY(reopened_result.ok());
     auto reopened = std::move(reopened_result).value();
     QVERIFY(reopened->validate_reclamation_frontier(*certified_frontier).ok());
-    const auto local_actor = reopened->actor();
-    QVERIFY(reopened->close().ok());
-
-    auto bound_artifact = Storage::decode_checkpoint(
-        published.value().shareable_artifact_bytes,
-        Storage::CheckpointKind::Shareable);
-    QVERIFY(bound_artifact.ok());
-    auto bound_core = Storage::decode_checkpoint_core(bound_artifact.value());
-    QVERIFY(bound_core.ok());
-    bound_core.value().engine.reclamation.stream = scope.stream;
-    bound_core.value().engine.reclamation.descriptor_hash = descriptor.hash;
-    bound_core.value().engine.reclamation.certificate_checkpoint_hash =
-        published.value().shareable_artifact_hash;
-    bound_core.value().engine.reclamation.operation_frontier =
-        captured.value().operation_coverage;
-    auto bound_bytes = Storage::encode_checkpoint_core(bound_core.value());
-    QVERIFY(bound_bytes.ok());
-    {
-      auto store = Storage::CheckpointStore::open(root / "checkpoints");
-      QVERIFY(store.ok());
-      auto bound_checkpoint =
-          store.value().publish(bound_bytes.value(), {}, local_actor);
-      QVERIFY(bound_checkpoint.ok());
-      auto selected_bound = store.value().recover(
-          local_actor,
-          [](std::string_view, const std::optional<std::string> &) -> Result<void> {
-            return {};
-          }, bound_core.value().context);
-      QVERIFY(selected_bound.ok());
-      QVERIFY(selected_bound.value().has_value());
-      QCOMPARE(selected_bound.value()->shareable_bytes, bound_bytes.value());
-    }
-
     bool binding_validated = false;
     config.validate_reclamation_binding =
         [&binding_validated, expected_binding, scope](
@@ -2575,6 +2559,28 @@ private slots:
                      "test provider rejected persisted reclamation binding");
       return {};
     };
+    auto installed = reopened->install_reclamation_frontier(
+        *certified_frontier, provider);
+    QVERIFY(installed.ok());
+    QVERIFY(installed.value().shareable_artifact_hash !=
+            published.value().shareable_artifact_hash);
+    auto installed_artifact = Storage::decode_checkpoint(
+        installed.value().shareable_artifact_bytes,
+        Storage::CheckpointKind::Shareable);
+    QVERIFY(installed_artifact.ok());
+    auto installed_core =
+        Storage::decode_checkpoint_core(installed_artifact.value());
+    QVERIFY(installed_core.ok());
+    QCOMPARE(installed_core.value().engine.reclamation.stream, scope.stream);
+    QCOMPARE(installed_core.value().engine.reclamation.descriptor_hash,
+             descriptor.hash);
+    QCOMPARE(installed_core.value().engine.reclamation.certificate_checkpoint_hash,
+             published.value().shareable_artifact_hash);
+    QCOMPARE(installed_core.value().engine.reclamation.operation_frontier,
+             captured.value().operation_coverage);
+    QVERIFY(reopened->close().ok());
+
+    binding_validated = false;
     auto bound_open = DocumentSession::open(config);
     QVERIFY(bound_open.ok());
     auto bound_session = std::move(bound_open).value();
