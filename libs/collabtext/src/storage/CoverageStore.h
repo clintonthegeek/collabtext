@@ -17,9 +17,15 @@ using MembershipCheckpointBundleResolver =
     std::function<Result<std::string>(std::string_view checkpoint_hash)>;
 
 /// Build a verifier that resolves a content-addressed multi-stream checkpoint
-/// bundle and proves its per-stream operation and delivery maps match evidence.
+/// bundle and proves its per-stream frontiers exactly match the supplied maps.
 [[nodiscard]] CheckpointCoverageVerifier
 make_membership_checkpoint_coverage_verifier(
+    MembershipCheckpointBundleResolver resolve_bundle);
+
+/// Build a verifier for one member's evidence: every common frontier in the
+/// named candidate checkpoint must be covered by that member's durable state.
+[[nodiscard]] CheckpointCoverageVerifier
+make_membership_checkpoint_evidence_verifier(
     MembershipCheckpointBundleResolver resolve_bundle);
 
 /// Durable, owner-local operation and delivery coverage for immutable

@@ -255,10 +255,20 @@ Result<void> verify_checkpoint(const CheckpointCoverageVerifier &verify,
 }
 } // namespace
 
-CheckpointCoverageVerifier make_membership_checkpoint_coverage_verifier(
-    MembershipCheckpointBundleResolver resolve_bundle) {
+namespace {
+bool frontier_covers(const std::map<ActorId, uint64_t> &coverage,
+                     const std::map<ActorId, uint64_t> &required) {
+  for (const auto &[producer, through] : required) {
+    const auto found = coverage.find(producer);
+    if (found == coverage.end() || found->second < through) return false;
+  }
+  return true;
+}
+
+CheckpointCoverageVerifier make_membership_checkpoint_verifier(
+    MembershipCheckpointBundleResolver resolve_bundle, bool require_exact) {
   if (!resolve_bundle) return {};
-  return [resolve_bundle = std::move(resolve_bundle)](
+  return [resolve_bundle = std::move(resolve_bundle), require_exact](
              const MembershipDescriptor &descriptor,
              std::string_view checkpoint_hash,
              const OperationCoverage &operation,
@@ -318,10 +328,15 @@ CheckpointCoverageVerifier make_membership_checkpoint_coverage_verifier(
                                            ? empty : expected_operation->second;
       const auto &delivery_frontier = expected_delivery == delivery.end()
                                           ? empty : expected_delivery->second;
-      if (core.value().coverage.operation != operation_frontier ||
-          core.value().coverage.delivery != delivery_frontier)
+      const bool operation_matches = require_exact
+          ? core.value().coverage.operation == operation_frontier
+          : frontier_covers(operation_frontier, core.value().coverage.operation);
+      const bool delivery_matches = require_exact
+          ? core.value().coverage.delivery == delivery_frontier
+          : frontier_covers(delivery_frontier, core.value().coverage.delivery);
+      if (!operation_matches || !delivery_matches)
         return Error(ErrorCode::corrupt_record,
-                     "checkpoint per-stream coverage differs from peer evidence",
+                     "checkpoint coverage is inconsistent with supplied frontier",
                      entry.stream);
     }
     const auto supported_stream = [&](const auto &name) {
@@ -340,6 +355,17 @@ CheckpointCoverageVerifier make_membership_checkpoint_coverage_verifier(
                      "delivery evidence names a stream absent from membership", stream);
     return {};
   };
+}
+} // namespace
+
+CheckpointCoverageVerifier make_membership_checkpoint_coverage_verifier(
+    MembershipCheckpointBundleResolver resolve_bundle) {
+  return make_membership_checkpoint_verifier(std::move(resolve_bundle), true);
+}
+
+CheckpointCoverageVerifier make_membership_checkpoint_evidence_verifier(
+    MembershipCheckpointBundleResolver resolve_bundle) {
+  return make_membership_checkpoint_verifier(std::move(resolve_bundle), false);
 }
 
 Result<CoverageStore> CoverageStore::open(std::filesystem::path directory,

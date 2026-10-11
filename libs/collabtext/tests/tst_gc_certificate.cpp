@@ -368,31 +368,84 @@ private slots:
                          "candidate checkpoint bundle is unavailable");
           return bundle.value();
         });
+    const auto evidence_verifier = make_membership_checkpoint_evidence_verifier(
+        [&](std::string_view requested_hash) -> Result<std::string> {
+          if (requested_hash != checkpoint_hash)
+            return Error(ErrorCode::awaiting_state,
+                         "candidate checkpoint bundle is unavailable");
+          return bundle.value();
+        });
     QVERIFY(static_cast<bool>(verifier));
+    QVERIFY(static_cast<bool>(evidence_verifier));
     QVERIFY(verifier(d, checkpoint_hash, operation, delivery).ok());
+    auto below_checkpoint = operation;
+    below_checkpoint["text"][actor(20)] = 7;
+    QVERIFY(!evidence_verifier(d, checkpoint_hash, below_checkpoint, delivery).ok());
+    QVERIFY(!verifier(d, checkpoint_hash, below_checkpoint, delivery).ok());
+    auto below_delivery_checkpoint = delivery;
+    below_delivery_checkpoint["text"][actor(20)] = 13;
+    QVERIFY(!evidence_verifier(d, checkpoint_hash, operation,
+                               below_delivery_checkpoint).ok());
 
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
     const auto root = std::filesystem::path(temporary.path().toStdString());
-    for (const auto &member : d.members) {
+    for (size_t i = 0; i < d.members.size(); ++i) {
+      const auto &member = d.members[i];
+      const auto advance = static_cast<uint64_t>(d.members.size() - i - 1);
+      auto member_operation = operation;
+      auto member_delivery = delivery;
+      for (auto &[stream, frontier] : member_operation) {
+        (void)stream;
+        for (auto &[producer, through] : frontier) {
+          (void)producer;
+          through += advance;
+        }
+      }
+      for (auto &[stream, frontier] : member_delivery) {
+        (void)stream;
+        for (auto &[producer, through] : frontier) {
+          (void)producer;
+          through += advance;
+        }
+      }
       auto store = CoverageStore::open(root, member);
       QVERIFY(store.ok());
       auto published = store.value().publish(
-          d, checkpoint_hash, operation, delivery, verifier);
+          d, checkpoint_hash, member_operation, member_delivery,
+          evidence_verifier);
       QVERIFY(published.ok());
-      QCOMPARE(published.value().operation, operation);
-      QCOMPARE(published.value().delivery, delivery);
+      QCOMPARE(published.value().operation, member_operation);
+      QCOMPARE(published.value().delivery, member_delivery);
     }
 
     std::vector<PeerCoverageEvidence> recovered_peers;
-    for (const auto &member : d.members) {
+    for (size_t i = 0; i < d.members.size(); ++i) {
+      const auto &member = d.members[i];
+      const auto advance = static_cast<uint64_t>(d.members.size() - i - 1);
+      auto member_operation = operation;
+      auto member_delivery = delivery;
+      for (auto &[stream, frontier] : member_operation) {
+        (void)stream;
+        for (auto &[producer, through] : frontier) {
+          (void)producer;
+          through += advance;
+        }
+      }
+      for (auto &[stream, frontier] : member_delivery) {
+        (void)stream;
+        for (auto &[producer, through] : frontier) {
+          (void)producer;
+          through += advance;
+        }
+      }
       auto store = CoverageStore::open(root, member);
       QVERIFY(store.ok());
-      auto recovered = store.value().recover(d, checkpoint_hash, verifier);
+      auto recovered = store.value().recover(d, checkpoint_hash, evidence_verifier);
       QVERIFY(recovered.ok());
       QVERIFY(recovered.value().has_value());
-      QCOMPARE(recovered.value()->operation, operation);
-      QCOMPARE(recovered.value()->delivery, delivery);
+      QCOMPARE(recovered.value()->operation, member_operation);
+      QCOMPARE(recovered.value()->delivery, member_delivery);
       recovered_peers.push_back(std::move(*recovered.value()));
     }
     const DurableCoverageVerifier durable = [&](const auto &descriptor,
@@ -401,7 +454,7 @@ private slots:
         return Error(ErrorCode::wrong_epoch, "membership descriptor changed");
       auto store = CoverageStore::open(root, item.member);
       if (!store) return store.error();
-      auto recovered = store.value().recover(d, checkpoint_hash, verifier);
+      auto recovered = store.value().recover(d, checkpoint_hash, evidence_verifier);
       if (!recovered) return recovered.error();
       if (!recovered.value() || recovered.value()->operation != item.operation ||
           recovered.value()->delivery != item.delivery)
@@ -409,8 +462,18 @@ private slots:
                      "peer coverage differs from its durable record");
       return {};
     };
+    const GcEligibilityVerifier eligibility =
+        [&](const auto &candidate, std::string_view hash,
+            const auto &common_operation, const auto &common_delivery,
+            const auto &peers) -> Result<void> {
+          auto checkpoint_matches = verifier(candidate, hash, common_operation,
+                                             common_delivery);
+          if (!checkpoint_matches.ok()) return checkpoint_matches.error();
+          return model_eligibility()(candidate, hash, common_operation,
+                                    common_delivery, peers);
+        };
     auto certificate = certify_common_coverage(
-        d, recovered_peers, durable, model_eligibility());
+        d, recovered_peers, durable, eligibility);
     QVERIFY(certificate.ok());
     QCOMPARE(certificate.value().checkpoint_hash(), checkpoint_hash);
     QCOMPARE(certificate.value().common_operation(), operation);
