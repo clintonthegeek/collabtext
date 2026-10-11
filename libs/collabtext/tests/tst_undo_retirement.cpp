@@ -4,6 +4,7 @@
 #include "storage/RetentionState.h"
 
 #include <fstream>
+#include <stdexcept>
 
 using namespace CollabText;
 using namespace CollabText::Storage;
@@ -88,6 +89,66 @@ private slots:
     auto reopened=RetentionState::open(path,actor(5)); QVERIFY(reopened.ok());
     QVERIFY(reopened.value().is_retired("doc",first));
     QVERIFY(reopened.value().is_retired("doc",second));
+  }
+
+  void multiStreamTrimPublishesRetryableDurablePrefix() {
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto path = std::filesystem::path(dir.path().toStdString()) / "multi.log";
+    const Crdt::Identity first{actor(31), 4}, second{actor(32), 9};
+    unsigned writes = 0;
+    StepHook hook;
+    hook.fail = [&](Step step, const fs::path &) -> std::optional<Error> {
+      if (step == Step::Write && ++writes == 2)
+        return Error(ErrorCode::io_error, "injected second-stream append failure");
+      return std::nullopt;
+    };
+    const std::vector<StreamUndoRetirement> batch{
+        {"stream-z", {second}}, {"stream-a", {first}}};
+    unsigned trim_commits = 0;
+    {
+      auto opened = RetentionState::open(path, actor(30), &hook);
+      QVERIFY(opened.ok());
+      auto state = std::move(opened).value();
+      auto thrown = state.publish_after_durable_trim(batch, []() -> Result<void> {
+        throw std::runtime_error("trim provider interrupted");
+      });
+      QVERIFY(!thrown.ok());
+      QCOMPARE(thrown.error().code(), ErrorCode::io_error);
+      QVERIFY(!state.is_retired("stream-a", first));
+      auto partial = state.publish_after_durable_trim(batch, [&]() -> Result<void> {
+        ++trim_commits;
+        return {};
+      });
+      QVERIFY(!partial.ok());
+      QCOMPARE(trim_commits, 1u);
+      QVERIFY(state.is_retired("stream-a", first));
+      QVERIFY(!state.is_retired("stream-z", second));
+    }
+
+    auto reopened = RetentionState::open(path, actor(30), &hook);
+    QVERIFY(reopened.ok());
+    auto state = std::move(reopened).value();
+    QVERIFY(state.is_retired("stream-a", first));
+    QVERIFY(!state.is_retired("stream-z", second));
+    auto retry = state.publish_after_durable_trim(batch, [&]() -> Result<void> {
+      ++trim_commits; // consumer trim persistence is idempotently retried
+      return {};
+    });
+    QVERIFY(retry.ok());
+    QCOMPARE(trim_commits, 2u);
+    QVERIFY(state.is_retired("stream-a", first));
+    QVERIFY(state.is_retired("stream-z", second));
+
+    auto invalid = state.publish_after_durable_trim(
+        std::vector<StreamUndoRetirement>{{"duplicate", {first}},
+                                          {"duplicate", {second}}},
+        [&]() -> Result<void> {
+          ++trim_commits;
+          return {};
+        });
+    QVERIFY(!invalid.ok());
+    QCOMPARE(invalid.error().code(), ErrorCode::malformed);
+    QCOMPARE(trim_commits, 2u);
   }
 };
 

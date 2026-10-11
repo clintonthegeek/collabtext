@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <exception>
 #include <fstream>
 #include <sstream>
 
@@ -83,15 +84,63 @@ Result<void> RetentionState::recover() {
 Result<void> RetentionState::publish_after_durable_trim(
     std::string_view stream, const std::vector<Crdt::Identity> &groups,
     const std::function<Result<void>()> &commit_trim) {
-  if(stream.empty() || stream.size()>4096 || !commit_trim || m_sequence==UINT64_MAX) return Error(ErrorCode::malformed, "retention publication arguments are invalid");
-  std::set<Crdt::Identity> unique;
-  for(const auto &id:groups) if(!id.actor.valid() || id.counter==0 || !unique.insert(id).second) return Error(ErrorCode::malformed, "retention group list has invalid or repeated identity");
-  auto committed=commit_trim(); if(!committed.ok()) return committed.error();
-  auto &retired=m_retired[std::string(stream)];
+  return publish_after_durable_trim(
+      std::vector<StreamUndoRetirement>{{std::string(stream), groups}},
+      commit_trim);
+}
+
+Result<void> RetentionState::publish_after_durable_trim(
+    const std::vector<StreamUndoRetirement> &retirements,
+    const std::function<Result<void>()> &commit_trim) {
+  if (retirements.empty() || !commit_trim || m_sequence == UINT64_MAX)
+    return Error(ErrorCode::malformed,
+                 "retention publication requires a nonempty batch and trim callback");
+  std::set<std::string> streams;
+  std::vector<std::pair<std::string, std::set<Crdt::Identity>>> canonical;
+  canonical.reserve(retirements.size());
+  for (const auto &retirement : retirements) {
+    if (retirement.stream.empty() || retirement.stream.size() > 4096 ||
+        !streams.insert(retirement.stream).second)
+      return Error(ErrorCode::malformed,
+                   "retention batch contains an invalid or repeated stream");
+    std::set<Crdt::Identity> unique;
+    for (const auto &id : retirement.groups) {
+      if (!id.actor.valid() || id.counter == 0 || !unique.insert(id).second)
+        return Error(ErrorCode::malformed,
+                     "retention group list has invalid or repeated identity");
+    }
+    canonical.emplace_back(retirement.stream, std::move(unique));
+  }
+  std::sort(canonical.begin(), canonical.end(),
+            [](const auto &left, const auto &right) {
+              return left.first < right.first;
+            });
+
+  Result<void> committed;
+  try {
+    committed = commit_trim();
+  } catch (const std::exception &error) {
+    return Error(ErrorCode::io_error, error.what(),
+                 "committing multi-stream private history trim");
+  } catch (...) {
+    return Error(ErrorCode::io_error,
+                 "multi-stream private history trim callback threw an unknown exception");
+  }
+  if (!committed.ok()) return committed.error();
+  for (const auto &[stream, groups] : canonical) {
+    auto published = append_retirements(stream, groups);
+    if (!published.ok()) return published.error();
+  }
+  return {};
+}
+
+Result<void> RetentionState::append_retirements(
+    std::string_view stream, const std::set<Crdt::Identity> &groups) {
+  auto &retired = m_retired[std::string(stream)];
   // A prior append may have reached the file but returned an error from its
   // durability barrier. Recovered membership in m_retired is not enough to
   // acknowledge it: force the existing journal through a fresh barrier first.
-  const bool has_existing = std::any_of(unique.begin(), unique.end(),
+  const bool has_existing = std::any_of(groups.begin(), groups.end(),
       [&](const auto &id) { return retired.contains(id); });
   if (has_existing) {
     auto log = DurableAppendFile::open(m_path, m_hook);
@@ -99,7 +148,7 @@ Result<void> RetentionState::publish_after_durable_trim(
     auto synced = log.value().sync();
     if (!synced.ok()) return synced.error();
   }
-  for(const auto &id:unique) {
+  for(const auto &id:groups) {
     if(retired.contains(id)) continue;
     if(m_sequence==UINT64_MAX) return Error(ErrorCode::limit_exceeded, "retention sequence is exhausted");
     auto seq=m_sequence+1;
