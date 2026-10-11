@@ -129,6 +129,10 @@ public:
   [[nodiscard]] Result<std::vector<SessionTextEdit>>
   edits_since(const Crdt::Global &) const;
   [[nodiscard]] const SessionRecoveryReport &recovery_report() const noexcept;
+  /// Deferred envelopes retained verbatim until their causal dependencies
+  /// arrive. The stable token and original payload bytes are suitable for a
+  /// checkpoint or provider reconciliation snapshot.
+  [[nodiscard]] std::vector<InboundDelivery> deferred_deliveries() const;
   [[nodiscard]] const ActorId &actor() const noexcept;
   [[nodiscard]] bool ready() const noexcept;
 

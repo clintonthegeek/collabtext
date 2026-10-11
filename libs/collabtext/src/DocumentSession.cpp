@@ -17,6 +17,11 @@ namespace CollabText {
 using namespace Crdt;
 
 struct DocumentSession::Impl {
+  struct DeferredState {
+    DeliveryToken token;
+    Operation operation;
+    std::string payload;
+  };
   DocumentSessionConfig config;
   std::optional<ReplicaState> replica;
   std::shared_ptr<CollabText::Identity::ReplicaAllocator> allocator;
@@ -27,7 +32,7 @@ struct DocumentSession::Impl {
   Global history_floor;
   uint64_t next_envelope = 1;
   std::unordered_set<std::string> replayed_tokens;
-  std::unordered_map<std::string, Operation> deferred_tokens;
+  std::unordered_map<std::string, DeferredState> deferred_tokens;
   bool closed = false;
   bool poisoned = false;
 
@@ -212,7 +217,8 @@ struct DocumentSession::Impl {
       if (outcomes.front().kind() != ApplyOutcomeKind::rejected)
         replayed_tokens.insert(key);
       if (outcomes.front().kind() == ApplyOutcomeKind::deferred)
-        deferred_tokens.emplace(key, decoded.value());
+        deferred_tokens.emplace(
+            key, DeferredState{delivery.token, decoded.value(), delivery.payload});
     }
     return {};
   }
@@ -314,7 +320,17 @@ DocumentSession::open_with_writer_config(
           const auto token_key = Impl::token_key(delivery.token);
           if (auto waiting = raw->deferred_tokens.find(token_key);
               waiting != raw->deferred_tokens.end()) {
-            if (!raw->buffer->version().observed(op_identity(waiting->second)))
+            if (waiting->second.payload != delivery.payload) {
+              auto error = Error(
+                  ErrorCode::corrupt_record,
+                  "deferred delivery token was reused with different payload bytes");
+              raw->report.complete = false;
+              ++raw->report.rejected;
+              if (!raw->report.issue) raw->report.issue = error;
+              return DeliveryDecision::quarantine(std::move(error));
+            }
+            if (!raw->buffer->version().observed(
+                    op_identity(waiting->second.operation)))
               return DeliveryDecision::retry();
             raw->deferred_tokens.erase(waiting);
             raw->replayed_tokens.insert(token_key);
@@ -336,7 +352,9 @@ DocumentSession::open_with_writer_config(
           raw->report.complete = false;
           raw->classify(outcome);
           if (outcome.kind() == ApplyOutcomeKind::deferred) {
-            raw->deferred_tokens.emplace(token_key, decoded.value());
+            raw->deferred_tokens.emplace(
+                token_key, Impl::DeferredState{delivery.token, decoded.value(),
+                                               delivery.payload});
             raw->replayed_tokens.insert(token_key);
             return DeliveryDecision::retry();
           }
@@ -649,6 +667,24 @@ DocumentSession::edits_since(const Global &since) const {
 }
 const SessionRecoveryReport &DocumentSession::recovery_report() const noexcept {
   return m_impl->report;
+}
+std::vector<InboundDelivery> DocumentSession::deferred_deliveries() const {
+  std::vector<InboundDelivery> deliveries;
+  if (!m_impl) return deliveries;
+  deliveries.reserve(m_impl->deferred_tokens.size());
+  for (const auto &[_, deferred] : m_impl->deferred_tokens)
+    deliveries.push_back({deferred.token, deferred.payload});
+  std::sort(deliveries.begin(), deliveries.end(),
+            [](const InboundDelivery &left, const InboundDelivery &right) {
+              if (left.token.stream != right.token.stream)
+                return left.token.stream < right.token.stream;
+              if (left.token.epoch != right.token.epoch)
+                return left.token.epoch < right.token.epoch;
+              if (left.token.producer != right.token.producer)
+                return left.token.producer < right.token.producer;
+              return left.token.sequence < right.token.sequence;
+            });
+  return deliveries;
 }
 const ActorId &DocumentSession::actor() const noexcept {
   return m_impl->replica->actor();

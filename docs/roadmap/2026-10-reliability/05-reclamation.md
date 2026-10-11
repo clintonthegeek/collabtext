@@ -125,12 +125,15 @@ Run `./tools/verify-roadmap.sh debug 'tst_gc_certificate|tst_transport_commit_co
 - `libs/collabtext/src/storage/CheckpointTranslationCodec.cpp`
 - `libs/collabtext/src/storage/CheckpointLocalCodec.cpp`
 - `libs/collabtext/src/storage/CheckpointMembershipCodec.cpp`
+- `libs/collabtext/src/DocumentSession.cpp`
+- `libs/collabtext/include/collabtext/DocumentSession.h`
 - `docs/specs/vnext-checkpoint.md`
 - `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/src/crdt/Buffer.cpp`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/tests/fuzz_decode.cpp`
 - `libs/collabtext/tests/tst_checkpoint_codec.cpp`
+- `libs/collabtext/tests/tst_session_recovery.cpp`
 
 **Steps:**
 

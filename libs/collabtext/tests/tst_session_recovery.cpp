@@ -1113,6 +1113,7 @@ private slots:
     const DocumentSessionConfig b_config{source, root / "device-b", "doc-3",
                                          "text-3", 1};
     ActorId actor_a;
+    std::optional<OutboundDelivery> expected_deferred;
     {
       auto opened = DocumentSession::open(a_config);
       QVERIFY(opened.ok());
@@ -1127,6 +1128,14 @@ private slots:
       auto b = std::move(opened).value();
       QCOMPARE(b->text(), std::string("A"));
       QVERIFY(b->apply_local({{1, 1}}, {"B"}).ok());
+      LocalBranchExport metadata;
+      auto exported = b->export_local_branch(
+          metadata, [&](const OutboundDelivery &delivery) -> Result<void> {
+            expected_deferred = delivery;
+            return {};
+          });
+      QVERIFY(exported.ok());
+      QVERIFY(expected_deferred.has_value());
       QVERIFY(b->close().ok());
     }
 
@@ -1142,6 +1151,10 @@ private slots:
     QVERIFY(!c->ready());
     QVERIFY(!c->recovery_report().complete);
     QVERIFY(c->recovery_report().deferred > 0);
+    auto deferred = c->deferred_deliveries();
+    QCOMPARE(deferred.size(), size_t(1));
+    QCOMPARE(deferred[0].token, expected_deferred->token);
+    QCOMPARE(deferred[0].payload, expected_deferred->payload);
     auto edit_while_incomplete = c->apply_local({{0, 0}}, {"unsafe"});
     QVERIFY(!edit_while_incomplete.ok());
 
@@ -1154,6 +1167,7 @@ private slots:
     QCOMPARE(c->text(), std::string("AB"));
     QVERIFY(c->poll().ok()); // commits any earlier deferred envelope after its
                              // dependency arrived
+    QVERIFY(c->deferred_deliveries().empty());
     auto recovered = c->recover();
     QVERIFY(recovered.ok());
     QVERIFY(c->close().ok());
