@@ -2587,6 +2587,31 @@ private slots:
     QVERIFY(binding_validated);
     QCOMPARE(bound_session->text(), std::string("peer"));
     QVERIFY(bound_session->recovery_report().diagnostics.empty());
+
+    auto late_undo = peer_engine.try_undo();
+    QVERIFY(late_undo.ok());
+    QVERIFY(late_undo.value().has_value());
+    auto late_undo_payload = encode_operation(*late_undo.value());
+    QVERIFY(late_undo_payload.ok());
+    {
+      Crdt::FileOpStream peer(root / "shared", producer);
+      QVERIFY(peer.start().ok());
+      QVERIFY(peer.register_stream(scope).ok());
+      QVERIFY(peer.push(
+          {{scope.stream, scope.epoch, producer, 2},
+           late_undo_payload.value()},
+          PushDurability::durable).ok());
+      QVERIFY(peer.close().ok());
+    }
+    auto late_undo_poll = bound_session->poll();
+    QVERIFY(late_undo_poll.ok());
+    QCOMPARE(late_undo_poll.value().quarantined, size_t(1));
+    QCOMPARE(bound_session->text(), std::string("peer"));
+    auto refused_undo = bound_session->quarantined_deliveries();
+    QVERIFY(refused_undo.ok());
+    QCOMPARE(refused_undo.value().size(), size_t(1));
+    QCOMPARE(refused_undo.value().front().reason.code(),
+             ErrorCode::history_unavailable);
     QVERIFY(bound_session->close().ok());
 
     expected_binding->refuse = true;
@@ -2595,7 +2620,9 @@ private slots:
     QVERIFY(refused_open.ok());
     auto refused_session = std::move(refused_open).value();
     QVERIFY(binding_validated);
-    QCOMPARE(refused_session->text(), std::string("peer"));
+    // The older unbound checkpoint still has the complete undo history, so
+    // after provider refusal the retained late undo can safely replay.
+    QCOMPARE(refused_session->text(), std::string());
     QVERIFY(refused_session->close().ok());
   }
 

@@ -1096,6 +1096,18 @@ Buffer::ApplyStep Buffer::apply_remote_undo(const UndoOperation &op) {
     if (!m_version.observed_all(op.version))
         return ApplyStep::not_ready;
 
+    for (const auto &[edit_id, count] : op.counts) {
+        (void)count;
+        if (operation_is_covered(m_reclamation.operation_frontier, edit_id)) {
+            m_apply_error = Error(
+                ErrorCode::history_unavailable,
+                "undo targets an operation at or below the certified reclamation frontier",
+                "undo target " + edit_id.actor.to_string() + "/" +
+                    std::to_string(edit_id.counter));
+            return ApplyStep::malformed;
+        }
+    }
+
     for (auto &[edit_id, count] : op.counts) {
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
     }
