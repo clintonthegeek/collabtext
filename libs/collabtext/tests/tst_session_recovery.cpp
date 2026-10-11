@@ -1214,6 +1214,8 @@ private slots:
       if (reopen == 0) {
         auto polled = session->poll();
         QVERIFY(polled.ok());
+        QCOMPARE(polled.value().quarantined, size_t(1));
+        QCOMPARE(polled.value().committed, size_t(0));
         auto after_poll = session->quarantined_deliveries();
         QVERIFY(after_poll.ok());
         QCOMPARE(after_poll.value().size(), size_t(1));
