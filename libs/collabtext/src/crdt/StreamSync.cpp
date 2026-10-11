@@ -126,10 +126,11 @@ Result<void> FileOpStream::replay_all(
         const auto dir = peer.path() / "log" / "streams" / stream_dir_name(scope.stream)
                        / std::to_string(scope.epoch);
         if (!fs::exists(dir)) continue;
-        auto cursor = m_shared_folder / "local" / m_local_actor.to_string() / "read-cursors"
-                    / "replay" / (stream_dir_name(scope.stream) + "-" + std::to_string(scope.epoch)
-                                   + "-" + actor.value().to_string() + ".bin");
-        SegmentReader reader(dir, cursor);
+        // Full replay has no durable application checkpoint to pair with a
+        // reader cursor. Keep this reader in-memory only: persisting a cursor
+        // here could let a later recovery skip records without the state that
+        // was built while visiting them.
+        SegmentReader reader(dir, {});
         reader.start();
         uint64_t expected = 1;
         std::string last_payload;

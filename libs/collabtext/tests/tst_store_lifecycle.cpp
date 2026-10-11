@@ -177,6 +177,11 @@ private slots:
     });
     QVERIFY(list_replay.ok());
     QCOMPARE(recovered_list_count, size_t(2));
+    // Full replay reconstructs state without a durable checkpoint, so it must
+    // not create receiver cursors that could later be mistaken for coverage.
+    const auto replay_cursors = receiver_root / "local"
+        / CollabText::Test::actor(96).to_string() / "read-cursors" / "replay";
+    QVERIFY(!fs::exists(replay_cursors));
     const auto recovered_ids = recovered_list.ids();
     QCOMPARE(recovered_ids.size(), size_t(2));
     QVERIFY(std::find(recovered_ids.begin(), recovered_ids.end(), 101)
