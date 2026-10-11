@@ -134,10 +134,12 @@ Result<int> IdListEngine::compare(const ListBoundary& a, const ListBoundary& b) 
 
 Result<Crdt::IdListOperation> IdListEngine::try_insert_after(
     const Crdt::Anchor &after, uint64_t id) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
     return m_impl->list.try_insert_after(after, id);
 }
 
 Result<Crdt::IdListOperation> IdListEngine::try_remove_at(const Crdt::Anchor &target) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
     return m_impl->list.try_remove_at(target);
 }
 
@@ -155,6 +157,7 @@ const ActorId &IdListEngine::actor_id() const { return m_impl->list.actor_id(); 
 
 std::vector<ApplyOutcome> IdListEngine::apply_ops(
     const std::vector<Crdt::IdListOperation> &ops) {
+    if (m_impl->callback_active) return std::vector<ApplyOutcome>(ops.size(), ApplyOutcome::rejected(Error(ErrorCode::reentrant_mutation, "mutation during callback")));
     return m_impl->list.apply_ops(ops);
 }
 
@@ -168,19 +171,22 @@ void IdListEngine::set_on_change(ChangeCallback cb) {
 }
 
 Result<std::optional<Crdt::IdListOperation>> IdListEngine::try_undo() {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
     return m_impl->list.try_undo();
 }
 Result<std::optional<Crdt::IdListOperation>> IdListEngine::try_redo() {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
     return m_impl->list.try_redo();
 }
-std::optional<Crdt::IdListOperation> IdListEngine::undo() { return m_impl->list.undo(); }
-std::optional<Crdt::IdListOperation> IdListEngine::redo() { return m_impl->list.redo(); }
+std::optional<Crdt::IdListOperation> IdListEngine::undo() { auto result = try_undo(); return result ? result.value() : std::nullopt; }
+std::optional<Crdt::IdListOperation> IdListEngine::redo() { auto result = try_redo(); return result ? result.value() : std::nullopt; }
 size_t IdListEngine::undo_depth() const { return m_impl->list.undo_depth(); }
 Crdt::LocalHistorySnapshot IdListEngine::local_history_snapshot() const {
     return m_impl->list.local_history_snapshot();
 }
 Result<void> IdListEngine::restore_local_history(
     const Crdt::LocalHistorySnapshot &snapshot) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
     return m_impl->list.restore_local_history(snapshot);
 }
 std::optional<Crdt::LocalUndoEntrySnapshot>
@@ -193,14 +199,17 @@ IdListEngine::next_redo_group() const {
 }
 Result<void> IdListEngine::acknowledge_undo_retirements(
     const std::vector<Crdt::Identity> &group_ids) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
     return m_impl->list.acknowledge_undo_retirements(group_ids);
 }
-bool IdListEngine::coalesce_last_undo() { return m_impl->list.coalesce_last_undo(); }
+bool IdListEngine::coalesce_last_undo() { return !m_impl->callback_active && m_impl->list.coalesce_last_undo(); }
 Result<void> IdListEngine::set_max_undo_depth(size_t depth) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
     return m_impl->list.set_max_undo_depth(depth);
 }
 size_t IdListEngine::max_undo_depth() const { return m_impl->list.max_undo_depth(); }
 Result<void> IdListEngine::set_max_undo_bytes(size_t bytes) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
     return m_impl->list.set_max_undo_bytes(bytes);
 }
 size_t IdListEngine::max_undo_bytes() const {
@@ -211,6 +220,7 @@ size_t IdListEngine::undo_history_bytes() const {
 }
 
 void IdListEngine::discard_local_view() noexcept {
+    if (m_impl->callback_active) return;
     m_impl->list.discard_local_view();
     m_impl->position_history_available = false;
 }

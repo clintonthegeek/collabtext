@@ -107,11 +107,11 @@ ApplyOutcome CrdtEngine::apply_counter_gap(const PositionScope& scope, const Crd
     if (scope.primitive != expected.primitive) return ApplyOutcome::rejected(Error(ErrorCode::wrong_primitive, "counter gap primitive mismatch"));
     if (scope.epoch != expected.epoch) return ApplyOutcome::rejected(Error(ErrorCode::wrong_epoch, "counter gap epoch mismatch"));
     if (!m_impl->position_history_available) return ApplyOutcome::rejected(Error(ErrorCode::history_unavailable, "local view was discarded"));
-    auto expected = m_impl->buffer.version();
+    auto expected_frontier = m_impl->buffer.version();
     auto outcome = m_impl->buffer.apply_counter_gap(gap);
     if (outcome.kind() == ApplyOutcomeKind::applied) {
-        expected.observe({gap.actor, gap.first + gap.count - 1});
-        if (m_impl->buffer.version() != expected) m_impl->notify();
+        expected_frontier.observe({gap.actor, gap.first + gap.count - 1});
+        if (m_impl->buffer.version() != expected_frontier) m_impl->notify();
     }
     return outcome;
 }

@@ -94,7 +94,9 @@ void gap_semantics(){
   auto next_list=!is_text?std::optional<IdListOperation>(take(writer_list->try_insert_after(Anchor::min(),7))):std::nullopt;
   require((is_text?peer_text->apply_remote(wire(*next_text)):peer_list->apply_ops({wire(*next_list)})[0]).kind()==ApplyOutcomeKind::deferred,"later op should await gap");
   bool guarded=false;
-  auto callback=[&]{auto nested=apply(peer_text,peer_list,decoded); guarded=nested.kind()==ApplyOutcomeKind::rejected && nested.error()->code()==ErrorCode::reentrant_mutation;};
+  auto callback=[&]{auto nested=apply(peer_text,peer_list,decoded); guarded=nested.kind()==ApplyOutcomeKind::rejected && nested.error()->code()==ErrorCode::reentrant_mutation;
+   if(is_text){auto edit=peer_text->try_insert(0,"bad");guarded=guarded && !edit && edit.error().code()==ErrorCode::reentrant_mutation;}
+   else{auto edit=peer_list->try_insert_after(Anchor::min(),9);guarded=guarded && !edit && edit.error().code()==ErrorCode::reentrant_mutation;}};
   peer_text->setOnChange(callback);peer_list->set_on_change(callback);
   require(apply(peer_text,peer_list,decoded).kind()==ApplyOutcomeKind::applied,"peer gap");
   require(guarded,"gap callback mutation was not guarded");
