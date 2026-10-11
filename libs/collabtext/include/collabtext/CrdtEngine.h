@@ -16,6 +16,36 @@
 
 namespace CollabText {
 
+namespace detail { struct CallbackSubscriptionState; }
+
+/// Memory limits for operations retained while waiting for causal dependencies.
+/// An offered operation refused at the limit remains caller-owned.
+struct DeferredOperationBudget {
+    size_t max_operations = 4096;
+    size_t max_bytes = 8u << 20;
+};
+
+/// Move-only RAII registration. Destroying or resetting the handle disconnects
+/// its callback; it is safe to outlive the engine. Use and destroy it on the
+/// engine's owner thread.
+class CallbackSubscription {
+public:
+    CallbackSubscription() noexcept = default;
+    ~CallbackSubscription();
+    CallbackSubscription(CallbackSubscription &&) noexcept;
+    CallbackSubscription &operator=(CallbackSubscription &&) noexcept;
+    CallbackSubscription(const CallbackSubscription &) = delete;
+    CallbackSubscription &operator=(const CallbackSubscription &) = delete;
+    void reset() noexcept;
+    [[nodiscard]] explicit operator bool() const noexcept;
+
+private:
+    explicit CallbackSubscription(
+        std::weak_ptr<detail::CallbackSubscriptionState> state) noexcept;
+    std::weak_ptr<detail::CallbackSubscriptionState> m_state;
+    friend class CrdtEngine;
+};
+
 class CrdtEngine {
 public:
     /// Checked scope binding. No implicit default document or stream.
@@ -77,12 +107,26 @@ public:
     [[nodiscard]] Result<void> set_max_undo_depth(size_t depth);
     [[nodiscard]] Result<void> set_max_undo_bytes(size_t bytes);
 
+    /// Configure the causal deferral queue. Lowering below current retained
+    /// usage is refused so accepted operations are never evicted by a limit
+    /// change. A refused incoming operation reports `deferred_queue_full` in
+    /// its ApplyOutcome and remains available to the caller for retry.
+    [[nodiscard]] Result<void>
+    set_deferred_operation_budget(DeferredOperationBudget budget);
+    [[nodiscard]] DeferredOperationBudget deferred_operation_budget() const;
+    [[nodiscard]] size_t deferred_operation_count() const;
+    [[nodiscard]] size_t deferred_operation_bytes() const;
+
     // Change notification. Callbacks run synchronously on the calling thread.
     // Callback registration may be changed during dispatch; the active event
     // uses a stable callback snapshot. Mutating this engine from either
     // callback returns `reentrant_mutation` through checked APIs.
     using ChangeCallback = std::function<void()>;
     void setOnChange(ChangeCallback cb);
+    /// Replaces the change callback and returns an RAII handle. Destroying or
+    /// resetting the handle disconnects it and releases its captured state.
+    [[nodiscard]] Result<CallbackSubscription>
+    subscribe_on_change(ChangeCallback cb);
 
     /// Local-op emission callback.
     ///
@@ -100,6 +144,10 @@ public:
     /// (null) function to clear the callback.
     using LocalOpCallback = std::function<void(const Crdt::Operation &)>;
     void setOnLocalOp(LocalOpCallback cb);
+    /// RAII alternative to `setOnLocalOp`; the move-only handle disconnects on
+    /// destruction and remains safe if it outlives this engine.
+    [[nodiscard]] Result<CallbackSubscription>
+    subscribe_on_local_op(LocalOpCallback cb);
 
     /// Apply remote operations in order and return one typed result per offered
     /// operation. Deferred operations remain queued by the engine.

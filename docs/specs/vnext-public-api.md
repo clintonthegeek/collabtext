@@ -242,6 +242,16 @@ switch (outcome.kind()) {
 }
 ```
 
+The engine retains causally deferred operations under an explicit count and byte
+budget. `CrdtEngine::set_deferred_operation_budget()` configures both limits;
+`deferred_operation_count()` and `deferred_operation_bytes()` report current
+usage. Lowering a limit below already retained work fails with `limit_exceeded`
+and leaves the current limit intact. When an offered operation cannot fit,
+`apply_remote()` returns `rejected` with `deferred_queue_full`. The caller still
+owns that operation and must retain or retry it after dependencies or capacity
+change; the engine never silently drops an accepted operation to make room.
+
+
 Implemented in P05 as `<collabtext/ApplyOutcome.h>`, with one deliberate
 divergence: `awaiting()` returns `std::optional<Crdt::Lamport>` rather than
 `std::optional<OperationId>`, because the engine's operation identity is still
@@ -453,21 +463,27 @@ store recovery, persistent undo and durable retention remain their named gates.
 ## 7. Callbacks: single-owner, non-reentrant
 
 ```cpp
-class Buffer {
+class CrdtEngine {
 public:
-    using ChangeCallback = std::function<void(ChangeInfo)>;
-    using LocalOpCallback = std::function<void(const BufferOperation&)>;
+    using ChangeCallback = std::function<void()>;
+    using LocalOpCallback = std::function<void(const Crdt::Operation&)>;
 
-    // Registering replaces any previous registration; the previous one is
-    // released before this call returns.
-    void set_on_change(ChangeCallback);
-    void set_on_local_op(LocalOpCallback);
+    // Registering replaces any prior callback for the same event.
+    Result<CallbackSubscription> subscribe_on_change(ChangeCallback);
+    Result<CallbackSubscription> subscribe_on_local_op(LocalOpCallback);
 
-    // Explicit removal. After this, no callback fires. Safe during a callback.
-    void clear_on_change();
-    void clear_on_local_op();
+    // Legacy single-slot registration remains available with explicit clear.
+    void setOnChange(ChangeCallback);
+    void setOnLocalOp(LocalOpCallback);
 };
 ```
+
+The returned move-only subscription disconnects on `reset()` or destruction,
+releases its captured callable, and is safe to reset after the engine is
+destroyed. Store the handle with the object whose callback it protects. Reset
+during dispatch prevents later events; the current event completes from its
+stable callback snapshot. The legacy setters remain single-slot and require
+explicit replacement or clearing.
 
 The rules, stated once for every callback in the library:
 
@@ -483,9 +499,11 @@ The rules, stated once for every callback in the library:
    available; dispatch uses a stable callback snapshot, so self-removal affects
    later notifications only. Defer follow-up mutation until notification
    returns. Transport callback reentrancy follows its own `OpStream` contract.
-3. **Lifetimes.** The engine owns the `std::function`. A callback capturing a raw
-   pointer to an object that dies first is a caller bug; the library does not
-   keep the object alive and does not check.
+3. **Lifetimes.** A scoped subscription disconnects when its handle is reset or
+   destroyed; the handle may outlive the engine safely. Keep the handle with the
+   listener it protects. Legacy setter callbacks stay registered until replaced,
+   cleared, or the engine is destroyed. Capturing a raw pointer and allowing its
+   object to die while the callback remains connected is still a caller bug.
 4. **Only for visible change.** `on_change` fires when visible text changed. An
    operation that is duplicate, deferred, rejected, or purely structural (a
    tombstone, an undo-map update) does not fire it. A batch of remote operations

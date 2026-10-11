@@ -55,6 +55,33 @@ private slots:
         QCOMPARE(delayed.text(), std::string());
         QCOMPARE(changes, 1);
 
+        CrdtEngine bounded_deferred(CollabText::Test::test_counter(26));
+        QVERIFY(bounded_deferred.set_deferred_operation_budget({1, 0}).ok());
+        const auto byte_limited = bounded_deferred.apply_remote(emitted[1]);
+        QCOMPARE(byte_limited.kind(), ApplyOutcomeKind::rejected);
+        QVERIFY(byte_limited.error().has_value());
+        QCOMPARE(byte_limited.error()->code(), ErrorCode::deferred_queue_full);
+        QVERIFY(bounded_deferred.set_deferred_operation_budget({0, 1u << 20}).ok());
+        const auto count_limited = bounded_deferred.apply_remote(emitted[1]);
+        QCOMPARE(count_limited.kind(), ApplyOutcomeKind::rejected);
+        QVERIFY(count_limited.error().has_value());
+        QCOMPARE(count_limited.error()->code(), ErrorCode::deferred_queue_full);
+        QCOMPARE(bounded_deferred.deferred_operation_count(), size_t(0));
+        QCOMPARE(bounded_deferred.deferred_operation_bytes(), size_t(0));
+
+        QVERIFY(bounded_deferred.set_deferred_operation_budget({1, 1u << 20}).ok());
+        QCOMPARE(bounded_deferred.apply_remote(emitted[1]).kind(), ApplyOutcomeKind::deferred);
+        QCOMPARE(bounded_deferred.deferred_operation_count(), size_t(1));
+        QVERIFY(bounded_deferred.deferred_operation_bytes() > 0);
+        auto would_evict = bounded_deferred.set_deferred_operation_budget({0, 0});
+        QVERIFY(!would_evict.ok());
+        QCOMPARE(would_evict.error().code(), ErrorCode::limit_exceeded);
+        QCOMPARE(bounded_deferred.deferred_operation_budget().max_operations, size_t(1));
+        QCOMPARE(bounded_deferred.apply_remote(emitted[0]).kind(), ApplyOutcomeKind::applied);
+        QCOMPARE(bounded_deferred.text(), std::string("ab"));
+        QCOMPARE(bounded_deferred.deferred_operation_count(), size_t(0));
+        QCOMPARE(bounded_deferred.deferred_operation_bytes(), size_t(0));
+
         const auto rejected = target.apply_remote(Operation{});
         QCOMPARE(rejected.kind(), ApplyOutcomeKind::rejected);
         QVERIFY(rejected.error().has_value());

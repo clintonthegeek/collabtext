@@ -7,10 +7,53 @@
 
 namespace CollabText {
 
+namespace detail {
+struct CallbackSubscriptionState {
+    virtual ~CallbackSubscriptionState() = default;
+    virtual void disconnect() noexcept = 0;
+    [[nodiscard]] virtual bool connected() const noexcept = 0;
+};
+
+template <class Callback>
+struct CallbackSlotState final : CallbackSubscriptionState {
+    explicit CallbackSlotState(Callback cb) : callback(std::move(cb)) {}
+    void disconnect() noexcept override {
+        active = false;
+        callback = {};
+    }
+    [[nodiscard]] bool connected() const noexcept override { return active; }
+    bool active = true;
+    Callback callback;
+};
+} // namespace detail
+
+CallbackSubscription::CallbackSubscription(
+    std::weak_ptr<detail::CallbackSubscriptionState> state) noexcept
+    : m_state(std::move(state)) {}
+
+CallbackSubscription::~CallbackSubscription() { reset(); }
+CallbackSubscription::CallbackSubscription(CallbackSubscription &&other) noexcept
+    : m_state(std::move(other.m_state)) {}
+CallbackSubscription &CallbackSubscription::operator=(CallbackSubscription &&other) noexcept {
+    if (this != &other) {
+        reset();
+        m_state = std::move(other.m_state);
+    }
+    return *this;
+}
+void CallbackSubscription::reset() noexcept {
+    if (auto state = m_state.lock()) state->disconnect();
+    m_state.reset();
+}
+CallbackSubscription::operator bool() const noexcept {
+    auto state = m_state.lock();
+    return state && state->connected();
+}
+
 struct CrdtEngine::Impl {
     Crdt::Buffer buffer;
-    ChangeCallback on_change;
-    LocalOpCallback on_local_op;
+    std::shared_ptr<detail::CallbackSlotState<ChangeCallback>> on_change;
+    std::shared_ptr<detail::CallbackSlotState<LocalOpCallback>> on_local_op;
     std::optional<PositionScope> scope;
     bool position_history_available = true;
     bool callback_active = false;
@@ -24,15 +67,17 @@ struct CrdtEngine::Impl {
     explicit Impl(Crdt::SharedIdentityAllocator allocator) : buffer(std::move(allocator)) {}
 
     void notify() {
-        auto callback = on_change;
-        if (!callback) return;
+        auto slot = on_change;
+        if (!slot || !slot->active || !slot->callback) return;
+        auto callback = slot->callback;
         CallbackScope scope(callback_active);
         callback();
     }
 
     void emit_op(const Crdt::Operation &op) {
-        auto callback = on_local_op;
-        if (!callback) return;
+        auto slot = on_local_op;
+        if (!slot || !slot->active || !slot->callback) return;
+        auto callback = slot->callback;
         CallbackScope scope(callback_active);
         callback(op);
     }
@@ -217,14 +262,57 @@ Result<void> CrdtEngine::set_max_undo_bytes(size_t bytes) {
     return m_impl->buffer.set_max_undo_bytes(bytes);
 }
 
+Result<void> CrdtEngine::set_deferred_operation_budget(
+    DeferredOperationBudget budget) {
+    if (m_impl->callback_active)
+        return Error(ErrorCode::reentrant_mutation,
+                     "cannot mutate an engine from its notification callback");
+    if (m_impl->buffer.deferred_count() > budget.max_operations ||
+        m_impl->buffer.deferred_bytes() > budget.max_bytes)
+        return Error(ErrorCode::limit_exceeded,
+                     "new deferral budget is below currently retained operations");
+    m_impl->buffer.set_deferred_budget(
+        Crdt::DeferredBudget{budget.max_operations, budget.max_bytes});
+    return {};
+}
+
+DeferredOperationBudget CrdtEngine::deferred_operation_budget() const {
+    const auto &budget = m_impl->buffer.deferred_budget();
+    return {budget.max_operations, budget.max_bytes};
+}
+
+size_t CrdtEngine::deferred_operation_count() const {
+    return m_impl->buffer.deferred_count();
+}
+
+size_t CrdtEngine::deferred_operation_bytes() const {
+    return m_impl->buffer.deferred_bytes();
+}
+
 void CrdtEngine::setOnChange(ChangeCallback cb)
 {
-    m_impl->on_change = std::move(cb);
+    if (m_impl->on_change) m_impl->on_change->disconnect();
+    m_impl->on_change.reset();
+    if (cb) m_impl->on_change = std::make_shared<detail::CallbackSlotState<ChangeCallback>>(std::move(cb));
+}
+
+Result<CallbackSubscription> CrdtEngine::subscribe_on_change(ChangeCallback cb) {
+    if (!cb) return Error(ErrorCode::malformed, "change callback is empty");
+    setOnChange(std::move(cb));
+    return CallbackSubscription(m_impl->on_change);
 }
 
 void CrdtEngine::setOnLocalOp(LocalOpCallback cb)
 {
-    m_impl->on_local_op = std::move(cb);
+    if (m_impl->on_local_op) m_impl->on_local_op->disconnect();
+    m_impl->on_local_op.reset();
+    if (cb) m_impl->on_local_op = std::make_shared<detail::CallbackSlotState<LocalOpCallback>>(std::move(cb));
+}
+
+Result<CallbackSubscription> CrdtEngine::subscribe_on_local_op(LocalOpCallback cb) {
+    if (!cb) return Error(ErrorCode::malformed, "local operation callback is empty");
+    setOnLocalOp(std::move(cb));
+    return CallbackSubscription(m_impl->on_local_op);
 }
 
 std::vector<ApplyOutcome> CrdtEngine::apply_ops(

@@ -108,6 +108,7 @@ public:
 
     /// Operations currently waiting for a causal dependency.
     [[nodiscard]] size_t deferred_count() const { return m_deferred_count; }
+    [[nodiscard]] size_t deferred_bytes() const { return m_deferred_bytes; }
 
     /// Operations evicted from the deferral queue by the budget, each with the
     /// reason it was refused. This diagnostic retention has its own budget;

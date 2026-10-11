@@ -147,7 +147,7 @@ Run `./tools/verify-roadmap.sh {debug,release,asan} 'tst_document_adapter|tst_ed
 
 ## A04 — Implement batch outcomes, subscriptions, and safe notification policy
 
-**Status:** in progress
+**Status:** complete
 **Depends on:** A03, P05  
 **Coverage:** R9  
 
@@ -166,6 +166,10 @@ Run `./tools/verify-roadmap.sh {debug,release,asan} 'tst_document_adapter|tst_ed
 - `libs/collabtext/src/crdt/StreamSync.cpp`
 - `libs/collabtext/tests/tst_opstream_replay.cpp`
 - `libs/collabtext/tests/tst_session_recovery.cpp`
+- `libs/collabtext/src/crdt/Buffer.h`
+- `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/tests/tst_crdtengine_op_api.cpp`
+- `docs/specs/vnext-public-api.md`
 
 **Steps:**
 
@@ -180,9 +184,9 @@ Run `./tools/verify-roadmap.sh {debug,release,asan} 'tst_document_adapter|tst_ed
 
 **Verification:**
 
-The focused callback group `tst_callbacks|tst_crdtengine_op_api|tst_document_adapter|tst_transport_commit_contract` passed in Debug (`20261011T044830Z-2`), Release (`20261011T044625Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T044722Z-2`). Remaining: session subscription teardown/lifetime, session mutation reentrancy, and bounded pending byte/count backpressure tests. FileOpStream callback reentrancy regression in `tst_opstream_replay|tst_transport_commit_contract` passes Debug (`20261011T045514Z-2`), Release (`20261011T045523Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T045534Z-2`). Nested poll and push from delivery and replay callbacks return `writer_conflict`, while outer delivery commits once. DocumentSession inbound authorization now rejects same-session reentrant mutation before it can change local state. The expanded `tst_session_recovery` passed Debug (`20261011T045836Z-2`), Release (`20261011T045855Z-2`), and ASan/UBSan with leak detection disabled (`20261011T045924Z-2`); the regression verifies inbound delivery still commits and text contains only the authorized remote edits.
+The complete A04 callback/backpressure group `tst_callbacks|tst_crdtengine_op_api|tst_operation_validation|tst_buffer|tst_opstream_replay|tst_transport_commit_contract|tst_session_recovery` passed Debug (`20261011T051409Z-2`), Release (`20261011T051432Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T051456Z-2`). Coverage includes callback batch/count semantics, RAII subscription reset/self-disconnect/outliving-engine behavior, transport and session reentrancy, and bounded causal queue byte/count backpressure with retry retention. The standalone public header object target `collabtext_public_headers_core` passed with `CCACHE_DISABLE=1`.
 
-**Current implementation note:** CrdtEngine remote batches return one outcome per offered operation and notify once only if any operation applies. Callback dispatch holds a stable callback snapshot, and checked same-engine mutation is rejected with `ErrorCode::reentrant_mutation` before changing state. `tst_callbacks` covers mixed applied batches, duplicate/rejected-only batches, callback self-removal, and reentrant local/remote mutation. The file transport also scopes delivery and receipt callback execution so nested transport mutations fail before state changes; replay visitors receive the same guard, and unsubscribe remains available during callbacks. Session subscription listener lifetime and queue/backpressure policy remain open.
+**Current implementation note:** CrdtEngine remote batches return one outcome per offered operation and notify once only if any operation applies. Callback dispatch holds a stable callback snapshot, and checked same-engine mutation is rejected with `ErrorCode::reentrant_mutation` before changing state. `tst_callbacks` covers mixed applied batches, duplicate/rejected-only batches, callback self-removal, and reentrant local/remote mutation. The file transport also scopes delivery and receipt callback execution so nested transport mutations fail before state changes; replay visitors receive the same guard, and unsubscribe remains available during callbacks. The scoped subscription and queue/backpressure requirements are complete; consumer integration remains a separate A03 follow-up.
 
 ## A05 — Define discard_local_view and other reset semantics across epochs
 

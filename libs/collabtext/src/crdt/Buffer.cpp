@@ -1155,6 +1155,7 @@ ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Identity awaiting)
     }
 
     enqueue_deferred({get_op_timestamp(op), op});
+    m_deferred_actors.insert(get_op_timestamp(op).actor);
     m_deferred_count += 1;
     m_deferred_bytes += bytes;
     return ApplyOutcome::deferred(awaiting);
@@ -1185,7 +1186,6 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
     case ValidationVerdict::rejected:
         return ApplyOutcome::rejected(verdict.error);
     case ValidationVerdict::deferred:
-        m_deferred_actors.insert(ts.actor);
         return defer_or_quarantine(op, *verdict.awaiting);
     case ValidationVerdict::valid:
         break;
@@ -1194,14 +1194,27 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
     // Head-of-line blocking within a replica. Operations from one replica are
     // causally ordered, so if an earlier one is waiting, this one is too.
     if (m_deferred_actors.count(ts.actor)) {
-        // The identity this one is ultimately waiting for is the earliest thing
-        // its actor is still missing; the blocked actor's own pending
-        // operation is the honest answer when it is not otherwise derivable.
-        const Identity awaiting = ts.counter > 0
-                                      ? Identity(ts.actor, ts.counter - 1)
-                                      : ts;
-        m_deferred_actors.insert(ts.actor);
-        return defer_or_quarantine(op, awaiting);
+        uint64_t earliest_pending_counter = UINT64_MAX;
+        m_deferred_queue.for_each([&](const OperationEntry &entry) {
+            if (entry.timestamp.actor == ts.actor)
+                earliest_pending_counter = std::min(earliest_pending_counter,
+                                                   entry.timestamp.counter);
+        });
+        // A lower counter from the same actor may be the missing prerequisite
+        // that releases the retained suffix. Only preserve head-of-line order
+        // for this pending operation and later counters.
+        if (ts.counter < earliest_pending_counter) {
+            // Continue through normal validation/application below.
+        } else {
+            // The identity this one is ultimately waiting for is the earliest
+            // thing its actor is still missing; the blocked actor's own pending
+            // operation is the honest answer when it is not otherwise derivable.
+            const Identity awaiting = ts.counter > 0
+                                          ? Identity(ts.actor, ts.counter - 1)
+                                          : ts;
+            m_deferred_actors.insert(ts.actor);
+            return defer_or_quarantine(op, awaiting);
+        }
     }
 
     switch (try_apply(op)) {

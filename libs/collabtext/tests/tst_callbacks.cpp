@@ -5,6 +5,7 @@
 #include "TestActor.h"
 
 #include <optional>
+#include <memory>
 #include <vector>
 
 using namespace CollabText;
@@ -12,6 +13,57 @@ using namespace CollabText;
 class TestCallbacks : public QObject {
   Q_OBJECT
 private slots:
+  void scopedCallbackSubscriptionsDisconnectAndCanOutliveEngine() {
+    CrdtEngine engine(Test::test_counter(140));
+    size_t changes = 0;
+    auto subscription = engine.subscribe_on_change([&] { ++changes; });
+    QVERIFY(subscription.ok());
+    QVERIFY(static_cast<bool>(subscription.value()));
+    QVERIFY(engine.try_insert(0, "a").ok());
+    QCOMPARE(changes, size_t(1));
+    subscription.value().reset();
+    QVERIFY(!static_cast<bool>(subscription.value()));
+    QVERIFY(engine.try_insert(1, "b").ok());
+    QCOMPARE(changes, size_t(1));
+
+    size_t self_disconnect_calls = 0;
+    CallbackSubscription self_disconnect;
+    auto self_result = engine.subscribe_on_change([&] {
+      ++self_disconnect_calls;
+      self_disconnect.reset();
+    });
+    QVERIFY(self_result.ok());
+    self_disconnect = std::move(self_result).value();
+    QVERIFY(engine.try_insert(2, "c").ok());
+    QCOMPARE(self_disconnect_calls, size_t(1));
+    QVERIFY(engine.try_insert(3, "d").ok());
+    QCOMPARE(self_disconnect_calls, size_t(1));
+
+    std::weak_ptr<int> captured_lifetime;
+    {
+      auto captured = std::make_shared<int>(7);
+      captured_lifetime = captured;
+      auto retained = engine.subscribe_on_local_op(
+          [captured](const Crdt::Operation &) {});
+      QVERIFY(retained.ok());
+      captured.reset();
+      QVERIFY(!captured_lifetime.expired());
+      retained.value().reset();
+      QVERIFY(captured_lifetime.expired());
+    }
+
+    CallbackSubscription outlives_engine;
+    {
+      CrdtEngine short_lived(Test::test_counter(145));
+      auto connection = short_lived.subscribe_on_change([] {});
+      QVERIFY(connection.ok());
+      outlives_engine = std::move(connection).value();
+      QVERIFY(static_cast<bool>(outlives_engine));
+    }
+    QVERIFY(!static_cast<bool>(outlives_engine));
+    outlives_engine.reset();
+  }
+
   void remoteBatchNotifiesOnceOnlyWhenVisibleStateChanges() {
     CrdtEngine source(Test::test_counter(141));
     CrdtEngine target(Test::test_counter(142));
