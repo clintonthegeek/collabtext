@@ -6,7 +6,7 @@ active lane; TASKS.json owns exact status and dependencies. Historical task
 steps and reports do not override these instructions.
 
 The user has authorized finishing Wave's Core requirements, including deep
-changes and optimization, before Markoff starts. Q01–Q05 and Q04a are complete; do not repeat them. The next task is external Q06 in
+changes and optimization, before Markoff starts. Q01–Q05 and Q04a are complete; do not repeat them. Wave acceptance remains external Q06 in
 [09-wave-core.md](09-wave-core.md). The normative capability contract is
 [wave-core-adoption.md](../../specs/wave-core-adoption.md); the consumer-facing
 instructions are [wave-core-response.md](../../handoff/wave-core-response.md).
@@ -47,3 +47,10 @@ unsupported; presence-only SyncManager no longer takes an ignored engine pointer
 CTBO/0002–0003 and CTPT/1–2 remain current writer formats; the reader obligation
 above starts with this adoption candidate for newly durable Wave data. This is
 not an obligation to upgrade earlier experimental stores.
+
+Current active upstream lane: M01–M05 in [10-markoff-core.md](10-markoff-core.md),
+authorized by the user after Markoff began integration. Normative contract:
+[markoff-core-adoption.md](../../specs/markoff-core-adoption.md). Response:
+[markoff-core-response.md](../../handoff/markoff-core-response.md). New candidate
+alpha.4/manifest v16 promises durable CTLO/0002 and CTGP/0001 readers; exact prior
+Wave tag is unchanged. M06 and Q06 are independent external approval gates.

@@ -165,7 +165,7 @@ Result<void> validate_sections(CheckpointKind kind,
     if (section.id != expected_id)
       return bad_sections("checkpoint section IDs must be complete and ordered");
     const bool supported = kind == CheckpointKind::Shareable && section.id == 2
-        ? (section.version == 2 || section.version == 3)
+        ? (section.version == 2 || section.version == 3 || section.version == 4)
         : section.version == 1;
     if (!supported)
       return bad_sections("checkpoint section version is unsupported");

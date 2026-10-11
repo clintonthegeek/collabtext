@@ -19,3 +19,7 @@ These upstream-shaped traces do not approve Wave's production adapter or its
 EventStore transactions. Wave reruns its own installed probes and records its
 stage-4 acceptance against the exact new candidate. See
 [the handoff](../../docs/handoff/wave-core-response.md).
+
+`consumer_markoff_core` adds the alpha.4 Markoff contract: full list identities,
+exact-identity addressing, literal CTLO archives and scoped terminal gaps across
+durable reservation/host-log reopen. Both streams and two peer replays run.

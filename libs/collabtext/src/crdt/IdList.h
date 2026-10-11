@@ -1,4 +1,5 @@
 #pragma once
+#include "crdt/CounterGapLedger.h"
 #include "crdt/PositionTraversal.h"
 
 #include "crdt/Anchor.h"
@@ -100,6 +101,7 @@ using IdListTree = SumTree<IdListEntry, IDLIST_TREE_B>;
 /// tree summaries are rebuilt from deletion records and UndoMap state.
 struct IdListCheckpointState {
     Global version;
+    std::vector<CounterGap> counter_gaps;
     std::vector<IdListEntry> entries;
     std::vector<UndoMapEntry> undo_entries;
     std::vector<IdListOpEntry> deferred;
@@ -201,6 +203,7 @@ public:
         const std::set<Identity> &pinned_identities);
 
     std::vector<IdListEntry> entries() const;
+    [[nodiscard]] ApplyOutcome apply_counter_gap(const CounterGap& gap);
     [[nodiscard]] IdListCheckpointState checkpoint_state() const;
     [[nodiscard]] Result<void>
     restore_checkpoint_state(const IdListCheckpointState &snapshot);
@@ -239,6 +242,7 @@ public:
 private:
     SharedIdentityAllocator m_allocator;
     Global m_version;
+    CounterGapLedger m_counter_gaps;
     UndoMap m_undo_map;
     ReclamationBinding m_reclamation;
     IdListTree m_entry_tree;

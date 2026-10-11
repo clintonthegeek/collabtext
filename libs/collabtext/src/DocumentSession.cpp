@@ -271,6 +271,7 @@ struct DocumentSession::Impl {
     const auto state = buffer->checkpoint_state();
     core.engine.kind = Storage::CheckpointEngineKind::Text;
     core.engine.fragments = state.fragments;
+    core.engine.counter_gaps = state.counter_gaps;
     core.engine.entries.clear();
     core.engine.reclamation = state.reclamation;
     core.causal.version = state.version;
@@ -432,6 +433,7 @@ struct DocumentSession::Impl {
     Crdt::BufferCheckpointState state;
     state.version = core.causal.version;
     state.fragments = core.engine.fragments;
+    state.counter_gaps = core.engine.counter_gaps;
     state.undo_entries = core.causal.undo_entries;
     state.reclamation = core.engine.reclamation;
     std::unordered_map<std::string, DeferredState> restored_deferred;

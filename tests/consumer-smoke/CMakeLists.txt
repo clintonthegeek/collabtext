@@ -155,3 +155,7 @@ endif()
 add_executable(consumer_wave_core wave_core.cpp)
 target_link_libraries(consumer_wave_core PRIVATE CollabText::Core)
 add_test(NAME consumer_wave_core COMMAND consumer_wave_core)
+
+add_executable(consumer_markoff_core markoff_core.cpp)
+target_link_libraries(consumer_markoff_core PRIVATE CollabText::Core)
+add_test(NAME consumer_markoff_core COMMAND consumer_markoff_core)

@@ -1,4 +1,5 @@
 #pragma once
+#include "crdt/CounterGapLedger.h"
 #include "crdt/PositionTraversal.h"
 
 #include "crdt/Anchor.h"
@@ -37,6 +38,7 @@ using FragmentTree = SumTree<Fragment, FRAG_TREE_B>;
 /// UndoMap, and the logical run sequence.
 struct BufferCheckpointState {
     Global version;
+    std::vector<CounterGap> counter_gaps;
     std::vector<Fragment> fragments;
     std::vector<UndoMapEntry> undo_entries;
     std::vector<OperationEntry> deferred;
@@ -232,6 +234,7 @@ public:
     /// Capture or replace shareable logical state. Replacement builds and
     /// validates a temporary Buffer first, preserving this instance's private
     /// actor history, allocator, budgets, and callback on success.
+    [[nodiscard]] ApplyOutcome apply_counter_gap(const CounterGap& gap);
     [[nodiscard]] BufferCheckpointState checkpoint_state() const;
     [[nodiscard]] Result<void>
     restore_checkpoint_state(const BufferCheckpointState &snapshot);
@@ -380,6 +383,7 @@ private:
 
     SharedIdentityAllocator m_allocator;
     Global m_version;
+    CounterGapLedger m_counter_gaps;
     UndoMap m_undo_map;
     ReclamationBinding m_reclamation;
 

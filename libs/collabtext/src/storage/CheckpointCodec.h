@@ -52,6 +52,7 @@ struct CheckpointCausalState {
 };
 
 struct CheckpointEngineState {
+  std::vector<Crdt::CounterGap> counter_gaps;
   CheckpointEngineKind kind = CheckpointEngineKind::Text;
   std::vector<Crdt::Fragment> fragments;
   std::vector<Crdt::IdListEntry> entries;

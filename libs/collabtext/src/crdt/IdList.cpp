@@ -810,6 +810,7 @@ std::vector<IdListEntry> IdList::entries() const {
 IdListCheckpointState IdList::checkpoint_state() const {
     IdListCheckpointState snapshot;
     snapshot.version = m_version;
+    snapshot.counter_gaps = m_counter_gaps.records();
     snapshot.reclamation = m_reclamation;
     snapshot.entries = get_entries();
     snapshot.undo_entries = m_undo_map.entries();
@@ -839,6 +840,8 @@ Result<void> IdList::restore_checkpoint_state(
                      "checkpoint deferred or quarantine record count exceeds configured budget",
                      "checkpoint.deferred");
     IdList rebuilt(m_allocator);
+    auto gaps = rebuilt.m_counter_gaps.restore(snapshot.counter_gaps, snapshot.version);
+    if (!gaps) return gaps.error();
     rebuilt.m_deferred_budget = m_deferred_budget;
     rebuilt.m_quarantine_budget = m_quarantine_budget;
     rebuilt.m_max_undo_depth = m_max_undo_depth;
@@ -849,7 +852,7 @@ Result<void> IdList::restore_checkpoint_state(
         return id.actor.valid() && id.counter != 0 && id.counter != UINT64_MAX;
     };
     auto observed_identity = [&](const Identity &id) {
-        return valid_identity(id) && snapshot.version.observed(id);
+        return valid_identity(id) && snapshot.version.observed(id) && !rebuilt.m_counter_gaps.contains(id);
     };
     auto map_restore = rebuilt.m_undo_map.restore_entries(snapshot.undo_entries);
     if (!map_restore) return map_restore.error();
@@ -892,6 +895,7 @@ Result<void> IdList::restore_checkpoint_state(
     size_t deferred_bytes = 0;
     std::set<Identity> deferred_identities;
     for (const auto &entry : snapshot.deferred) {
+        if (rebuilt.m_counter_gaps.conflicts(entry.op)) return CounterGapLedger::conflict();
         const auto timestamp = get_idlist_op_identity(entry.op);
         if (timestamp != entry.timestamp || !valid_identity(timestamp) ||
             snapshot.version.observed(timestamp) ||
@@ -921,6 +925,7 @@ Result<void> IdList::restore_checkpoint_state(
 
     size_t quarantine_bytes = 0;
     for (const auto &entry : snapshot.quarantined) {
+        if (rebuilt.m_counter_gaps.conflicts(entry.op)) return CounterGapLedger::conflict();
         const auto timestamp = get_idlist_op_identity(entry.op);
         if (!valid_identity(timestamp) || snapshot.version.observed(timestamp) ||
             entry.reason.empty() || !deferred_identities.insert(timestamp).second)
@@ -1022,6 +1027,20 @@ ApplyOutcome IdList::defer_or_quarantine(const IdListOperation& op,
     return ApplyOutcome::deferred(awaiting);
 }
 
+ApplyOutcome IdList::apply_counter_gap(const CounterGap& gap) {
+    auto outcome = m_counter_gaps.check(gap, m_version);
+    if (outcome.kind() != ApplyOutcomeKind::applied) return outcome;
+    CounterGapLedger offered; Global prior = gap.prior; offered.commit(gap, prior);
+    bool conflict = false;
+    m_deferred_queue.for_each([&](const auto& entry) { conflict |= offered.conflicts(entry.op); });
+    for (const auto& entry : m_quarantined) conflict |= offered.conflicts(entry.op);
+    if (conflict) return ApplyOutcome::rejected(CounterGapLedger::conflict());
+    m_counter_gaps.commit(gap, m_version);
+    observe_remote({gap.actor, gap.first + gap.count - 1});
+    retry_deferred();
+    return ApplyOutcome::applied();
+}
+
 ApplyOutcome IdList::apply_one(const IdListOperation& op) {
     const Identity ts = get_idlist_op_identity(op);
 
@@ -1033,6 +1052,7 @@ ApplyOutcome IdList::apply_one(const IdListOperation& op) {
         return ApplyOutcome::rejected(identity.error);
     }
 
+    if (m_counter_gaps.conflicts(op)) return ApplyOutcome::rejected(CounterGapLedger::conflict());
     if (m_version.observed(ts)) return ApplyOutcome::duplicate();
 
     // Validity before causality: an operation that can never be applied is

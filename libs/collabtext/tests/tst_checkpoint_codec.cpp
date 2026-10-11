@@ -55,6 +55,62 @@ class CheckpointCodecTest final : public QObject {
   Q_OBJECT
 
 private slots:
+  void terminalGapBoundsAndPendingConflicts() {
+    using namespace CollabText::Test;
+    Crdt::Buffer buffer(test_counter(2)); Crdt::Global prior;
+    for (uint64_t counter=1; counter<=Crdt::CounterGapLedger::max_records; ++counter) {
+      Crdt::CounterGap gap{actor(1),counter,1,prior};
+      QCOMPARE(buffer.apply_counter_gap(gap).kind(),ApplyOutcomeKind::applied);
+      prior.observe({actor(1),counter});
+    }
+    auto before=buffer.version(); auto blocked=buffer.apply_counter_gap({actor(1),4097,1,prior});
+    QCOMPARE(blocked.kind(),ApplyOutcomeKind::rejected); QCOMPARE(blocked.error()->code(),ErrorCode::limit_exceeded); QCOMPARE(buffer.version(),before);
+    Crdt::Buffer author(test_counter(1)), missing(test_counter(3)), dependency(test_counter(2));
+    auto base=dependency.try_apply_local_edit({{0,0}},{"x"}); QVERIFY(base); QVERIFY(apply_succeeded(author.apply_ops({base.value()})[0]));
+    auto queued=author.try_apply_local_edit({{1,1}},{"xy"}); QVERIFY(queued); QCOMPARE(missing.apply_ops({queued.value()})[0].kind(),ApplyOutcomeKind::deferred);
+    auto ts=Crdt::op_identity(queued.value()); before=missing.version();
+    QCOMPARE(missing.apply_counter_gap({actor(1),ts.counter-2,3,{}}).kind(),ApplyOutcomeKind::rejected); QCOMPARE(missing.version(),before);
+    Crdt::IdList list_author(test_counter(1)), list_missing(test_counter(3)), list_dependency(test_counter(2));
+    auto list_base=list_dependency.try_insert_after(Crdt::Anchor::min(),7); QVERIFY(list_base); QVERIFY(apply_succeeded(list_author.apply_ops({list_base.value()})[0]));
+    auto list_queued=list_author.try_insert_after(Crdt::Anchor::min(),7); QVERIFY(list_queued); QCOMPARE(list_missing.apply_ops({list_queued.value()})[0].kind(),ApplyOutcomeKind::deferred);
+    auto list_ts=Crdt::idlist_op_identity(list_queued.value()); before=list_missing.version();
+    QCOMPARE(list_missing.apply_counter_gap({actor(1),list_ts.counter,1,{}}).kind(),ApplyOutcomeKind::rejected); QCOMPARE(list_missing.version(),before);
+  }
+  void terminalGapsSurviveEngineCheckpoint() {
+    using namespace CollabText::Test;
+    Crdt::CounterGap gap{actor(1),1,4,{}};
+    for (bool text : {false,true}) {
+      Crdt::Buffer buffer(test_counter(1,5)); Crdt::IdList list(test_counter(1,5));
+      QCOMPARE((text ? buffer.apply_counter_gap(gap) : list.apply_counter_gap(gap)).kind(), ApplyOutcomeKind::applied);
+      Storage::CheckpointEngineState engine;
+      engine.kind = text ? CheckpointEngineKind::Text : CheckpointEngineKind::IdList;
+      engine.counter_gaps = {gap};
+      if (text) { auto inserted = buffer.try_insert_marker(0); QVERIFY(inserted); engine.fragments = buffer.fragments(); }
+      else { auto inserted = list.try_insert_after(Crdt::Anchor::min(),7); QVERIFY(inserted); engine.entries = list.entries(); }
+      auto encoded = encode_checkpoint_engine(engine); QVERIFY(encoded); QCOMPARE(encoded.value().version,uint16_t(4));
+      auto decoded = decode_checkpoint_engine(encoded.value()); QVERIFY(decoded); QCOMPARE(decoded.value().counter_gaps.size(),size_t(1));
+      for (size_t n=0; n<encoded.value().bytes.size(); ++n) {
+        auto truncated=encoded.value(); truncated.bytes.resize(n); QVERIFY(!decode_checkpoint_engine(truncated));
+      }
+      auto trailing=encoded.value(); trailing.bytes+='x'; QVERIFY(!decode_checkpoint_engine(trailing));
+      if (text) {
+        auto snapshot=buffer.checkpoint_state(); snapshot.fragments=decoded.value().fragments; snapshot.counter_gaps=decoded.value().counter_gaps;
+        Crdt::Buffer restored(test_counter(2,100)); QVERIFY(restored.restore_checkpoint_state(snapshot));
+        QCOMPARE(restored.apply_counter_gap(gap).kind(),ApplyOutcomeKind::duplicate);
+        Crdt::Buffer conflicting(test_counter(1)); auto reused=conflicting.try_apply_local_edit({{0,0}},{"x"}); QVERIFY(reused);
+        QCOMPARE(restored.apply_ops({reused.value()})[0].kind(),ApplyOutcomeKind::rejected);
+        snapshot.counter_gaps[0].count=100; QVERIFY(!restored.restore_checkpoint_state(snapshot));
+      } else {
+        auto snapshot=list.checkpoint_state(); snapshot.entries=decoded.value().entries; snapshot.counter_gaps=decoded.value().counter_gaps;
+        Crdt::IdList restored(test_counter(2,100)); QVERIFY(restored.restore_checkpoint_state(snapshot));
+        QCOMPARE(restored.apply_counter_gap(gap).kind(),ApplyOutcomeKind::duplicate);
+        Crdt::IdList conflicting(test_counter(1)); auto reused=conflicting.try_insert_after(Crdt::Anchor::min(),7); QVERIFY(reused);
+        QCOMPARE(restored.apply_ops({reused.value()})[0].kind(),ApplyOutcomeKind::rejected);
+        snapshot.counter_gaps[0].count=100; QVERIFY(!restored.restore_checkpoint_state(snapshot));
+      }
+    }
+  }
+
   void roundTripsBothKinds() {
     for (const auto kind : {CheckpointKind::Shareable, CheckpointKind::Local}) {
       auto input = kind == CheckpointKind::Shareable ? shared_sections() : local_sections();

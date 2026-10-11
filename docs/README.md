@@ -10,11 +10,16 @@ Current consumer entry points:
 - [ALPHA_CAPABILITIES.md](../libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md):
   installed, versioned capability and serialized-reader authority.
 
+- [markoff-core-response.md](handoff/markoff-core-response.md): ordered identities,
+  terminal gaps, durable structural readers and host obligations.
+
 Current maintainer entry points:
 
 - [DIRECTION.md](roadmap/2026-10-reliability/DIRECTION.md): selected lane and policy.
 - [TASKS.json](roadmap/2026-10-reliability/TASKS.json): exact dependency/status registry.
 - [09-wave-core.md](roadmap/2026-10-reliability/09-wave-core.md): implementable Wave tasks.
+- [10-markoff-core.md](roadmap/2026-10-reliability/10-markoff-core.md): current Markoff tasks.
+- [markoff-core-adoption.md](specs/markoff-core-adoption.md): normative Markoff extension.
 - [EXECUTION.md](roadmap/2026-10-reliability/EXECUTION.md): verification procedure.
 - [wave-core-adoption.md](specs/wave-core-adoption.md): current normative extension.
 - [vnext-operation-codec.md](specs/vnext-operation-codec.md): current frame schemas.

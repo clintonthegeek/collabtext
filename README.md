@@ -5,7 +5,7 @@ and IdList share FugueMax sequence ordering. Operations and scoped positions
 are opaque public values; consumers own authorization and transport.
 
 The active branch is `feat/fuguemax-placement`, in the reliability-v2 worktree.
-Current adoption work targets `0.2.0-alpha.3`. Read the
+Current adoption work targets `0.2.0-alpha.4`. Read the
 [consumer handoff](docs/handoff/consumer-adoption.md) and
 [Wave Core response](docs/handoff/wave-core-response.md) before integration.
 The earlier adoption tag is preserved; candidate tags identify exact source,
@@ -56,3 +56,5 @@ Historical locator-era specs and discovery reports remain in `docs/` for
 provenance. Current public contracts are the vNext specs supplemented by
 [wave-core-adoption.md](docs/specs/wave-core-adoption.md). They supersede the
 historical API examples and earlier capability limits.
+
+Current Markoff adoption: [ordered list identities, durable counter gaps and CTLO readers](docs/handoff/markoff-core-response.md). Candidate `collabtext-markoff-core-2026-10-11`, manifest v16; previous Wave candidate remains immutable.

@@ -21,6 +21,12 @@ public:
     Crdt::IdList list;
     std::optional<PositionScope> scope;
     bool position_history_available = true;
+    bool callback_active = false;
+    struct CallbackScope {
+        bool& active; bool prior;
+        explicit CallbackScope(bool& flag) : active(flag), prior(flag) { active = true; }
+        ~CallbackScope() { active = prior; }
+    };
 };
 
 IdListEngine::IdListEngine(Crdt::SharedIdentityAllocator allocator)
@@ -29,6 +35,25 @@ IdListEngine::IdListEngine(Crdt::SharedIdentityAllocator allocator)
 IdListEngine::~IdListEngine() = default;
 IdListEngine::IdListEngine(IdListEngine &&) noexcept = default;
 IdListEngine &IdListEngine::operator=(IdListEngine &&) noexcept = default;
+
+ApplyOutcome IdListEngine::apply_counter_gap(const PositionScope& scope, std::string_view bytes) {
+    auto gap = Crdt::decode_counter_gap(bytes); if (!gap) return ApplyOutcome::rejected(gap.error());
+    auto canonical = Crdt::encode_counter_gap(gap.value()); if (!canonical) return ApplyOutcome::rejected(canonical.error());
+    if (canonical.value() != bytes) return ApplyOutcome::rejected(Error(ErrorCode::malformed, "counter gap bytes are not canonical"));
+    return apply_counter_gap(scope, gap.value());
+}
+
+ApplyOutcome IdListEngine::apply_counter_gap(const PositionScope& scope, const Crdt::CounterGap& gap) {
+    if (m_impl->callback_active) return ApplyOutcome::rejected(Error(ErrorCode::reentrant_mutation, "mutation during callback"));
+    if (!m_impl->scope) return ApplyOutcome::rejected(Error(ErrorCode::unknown_stream, "engine has no bound scope"));
+    const auto& expected = *m_impl->scope;
+    if (scope.document != expected.document) return ApplyOutcome::rejected(Error(ErrorCode::wrong_document, "counter gap document mismatch"));
+    if (scope.stream != expected.stream) return ApplyOutcome::rejected(Error(ErrorCode::wrong_stream, "counter gap stream mismatch"));
+    if (scope.primitive != expected.primitive) return ApplyOutcome::rejected(Error(ErrorCode::wrong_primitive, "counter gap primitive mismatch"));
+    if (scope.epoch != expected.epoch) return ApplyOutcome::rejected(Error(ErrorCode::wrong_epoch, "counter gap epoch mismatch"));
+    if (!m_impl->position_history_available) return ApplyOutcome::rejected(Error(ErrorCode::history_unavailable, "local view was discarded"));
+    return m_impl->list.apply_counter_gap(gap);
+}
 
 Result<std::unique_ptr<IdListEngine>> IdListEngine::create(Crdt::SharedIdentityAllocator allocator, PositionScope scope) {
     auto valid = detail::validate_scope(scope, Primitive::list);
@@ -58,6 +83,31 @@ Result<ListElement> IdListEngine::element_of(uint64_t value) const {
     }
     return Error(ErrorCode::not_found, "application value has no visible list element");
 }
+Result<std::vector<VisibleIdListEntry>> IdListEngine::visible_entries() const {
+    if (!m_impl->position_history_available) return Error(ErrorCode::history_unavailable, "local view was discarded");
+    auto items = m_impl->list.position_items(); if (!items) return items.error();
+    std::vector<VisibleIdListEntry> result;
+    for (const auto& item : items.value()) if (item.visible) {
+        if (!item.application_value) return Error(ErrorCode::history_unavailable, "retained list application value is unavailable");
+        result.push_back({*item.application_value, item.identity});
+    }
+    return result;
+}
+Result<Crdt::Anchor> IdListEngine::try_anchor_of(const Crdt::Identity& identity, Crdt::Bias bias) const {
+    if (!identity.actor.valid() || !identity.counter || identity.counter == UINT64_MAX) return Error(ErrorCode::invalid_identity, "invalid entry identity");
+    auto entries = visible_entries(); if (!entries) return entries.error();
+    for (const auto& entry : entries.value()) if (entry.identity == identity) return Crdt::Anchor{identity,bias};
+    return Error(ErrorCode::unresolvable_anchor, "identity has no visible list entry");
+}
+Result<ListElement> IdListEngine::element_of(const Crdt::Identity& identity) const {
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
+    auto anchor = try_anchor_of(identity); if (!anchor) return anchor.error();
+    detail::PositionPayload p{*m_impl->scope, detail::PositionKind::list_element};
+    p.referent = identity; p.frontier = m_impl->list.version();
+    auto valid = detail::validate_position(p); if (!valid) return valid.error();
+    return detail::PositionAccess::make<ListElement>(std::move(p));
+}
+
 Result<ResolvedListPosition> IdListEngine::resolve(const ListBoundary& token) const {
     if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
     auto p = detail::PositionAccess::get(token);
@@ -109,10 +159,12 @@ std::vector<ApplyOutcome> IdListEngine::apply_ops(
 }
 
 void IdListEngine::set_on_local_op(LocalOpCallback cb) {
-    m_impl->list.set_on_local_op(std::move(cb));
+    auto* impl = m_impl.get();
+    m_impl->list.set_on_local_op(cb ? LocalOpCallback([impl, cb = std::move(cb)](const auto& op) { auto callback = cb; Impl::CallbackScope guard(impl->callback_active); callback(op); }) : LocalOpCallback{});
 }
 void IdListEngine::set_on_change(ChangeCallback cb) {
-    m_impl->list.set_on_change(std::move(cb));
+    auto* impl = m_impl.get();
+    m_impl->list.set_on_change(cb ? ChangeCallback([impl, cb = std::move(cb)] { auto callback = cb; Impl::CallbackScope guard(impl->callback_active); callback(); }) : ChangeCallback{});
 }
 
 Result<std::optional<Crdt::IdListOperation>> IdListEngine::try_undo() {

@@ -1,4 +1,5 @@
 #pragma once
+#include <collabtext/Serialization.h>
 #include <collabtext/Anchor.h>
 
 #include <collabtext/ActorId.h>
@@ -54,6 +55,10 @@ struct MarkerInsertion {
 
 class CrdtEngine {
 public:
+    /// Apply an already committed, host-authorized scoped terminal CTGP record.
+    [[nodiscard]] ApplyOutcome apply_counter_gap(const PositionScope&, const Crdt::CounterGap&);
+    /// Durable envelopes use canonical CTGP bytes; alternate spellings fail.
+    [[nodiscard]] ApplyOutcome apply_counter_gap(const PositionScope&, std::string_view committed_bytes);
     /// Checked scope binding. No implicit default document or stream.
     static Result<std::unique_ptr<CrdtEngine>> create(Crdt::SharedIdentityAllocator, PositionScope);
     /// UTF-8 byte offsets at scalar boundaries; editing remains UTF-16.

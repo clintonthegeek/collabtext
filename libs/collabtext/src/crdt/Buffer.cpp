@@ -92,6 +92,7 @@ std::vector<Fragment> Buffer::fragments() const {
 BufferCheckpointState Buffer::checkpoint_state() const {
     BufferCheckpointState snapshot;
     snapshot.version = m_version;
+    snapshot.counter_gaps = m_counter_gaps.records();
     snapshot.reclamation = m_reclamation;
     snapshot.fragments = get_fragments();
     snapshot.undo_entries = m_undo_map.entries();
@@ -121,6 +122,8 @@ Result<void> Buffer::restore_checkpoint_state(
                      "checkpoint deferred or quarantine record count exceeds configured budget",
                      "checkpoint.deferred");
     Buffer rebuilt(m_allocator);
+    auto gaps = rebuilt.m_counter_gaps.restore(snapshot.counter_gaps, snapshot.version);
+    if (!gaps) return gaps.error();
     rebuilt.m_deferred_budget = m_deferred_budget;
     rebuilt.m_quarantine_budget = m_quarantine_budget;
     rebuilt.m_max_undo_depth = m_max_undo_depth;
@@ -130,7 +133,7 @@ Result<void> Buffer::restore_checkpoint_state(
         return id.actor.valid() && id.counter != 0;
     };
     auto observed_identity = [&](const Identity &id) {
-        return valid_identity(id) && snapshot.version.observed(id);
+        return valid_identity(id) && snapshot.version.observed(id) && !rebuilt.m_counter_gaps.contains(id);
     };
     auto map_restore = rebuilt.m_undo_map.restore_entries(snapshot.undo_entries);
     if (!map_restore) return map_restore.error();
@@ -156,7 +159,8 @@ Result<void> Buffer::restore_checkpoint_state(
                          "checkpoint.engine.text");
         const uint64_t end = fragment.origin.counter + fragment.length;
         ranges[fragment.origin.actor].emplace_back(fragment.origin.counter, end);
-        if (!observed_identity(Identity(fragment.origin.actor, end - 1)))
+        if (rebuilt.m_counter_gaps.overlaps(fragment.origin.actor, fragment.origin.counter, end - 1) ||
+            !observed_identity(Identity(fragment.origin.actor, end - 1)))
             return Error(ErrorCode::malformed,
                          "checkpoint fragment is outside its causal state",
                          "checkpoint.engine.text");
@@ -199,6 +203,7 @@ Result<void> Buffer::restore_checkpoint_state(
     std::optional<Identity> previous_deferred;
     std::set<Identity> deferred_and_quarantined_ids;
     for (const auto &entry : snapshot.deferred) {
+        if (rebuilt.m_counter_gaps.conflicts(entry.op)) return CounterGapLedger::conflict();
         const auto timestamp = get_op_timestamp(entry.op);
         if (timestamp != entry.timestamp || !valid_identity(timestamp) ||
             snapshot.version.observed(timestamp) ||
@@ -231,6 +236,7 @@ Result<void> Buffer::restore_checkpoint_state(
 
     size_t quarantine_bytes = 0;
     for (const auto &entry : snapshot.quarantined) {
+        if (rebuilt.m_counter_gaps.conflicts(entry.op)) return CounterGapLedger::conflict();
         const auto timestamp = get_op_timestamp(entry.op);
         if (!valid_identity(timestamp) || snapshot.version.observed(timestamp) ||
             entry.reason.empty() ||
@@ -1488,6 +1494,20 @@ ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Identity awaiting)
     return ApplyOutcome::deferred(awaiting);
 }
 
+ApplyOutcome Buffer::apply_counter_gap(const CounterGap& gap) {
+    auto outcome = m_counter_gaps.check(gap, m_version);
+    if (outcome.kind() != ApplyOutcomeKind::applied) return outcome;
+    CounterGapLedger offered; Global prior = gap.prior; offered.commit(gap, prior);
+    bool conflict = false;
+    m_deferred_queue.for_each([&](const auto& entry) { conflict |= offered.conflicts(entry.op); });
+    for (const auto& entry : m_quarantined) conflict |= offered.conflicts(entry.op);
+    if (conflict) return ApplyOutcome::rejected(CounterGapLedger::conflict());
+    m_counter_gaps.commit(gap, m_version);
+    observe_remote({gap.actor, gap.first + gap.count - 1});
+    retry_deferred();
+    return ApplyOutcome::applied();
+}
+
 ApplyOutcome Buffer::apply_one(const Operation& op) {
     const Identity ts = get_op_timestamp(op);
 
@@ -1503,6 +1523,7 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
     // Duplicate. Idempotence has to hold even for an operation we could not
     // fully validate, because the commonest cause of an unexpected record is a
     // transport re-delivering one we already applied.
+    if (m_counter_gaps.conflicts(op)) return ApplyOutcome::rejected(CounterGapLedger::conflict());
     if (m_version.observed(ts)) return ApplyOutcome::duplicate();
 
     // Validity before causality: a record that can never be applied is refused

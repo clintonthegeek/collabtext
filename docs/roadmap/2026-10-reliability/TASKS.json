@@ -10,11 +10,16 @@
     "placement": "FugueMax",
     "spec": "docs/specs/vnext-sequence-algorithm.md#0",
     "next": [
-      "Q06"
+      "M01",
+      "M02",
+      "M03",
+      "M04",
+      "M05"
     ],
     "unblocked_not_next": [
       "G03",
-      "G06"
+      "G06",
+      "Q06"
     ],
     "operation_formats": {
       "CTBO": [
@@ -4278,10 +4283,225 @@
       "baseline_revision": "0d21670896d02dda3dc44d18d37f9657935333ed",
       "implementation_commits": [],
       "verification_results": {}
+    },
+    {
+      "id": "M01",
+      "title": "Expose ordered full list insertion identities",
+      "phase": 10,
+      "depends_on": [
+        "Q05"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/IdListEngine.h",
+        "libs/collabtext/src/IdListEngine.cpp",
+        "tests/consumer-smoke/markoff_core.cpp"
+      ],
+      "steps": [
+        "Project visible native list entries to owned application_value/Identity values, preserving order and duplicate values. Reject invalid retained state and discarded views instead of silently omitting entries.",
+        "Add exact-identity element_of and try_anchor_of overloads; retain application-value first-match behavior and unchanged operation codecs. Test concurrency, removal/undo and fresh encoded replay."
+      ],
+      "acceptance": [
+        "Distinct insertion identities survive visibility changes and replay; ids() and wire bytes remain unchanged.",
+        "Installed consumers need no private tree includes or identity truncation."
+      ],
+      "verification": "Run tst_markoff_core and relocated consumer_markoff_core in Debug/Release/ASan.",
+      "addresses": [
+        "R9",
+        "R14"
+      ],
+      "gate": null,
+      "status": "in_progress",
+      "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
+      "implementation_commits": [],
+      "verification_results": {}
+    },
+    {
+      "id": "M02",
+      "title": "Specify and model terminal counter-gap application",
+      "phase": 10,
+      "depends_on": [
+        "M01"
+      ],
+      "files": [
+        "docs/specs/markoff-core-adoption.md",
+        "tests/markoff-core/gap-model.cpp"
+      ],
+      "steps": [
+        "Specify scoped host-authorized durable terminal records, full reserved intervals, causal prior, exact canonical retry, overlap rejection, bounded retention, deferred retry ownership and restart replay.",
+        "Run an independent interval/coverage model before production gap integration. Use runtime checks under Release."
+      ],
+      "acceptance": [
+        "Model rejects conflicting intervals and allocation reuse, and preserves deterministic replay across a reopen boundary."
+      ],
+      "verification": "Build/run independent gap-model directly with -DNDEBUG and through tst_counter_gap_model.",
+      "addresses": [
+        "R9",
+        "R14"
+      ],
+      "gate": "The model must pass before M03; a codec or scalar counter raise is insufficient.",
+      "status": "in_progress",
+      "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
+      "implementation_commits": [],
+      "verification_results": {}
+    },
+    {
+      "id": "M03",
+      "title": "Apply retained terminal intervals to scoped text and list coverage",
+      "phase": 10,
+      "depends_on": [
+        "M02"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/CrdtEngine.h",
+        "libs/collabtext/include/collabtext/IdListEngine.h",
+        "libs/collabtext/src/CrdtEngine.cpp",
+        "libs/collabtext/src/IdListEngine.cpp",
+        "libs/collabtext/src/crdt/CounterGapLedger.h",
+        "libs/collabtext/src/crdt/Buffer.h",
+        "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/IdList.h",
+        "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/src/storage/CheckpointCodec.h",
+        "libs/collabtext/src/storage/CheckpointCodec.cpp",
+        "libs/collabtext/src/storage/CheckpointEngineCodec.cpp",
+        "libs/collabtext/src/DocumentSession.cpp",
+        "libs/collabtext/tests/tst_checkpoint_codec.cpp",
+        "tests/consumer-smoke/markoff_core.cpp"
+      ],
+      "steps": [
+        "Add scoped apply_counter_gap value and canonical-byte entry points. Reject wrong scope, malformed records, differing-prior/overlapping gaps, covered intervals and conflicting deferred/quarantined allocations without mutation.",
+        "Retain terminal intervals with 4096-record/8-MiB limits; reject operation allocation reuse before duplicate handling. Advance causal coverage and allocator observation only on success, retry document waits, and emit no gap document operation/history/publication callback.",
+        "Preserve gap evidence in checkpoint engine section 4; keep current no-gap sections 2/3. Validate restored gap coverage and retained identities, and carry the field through session checkpoint composition without adding session gap publication.",
+        "Test both stream kinds with durable ReplicaState reservation, definitively absent host bundle, synced scoped gap before later operation, reopened writer/peers, exact retry, conflicts, missing prior, callback behavior, malformed inputs, bounds and checkpoint round-trip."
+      ],
+      "acceptance": [
+        "Both peers and reopened engines accept later operations without placeholder edits or reused identities.",
+        "Gap conflicts remain detectable after later coverage and checkpoints; missing prior is not acknowledged or silently retained."
+      ],
+      "verification": "Run tst_markoff_core, tst_checkpoint_codec, affected operation/recovery/undo/callback suites, full Debug/Release/leak-enabled ASan and relocated live Core gates.",
+      "addresses": [
+        "R9",
+        "R14"
+      ],
+      "gate": null,
+      "status": "in_progress",
+      "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
+      "implementation_commits": [],
+      "verification_results": {}
+    },
+    {
+      "id": "M04",
+      "title": "Commit durable CTLO and terminal-gap readers with installed evidence",
+      "phase": 10,
+      "depends_on": [
+        "M03"
+      ],
+      "files": [
+        "libs/collabtext/include/collabtext/Serialization.h",
+        "libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md",
+        "tests/consumer-smoke/markoff_core.cpp",
+        "tests/consumer-smoke/CMakeLists.txt",
+        "libs/collabtext/CMakeLists.txt",
+        "tools/verify_changed.py"
+      ],
+      "steps": [
+        "Declare indefinite CTLO/0002 insert/remove/undo reader semantics from this adoption cut, plus CTGP/0001 terminal metadata needed for durable host replay. Keep historical experimental stores unsupported.",
+        "Retain independent literal CTLO insert/remove/undo fixtures, exact canonical round-trip, identity/visibility checks, future-version refusal and malformed prefixes. Register installed public-header Markoff trace and fail-closed verification routing."
+      ],
+      "acceptance": [
+        "An installed newer reader replays literal archives without rewriting host records or exposing payload builders."
+      ],
+      "verification": "Run installed consumer_markoff_core in all three relocated package modes and verification tooling tests.",
+      "addresses": [
+        "R9",
+        "R14"
+      ],
+      "gate": null,
+      "status": "in_progress",
+      "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
+      "implementation_commits": [],
+      "verification_results": {}
+    },
+    {
+      "id": "M05",
+      "title": "Finalize Markoff response and new immutable candidate",
+      "phase": 10,
+      "depends_on": [
+        "M04"
+      ],
+      "files": [
+        "CMakeLists.txt",
+        "libs/collabtext/CMakeLists.txt",
+        "AGENTS.md",
+        "README.md",
+        "docs/README.md",
+        "docs/USING_VNEXT.md",
+        "docs/handoff/consumer-adoption.md",
+        "docs/handoff/markoff-core-response.md",
+        "docs/specs/markoff-core-adoption.md",
+        "docs/specs/vnext-operation-codec.md",
+        "docs/specs/vnext-protocol.md",
+        "docs/roadmap/2026-10-reliability/DIRECTION.md",
+        "docs/roadmap/2026-10-reliability/DECISIONS.md",
+        "docs/roadmap/2026-10-reliability/EXECUTION.md",
+        "docs/roadmap/2026-10-reliability/README.md",
+        "docs/roadmap/2026-10-reliability/TASKS.json",
+        "docs/roadmap/2026-10-reliability/10-markoff-core.md",
+        "docs/reports/vnext-task-log.md",
+        "docs/reports/2026-10-11-markoff-core-candidate.md",
+        "tests/consumer-smoke/README.md"
+      ],
+      "steps": [
+        "Bump package alpha.4 and capability manifest v16; settle all three asks and host document-key/stream naming obligations in a public response. Align current roadmap/specs without rewriting historical Wave evidence.",
+        "Run strict plan/scope/verifier checks, full correctness and installed gates. Run Markoff-owned installed probe read-only when available and distinguish its existing coverage from production adoption.",
+        "Commit source and evidence; create a new annotated collabtext-markoff-core-2026-10-11 tag without moving either earlier tag. Preserve external Q06/M06 gates; do not edit consumers, message, push, publish or merge."
+      ],
+      "acceptance": [
+        "All upstream asks have implemented public paths and executable evidence; external approval remains separate."
+      ],
+      "verification": "Run validate-plan.py, check-scope.py --strict, tooling tests, full correctness, three relocated live package gates and available read-only Markoff probe.",
+      "addresses": [
+        "R9",
+        "R14"
+      ],
+      "gate": null,
+      "status": "in_progress",
+      "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
+      "implementation_commits": [],
+      "verification_results": {}
+    },
+    {
+      "id": "M06",
+      "title": "Record production Markoff acceptance on exact candidate",
+      "phase": 10,
+      "depends_on": [
+        "M05"
+      ],
+      "files": [
+        "docs/handoff/markoff-core-response.md",
+        "docs/roadmap/2026-10-reliability/TASKS.json"
+      ],
+      "steps": [
+        "Obtain Markoff-owned production BlockId/stream/routing/persistence evidence using full insertion identities and document keys, plus committed terminal gap recovery and retained CTLO archive acceptance on the exact candidate.",
+        "Record consumer revision, producer SHA, relocated prefix, commands and explicit acceptance. Require final Wave and Markoff same-candidate acceptance and engine checks before explicit user merge authorization."
+      ],
+      "acceptance": [
+        "No upstream-shaped fixture or unchanged older probe is substituted for production adoption approval."
+      ],
+      "verification": "Consumer executes its production acceptance and supplies evidence; upstream does not certify it.",
+      "addresses": [
+        "R9",
+        "R14"
+      ],
+      "gate": null,
+      "status": "not_started",
+      "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
+      "implementation_commits": [],
+      "verification_results": {}
     }
   ],
   "revised": "2026-10-11",
-  "revision_reason": "Finish Wave Core adoption requirements Q01\u2013Q05/Q04a with native markers, durable current-format readers, owned undo and stable projection identities; obsolete alpha compatibility removed; external Q06 and later consumer/GC/performance gates remain open.",
+  "revision_reason": "Markoff asks add ordered list identities, applicable terminal gap coverage and durable CTLO readers; M01\u2013M05 upstream implementation, M06/Q06 external acceptance.",
   "removed_tasks": [
     {
       "id": "E01",

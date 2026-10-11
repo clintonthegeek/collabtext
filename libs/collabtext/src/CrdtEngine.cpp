@@ -91,6 +91,31 @@ CrdtEngine::CrdtEngine(Crdt::SharedIdentityAllocator allocator)
 
 CrdtEngine::~CrdtEngine() = default;
 
+ApplyOutcome CrdtEngine::apply_counter_gap(const PositionScope& scope, std::string_view bytes) {
+    auto gap = Crdt::decode_counter_gap(bytes); if (!gap) return ApplyOutcome::rejected(gap.error());
+    auto canonical = Crdt::encode_counter_gap(gap.value()); if (!canonical) return ApplyOutcome::rejected(canonical.error());
+    if (canonical.value() != bytes) return ApplyOutcome::rejected(Error(ErrorCode::malformed, "counter gap bytes are not canonical"));
+    return apply_counter_gap(scope, gap.value());
+}
+
+ApplyOutcome CrdtEngine::apply_counter_gap(const PositionScope& scope, const Crdt::CounterGap& gap) {
+    if (m_impl->callback_active) return ApplyOutcome::rejected(Error(ErrorCode::reentrant_mutation, "mutation during callback"));
+    if (!m_impl->scope) return ApplyOutcome::rejected(Error(ErrorCode::unknown_stream, "engine has no bound scope"));
+    const auto& expected = *m_impl->scope;
+    if (scope.document != expected.document) return ApplyOutcome::rejected(Error(ErrorCode::wrong_document, "counter gap document mismatch"));
+    if (scope.stream != expected.stream) return ApplyOutcome::rejected(Error(ErrorCode::wrong_stream, "counter gap stream mismatch"));
+    if (scope.primitive != expected.primitive) return ApplyOutcome::rejected(Error(ErrorCode::wrong_primitive, "counter gap primitive mismatch"));
+    if (scope.epoch != expected.epoch) return ApplyOutcome::rejected(Error(ErrorCode::wrong_epoch, "counter gap epoch mismatch"));
+    if (!m_impl->position_history_available) return ApplyOutcome::rejected(Error(ErrorCode::history_unavailable, "local view was discarded"));
+    auto expected = m_impl->buffer.version();
+    auto outcome = m_impl->buffer.apply_counter_gap(gap);
+    if (outcome.kind() == ApplyOutcomeKind::applied) {
+        expected.observe({gap.actor, gap.first + gap.count - 1});
+        if (m_impl->buffer.version() != expected) m_impl->notify();
+    }
+    return outcome;
+}
+
 Result<std::unique_ptr<CrdtEngine>> CrdtEngine::create(Crdt::SharedIdentityAllocator allocator, PositionScope scope) {
     auto valid = detail::validate_scope(scope, Primitive::text);
     if (!valid) return valid.error();

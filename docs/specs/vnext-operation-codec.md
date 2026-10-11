@@ -100,6 +100,7 @@ deletions and compensation semantics, not merely visible strings. Existing
 CTBO/0002 encoder goldens remain unchanged. Marker insertion/removal and CTPT/2
 literal goldens are also retained in the public installed `consumer_wave_core`
 trace. Unknown-version inputs use a future version; known-version malformed
-inputs must continue rejecting. CTLO/CTGV/CTGP retain their separately declared
-alpha interchange status. Archive reading is independent of encoder byte
+inputs must continue rejecting. CTLO/0002 and CTGP/0001 also have indefinite durable readers from the Markoff
+adoption cut; see [Markoff contract](markoff-core-adoption.md). CTGV retains
+its separately declared alpha interchange status. Archive reading is independent of encoder byte
 choices for new operations across future library versions.

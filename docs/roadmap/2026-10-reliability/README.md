@@ -1,3 +1,15 @@
+# 2026-10-11 Markoff adoption amendment
+
+The user authorized facilitating Markoff's integration requests. M01–M05 in
+`10-markoff-core.md` implement ordered full list identities, scoped terminal
+counter-gap application and durable CTLO/0002/CTGP/0001 readers. The normative
+extension is `docs/specs/markoff-core-adoption.md`; the response is
+`docs/handoff/markoff-core-response.md`. Keep all earlier candidate tags immutable;
+prepare alpha.4/manifest v16 and a separate Markoff candidate. Q06 and M06 remain
+external production acceptance. Markoff has begun integration; earlier wording
+that adoption has not started is historical. No consumer edit, message, push,
+publication or master merge is authorized. One executor; model before gaps.
+
 # Reliability roadmap
 
 Execution branch: `feat/fuguemax-placement`. Worktree:

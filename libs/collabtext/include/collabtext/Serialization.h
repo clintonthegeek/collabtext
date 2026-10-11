@@ -18,7 +18,7 @@ struct CounterGap {
 };
 
 /// CTBO 0002 text/undo and 0003 markers; CTLO 0002; CTGV/CTGP 0001.
-/// CTBO 0002/0003 readers are retained indefinitely for consumer archives. Frames contain bounded
+/// CTBO 0002/0003, CTLO 0002 and CTGP 0001 readers are retained indefinitely for consumer archives. Frames contain bounded
 /// JSON and fixed-width hex integers; use the checked codecs, not manual parsing.
 /// Default limits: 8 MiB frame, 4 MiB string, 32 nesting, 100,000 JSON values,
 /// 1,024-byte keys, 512 actors. Unknown/newer formats remain caller-owned.

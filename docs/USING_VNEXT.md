@@ -8,7 +8,7 @@ The source branch is **`feat/fuguemax-placement`**, in
 `.worktrees/reliability-v2`. The annotated adoption tag is
 **`collabtext-wave-core-2026-10-11`**. Pin its resolved commit SHA, rather than a
 moving branch or the package label alone. This is an adoption snapshot; the
-package still reports **`0.2.0-alpha.3`**, and its C++ API/ABI remains alpha.
+package still reports **`0.2.0-alpha.4`**, and its C++ API/ABI remains alpha.
 A local tag must be distributed separately before other repositories can fetch it.
 
 The [installed capability manifest](../libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md)
@@ -96,3 +96,5 @@ the actual consumer integrations need their own acceptance suites as well.
 [Markoff-shaped adapter](../tests/consumer-smoke/markdown-contract/Markoff.h)
 are executable references. Their volatile Core allocators are test helpers,
 not production durability implementations.
+
+Current Markoff adoption: [ordered list identities, durable counter gaps and CTLO readers](handoff/markoff-core-response.md). Candidate `collabtext-markoff-core-2026-10-11`, manifest v16; previous Wave candidate remains immutable.

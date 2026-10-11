@@ -46,6 +46,7 @@
 #include <collabtext/Engine.h>
 #include <collabtext/IdListOperations.h>
 #include <collabtext/LocalHistory.h>
+#include <collabtext/Serialization.h>
 
 #include <cstdint>
 #include <functional>
@@ -55,12 +56,25 @@
 
 namespace CollabText {
 
+struct VisibleIdListEntry {
+    uint64_t application_value;
+    Crdt::Identity identity;
+    bool operator==(const VisibleIdListEntry&) const = default;
+};
+
 /// A replicated ordered list of caller-owned opaque values.
 class IdListEngine {
 public:
     static Result<std::unique_ptr<IdListEngine>> create(Crdt::SharedIdentityAllocator, PositionScope);
     Result<ListBoundary> boundary_at(uint32_t element_index, Affinity) const;
     Result<ListElement> element_of(uint64_t application_value) const;
+    Result<ListElement> element_of(const Crdt::Identity&) const;
+    [[nodiscard]] Result<std::vector<VisibleIdListEntry>> visible_entries() const;
+    [[nodiscard]] Result<Crdt::Anchor> try_anchor_of(const Crdt::Identity&, Crdt::Bias = Crdt::Bias::Left) const;
+    /// Apply an already committed, host-authorized scoped terminal CTGP record.
+    [[nodiscard]] ApplyOutcome apply_counter_gap(const PositionScope&, const Crdt::CounterGap&);
+    /// Durable envelopes use canonical CTGP bytes; alternate spellings fail.
+    [[nodiscard]] ApplyOutcome apply_counter_gap(const PositionScope&, std::string_view committed_bytes);
     Result<ResolvedListPosition> resolve(const ListBoundary&) const;
     Result<ResolvedListPosition> resolve(const ListElement&) const;
     Result<int> compare(const ListBoundary&, const ListBoundary&) const;

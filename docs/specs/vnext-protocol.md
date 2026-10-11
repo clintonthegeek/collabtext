@@ -93,7 +93,7 @@ carry the external persisted-data contract in W1/W3; versioning does not cancel 
 | Operation payload (Buffer) | `CTBO` (`collabtext.buffer-op`) | 0002/0003 | Text/undo archives and typed zero-width marker edits; retained supported readers |
 | Operation payload (IdList) | `CTLO` (`collabtext.idlist-op`) | 0002 | Implemented structural ops |
 | Sparse causal vector | `CTGV` (`collabtext.global`) | 1 | Implemented exact sparse actor/head codec |
-| Terminal unused interval | `CTGP` (`collabtext.counter-gap`) | 1 | Codec only; P07/L02 own integration/publication |
+| Terminal unused interval | `CTGP` (`collabtext.counter-gap`) | 1 | Core scoped terminal application available; host owns publication (markoff-core-adoption.md) |
 | Stream envelope | `"collabtext.envelope"` | 1 | Wraps context + payload + codec version |
 | Store manifest | `"collabtext.manifest"` | 1 | Document/stream inventory + membership |
 | Segment file | `"collabtext.segment"` | 1 | Sealed segment and open tail |
@@ -279,7 +279,10 @@ Coverage answers "what has been received and applied", per (stream, actor).
 - A disconnected peer's operations are queued by the transport and released on
   reconnect; they are not lost and not applied early.
 - Missing segments hold the frontier (§5).
-- Retirement (§8) is the only thing that resolves a gap that can never be filled.
+- A proven-unused reservation can be closed by a durably committed scoped terminal
+  CTGP record through Core (see markoff-core-adoption.md). Missing document
+  operations with uncertain publication cannot be declared unused; explicit
+  retirement remains a separate membership/epoch protocol.
 
 ## 8. Membership
 

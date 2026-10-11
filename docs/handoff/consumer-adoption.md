@@ -28,8 +28,9 @@ explicit consumer migration and an updated snapshot.
 
 `CTBO/0002` text/undo and `CTBO/0003` marker operations now have indefinite
 supported-reader obligations. `CTPT/1` and marker `CTPT/2` have supported
-persisted-token readers. Keep canonical event bytes unchanged. Other operation,
-coverage/gap, private-history/store/checkpoint formats retain their stated alpha
+persisted-token readers. Keep canonical event bytes unchanged. CTLO/0002 and CTGP/0001 now also have indefinite readers from the Markoff adoption
+cut (see [Markoff response](markoff-core-response.md)). Other coverage,
+private-history/store/checkpoint formats retain their stated alpha
 limits; validate upgrades explicitly. Recreating a populated CRDT from visible
 text loses identities, tokens and undo history.
 

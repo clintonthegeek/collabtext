@@ -37,8 +37,9 @@ ROUTES = [
     # keep the existing widget and viewport regressions beside it.
     ('app/collabedit/*', r'tst_(editor_recovery|scroll_stability|collab_plain_text_edit)'),
     ('libs/collabtext/CMakeLists.txt', PACKAGING), ('CMakeLists.txt', PACKAGING),
-    ('cmake/*', PACKAGING), ('tests/consumer-smoke/*', r'(tst_wave_core|'+PACKAGING+')'),
+    ('cmake/*', PACKAGING), ('tests/consumer-smoke/*', r'(tst_markoff_core|tst_wave_core|'+PACKAGING+')'),
     ('tests/wave-core/*', 'tst_marker_model'),
+    ('tests/markoff-core/*', 'tst_counter_gap_model'),
     ('libs/collabtext/include/*', PACKAGING),
     ('libs/collabtext/src/crdt/IdList*', r'tst_(idlist.*|anchor.*|sequence_.*|boundary_.*|operation_validation|evaluation_regressions)'),
     ('libs/collabtext/src/IdListEngine.cpp', r'(tst_idlist.*|collabtext_alpha_consumer)'),

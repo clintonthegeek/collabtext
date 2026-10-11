@@ -240,6 +240,7 @@ Result<CheckpointSection> encode_checkpoint_engine(
                            ? state.fragments.size() : state.entries.size();
   if (count > kMaxEntries)
     return Error(ErrorCode::limit_exceeded, "checkpoint engine exceeds entry limit", "checkpoint.engine");
+  const bool gaps = !state.counter_gaps.empty();
   const bool markers = std::any_of(state.fragments.begin(), state.fragments.end(), [](const auto& f){return f.marker;});
   std::string payload;
   put_u16(payload, static_cast<uint16_t>(state.kind));
@@ -254,7 +255,7 @@ Result<CheckpointSection> encode_checkpoint_engine(
           fragment.byte_length != fragment.text.size() ||
           !Codec::utf8_length(fragment.text, scalars).ok() || (fragment.marker ? (fragment.length != 1 || scalars != 0) : scalars != fragment.length))
         return malformed("checkpoint fragment identity or UTF-8 lengths are invalid");
-      if (markers) payload.push_back(fragment.marker ? 1 : 0);
+      if (markers || gaps) payload.push_back(fragment.marker ? 1 : 0);
       put_identity(payload, fragment.origin);
       if (auto valid = put_link(payload, fragment.link); !valid) return valid.error();
       if (auto valid = put_deletions(payload, fragment.deletions); !valid) return valid.error();
@@ -296,17 +297,28 @@ Result<CheckpointSection> encode_checkpoint_engine(
   }
   if (auto valid = put_reclamation(payload, state.reclamation); !valid)
     return valid.error();
+  if (gaps) {
+    Crdt::Global coverage;
+    for (const auto& gap : state.counter_gaps) { coverage.join(gap.prior); coverage.observe({gap.actor, gap.first + gap.count - 1}); }
+    Crdt::CounterGapLedger ledger; auto valid = ledger.restore(state.counter_gaps, coverage); if (!valid) return valid.error();
+    put_u32(payload, static_cast<uint32_t>(state.counter_gaps.size()));
+    for (const auto& gap : state.counter_gaps) {
+      auto bytes = Crdt::encode_counter_gap(gap); if (!bytes) return bytes.error();
+      put_string(payload, bytes.value());
+      if (payload.size() > kCheckpointMaxBytes - kSectionHeaderBytes) return Error(ErrorCode::limit_exceeded, "checkpoint gap section exceeds byte limit");
+    }
+  }
   if (payload.size() > kCheckpointMaxBytes - kSectionHeaderBytes)
     return Error(ErrorCode::limit_exceeded,
                  "checkpoint engine section exceeds byte limit",
                  "checkpoint.engine");
-  return CheckpointSection{2, static_cast<uint16_t>(markers ? 3 : 2), std::move(payload)};
+  return CheckpointSection{2, static_cast<uint16_t>(gaps ? 4 : markers ? 3 : 2), std::move(payload)};
 }
 
 Result<CheckpointEngineState> decode_checkpoint_engine(
     const CheckpointSection &section) {
   if (section.id != 2) return malformed("checkpoint engine state must be section 2");
-  if (section.version != 2 && section.version != 3)
+  if (section.version != 2 && section.version != 3 && section.version != 4)
     return Error(ErrorCode::unsupported_version, "checkpoint engine section version is unsupported", "checkpoint.engine");
   if (section.bytes.size() > kCheckpointMaxBytes - kSectionHeaderBytes)
     return Error(ErrorCode::limit_exceeded, "checkpoint engine section exceeds byte limit", "checkpoint.engine");
@@ -330,7 +342,7 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
     for (uint32_t i = 0; i < count; ++i) {
       if (!reader.need(24)) return malformed("checkpoint fragment origin is truncated");
       Crdt::Fragment fragment;
-      if (section.version == 3) {
+      if (section.version >= 3) {
         if (!reader.need(1)) return malformed("fragment kind is truncated");
         const auto kind = static_cast<unsigned char>(reader.bytes[reader.cursor++]);
         if (kind > 1) return malformed("invalid fragment kind");
@@ -386,6 +398,20 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
   }
   if (!read_reclamation(reader, state.reclamation))
     return malformed("checkpoint reclamation binding is invalid or truncated");
+  if (section.version == 4) {
+    if (!reader.need(4)) return malformed("checkpoint gap count is truncated");
+    const auto count = reader.u32();
+    if (!count || count > Crdt::CounterGapLedger::max_records) return malformed("checkpoint gap count is invalid");
+    for (uint32_t i = 0; i < count; ++i) {
+      if (!reader.need(4)) return malformed("checkpoint gap length is truncated");
+      const auto size = reader.u32(); if (!reader.need(size)) return malformed("checkpoint gap is truncated");
+      auto gap = Crdt::decode_counter_gap(reader.string(size)); if (!gap) return gap.error();
+      state.counter_gaps.push_back(std::move(gap).value());
+    }
+    Crdt::Global coverage;
+    for (const auto& gap : state.counter_gaps) { coverage.join(gap.prior); coverage.observe({gap.actor, gap.first + gap.count - 1}); }
+    Crdt::CounterGapLedger ledger; auto valid = ledger.restore(state.counter_gaps, coverage); if (!valid) return valid.error();
+  }
   if (reader.cursor != reader.bytes.size())
     return malformed("checkpoint engine section has trailing bytes");
   return state;
@@ -396,8 +422,10 @@ namespace {
 Result<void> validate_core_relationships(const CheckpointShareableCore &core) {
   if (core.context.engine != core.engine.kind)
     return malformed("checkpoint context and engine section kinds disagree");
+  Crdt::CounterGapLedger ledger;
+  auto gaps = ledger.restore(core.engine.counter_gaps, core.causal.version); if (!gaps) return gaps.error();
   auto covered = [&](const Crdt::Identity &id) {
-    return valid_identity(id) && core.causal.version.observed(id);
+    return valid_identity(id) && core.causal.version.observed(id) && !ledger.contains(id);
   };
   auto covered_link = [&](const Crdt::Link &link) {
     return (!link.parent || covered(*link.parent)) &&
@@ -406,6 +434,7 @@ Result<void> validate_core_relationships(const CheckpointShareableCore &core) {
   if (core.engine.kind == CheckpointEngineKind::Text) {
     for (const auto &fragment : core.engine.fragments) {
       if (fragment.length == 0 ||
+          ledger.overlaps(fragment.origin.actor, fragment.origin.counter, fragment.origin.counter + fragment.length - 1) ||
           fragment.origin.counter > UINT64_MAX - fragment.length + 1)
         return malformed("checkpoint text run has an invalid identity range");
       const auto last_item = Crdt::Identity(
