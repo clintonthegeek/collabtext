@@ -2415,12 +2415,20 @@ private slots:
     QVERIFY(!initially_due.value());
 
     const auto producer = Test::actor(188);
-    Crdt::Buffer peer_engine(Test::test_counter(188));
-    auto peer_operation = peer_engine.try_apply_local_edit({{0, 0}}, {"peer"});
+    const PositionScope pin_scope{"checkpoint-receipt-doc", scope.stream,
+                                  Primitive::text, scope.epoch};
+    auto peer_engine = CrdtEngine::create(Test::test_counter(188), pin_scope);
+    QVERIFY(peer_engine.ok());
+    auto peer_operation = peer_engine.value()->try_insert(0, "peer");
     QVERIFY(peer_operation.ok());
     auto peer_payload = encode_operation(peer_operation.value());
     QVERIFY(peer_payload.ok());
-    auto peer_delete = peer_engine.try_apply_local_edit({{0, 4}}, {""});
+    auto pinned_position = peer_engine.value()->attachment_at(
+        2, Affinity::left, ReferentSide::preceding);
+    QVERIFY(pinned_position.ok());
+    auto pinned_position_bytes = encode_position(PositionToken{pinned_position.value()});
+    QVERIFY(pinned_position_bytes.ok());
+    auto peer_delete = peer_engine.value()->try_remove(0, 4);
     QVERIFY(peer_delete.ok());
     auto peer_delete_payload = encode_operation(peer_delete.value());
     QVERIFY(peer_delete_payload.ok());
@@ -2445,7 +2453,11 @@ private slots:
     QCOMPARE(session->text(), std::string());
 
     SessionCheckpointProviderState provider;
-    provider.canonical_pin_projection_hash = sha256_hex("");
+    provider.projected_pin_frontier = 1;
+    provider.canonical_pin_frontier = 1;
+    provider.canonical_pin_projection_hash = sha256_hex("reply-1-pin");
+    provider.live_pins.push_back(
+        {"reply-1", pin_scope, pinned_position_bytes.value()});
     auto captured = session->capture_checkpoint(provider);
     QVERIFY(captured.ok());
     QCOMPARE(captured.value().delivery_coverage.at(producer), uint64_t(2));
@@ -2649,7 +2661,35 @@ private slots:
     auto reclaimed = bound_session->collect_garbage(
         *collection_frontier, provider);
     QVERIFY(reclaimed.ok());
-    QCOMPARE(reclaimed.value(), size_t(4));
+    QCOMPARE(reclaimed.value(), size_t(0));
+
+    provider.projected_pin_frontier = 2;
+    provider.canonical_pin_frontier = 2;
+    provider.canonical_pin_projection_hash = sha256_hex("");
+    provider.live_pins.clear();
+    auto released_checkpoint = bound_session->publish_checkpoint(provider);
+    QVERIFY(released_checkpoint.ok());
+    evidence.checkpoint_hash = released_checkpoint.value().shareable_artifact_hash;
+    evidence.operation[scope.stream] =
+        released_checkpoint.value().operation_coverage;
+    evidence.delivery[scope.stream] =
+        released_checkpoint.value().delivery_coverage;
+    auto released_certificate = Storage::certify_common_coverage(
+        descriptor, {evidence},
+        [](const auto &, const auto &) { return Result<void>{}; },
+        [](const auto &, auto, const auto &, const auto &, const auto &) {
+          return Result<void>{};
+        });
+    QVERIFY(released_certificate.ok());
+    auto released_frontier =
+        released_certificate.value().operation_frontier(scope.stream);
+    QVERIFY(released_frontier.has_value());
+    expected_binding->checkpoint_hash =
+        released_checkpoint.value().shareable_artifact_hash;
+    auto released_reclaimed = bound_session->collect_garbage(
+        *released_frontier, provider);
+    QVERIFY(released_reclaimed.ok());
+    QCOMPARE(released_reclaimed.value(), size_t(4));
     auto after_collection = bound_session->capture_checkpoint(provider);
     QVERIFY(after_collection.ok());
     auto after_collection_artifact = Storage::decode_checkpoint(
@@ -2664,10 +2704,10 @@ private slots:
     QVERIFY(!unavailable_history.ok());
     QCOMPARE(unavailable_history.error().code(), ErrorCode::history_unavailable);
 
-    auto late_undo = peer_engine.try_undo();
+    auto late_undo = peer_engine.value()->try_undo();
     QVERIFY(late_undo.ok());
     QVERIFY(late_undo.value().has_value());
-    auto late_undo_payload = encode_operation(*late_undo.value());
+    auto late_undo_payload = Crdt::encode_operation(*late_undo.value());
     QVERIFY(late_undo_payload.ok());
     {
       Crdt::FileOpStream peer(root / "shared", producer);
