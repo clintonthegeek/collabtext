@@ -10,6 +10,7 @@
 #include "identity/ReplicaAllocator.h"
 #include "storage/DurableFile.h"
 #include "storage/CheckpointStore.h"
+#include "storage/GcCertificate.h"
 #include "storage/LocalHistoryLog.h"
 #include "storage/MembershipStore.h"
 #include "storage/RetentionState.h"
@@ -2367,11 +2368,29 @@ private slots:
                                  "checkpoint-receipt-doc", scope.stream,
                                  scope.epoch};
     config.checkpoint_store = root / "checkpoints";
+    struct ExpectedReclamationBinding {
+      std::string descriptor_hash;
+      std::string checkpoint_hash;
+      bool refuse = false;
+    };
+    auto expected_binding = std::make_shared<ExpectedReclamationBinding>();
     config.validate_checkpoint_candidate =
         [](std::string_view shareable,
            const std::optional<std::string> &local) -> Result<void> {
       if (shareable.empty() || !local)
         return Error(ErrorCode::malformed, "incomplete checkpoint bundle");
+      return {};
+    };
+    config.validate_reclamation_frontier =
+        [expected_binding, scope](
+            const DocumentId &document, const StreamId &stream, uint64_t epoch,
+            const Storage::CertifiedOperationFrontier &frontier) -> Result<void> {
+      if (expected_binding->refuse || document != "checkpoint-receipt-doc" ||
+          stream != scope.stream || epoch != scope.epoch ||
+          !frontier.matches_context(stream, expected_binding->descriptor_hash,
+                                    expected_binding->checkpoint_hash))
+        return Error(ErrorCode::awaiting_state,
+                     "test provider rejected the reclamation certificate");
       return {};
     };
     config.checkpoint_delivery_threshold = 1;
@@ -2414,6 +2433,69 @@ private slots:
     QVERIFY(published.ok());
     QCOMPARE(published.value().shareable_artifact_hash,
              captured.value().shareable_artifact_hash);
+
+    const auto session_actor = session->actor();
+    Storage::MembershipDescriptor descriptor;
+    descriptor.epoch = scope.epoch;
+    descriptor.base_checkpoint_hash = sha256_hex("reclamation-base-checkpoint");
+    descriptor.members = {session_actor};
+    Storage::MembershipDescriptor::StreamFrontier base;
+    base.stream = scope.stream;
+    base.operation.emplace(session_actor, 0);
+    base.delivery.emplace(session_actor, 0);
+    for (const auto &[actor, _] : captured.value().operation_coverage)
+      base.operation.emplace(actor, 0);
+    for (const auto &[actor, _] : captured.value().delivery_coverage)
+      base.delivery.emplace(actor, 0);
+    descriptor.base_frontiers.push_back(std::move(base));
+    descriptor.supported_token_versions = {1};
+    descriptor.translation_manifest_hash = sha256_hex("reclamation-translations");
+    auto sealed_descriptor = Storage::seal_membership_descriptor(
+        std::move(descriptor));
+    QVERIFY(sealed_descriptor.ok());
+    descriptor = std::move(sealed_descriptor).value();
+
+    Storage::PeerCoverageEvidence evidence;
+    evidence.member = session_actor;
+    evidence.epoch = descriptor.epoch;
+    evidence.descriptor_hash = descriptor.hash;
+    evidence.checkpoint_hash = published.value().shareable_artifact_hash;
+    evidence.operation[scope.stream] = captured.value().operation_coverage;
+    evidence.delivery[scope.stream] = captured.value().delivery_coverage;
+    auto certificate = Storage::certify_common_coverage(
+        descriptor, {evidence},
+        [](const auto &, const auto &) { return Result<void>{}; },
+        [](const auto &, auto, const auto &, const auto &, const auto &) {
+          return Result<void>{};
+        });
+    QVERIFY(certificate.ok());
+    auto certified_frontier =
+        certificate.value().operation_frontier(scope.stream);
+    QVERIFY(certified_frontier.has_value());
+    expected_binding->descriptor_hash = descriptor.hash;
+    expected_binding->checkpoint_hash = published.value().shareable_artifact_hash;
+    QVERIFY(session->validate_reclamation_frontier(*certified_frontier).ok());
+
+    evidence.checkpoint_hash = sha256_hex("stale-reclamation-checkpoint");
+    auto stale_certificate = Storage::certify_common_coverage(
+        descriptor, {evidence},
+        [](const auto &, const auto &) { return Result<void>{}; },
+        [](const auto &, auto, const auto &, const auto &, const auto &) {
+          return Result<void>{};
+        });
+    QVERIFY(stale_certificate.ok());
+    auto stale_frontier = stale_certificate.value().operation_frontier(scope.stream);
+    QVERIFY(stale_frontier.has_value());
+    auto stale_result = session->validate_reclamation_frontier(*stale_frontier);
+    QVERIFY(!stale_result.ok());
+    QCOMPARE(stale_result.error().code(), ErrorCode::wrong_epoch);
+
+    expected_binding->refuse = true;
+    auto refused = session->validate_reclamation_frontier(*certified_frontier);
+    QVERIFY(!refused.ok());
+    QCOMPARE(refused.error().code(), ErrorCode::awaiting_state);
+    expected_binding->refuse = false;
+
     auto reset_due = session->checkpoint_due();
     QVERIFY(reset_due.ok());
     QVERIFY(!reset_due.value());
@@ -2441,6 +2523,11 @@ private slots:
     expected += published.value().shareable_artifact_hash;
     QCOMPARE(actual, expected);
     QVERIFY(session->close().ok());
+    auto reopened_result = DocumentSession::open(config);
+    QVERIFY(reopened_result.ok());
+    auto reopened = std::move(reopened_result).value();
+    QVERIFY(reopened->validate_reclamation_frontier(*certified_frontier).ok());
+    QVERIFY(reopened->close().ok());
   }
 
   void invalidCheckpointCoverageResetsBeforeFullReplayFallback() {

@@ -1,11 +1,13 @@
 #include <collabtext/DocumentSession.h>
 
 #include "crdt/Buffer.h"
+#include "crdt/ReclamationPolicy.h"
 #include "crdt/SeedOp.h"
 #include "core/Sha256.h"
 #include "identity/ReplicaAllocator.h"
 #include "storage/CheckpointCodec.h"
 #include "storage/CheckpointStore.h"
+#include "storage/GcCertificate.h"
 #include "storage/LocalHistoryLog.h"
 #include "transport/StreamSync.h"
 #ifdef COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS
@@ -49,6 +51,7 @@ struct DocumentSession::Impl {
   std::unordered_map<std::string, DeferredState> deferred_tokens;
   std::map<ActorId, uint64_t> checkpointed_delivery_frontiers;
   std::map<ActorId, uint64_t> checkpoint_threshold_frontiers;
+  std::string latest_shareable_checkpoint_hash;
   std::optional<Crdt::LocalHistorySnapshot> checkpoint_local_history;
   std::vector<SessionQuarantinedDelivery> quarantined_deliveries;
   size_t quarantined_bytes = 0;
@@ -481,6 +484,7 @@ struct DocumentSession::Impl {
     replayed_payload_hashes = std::move(restored_payload_hashes);
     checkpointed_delivery_frontiers = core.coverage.delivery;
     checkpoint_threshold_frontiers = core.coverage.delivery;
+    latest_shareable_checkpoint_hash = candidate.checkpoint_id;
     for (const auto &record : core.deferred)
       checkpoint_threshold_frontiers[record.token.producer] = std::max(
           checkpoint_threshold_frontiers[record.token.producer],
@@ -519,6 +523,7 @@ struct DocumentSession::Impl {
     deferred_tokens.clear();
     checkpointed_delivery_frontiers.clear();
     checkpoint_threshold_frontiers.clear();
+    latest_shareable_checkpoint_hash.clear();
     checkpoint_local_history.reset();
     quarantined_deliveries.clear();
     quarantined_bytes = 0;
@@ -1129,6 +1134,7 @@ Result<SessionCheckpointCapture> DocumentSession::publish_checkpoint(
       capture.value().local_companion_artifact_bytes,
       m_impl->replica->actor());
   if (!published.ok()) return published.error();
+  m_impl->latest_shareable_checkpoint_hash = published.value().checkpoint_id;
   m_impl->checkpointed_delivery_frontiers =
       capture.value().delivery_coverage;
   m_impl->checkpoint_threshold_frontiers =
@@ -1152,6 +1158,69 @@ Result<SessionCheckpointCapture> DocumentSession::publish_checkpoint(
     return receipts.error().with_context(
         "checkpoint is durable but recovery receipt publication failed");
   return std::move(capture).value();
+}
+
+Result<void> DocumentSession::validate_reclamation_frontier(
+    const Storage::CertifiedOperationFrontier &frontier) const {
+  if (!m_impl || m_impl->closed || !m_impl->buffer)
+    return Error(ErrorCode::writer_conflict,
+                 "session is unavailable for reclamation validation");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok())
+    return allowed.error();
+  if (m_impl->latest_shareable_checkpoint_hash.empty() ||
+      !frontier.matches_context(m_impl->config.stream,
+                                frontier.descriptor_hash(),
+                                m_impl->latest_shareable_checkpoint_hash))
+    return Error(ErrorCode::wrong_epoch,
+                 "reclamation certificate does not name this stream's latest durable checkpoint");
+  if (!m_impl->config.validate_reclamation_frontier)
+    return Error(ErrorCode::awaiting_state,
+                 "reclamation requires current provider certificate revalidation");
+  if (!m_impl->report.complete || m_impl->buffer->deferred_count() != 0 ||
+      !m_impl->deferred_tokens.empty() ||
+      !m_impl->quarantined_deliveries.empty())
+    return Error(ErrorCode::awaiting_state,
+                 "reclamation is unavailable while session input is incomplete");
+
+  for (const auto &[actor, through] : frontier.counters()) {
+    if (!actor.valid() || through == 0 || through == UINT64_MAX ||
+        m_impl->buffer->version().get(actor) < through)
+      return Error(ErrorCode::counter_regression,
+                   "reclamation frontier exceeds the recovered engine state");
+  }
+
+  const auto history = m_impl->buffer->local_history_snapshot();
+  const auto check_group = [&](const Crdt::LocalUndoEntrySnapshot &group) {
+    const auto protected_target = [&](const Crdt::Identity &target) {
+      return Crdt::operation_is_covered(frontier.counters(), target);
+    };
+    return std::none_of(group.inserted_items.begin(), group.inserted_items.end(),
+                        protected_target) &&
+           std::none_of(group.deletion_operations.begin(),
+                        group.deletion_operations.end(), protected_target);
+  };
+  if (!std::all_of(history.entries.begin(), history.entries.end(), check_group) ||
+      !std::all_of(history.retired_entries.begin(), history.retired_entries.end(),
+                   check_group))
+    return Error(ErrorCode::awaiting_state,
+                 "local undo or redo still targets the proposed reclamation frontier");
+
+  Result<void> verified;
+  try {
+    SessionCallbackScope callback_scope(m_impl->callback_active);
+    verified = m_impl->config.validate_reclamation_frontier(
+        m_impl->config.document, m_impl->config.stream, m_impl->config.epoch,
+        frontier);
+  } catch (const std::exception &error) {
+    return Error(ErrorCode::io_error, error.what(),
+                 "revalidating reclamation certificate");
+  } catch (...) {
+    return Error(ErrorCode::io_error,
+                 "reclamation certificate validator threw an unknown exception");
+  }
+  if (!verified.ok())
+    return verified.error().with_context("revalidating reclamation certificate");
+  return {};
 }
 
 Result<bool> DocumentSession::checkpoint_due() const {

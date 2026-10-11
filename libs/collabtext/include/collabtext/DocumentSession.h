@@ -24,6 +24,10 @@
 #include <utility>
 #include <vector>
 
+namespace CollabText::Storage {
+class CertifiedOperationFrontier;
+}
+
 namespace CollabText {
 
 using SessionCheckpointCandidateValidator = std::function<Result<void>(
@@ -79,6 +83,13 @@ struct DocumentSessionConfig {
   std::function<Result<std::shared_ptr<void>>(
       const DocumentId &, const StreamId &, uint64_t, const DeliveryToken &)>
       authorize_inbound_delivery;
+  /// Revalidate a GC certificate against current membership, acknowledgements,
+  /// pin/undo state, and its exact checkpoint before a session uses its cutoff.
+  /// The session independently binds the token to its configured stream and
+  /// latest durable checkpoint before invoking this callback.
+  std::function<Result<void>(const DocumentId &, const StreamId &, uint64_t,
+                             const Storage::CertifiedOperationFrontier &)>
+      validate_reclamation_frontier;
 };
 
 /// Local producer deliveries retained for one original document epoch.
@@ -208,6 +219,11 @@ public:
   /// checkpoint itself has already become recoverable.
   [[nodiscard]] Result<SessionCheckpointCapture>
   publish_checkpoint(const SessionCheckpointProviderState &);
+  /// Verify that a certificate's operation frontier still names this session's
+  /// latest durable checkpoint and that the provider's current membership
+  /// verifier accepts it. This is an authorization check; it does not collect.
+  [[nodiscard]] Result<void> validate_reclamation_frontier(
+      const Storage::CertifiedOperationFrontier &) const;
   /// Report whether retained delivery coverage has grown by the configured
   /// threshold since the latest successfully published/selected checkpoint.
   [[nodiscard]] Result<bool> checkpoint_due() const;
