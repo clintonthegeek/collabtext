@@ -5,6 +5,7 @@
 #include <functional>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -29,6 +30,32 @@ struct DeliveryCoverageTag;
 /// Per-stream producer delivery sequence coverage. The outer key preserves
 /// stream identity, including IdList streams, when actors reuse counters.
 using DeliveryCoverage = StreamCoverage<DeliveryCoverageTag>;
+
+/// Provenance-bearing view of one stream's operation cutoff. It can only be
+/// produced from an immutable, fully checked GC certificate, and retains the
+/// descriptor/checkpoint binding needed by DocumentSession before installation.
+class CertifiedOperationFrontier {
+public:
+  [[nodiscard]] const std::string &stream() const { return m_stream; }
+  [[nodiscard]] const std::string &descriptor_hash() const { return m_descriptor_hash; }
+  [[nodiscard]] const std::string &checkpoint_hash() const { return m_checkpoint_hash; }
+  [[nodiscard]] const std::map<ActorId, uint64_t> &counters() const { return m_counters; }
+
+private:
+  CertifiedOperationFrontier(std::string stream, std::string descriptor_hash,
+                             std::string checkpoint_hash,
+                             std::map<ActorId, uint64_t> counters)
+      : m_stream(std::move(stream)),
+        m_descriptor_hash(std::move(descriptor_hash)),
+        m_checkpoint_hash(std::move(checkpoint_hash)),
+        m_counters(std::move(counters)) {}
+
+  std::string m_stream;
+  std::string m_descriptor_hash;
+  std::string m_checkpoint_hash;
+  std::map<ActorId, uint64_t> m_counters;
+  friend class GcCertificate;
+};
 
 struct PeerCoverageEvidence {
   ActorId member;
@@ -66,10 +93,12 @@ public:
   [[nodiscard]] const DeliveryCoverage &common_delivery() const { return m_common_delivery; }
   /// Return the certified operation frontier for one exact stream. Missing
   /// streams have no reclamation authority and return nullptr.
-  [[nodiscard]] const std::map<ActorId, uint64_t> *
+  [[nodiscard]] std::optional<CertifiedOperationFrontier>
   operation_frontier(std::string_view stream) const {
     const auto found = m_common_operation.find(std::string(stream));
-    return found == m_common_operation.end() ? nullptr : &found->second;
+    if (found == m_common_operation.end()) return std::nullopt;
+    return CertifiedOperationFrontier(std::string(stream), m_descriptor_hash,
+                                      m_checkpoint_hash, found->second);
   }
 
 private:

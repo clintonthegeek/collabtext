@@ -179,16 +179,19 @@ private slots:
     QCOMPARE(delivery.at("ids").at(p), uint64_t(13));
 
     const std::vector<Crdt::Identity> deletion{Crdt::Identity(p, 9)};
-    const auto *text_frontier = certificate.value().operation_frontier("text");
-    QVERIFY(text_frontier);
-    QVERIFY(Crdt::tombstone_is_covered(*text_frontier, Crdt::Identity(p, 8),
-                                       2, deletion));
-    const auto *comments_frontier =
+    const auto text_frontier = certificate.value().operation_frontier("text");
+    QVERIFY(text_frontier.has_value());
+    QCOMPARE(text_frontier->stream(), std::string("text"));
+    QCOMPARE(text_frontier->descriptor_hash(), d.hash);
+    QCOMPARE(text_frontier->checkpoint_hash(), candidate_checkpoint);
+    QVERIFY(Crdt::tombstone_is_covered(text_frontier->counters(),
+                                       Crdt::Identity(p, 8), 2, deletion));
+    const auto comments_frontier =
         certificate.value().operation_frontier("comments");
-    QVERIFY(comments_frontier);
-    QVERIFY(!Crdt::tombstone_is_covered(*comments_frontier,
+    QVERIFY(comments_frontier.has_value());
+    QVERIFY(!Crdt::tombstone_is_covered(comments_frontier->counters(),
                                         Crdt::Identity(p, 8), 2, deletion));
-    QVERIFY(!certificate.value().operation_frontier("unknown"));
+    QVERIFY(!certificate.value().operation_frontier("unknown").has_value());
   }
 
   void missingStaleAndUnverifiedMembersCannotCertify() {
