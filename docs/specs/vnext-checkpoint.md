@@ -362,6 +362,14 @@ and provider-owned pin/translation state. A rejected, missing, or corrupt
 candidate falls back to the other manifest. The shareable digest is the
 checkpoint ID suitable for a transport recovery point.
 
+`FileOpStream::delivery_frontiers()` scans and validates the retained stream,
+then returns each producer’s highest contiguous delivery sequence.
+`replay_uncovered()` validates supplied checkpoint delivery frontiers against
+those retained sequences before invoking its visitor; a frontier beyond a
+producer’s log (including a missing producer) fails with `corrupt_record`.
+This checks retained-log availability only. It does not prove that checkpoint
+engine state represents the covered deliveries or authenticate the checkpoint.
+
 This storage layer does not yet let `DocumentSession` capture a checkpoint,
 restore local history and allocator state, advance transport cursors only after
 checkpoint publication, or replay only uncovered records. Full-log replay

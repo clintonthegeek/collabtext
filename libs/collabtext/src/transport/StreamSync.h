@@ -161,7 +161,9 @@ public:
     delivery_frontiers(const StreamScope &) const;
     /// Validate the complete retained log but visit only records beyond the
     /// checkpoint's per-producer delivery frontiers. Covered records are still
-    /// scanned for gaps/corruption; this does not persist reader cursors.
+    /// scanned for gaps/corruption, and a claimed frontier beyond the retained
+    /// producer log is rejected before the visitor runs. This does not persist
+    /// reader cursors.
     [[nodiscard]] Result<void> replay_uncovered(
         const StreamScope &, const std::map<ActorId, uint64_t> &delivery_frontiers,
         const std::function<Result<void>(const InboundDelivery &)> &visitor) const;

@@ -191,6 +191,17 @@ Result<void> FileOpStream::replay_uncovered(
             return Error(ErrorCode::invalid_identity,
                          "checkpoint delivery frontier has an invalid producer");
     }
+    auto retained_frontiers = this->delivery_frontiers(scope);
+    if (!retained_frontiers.ok()) return retained_frontiers.error();
+    for (const auto &[producer, through] : delivery_frontiers) {
+        const auto retained = retained_frontiers.value().find(producer);
+        const uint64_t available = retained == retained_frontiers.value().end()
+                                       ? 0 : retained->second;
+        if (through > available)
+            return Error(ErrorCode::corrupt_record,
+                         "checkpoint delivery frontier exceeds the retained producer log",
+                         producer.to_string());
+    }
     return replay_all(scope, [&](const InboundDelivery &delivery) -> Result<void> {
         const auto it = delivery_frontiers.find(delivery.token.producer);
         if (it != delivery_frontiers.end() && delivery.token.sequence <= it->second)

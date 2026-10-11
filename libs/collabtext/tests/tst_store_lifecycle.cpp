@@ -261,6 +261,24 @@ private slots:
           return Error(ErrorCode::malformed, "covered delivery reached visitor");
         });
     QVERIFY(covered_only.ok());
+    size_t invalid_coverage_callbacks = 0;
+    auto frontier_past_log = receiver.replay_uncovered(
+        text_scope, {{producer, 3}}, [&](const InboundDelivery &) -> Result<void> {
+          ++invalid_coverage_callbacks;
+          return {};
+        });
+    QVERIFY(!frontier_past_log.ok());
+    QCOMPARE(frontier_past_log.error().code(), ErrorCode::corrupt_record);
+    QCOMPARE(invalid_coverage_callbacks, size_t(0));
+    auto absent_producer = receiver.replay_uncovered(
+        text_scope, {{CollabText::Test::actor(99), 1}},
+        [&](const InboundDelivery &) -> Result<void> {
+          ++invalid_coverage_callbacks;
+          return {};
+        });
+    QVERIFY(!absent_producer.ok());
+    QCOMPARE(absent_producer.error().code(), ErrorCode::corrupt_record);
+    QCOMPARE(invalid_coverage_callbacks, size_t(0));
     const std::map<ActorId, uint64_t> invalid_frontier{{ActorId{}, 1}};
     QVERIFY(!receiver.replay_uncovered(
         text_scope, invalid_frontier,
