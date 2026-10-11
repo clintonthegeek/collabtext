@@ -1439,6 +1439,84 @@ private slots:
     QCOMPARE(rejected->text(), std::string("local"));
     QVERIFY(!rejected->recovery_report().diagnostics.empty());
     QVERIFY(rejected->close().ok());
+
+  }
+
+  void checkpointStartupMatchesFullReplayForFutureEdits() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    DocumentSessionConfig source_config{root / "source-shared",
+                                        root / "source-device", "doc-equivalent",
+                                        "stream-equivalent", 1};
+    auto source_open = DocumentSession::open(source_config);
+    QVERIFY(source_open.ok());
+    auto source = std::move(source_open).value();
+    auto initial_edit = source->apply_local({{0, 0}}, {"base"});
+    QVERIFY(initial_edit.ok());
+
+    SessionCheckpointProviderState provider;
+    provider.canonical_pin_projection_hash = sha256_hex("");
+    auto capture = source->capture_checkpoint(provider);
+    QVERIFY2(capture.ok(), capture.error().message().data());
+    {
+      auto store_open = Storage::CheckpointStore::open(root / "source-checkpoint");
+      QVERIFY(store_open.ok());
+      auto store = std::move(store_open).value();
+      auto published = store.publish(capture.value().shareable_artifact_bytes,
+                                     capture.value().local_companion_artifact_bytes,
+                                     source->actor());
+      QVERIFY(published.ok());
+    }
+    QVERIFY(source->close().ok());
+
+    const auto copy_tree = [](const std::filesystem::path &from,
+                              const std::filesystem::path &to) {
+      std::error_code error;
+      std::filesystem::copy(from, to,
+                            std::filesystem::copy_options::recursive, error);
+      return !error;
+    };
+    const auto full_shared = root / "full-shared";
+    const auto full_device = root / "full-device";
+    QVERIFY(copy_tree(root / "source-shared", full_shared));
+    QVERIFY(copy_tree(root / "source-device", full_device));
+
+    auto checkpoint_config = source_config;
+    checkpoint_config.checkpoint_store = root / "source-checkpoint";
+    checkpoint_config.validate_checkpoint_candidate =
+        [](std::string_view shareable,
+           const std::optional<std::string> &local) -> Result<void> {
+      if (shareable.empty() || !local)
+        return Error(ErrorCode::malformed, "incomplete checkpoint bundle");
+      return {};
+    };
+    auto checkpoint_open = DocumentSession::open(checkpoint_config);
+    QVERIFY(checkpoint_open.ok());
+    auto checkpointed = std::move(checkpoint_open).value();
+    QCOMPARE(checkpointed->text(), std::string("base"));
+    auto checkpoint_edit = checkpointed->apply_local({{4, 4}}, {"!"});
+    QVERIFY(checkpoint_edit.ok());
+    auto checkpoint_bytes = encode_operation(checkpoint_edit.value());
+    QVERIFY(checkpoint_bytes.ok());
+    const auto checkpoint_text = checkpointed->text();
+    QVERIFY(checkpoint_text == "base!");
+    QVERIFY(checkpointed->close().ok());
+
+    auto full_config = source_config;
+    full_config.shared_store = full_shared;
+    full_config.private_state = full_device;
+    auto full_open = DocumentSession::open(full_config);
+    QVERIFY(full_open.ok());
+    auto replayed = std::move(full_open).value();
+    QCOMPARE(replayed->text(), std::string("base"));
+    auto full_edit = replayed->apply_local({{4, 4}}, {"!"});
+    QVERIFY(full_edit.ok());
+    auto full_bytes = encode_operation(full_edit.value());
+    QVERIFY(full_bytes.ok());
+    QCOMPARE(checkpoint_bytes.value(), full_bytes.value());
+    QCOMPARE(replayed->text(), checkpoint_text);
+    QVERIFY(replayed->close().ok());
   }
 
   void consumer_event_log_correlates_undo_and_redo_groups_append_only() {
