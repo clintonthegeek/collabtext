@@ -129,7 +129,7 @@ private slots:
             if (!decode(bytes + " \n\t\r").ok()) return false;
             return has_error_code(decode("{}"), E::unknown_format)
                 && has_error_code(decode("ZZZZ0001:{}"), E::unknown_format)
-                && has_error_code(decode(bytes.substr(0, 4) + "0003:{}"), E::unsupported_version)
+                && has_error_code(decode(bytes.substr(0, 4) + "000f:{}"), E::unsupported_version)
                 && has_error_code(decode(bytes.substr(0, 4) + "0001!{}"), E::malformed);
         };
         QVERIFY(check_family(golden("text-edit"), decode_operation));
@@ -222,7 +222,7 @@ private slots:
     }
     void unsupported_version_has_a_typed_verdict() {
         // Newer than anything this build reads.
-        QVERIFY(has_error_code(decode_operation("CTBO0003:{}"),
+        QVERIFY(has_error_code(decode_operation("CTBO000f:{}"),
                                CollabText::ErrorCode::unsupported_version));
         // Version 1 carried fractional locators and split relocations; S03 replaced
         // them, and no migration is provided, so the old frames are refused by name

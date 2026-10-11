@@ -1,3 +1,19 @@
+# 2026-10-11 Wave adoption amendment
+
+The user authorized native-engine refactoring, optimizations and API changes to
+finish Wave's requirements before Markoff starts. Q01–Q06 and
+`docs/specs/wave-core-adoption.md` implement that decision. Typed zero-width
+markers extend the existing text sequence. Durable CTBO/0002 and CTBO/0003
+readers and CTPT/1–2 readers are now promised; the old fresh-start policy still
+excludes pre-vNext data. Use a stable projection actor per scoped stream and
+versioned adapter, not one actor per event. Core exposes consumer-owned history
+snapshots; Wave remains the sole canonical log. The original adoption tag stays
+immutable. External acceptance, merge and publication remain separate gates.
+
+The decisions below explain the original workstream. A deferral of performance,
+plaintext-only restriction or candidate-bound CTBO policy below is superseded
+by this amendment; no replacement engine is authorized.
+
 # Accepted design and lifecycle decisions
 
 **Updated:** 2026-10-04. All Q1–Q4 are resolved by the user's replies. Improve the existing native C++ engine incrementally. No backend choice remains open. Any new questions belong in ordinary conversation text for this user.

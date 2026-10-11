@@ -9,6 +9,7 @@
 namespace CollabText {
 enum class Primitive { text, list };
 enum class Affinity { left, right };
+enum class MarkerSide { before, after };
 enum class ReferentSide { preceding, following };
 struct PositionScope {
     DocumentId document;
@@ -33,6 +34,7 @@ private:
     explicit OpaquePosition(std::shared_ptr<const detail::PositionPayload> p) : payload(std::move(p)) {}
 };
 using TextBoundary = OpaquePosition<struct TextBoundaryTag>;
+using TextMarker = OpaquePosition<struct TextMarkerTag>;
 using TextAttachment = OpaquePosition<struct TextAttachmentTag>;
 using ListBoundary = OpaquePosition<struct ListBoundaryTag>;
 using ListElement = OpaquePosition<struct ListElementTag>;
@@ -46,8 +48,8 @@ struct ResolvedListPosition {
     bool lost_left, lost_right;
     bool collapsed() const noexcept { return lost_left || lost_right; }
 };
-using PositionToken = std::variant<TextBoundary,TextAttachment,ListBoundary,ListElement>;
-/// Library-owned binary CTPT v1 bytes, including NUL. No layout is wire data.
+using PositionToken = std::variant<TextBoundary,TextAttachment,ListBoundary,ListElement,TextMarker>;
+/// Library-owned supported binary CTPT/1 and CTPT/2 marker bytes, including NUL. No layout is wire data.
 /// Bounded to 64 KiB, 256-byte scope strings and 512 frontier actors. Decode
 /// requires exact EOF, retains no input reference, creates no pin or identity.
 Result<std::string> encode_position(const PositionToken& token);

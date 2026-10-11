@@ -6,7 +6,7 @@ This document is intended to let a less-capable executor faithfully implement a 
 
 Execute breaking work only in `/home/clinton/dev/collabtext/.worktrees/reliability-v2`. The checked-out branch is `feat/fuguemax-placement`; it contains `roadmap/reliability-v2`. Read [DIRECTION.md](DIRECTION.md) before choosing work. Verify `pwd`, `git branch --show-current`, and `git status --short` before editing. Build directories and logs belong in this worktree or task-specific temporary directories. Do not accidentally build against the original checkout's generated files.
 
-The original checkout and master are the evaluated source baseline. The user confirmed there are no production stores/history and authorized freely redesigned APIs/formats; do not add migration or compatibility work. Do not merge/rebase onto master, publish packages, send consumer messages, or edit external consumer repositories as part of a task. A new explicit user instruction is required for external publication or master integration. Routine code changes and local test runs within the selected task do not need repeated permission.
+The original checkout and master are the evaluated source baseline. The 2026-10-11 user authorized finishing Wave Core capabilities, including native refactoring and optimization. Supported CTBO/CTPT archive readers now must be retained; the original clean-start rule still excludes pre-vNext data. Follow Q01–Q06 and wave-core-adoption.md. Do not merge/rebase onto master, publish packages, send consumer messages, or edit external consumer repositories as part of a task. A new explicit user instruction is required for external publication or master integration. Routine code changes and local test runs within the selected task do not need repeated permission.
 
 These plans supersede old CLAUDE.md restrictions about the completed OpStream extraction **on this isolated branch**. They do not authorize unrelated product features or a backend substitution. There is no dependency on an unavailable Superpowers skill or parallel agent workflow. One executor can follow the serial task order.
 
@@ -55,8 +55,10 @@ User-facing questions belong in ordinary conversation/final text for this user, 
 Use a warm, affected subset while implementing. Run the required broader gates
 at a completed implementation arc, and record what they actually exercised.
 Benchmarks never run with tests, including `--all` or a fresh acceptance sweep.
-Engine optimization and performance comparisons are deferred per the user's
-2026-10-05 instruction; correctness and consumer capability work take priority.
+The 2026-10-11 user authorized performance work in the Wave lane. Correctness
+and reader gates remain mandatory; benchmark separately before comparative
+claims. Q02 removes avoidable query/edit-conversion allocations, while broad
+X-series performance certification remains pending.
 
 | Command | Use |
 | --- | --- |

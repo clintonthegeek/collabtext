@@ -17,12 +17,12 @@ Result<void> validate_scope(const PositionScope& scope, Primitive expected) {
     return {};
 }
 Result<void> validate_position(const PositionPayload& p) {
-    const bool text = p.kind == PositionKind::text_boundary || p.kind == PositionKind::text_attachment;
+    const bool text = p.kind == PositionKind::text_boundary || p.kind == PositionKind::text_attachment || p.kind == PositionKind::text_marker;
     if (!text && p.kind != PositionKind::list_boundary && p.kind != PositionKind::list_element)
         return failure(ErrorCode::malformed, "invalid position kind");
     auto scope = validate_scope(p.scope, text ? Primitive::text : Primitive::list);
     if (!scope) return scope.error();
-    if (!affinity_valid(p.affinity) || (p.kind == PositionKind::list_element && p.affinity != Affinity::left))
+    if (!affinity_valid(p.affinity) || ((p.kind == PositionKind::list_element || p.kind == PositionKind::text_marker) && p.affinity != Affinity::left))
         return failure(ErrorCode::malformed, "invalid position affinity");
     if (p.frontier.pair_count() > 512) return failure(ErrorCode::limit_exceeded, "mint frontier exceeds 512 actors");
     for (size_t i = 0; i < p.frontier.pair_count(); ++i) {
@@ -34,7 +34,7 @@ Result<void> validate_position(const PositionPayload& p) {
     };
     if (!check_item(p.left) || !check_item(p.right) || !check_item(p.referent))
         return failure(ErrorCode::malformed, "item identity is invalid or outside mint frontier");
-    if (p.kind == PositionKind::list_element) {
+    if (p.kind == PositionKind::list_element || p.kind == PositionKind::text_marker) {
         if (!p.referent || p.left || p.right) return failure(ErrorCode::malformed, "invalid list referent");
     } else {
         if (p.referent || (p.left && p.right && p.left == p.right))
@@ -68,7 +68,7 @@ Result<PositionPayload> mint_boundary(const PositionScope& scope, const Crdt::Gl
     uint64_t prefix = 0;
     bool found = false;
     for (const auto& item : items) {
-        if (!item.visible) continue;
+        if (!item.visible || item.marker) continue;
         if (prefix == offset && !found) { p.right = item.identity; found = true; }
         if (!found) p.left = item.identity;
         prefix += item.width;

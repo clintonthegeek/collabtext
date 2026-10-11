@@ -240,6 +240,7 @@ Result<CheckpointSection> encode_checkpoint_engine(
                            ? state.fragments.size() : state.entries.size();
   if (count > kMaxEntries)
     return Error(ErrorCode::limit_exceeded, "checkpoint engine exceeds entry limit", "checkpoint.engine");
+  const bool markers = std::any_of(state.fragments.begin(), state.fragments.end(), [](const auto& f){return f.marker;});
   std::string payload;
   put_u16(payload, static_cast<uint16_t>(state.kind));
   put_u32(payload, static_cast<uint32_t>(count));
@@ -251,8 +252,9 @@ Result<CheckpointSection> encode_checkpoint_engine(
       if (!valid_identity(fragment.origin) || fragment.length == 0 ||
           fragment.length > UINT64_MAX - fragment.origin.counter ||
           fragment.byte_length != fragment.text.size() ||
-          !Codec::utf8_length(fragment.text, scalars).ok() || scalars != fragment.length)
+          !Codec::utf8_length(fragment.text, scalars).ok() || (fragment.marker ? (fragment.length != 1 || scalars != 0) : scalars != fragment.length))
         return malformed("checkpoint fragment identity or UTF-8 lengths are invalid");
+      if (markers) payload.push_back(fragment.marker ? 1 : 0);
       put_identity(payload, fragment.origin);
       if (auto valid = put_link(payload, fragment.link); !valid) return valid.error();
       if (auto valid = put_deletions(payload, fragment.deletions); !valid) return valid.error();
@@ -298,13 +300,13 @@ Result<CheckpointSection> encode_checkpoint_engine(
     return Error(ErrorCode::limit_exceeded,
                  "checkpoint engine section exceeds byte limit",
                  "checkpoint.engine");
-  return CheckpointSection{2, 2, std::move(payload)};
+  return CheckpointSection{2, static_cast<uint16_t>(markers ? 3 : 2), std::move(payload)};
 }
 
 Result<CheckpointEngineState> decode_checkpoint_engine(
     const CheckpointSection &section) {
   if (section.id != 2) return malformed("checkpoint engine state must be section 2");
-  if (section.version != 1 && section.version != 2)
+  if (section.version != 1 && section.version != 2 && section.version != 3)
     return Error(ErrorCode::unsupported_version, "checkpoint engine section version is unsupported", "checkpoint.engine");
   if (section.bytes.size() > kCheckpointMaxBytes - kSectionHeaderBytes)
     return Error(ErrorCode::limit_exceeded, "checkpoint engine section exceeds byte limit", "checkpoint.engine");
@@ -328,6 +330,12 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
     for (uint32_t i = 0; i < count; ++i) {
       if (!reader.need(24)) return malformed("checkpoint fragment origin is truncated");
       Crdt::Fragment fragment;
+      if (section.version == 3) {
+        if (!reader.need(1)) return malformed("fragment kind is truncated");
+        const auto kind = static_cast<unsigned char>(reader.bytes[reader.cursor++]);
+        if (kind > 1) return malformed("invalid fragment kind");
+        fragment.marker = kind == 1;
+      }
       fragment.origin = reader.identity();
       if (!valid_identity(fragment.origin) || !read_link(reader, fragment.link) ||
           !read_deletions(reader, fragment.deletions) || !reader.need(8))
@@ -340,7 +348,7 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
       reader.cursor += fragment.byte_length;
       size_t scalars = 0;
       if (fragment.length == 0 || fragment.length > UINT64_MAX - fragment.origin.counter ||
-          !Codec::utf8_length(fragment.text, scalars).ok() || scalars != fragment.length)
+          !Codec::utf8_length(fragment.text, scalars).ok() || (fragment.marker ? (fragment.length != 1 || scalars != 0) : scalars != fragment.length))
         return malformed("checkpoint fragment text or identity range is invalid");
       by_actor[fragment.origin.actor].emplace_back(
           fragment.origin.counter, fragment.origin.counter + fragment.length);

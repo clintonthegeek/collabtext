@@ -88,6 +88,14 @@ public:
         const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
         const std::vector<std::string> &new_text);
 
+    Result<uint32_t> marker_offset(Identity) const;
+    Result<std::pair<uint32_t,uint32_t>> utf16_range(int position, int length) const;
+    size_t utf16_length() const;
+    Result<Operation> try_insert_marker(uint32_t byte_offset);
+    Result<Operation> try_insert_relative(Identity marker, MarkerSide side,
+                                         const std::string& text, bool insert_marker);
+    Result<Operation> try_remove_marker(Identity marker);
+
     /// Apply remote operations (handles causal ordering, deduplication).
     ///
     /// Returns one outcome per offered operation, in order. Each is `applied`,
@@ -273,6 +281,11 @@ private:
         m_reclamation = std::move(binding);
     }
 
+    struct UndoEntry;
+    Result<Operation> try_insert_item(std::optional<Identity> left,
+                                      const std::string& text, bool marker);
+    void commit_local_history(UndoEntry&&);
+
     // ---- Fragment vector helpers ----
     // Operations modify fragments via a temporary vector, then rebuild the tree.
 
@@ -376,7 +389,6 @@ private:
     FragmentTree m_fragment_tree;
 
     /// Trim the undo stack to m_max_undo_depth entries.
-    struct UndoEntry;
     void trim_undo_stack();
     void recalculate_undo_bytes();
     Result<void> check_retirement_budget_for_limits(size_t depth,

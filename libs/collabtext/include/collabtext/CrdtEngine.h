@@ -5,6 +5,7 @@
 #include <collabtext/ApplyOutcome.h>
 #include <collabtext/Engine.h>
 #include <collabtext/Operations.h>
+#include <collabtext/LocalHistory.h>
 
 #include <cstdint>
 #include <cstddef>
@@ -46,6 +47,11 @@ private:
     friend class CrdtEngine;
 };
 
+struct MarkerInsertion {
+    TextMarker marker;
+    Crdt::Operation operation;
+};
+
 class CrdtEngine {
 public:
     /// Checked scope binding. No implicit default document or stream.
@@ -55,6 +61,12 @@ public:
     Result<TextAttachment> attachment_at(uint32_t utf8_byte_offset, Affinity, ReferentSide) const;
     Result<ResolvedTextPosition> resolve(const TextBoundary&) const;
     Result<ResolvedTextPosition> resolve(const TextAttachment&) const;
+    /// Markers use UTF-8 byte boundaries; they contribute zero text width.
+    [[nodiscard]] Result<MarkerInsertion> try_insert_marker(uint32_t utf8_byte_offset);
+    [[nodiscard]] Result<MarkerInsertion> try_insert_marker(const TextMarker&, MarkerSide);
+    [[nodiscard]] Result<Crdt::Operation> try_insert_at_marker(const TextMarker&, MarkerSide, const std::string&);
+    [[nodiscard]] Result<Crdt::Operation> try_remove_marker(const TextMarker&);
+    [[nodiscard]] Result<ResolvedTextPosition> resolve(const TextMarker&) const;
     Result<int> compare(const TextBoundary&, const TextBoundary&) const;
     /// Discard this engine's local view without creating a collaborative edit.
     /// Preserves its allocator, observed version and callbacks, but drops CRDT
@@ -94,6 +106,15 @@ public:
     try_replace(int position, int length, const std::string &text);
     std::string text() const;
     int length() const;
+
+    /// Persist locally; restore after shared replay, before new edits. Neither
+    /// snapshot restoration nor coalescing emits a collaborative operation.
+    [[nodiscard]] Crdt::LocalHistorySnapshot local_history_snapshot() const;
+    [[nodiscard]] Result<void> restore_local_history(const Crdt::LocalHistorySnapshot&);
+    [[nodiscard]] std::optional<Crdt::LocalUndoEntrySnapshot> next_undo_group() const;
+    [[nodiscard]] std::optional<Crdt::LocalUndoEntrySnapshot> next_redo_group() const;
+    [[nodiscard]] Result<void> acknowledge_undo_retirements(const std::vector<Crdt::Identity>&);
+    bool coalesce_last_undo();
 
     // Undo / redo
     bool undo();

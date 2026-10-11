@@ -92,6 +92,8 @@ struct Fragment {
     bool visible = true;     ///< Cached visibility (set during tree construction)
     std::string text;        ///< Inline text content owned by this fragment
 
+    bool marker = false;    ///< One zero-width ordered item; text remains empty.
+
     Fragment() = default;
     Fragment(Identity orig, Link l, uint32_t byte_len, uint32_t char_len)
         : origin(std::move(orig)), link(std::move(l)), byte_length(byte_len), length(char_len) {}

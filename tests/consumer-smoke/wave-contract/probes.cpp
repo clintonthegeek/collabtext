@@ -184,7 +184,7 @@ std::string run(const std::string& name) {
         unsigned prefixes=0,suffixes=0;
         for(size_t n=0;n<bytes.size();++n) { require(!decode_position(std::string_view(bytes).substr(0,n)).ok(),"accepted prefix");++prefixes; }
         for(unsigned n=0;n<256;++n) { require(!decode_position(bytes+char(n)).ok(),"accepted trailing byte");++suffixes; }
-        auto version=bytes;version[5]=2;auto enum_bytes=bytes;enum_bytes[7]=2;
+        auto version=bytes;version[5]=3;auto enum_bytes=bytes;enum_bytes[7]=2;
         auto newer=refusal(decode_position(version)),bad=refusal(decode_position(enum_bytes));
         auto copied=checked(decode_position_as<TextBoundary>(bytes));bytes.assign(bytes.size(),'!');
         require(checked(e.resolve(copied)).byte_offset==1,"decoder input lifetime");

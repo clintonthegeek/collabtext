@@ -322,12 +322,16 @@ Result<CounterGap> decode_counter_gap(std::string_view bytes) {
 }
 Result<std::string> encode_operation(const Operation& op) {
     if (!usable(op_identity(op))) return invalid_identity("invalid or empty text operation");
-    Writer w; w.raw("CTBO0002:");
+    const auto* edit = operation_get_if<EditOperation>(&op);
+    const bool marker = edit && edit->marker_edit;
+    const auto format = marker ? "0003" : "0002";
+    Writer w; w.raw(marker ? "CTBO0003:" : "CTBO0002:");
     return visit_operation([&](const auto& value)->Result<std::string> {
         using T=std::decay_t<decltype(value)>;
         if constexpr(std::is_same_v<T,EditOperation>) {
             auto allocation=edit_allocation(value); if(!allocation) return allocation.error();
             w.raw("{\"t\":\"e\""); write_allocation(w,value.timestamp,value.version,allocation.value());
+            if (marker) { w.raw(",\"marker\":"); w.number(1); }
             w.raw(",\"did\":"); w.identity(value.deletion_id);
             w.raw(",\"r\":[");
             for(size_t i=0;i<value.ranges.size();++i) {
@@ -339,7 +343,7 @@ Result<std::string> encode_operation(const Operation& op) {
             for(size_t i=0;i<value.inserted_fragments.size();++i) {
                 const auto& f=value.inserted_fragments[i]; if(i) w.raw(",");
                 w.raw("{\"o\":"); w.identity(f.origin); w.raw(",\"k\":"); w.link(f.link);
-                w.raw(",\"c\":"); w.string(f.content); w.raw(",\"n\":"); w.number(f.length); w.raw("}");
+                w.raw(",\"c\":"); w.string(f.content); w.raw(",\"n\":"); w.number(f.length); if (marker) { w.raw(",\"m\":"); w.number(1); } w.raw("}");
             }
             w.raw("],\"dr\":[");
             for(size_t i=0;i<value.deletion_runs.size();++i) {
@@ -351,22 +355,26 @@ Result<std::string> encode_operation(const Operation& op) {
             w.raw("{\"t\":\"u\""); write_allocation(w,value.timestamp,value.version,1);
             w.raw(",\"c\":"); w.counts(value.counts); w.raw("}");
         }
-        return w.finish("CTBO","0002");
+        return w.finish("CTBO",format);
     },op);
 }
 Result<Operation> decode_operation(std::string_view bytes) {
-    auto parsed=read_frame(bytes,"CTBO","0002"); if(!parsed) return parsed.error();
+    const bool marker = bytes.size() >= 8 && bytes.substr(4,4) == "0003";
+    auto parsed=read_frame(bytes,"CTBO",marker ? "0003" : "0002"); if(!parsed) return parsed.error();
     Reader r; const auto& root=parsed.value(); const auto tag=r.string(r.field(root,"t"));
     if(r.error) return r.error;
     if(tag!="e" && tag!="u") return Error(ErrorCode::unsupported_operation,"unknown text operation tag");
+    if(tag=="u" && marker) return malformed("marker format requires a marker edit");
     if(tag=="u") {
         if(!r.schema(root,{"t","ts","v","a","c"})) return r.error;
         UndoOperation op; op.timestamp=r.identity(r.field(root,"ts")); op.version=r.global(r.field(root,"v"));
         op.counts=r.counts(r.field(root,"c"),op.timestamp); r.allocation(r.field(root,"a"),op.timestamp,op.version,1);
         if(r.error) return r.error; return Operation(std::move(op));
     }
-    if(!r.schema(root,{"t","ts","v","a","did","r","nt","if","dr"})) return r.error;
-    EditOperation op; op.timestamp=r.identity(r.field(root,"ts")); op.version=r.global(r.field(root,"v"));
+    if (marker ? !r.schema(root,{"t","ts","v","a","did","r","nt","if","dr","marker"})
+               : !r.schema(root,{"t","ts","v","a","did","r","nt","if","dr"})) return r.error;
+    if (marker && r.number(r.field(root,"marker")) != 1) return malformed("invalid marker edit tag");
+    EditOperation op; op.marker_edit = marker; op.timestamp=r.identity(r.field(root,"ts")); op.version=r.global(r.field(root,"v"));
     op.deletion_id=r.identity(r.field(root,"did"));
     for(const auto& item:r.array(r.field(root,"r"))) {
         if(!r.array(item,2)) break;
@@ -375,8 +383,9 @@ Result<Operation> decode_operation(std::string_view bytes) {
     }
     for(const auto& item:r.array(r.field(root,"nt"))) op.new_text.push_back(r.string(item));
     for(const auto& item:r.array(r.field(root,"if"))) {
-        if(!r.schema(item,{"o","k","c","n"})) break;
-        EditOperation::InsertedFragment f;
+        if (marker ? !r.schema(item,{"o","k","c","n","m"}) : !r.schema(item,{"o","k","c","n"})) break;
+        if (marker && r.number(r.field(item,"m")) != 1) return malformed("invalid marker fragment tag");
+        EditOperation::InsertedFragment f; f.marker = marker;
         f.origin=r.identity(r.field(item,"o")); f.link=r.link(r.field(item,"k"));
         f.content=r.string(r.field(item,"c")); f.length=r.narrow(r.field(item,"n"));
         op.inserted_fragments.push_back(std::move(f));

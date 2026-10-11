@@ -1,14 +1,15 @@
 # Consumer adoption handoff: Wave and Markoff
 
-Date: 2026-10-11. Source branch: **`feat/fuguemax-placement`**, in
-`.worktrees/reliability-v2`. Adoption baseline: **`collabtext-adoption-2026-10-11`**,
-an annotated local Git tag created with this handoff. Its parent implementation
-revision is `20fdbb2e6354b44bfa0e8e00c8dec6af19dcbaff`.
-The package reports `0.2.0-alpha.2`; that label alone does not identify this
-candidate. Record the tag's resolved commit SHA in each consumer's dependency
-lock and build evidence. The tag is an adoption snapshot, not a release or a
-promise of production readiness. Distribution of the tag/package is a separate
-step; a local tag is not automatically available to another repository.
+Date: 2026-10-11. Source branch: **`feat/fuguemax-placement`**, isolated in
+`.worktrees/reliability-v2`. Current candidate: **`collabtext-wave-core-2026-10-11`**,
+package `0.2.0-alpha.3`, manifest v15. Resolve the annotated local tag to its
+commit SHA for consumer locks and test evidence. The prior adoption tag
+`collabtext-adoption-2026-10-11` at `0d21670896d02dda3dc44d18d37f9657935333ed`
+is immutable. A local tag is not publication or distribution.
+
+Wave-specific requirements, APIs and adoption checks are settled in
+[wave-core-response.md](wave-core-response.md); this document covers the shared
+consumer responsibilities and master merge gate.
 
 ## Recommendation and stability boundary
 
@@ -25,14 +26,12 @@ coordinate units, position semantics, and operation identity must remain
 compatibility gates for optimization. A proposed breaking change requires an
 explicit consumer migration and an updated snapshot.
 
-`CTPT/1` position-token bytes have an existing supported-reader obligation.
-Operation frames (`CTBO/0002`, `CTLO/0002`), coverage/gap codecs, private state,
-history journals, and checkpoint artifacts do not yet have the same supported
-cross-version storage promise. Keep durable adoption stores candidate-bound.
-Before upgrading a populated store, establish a tested reader/translation or
-keep the old reader available and perform a validated migration. Do not infer
-storage compatibility from the package version, or recreate a populated CRDT
-from visible text: that loses identities, tokens, and undo history.
+`CTBO/0002` text/undo and `CTBO/0003` marker operations now have indefinite
+supported-reader obligations. `CTPT/1` and marker `CTPT/2` have supported
+persisted-token readers. Keep canonical event bytes unchanged. Other operation,
+coverage/gap, private-history/store/checkpoint formats retain their stated alpha
+limits; validate upgrades explicitly. Recreating a populated CRDT from visible
+text loses identities, tokens and undo history.
 
 ## Choose one owner for persistence and publication
 
@@ -172,13 +171,14 @@ is different. `discard_local_view()` is not collaborative deletion or replay
 reset: it preserves observed versions, and old operations will be duplicates.
 Recover into a fresh engine/valid checkpoint instead.
 
-Core's operation log alone does not restore the local undo cursor/grouping.
-`IdListEngine` exposes history snapshots for consumer-owned persistence; the
-text facade does not expose an equivalent public snapshot API. For persistent
-text undo, use `DocumentSession` or settle an additive Core history API before
-claiming that capability. Persist consumer metadata and undo/redo transitions
-consistently. Publish retirement acknowledgements only after the corresponding
-consumer event is durable; trimming history alone is not reclamation permission.
+Core's operation log alone does not restore local undo cursor/grouping. Both
+CrdtEngine and IdListEngine expose `local_history_snapshot()` and
+`restore_local_history()` for consumer-owned persistence, plus coalescing, next
+groups and retirement acknowledgments. Restore after shared replay with valid
+allocation authority. Persist metadata/compensation transitions consistently.
+Publish retirement acknowledgments only after their consumer event is durable;
+trimming alone is not reclamation permission. Optional DocumentSession owns this
+metadata for its own file stream; Wave uses Core with its existing canonical log.
 
 ## Initial lifecycle policy
 

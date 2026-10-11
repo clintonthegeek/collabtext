@@ -67,12 +67,12 @@ Result<std::string> encode_position(const PositionToken& token) {
         const auto* p=detail::PositionAccess::get(typed);
         if (!p) return malformed("moved-from position");
         auto valid=detail::validate_position(*p); if (!valid) return valid.error();
-        Writer w; w.number(1,2); w.number(static_cast<uint8_t>(p->kind),1);
+        Writer w; w.number(p->kind == detail::PositionKind::text_marker ? 2 : 1,2); w.number(static_cast<uint8_t>(p->kind),1);
         w.number(p->affinity == Affinity::right ? 1 : 0,1);
         w.string(p->scope.document); w.string(p->scope.stream); w.number(p->scope.epoch,8);
         if (p->kind == detail::PositionKind::text_attachment)
             w.number(p->selection == ReferentSide::preceding ? 1 : 2,1);
-        if (p->kind == detail::PositionKind::list_element) w.identity(*p->referent);
+        if ((p->kind == detail::PositionKind::list_element || p->kind == detail::PositionKind::text_marker)) w.identity(*p->referent);
         else { w.fence(p->left); w.fence(p->right); }
         w.number(p->frontier.pair_count(),2);
         for (size_t n=0; n<p->frontier.pair_count(); ++n) {
@@ -118,21 +118,21 @@ Result<PositionToken> decode_position(std::string_view bytes) {
     Reader r(bytes); r.position=4;
     const auto version=r.number(2);
     if (r.error) return r.error;
-    if (version!=1) return Error(ErrorCode::unsupported_version,"unsupported position version");
+    if (version!=1 && version!=2) return Error(ErrorCode::unsupported_version,"unsupported position version");
     const auto kind=r.number(1), affinity=r.number(1);
     if (r.error) return r.error;
-    if (kind<1 || kind>4 || affinity>1 || (kind==3 && affinity)) return malformed("invalid position kind/affinity");
+    if (kind<1 || kind>5 || (version==1 && kind==5) || (version==2 && kind!=5) || affinity>1 || ((kind==3 || kind==5) && affinity)) return malformed("invalid position kind/affinity");
     detail::PositionPayload p;
     p.kind=static_cast<detail::PositionKind>(kind);
     p.affinity=affinity ? Affinity::right : Affinity::left;
     p.scope.document=r.string(); p.scope.stream=r.string(); p.scope.epoch=r.number(8);
-    p.scope.primitive=(kind==1 || kind==4) ? Primitive::text : Primitive::list;
+    p.scope.primitive=(kind==1 || kind==4 || kind==5) ? Primitive::text : Primitive::list;
     if (kind==4) {
         const auto selected=r.number(1);
         if (selected!=1 && selected!=2) r.fail("invalid attachment selection");
         p.selection=selected==1 ? ReferentSide::preceding : ReferentSide::following;
     }
-    if (kind==3) p.referent=r.identity();
+    if (kind==3 || kind==5) p.referent=r.identity();
     else { p.left=r.fence(); p.right=r.fence(); }
     const auto count=r.number(2);
     if (count>512) r.fail("frontier exceeds 512 actors");
@@ -148,6 +148,7 @@ Result<PositionToken> decode_position(std::string_view bytes) {
     auto valid=detail::validate_position(p);
     if (!valid) return malformed("invalid position structure/context/frontier");
     switch (p.kind) {
+    case detail::PositionKind::text_marker: return PositionToken{detail::PositionAccess::make<TextMarker>(std::move(p))};
     case detail::PositionKind::text_boundary: return PositionToken{detail::PositionAccess::make<TextBoundary>(std::move(p))};
     case detail::PositionKind::list_boundary: return PositionToken{detail::PositionAccess::make<ListBoundary>(std::move(p))};
     case detail::PositionKind::list_element: return PositionToken{detail::PositionAccess::make<ListElement>(std::move(p))};

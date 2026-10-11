@@ -228,6 +228,13 @@ ValidationResult validate_edit_operation(const EditOperation& op,
                                          const Global& current) {
     const Limits& limits = default_validation_limits();
 
+    if (op.marker_edit && (!op.ranges.empty() || !op.new_text.empty() ||
+        !((op.inserted_fragments.size() == 1 && op.deletion_runs.empty() &&
+           op.inserted_fragments[0].marker) ||
+          (op.inserted_fragments.empty() && op.deletion_runs.size() == 1 &&
+           op.deletion_runs[0].count == 1))))
+        return malformed("marker edit must insert or remove exactly one marker");
+
     // ---- Declared sizes -------------------------------------------------
     if (op.ranges.size() > limits.max_ranges ||
         op.inserted_fragments.size() > limits.max_inserted_fragments ||
@@ -291,7 +298,9 @@ ValidationResult validate_edit_operation(const EditOperation& op,
                           Codec::describe(error),
                       describe(op.timestamp)));
         }
-        if (scalars != fragment.length) {
+        if (fragment.marker && (!op.marker_edit || fragment.length != 1 || !fragment.content.empty()))
+            return malformed("invalid marker fragment");
+        if (!fragment.marker && scalars != fragment.length) {
             return malformed(where + " declares length " +
                              std::to_string(fragment.length) + " but its " +
                              std::to_string(scalars) +

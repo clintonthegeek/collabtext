@@ -1,6 +1,7 @@
 #include "collabtext/CrdtEngine.h"
 #include "crdt/Buffer.h"
 #include "crdt/Utf16.h"
+#include "crdt/OperationPayload.h"
 
 #include <algorithm>
 #include <limits>
@@ -129,6 +130,58 @@ Result<ResolvedTextPosition> CrdtEngine::resolve(const TextAttachment& token) co
     auto items = m_impl->buffer.position_items(); if (!items) return items.error();
     return detail::resolve_boundary(*p, items.value());
 }
+Result<ResolvedTextPosition> CrdtEngine::resolve(const TextMarker& token) const {
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
+    const auto* p = detail::PositionAccess::get(token);
+    auto valid = detail::check_position_context(*m_impl->scope, p, m_impl->buffer.version(), m_impl->position_history_available);
+    if (!valid) return valid.error();
+    auto offset = m_impl->buffer.marker_offset(*p->referent);
+    if (!offset) return offset.error();
+    return ResolvedTextPosition{offset.value(), false, false};
+}
+
+Result<MarkerInsertion> CrdtEngine::try_insert_marker(uint32_t offset) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
+    if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "marker requires a bound position scope");
+    if (!m_impl->position_history_available) return Error(ErrorCode::history_unavailable, "local view was discarded");
+    auto operation = m_impl->buffer.try_insert_marker(offset); if (!operation) return operation.error();
+    const auto& edit = Crdt::operation_get<Crdt::EditOperation>(operation.value());
+    detail::PositionPayload payload{*m_impl->scope, detail::PositionKind::text_marker};
+    payload.frontier = m_impl->buffer.version(); payload.referent = edit.inserted_fragments[0].origin;
+    auto marker = detail::PositionAccess::make<TextMarker>(std::move(payload));
+    m_impl->emit_op(operation.value()); m_impl->notify();
+    return MarkerInsertion{std::move(marker), std::move(operation).value()};
+}
+
+Result<MarkerInsertion> CrdtEngine::try_insert_marker(const TextMarker& target, MarkerSide side) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
+    auto valid = resolve(target); if (!valid) return valid.error();
+    auto operation = m_impl->buffer.try_insert_relative(*detail::PositionAccess::get(target)->referent, side, "", true);
+    if (!operation) return operation.error();
+    const auto& edit = Crdt::operation_get<Crdt::EditOperation>(operation.value());
+    detail::PositionPayload payload{*m_impl->scope, detail::PositionKind::text_marker};
+    payload.frontier = m_impl->buffer.version(); payload.referent = edit.inserted_fragments[0].origin;
+    auto marker = detail::PositionAccess::make<TextMarker>(std::move(payload));
+    m_impl->emit_op(operation.value()); m_impl->notify();
+    return MarkerInsertion{std::move(marker), std::move(operation).value()};
+}
+
+Result<Crdt::Operation> CrdtEngine::try_insert_at_marker(const TextMarker& target, MarkerSide side, const std::string& text) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
+    auto valid = resolve(target); if (!valid) return valid.error();
+    auto operation = m_impl->buffer.try_insert_relative(*detail::PositionAccess::get(target)->referent, side, text, false);
+    if (!operation) return operation.error();
+    m_impl->emit_op(operation.value()); m_impl->notify(); return std::move(operation).value();
+}
+
+Result<Crdt::Operation> CrdtEngine::try_remove_marker(const TextMarker& target) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
+    auto valid = resolve(target); if (!valid) return valid.error();
+    auto operation = m_impl->buffer.try_remove_marker(*detail::PositionAccess::get(target)->referent);
+    if (!operation) return operation.error();
+    m_impl->emit_op(operation.value()); m_impl->notify(); return std::move(operation).value();
+}
+
 Result<int> CrdtEngine::compare(const TextBoundary& a, const TextBoundary& b) const {
     auto x = resolve(a); if (!x) return x.error();
     auto y = resolve(b); if (!y) return y.error();
@@ -165,24 +218,9 @@ Result<Crdt::Operation> CrdtEngine::try_replace(
     if (m_impl->callback_active)
         return Error(ErrorCode::reentrant_mutation,
                      "cannot mutate an engine from its notification callback");
-    const std::string current = m_impl->buffer.text();
-    if (current.size() > std::numeric_limits<uint32_t>::max())
-        return Error(ErrorCode::malformed,
-                     "document byte length exceeds the operation offset range");
-    const auto current_length = Crdt::utf16_length(current);
-    if (position < 0 || length < 0 ||
-        static_cast<uint64_t>(position) > current_length ||
-        static_cast<uint64_t>(length) > current_length - static_cast<uint64_t>(position))
-        return Error(ErrorCode::malformed, "text edit range is outside the document");
-
-    const auto start16 = static_cast<size_t>(position);
-    const auto end16 = start16 + static_cast<size_t>(length);
-    const auto start_byte = Crdt::utf16_to_byte_offset(current, start16);
-    const auto end_byte = Crdt::utf16_to_byte_offset(current, end16);
-    if (Crdt::byte_to_utf16_offset(current, start_byte) != start16 ||
-        Crdt::byte_to_utf16_offset(current, end_byte) != end16)
-        return Error(ErrorCode::malformed,
-                     "text edit range splits a UTF-16 surrogate pair");
+    auto range = m_impl->buffer.utf16_range(position, length);
+    if (!range) return range.error();
+    const auto [start_byte, end_byte] = range.value();
 
     if (text.size() > std::numeric_limits<uint32_t>::max())
         return Error(ErrorCode::malformed,
@@ -204,7 +242,7 @@ std::string CrdtEngine::text() const
 
 int CrdtEngine::length() const
 {
-    return static_cast<int>(Crdt::utf16_length(m_impl->buffer.text()));
+    return static_cast<int>(m_impl->buffer.utf16_length());
 }
 
 bool CrdtEngine::undo()
@@ -341,3 +379,21 @@ ApplyOutcome CrdtEngine::apply_remote(const Crdt::Operation& operation) {
 }
 
 } // namespace CollabText
+
+namespace CollabText {
+Crdt::LocalHistorySnapshot CrdtEngine::local_history_snapshot() const { return m_impl->buffer.local_history_snapshot(); }
+std::optional<Crdt::LocalUndoEntrySnapshot> CrdtEngine::next_undo_group() const { return m_impl->buffer.next_undo_group(); }
+std::optional<Crdt::LocalUndoEntrySnapshot> CrdtEngine::next_redo_group() const { return m_impl->buffer.next_redo_group(); }
+bool CrdtEngine::coalesce_last_undo() {
+    if (m_impl->callback_active) return false;
+    return m_impl->buffer.coalesce_last_undo();
+}
+Result<void> CrdtEngine::restore_local_history(const Crdt::LocalHistorySnapshot& snapshot) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
+    return m_impl->buffer.restore_local_history(snapshot);
+}
+Result<void> CrdtEngine::acknowledge_undo_retirements(const std::vector<Crdt::Identity>& groups) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
+    return m_impl->buffer.acknowledge_undo_retirements(groups);
+}
+}

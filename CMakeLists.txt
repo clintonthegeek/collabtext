@@ -13,7 +13,7 @@ cmake_minimum_required(VERSION 3.19)
 # COLLABTEXT_PRERELEASE must equal the one in libs/collabtext/CMakeLists.txt.
 # tools/prepare-integration-alpha.sh refuses a candidate when they disagree.
 project(collabtext VERSION 0.2.0 LANGUAGES CXX)
-set(COLLABTEXT_PRERELEASE "alpha.2")
+set(COLLABTEXT_PRERELEASE "alpha.3")
 set(COLLABTEXT_VERSION_STRING "${PROJECT_VERSION}-${COLLABTEXT_PRERELEASE}")
 
 set(CMAKE_CXX_STANDARD 20)

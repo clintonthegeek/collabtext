@@ -151,3 +151,7 @@ if(CONSUMER_PROBE_GATE STREQUAL "live")
         --output ${CMAKE_CURRENT_BINARY_DIR}/markdown-probe-results)
     set_tests_properties(consumer_markdown_contract PROPERTIES TIMEOUT 120)
 endif()
+
+add_executable(consumer_wave_core wave_core.cpp)
+target_link_libraries(consumer_wave_core PRIVATE CollabText::Core)
+add_test(NAME consumer_wave_core COMMAND consumer_wave_core)

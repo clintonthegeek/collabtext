@@ -8,6 +8,7 @@ struct PositionItem {
     uint32_t width;
     bool visible;
     std::optional<uint64_t> application_value;
+    bool marker = false;
 };
 Result<PositionPayload> mint_boundary(const PositionScope&, const Crdt::Global&,
     const std::vector<PositionItem>&, uint32_t offset, Affinity);

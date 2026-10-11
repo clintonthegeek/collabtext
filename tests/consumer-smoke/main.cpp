@@ -365,7 +365,7 @@ int main() {
         if (decoded.ok()) check(decoded.value().first == gap.first && decoded.value().count == 1,
                                "gap metadata remains exact");
     }
-    auto newer = Crdt::decode_operation("CTBO0003:{}");
+    auto newer = Crdt::decode_operation("CTBO000f:{}");
     check(!newer.ok() && newer.error().code() == ErrorCode::unsupported_version,
           "newer format has a typed verdict");
     Crdt::Global frontier;

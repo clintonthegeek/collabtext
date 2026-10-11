@@ -1,3 +1,6 @@
+> These early-lane tasks are complete. Follow DIRECTION.md and TASKS.json for
+> current work; Q01–Q06 now settle Wave Core capabilities and a new candidate.
+
 # Early consumer integration: package, positions, probes and alphas
 
 

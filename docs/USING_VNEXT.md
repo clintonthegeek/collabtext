@@ -6,15 +6,16 @@ initial lifecycle policy, and the gate for merging this branch into master.
 
 The source branch is **`feat/fuguemax-placement`**, in
 `.worktrees/reliability-v2`. The annotated adoption tag is
-**`collabtext-adoption-2026-10-11`**. Pin its resolved commit SHA, rather than a
+**`collabtext-wave-core-2026-10-11`**. Pin its resolved commit SHA, rather than a
 moving branch or the package label alone. This is an adoption snapshot; the
-package still reports **`0.2.0-alpha.2`**, and its C++ API/ABI remains alpha.
+package still reports **`0.2.0-alpha.3`**, and its C++ API/ABI remains alpha.
 A local tag must be distributed separately before other repositories can fetch it.
 
 The [installed capability manifest](../libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md)
-describes supported formats and component limits. `CTPT/1` position-token bytes
-have a supported-reader obligation. Operation/history/store/checkpoint formats
-remain candidate-bound without an equivalent cross-version storage commitment.
+describes supported formats and component limits. CTBO/0002–0003 operation
+archives and CTPT/1–2 position tokens have supported readers. Store/checkpoint
+formats retain their separate alpha limits. Wave's marker, undo and projection
+composition is in [wave-core-response.md](handoff/wave-core-response.md).
 
 ## Build and consume
 

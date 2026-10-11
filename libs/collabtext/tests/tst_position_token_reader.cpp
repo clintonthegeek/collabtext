@@ -473,7 +473,7 @@ private slots:
         for (const Golden &golden : goldens) {
             std::string bytes = golden.bytes();
             bytes[4] = 0x00;
-            bytes[5] = 0x02;
+            bytes[5] = 0x03;
             auto decoded = decode_position(bytes);
             QVERIFY(!decoded.ok());
             QCOMPARE(decoded.error().code(), ErrorCode::unsupported_version);

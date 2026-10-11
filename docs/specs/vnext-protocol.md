@@ -1,3 +1,10 @@
+> Current 2026-10-11 extension: [Wave Core adoption](wave-core-adoption.md)
+> specifies typed zero-width text markers, CTBO/0002–0003 archival reading,
+> CTPT/1–2, public local-history composition and projection identities. It takes
+> precedence where this earlier specification describes historical capability
+> limits. Installed signatures are in the public headers; roadmap task completion
+> and the capability manifest distinguish implementation from target examples.
+
 # vNext protocol contract
 
 **Status:** binding design-gate artifact (P01). Paired with
@@ -83,8 +90,8 @@ carry the external persisted-data contract in W1/W3; versioning does not cancel 
 
 | Artifact | Identifier | Baseline version | Notes |
 |---|---|---|---|
-| Operation payload (Buffer) | `CTBO` (`collabtext.buffer-op`) | 1 | Implemented text edits and undo variants |
-| Operation payload (IdList) | `CTLO` (`collabtext.idlist-op`) | 1 | Implemented structural ops |
+| Operation payload (Buffer) | `CTBO` (`collabtext.buffer-op`) | 0002/0003 | Text/undo archives and typed zero-width marker edits; retained supported readers |
+| Operation payload (IdList) | `CTLO` (`collabtext.idlist-op`) | 0002 | Implemented structural ops |
 | Sparse causal vector | `CTGV` (`collabtext.global`) | 1 | Implemented exact sparse actor/head codec |
 | Terminal unused interval | `CTGP` (`collabtext.counter-gap`) | 1 | Codec only; P07/L02 own integration/publication |
 | Stream envelope | `"collabtext.envelope"` | 1 | Wraps context + payload + codec version |

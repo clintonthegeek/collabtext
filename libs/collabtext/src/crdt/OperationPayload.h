@@ -13,6 +13,7 @@ namespace CollabText::Crdt {
 struct EditOperation {
     operator Operation() const &;
     operator Operation() &&;
+    bool marker_edit = false;
     Identity timestamp;       ///< Operation identity of the edit.
     Global version;           ///< Causal dependencies (version vector). Evolution-reserved.
     std::vector<std::pair<uint32_t, uint32_t>> ranges;  ///< (start, end) byte offsets in visible text. Evolution-reserved.
@@ -26,6 +27,7 @@ struct EditOperation {
         Link link;
         std::string content;
         uint32_t length;
+        bool marker = false;
     };
     std::vector<InsertedFragment> inserted_fragments;    ///< Evolution-reserved.
 

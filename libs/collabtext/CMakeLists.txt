@@ -14,7 +14,7 @@ cmake_minimum_required(VERSION 3.19)
 # "0.2.0", not "0.2.0-alpha.1", so a find_package request cannot name the
 # prerelease. COLLABTEXT_VERSION_STRING carries the full label.
 project(collabtext-lib VERSION 0.2.0 LANGUAGES CXX)
-set(COLLABTEXT_PRERELEASE "alpha.2")
+set(COLLABTEXT_PRERELEASE "alpha.3")
 set(COLLABTEXT_VERSION_STRING "${PROJECT_VERSION}-${COLLABTEXT_PRERELEASE}")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -51,6 +51,7 @@ endif()
 add_library(collabtext_core STATIC
     src/AnchorPins.cpp
     src/MembershipCoordinator.cpp
+    src/Projection.cpp
     src/CrdtEngine.cpp
     src/IdListEngine.cpp
     src/core/Sha256.cpp
@@ -328,6 +329,7 @@ add_library(collabtext_public_headers_core OBJECT
     tests/public-headers/only_IdentityStore_h.cpp
     tests/public-headers/only_IdListEngine_h.cpp
     tests/public-headers/only_IdListOperations_h.cpp
+    tests/public-headers/only_Projection_h.cpp
     tests/public-headers/only_LocalHistory_h.cpp
     tests/public-headers/only_MembershipCoordinator_h.cpp
     tests/public-headers/only_Operations_h.cpp
@@ -367,6 +369,7 @@ add_crdt_test(tst_anchor_retention)
 # test so a candidate cannot declare a token version supported without it passing.
 add_crdt_test(tst_position_token_reader)
 add_crdt_test(tst_positions)
+add_crdt_test(tst_text_markers)
 add_executable(collabtext_position_replay_worker tests/position-replay/main.cpp)
 target_link_libraries(collabtext_position_replay_worker PRIVATE collabtext_core)
 add_dependencies(tst_positions collabtext_position_replay_worker)
@@ -644,3 +647,11 @@ export(PACKAGE collabtext)
 # relocation check meaningful: a script installs to prefix A, moves it to prefix
 # B, and proves nothing resolved back to A or to the source.
 export(PACKAGE collabtext)
+
+if(COLLABTEXT_BUILD_TESTS)
+    add_executable(tst_wave_core ../../tests/consumer-smoke/wave_core.cpp)
+    target_link_libraries(tst_wave_core PRIVATE CollabText::Core)
+    add_test(NAME tst_wave_core COMMAND tst_wave_core)
+    add_executable(tst_marker_model ../../tests/wave-core/marker-model.cpp)
+    add_test(NAME tst_marker_model COMMAND tst_marker_model)
+endif()

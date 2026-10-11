@@ -1,3 +1,10 @@
+> Current 2026-10-11 extension: [Wave Core adoption](wave-core-adoption.md)
+> specifies typed zero-width text markers, CTBO/0002–0003 archival reading,
+> CTPT/1–2, public local-history composition and projection identities. It takes
+> precedence where this earlier specification describes historical capability
+> limits. Installed signatures are in the public headers; roadmap task completion
+> and the capability manifest distinguish implementation from target examples.
+
 # External position tokens and consumer integration
 
 **Date:** 2026-10-04. **Status:** accepted roadmap requirements, updated for Wave

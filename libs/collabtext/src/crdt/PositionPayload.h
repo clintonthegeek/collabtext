@@ -2,7 +2,7 @@
 #include <collabtext/Anchor.h>
 #include <optional>
 namespace CollabText::detail {
-enum class PositionKind : uint8_t { text_boundary=1, list_boundary=2, list_element=3, text_attachment=4 };
+enum class PositionKind : uint8_t { text_boundary=1, list_boundary=2, list_element=3, text_attachment=4, text_marker=5 };
 struct PositionPayload {
     PositionScope scope;
     PositionKind kind;

@@ -1,3 +1,4 @@
+#include "crdt/Utf16.h"
 #include "crdt/Buffer.h"
 #include "crdt/LocalHistoryBudget.h"
 #include "crdt/OperationQueue.h"
@@ -27,11 +28,15 @@ Result<std::vector<CollabText::detail::PositionItem>> Buffer::position_items() c
         size_t scalars = 0;
         if (!Codec::utf8_length(fragment.text, scalars).ok())
             return Error(ErrorCode::invalid_unicode, "invalid retained fragment text");
-        if (scalars != fragment.length || fragment.text.size() != fragment.byte_length)
+        if ((fragment.marker ? (fragment.length != 1 || scalars != 0) : scalars != fragment.length) || fragment.text.size() != fragment.byte_length)
             return Error(ErrorCode::history_unavailable, "retained fragment length mismatch");
         if (fragment.length && (!fragment.origin.actor.valid() || !fragment.origin.counter ||
             fragment.length > UINT64_MAX - fragment.origin.counter))
             return Error(ErrorCode::history_unavailable, "retained item interval is invalid");
+        if (fragment.marker) {
+            items.push_back({fragment.origin, 0, fragment.visible, std::nullopt, true});
+            continue;
+        }
         size_t byte = 0;
         for (uint32_t scalar = 0; scalar < fragment.length; ++scalar) {
             const auto lead = static_cast<unsigned char>(fragment.text[byte]);
@@ -145,7 +150,7 @@ Result<void> Buffer::restore_checkpoint_state(
             fragment.length > UINT64_MAX - fragment.origin.counter ||
             fragment.byte_length != fragment.text.size() ||
             !Codec::utf8_length(fragment.text, scalar_count).ok() ||
-            scalar_count != fragment.length)
+            (fragment.marker ? (fragment.length != 1 || scalar_count != 0) : scalar_count != fragment.length))
             return Error(ErrorCode::malformed,
                          "checkpoint fragment identity or UTF-8 lengths are invalid",
                          "checkpoint.engine.text");
@@ -814,7 +819,7 @@ static std::optional<Identity> visible_element_before(const std::vector<Fragment
     if (start == 0) return std::nullopt;
     uint32_t seen = 0;
     for (const auto& f : frags) {
-        if (!f.visible) continue;
+        if (!f.visible || f.marker) continue;
         if (seen + f.byte_length >= start) {
             const uint32_t scalars = count_utf8_chars(f.text, start - seen);
             return f.item_at(scalars - 1);
@@ -1030,7 +1035,7 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
         split_at_visible_offset(frags, end);
         uint32_t seen = 0;
         for (auto &f : frags) {
-            if (!f.visible) continue;
+            if (!f.visible || f.marker) continue;
             const uint32_t from = seen;
             seen += f.byte_length;
             if (from < start || seen > end) continue;
@@ -1070,12 +1075,7 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     // ---- Undo entry ----
     if (had_deletions)
         undo_entry.deletion_ids.push_back(op_identity);
-    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i)
-        retire_undo_entry(m_undo_stack[i]);
-    m_undo_stack.resize(m_undo_cursor);
-    m_undo_stack.push_back(std::move(undo_entry));
-    m_undo_cursor = m_undo_stack.size();
-    trim_undo_stack();
+    commit_local_history(std::move(undo_entry));
 
     // Build run-length encoded deletion descriptors from the deleted identities.
     // Sort by (actor, counter) then group consecutive runs.
@@ -1098,6 +1098,156 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     if (m_on_change) m_on_change();
 
     return Result<Operation>(std::move(op));
+}
+
+Result<uint32_t> Buffer::marker_offset(Identity marker) const {
+    uint32_t offset = 0;
+    std::optional<Result<uint32_t>> result;
+    m_fragment_tree.for_each([&](const Fragment& f) {
+        if (!f.marker && f.origin.actor == marker.actor && marker.counter >= f.origin.counter &&
+            marker.counter - f.origin.counter < f.length)
+            result = Error(ErrorCode::malformed, "marker token names text");
+        if (f.origin == marker && f.marker)
+            result = f.visible ? Result<uint32_t>(offset) : Result<uint32_t>(Error(ErrorCode::detached, "marker is hidden"));
+        if (f.visible) offset += f.byte_length;
+    });
+    if (result) return std::move(*result);
+    return Error(ErrorCode::history_unavailable, "marker is not retained");
+}
+
+size_t Buffer::utf16_length() const {
+    size_t length = 0;
+    m_fragment_tree.for_each([&](const Fragment& f) { if (f.visible) length += Crdt::utf16_length(f.text); });
+    return length;
+}
+
+Result<std::pair<uint32_t,uint32_t>> Buffer::utf16_range(int position, int length) const {
+    if (position < 0 || length < 0) return Error(ErrorCode::malformed, "negative text range");
+    const uint64_t start = static_cast<uint64_t>(position), end = start + static_cast<uint64_t>(length);
+    uint64_t units = 0, bytes = 0;
+    std::optional<uint32_t> first, last;
+    bool split = false;
+    m_fragment_tree.for_each([&](const Fragment& f) {
+        if (!f.visible || f.marker) return;
+        const auto width = Crdt::utf16_length(f.text);
+        const auto convert = [&](uint64_t target, std::optional<uint32_t>& out) {
+            if (out || target < units || target > units + width) return;
+            const auto local = static_cast<size_t>(target - units);
+            const auto byte = Crdt::utf16_to_byte_offset(f.text, local);
+            if (Crdt::byte_to_utf16_offset(f.text, byte) != local) { split = true; return; }
+            out = static_cast<uint32_t>(bytes + byte);
+        };
+        convert(start, first); convert(end, last);
+        units += width; bytes += f.byte_length;
+    });
+    if (bytes > UINT32_MAX)
+        return Error(ErrorCode::malformed, "document byte length exceeds the operation offset range");
+    if (split) return Error(ErrorCode::malformed, "text range splits a UTF-16 surrogate pair");
+    if (end > units) return Error(ErrorCode::malformed, "text range is outside the document");
+    // Empty text, including a sequence containing only markers.
+    if (start == units && !first) first = static_cast<uint32_t>(bytes);
+    if (end == units && !last) last = static_cast<uint32_t>(bytes);
+    if (!first || !last) return Error(ErrorCode::history_unavailable, "text range is unavailable");
+    return std::pair{*first, *last};
+}
+
+void Buffer::commit_local_history(UndoEntry&& entry) {
+    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i)
+        retire_undo_entry(m_undo_stack[i]);
+    m_undo_stack.resize(m_undo_cursor);
+    m_undo_stack.push_back(std::move(entry));
+    m_undo_cursor = m_undo_stack.size();
+    trim_undo_stack();
+}
+
+Result<Operation> Buffer::try_insert_marker(uint32_t offset) {
+    auto valid = validate_local_edit({{offset, offset}}, {""}, visible_length());
+    if (!valid) return valid.error();
+    auto frags = get_fragments();
+    uint32_t seen = 0;
+    for (const auto& f : frags) {
+        if (!f.visible || f.marker) continue;
+        if (offset > seen && offset < seen + f.byte_length &&
+            (static_cast<unsigned char>(f.text[offset-seen]) & 0xc0) == 0x80)
+            return Error(ErrorCode::not_scalar_boundary, "marker splits a UTF-8 scalar");
+        seen += f.byte_length;
+    }
+    return try_insert_item(visible_element_before(frags, offset), "", true);
+}
+
+Result<Operation> Buffer::try_insert_relative(Identity marker, MarkerSide side,
+                                             const std::string& text, bool insert_marker) {
+    if (side != MarkerSide::before && side != MarkerSide::after)
+        return Error(ErrorCode::malformed, "invalid marker side");
+    auto frags = get_fragments();
+    std::optional<Identity> previous;
+    for (const auto& f : frags) {
+        if (f.origin == marker && f.marker) {
+            if (!f.visible) return Error(ErrorCode::detached, "marker is hidden");
+            return try_insert_item(side == MarkerSide::before ? previous : marker, text, insert_marker);
+        }
+        // Explicit side denotes a retained sequence gap, including tombstones.
+        previous = f.item_at(f.length-1);
+    }
+    return Error(ErrorCode::history_unavailable, "marker is not retained");
+}
+
+Result<Operation> Buffer::try_insert_item(std::optional<Identity> left,
+                                         const std::string& text, bool marker) {
+    if (auto valid = check_allocator(); !valid) return valid.error();
+    size_t scalars = 0;
+    if (!Codec::utf8_length(text, scalars).ok())
+        return Error(ErrorCode::invalid_unicode, "inserted text is invalid UTF-8");
+    if ((!marker && scalars == 0) || scalars > UINT32_MAX || text.size() > UINT32_MAX)
+        return Error(ErrorCode::malformed, "relative insertion requires nonempty bounded text");
+    const size_t count = marker ? 1 : scalars;
+    if (count > SIZE_MAX / sizeof(UndoMapKey) ||
+        text.size() > SIZE_MAX - count * sizeof(UndoMapKey))
+        return Error(ErrorCode::limit_exceeded, "undo charge overflows");
+    const size_t charge = text.size() + count * sizeof(UndoMapKey);
+    if (charge > m_max_undo_bytes)
+        return Error(ErrorCode::limit_exceeded, "insertion exceeds undo byte budget");
+    if (auto budget = check_retirement_budget_for_new_entry(charge, count, 0); !budget)
+        return budget.error();
+    auto frags = get_fragments();
+    const auto link = SequenceOrder::mint_link(frags, left);
+    auto reserved = m_allocator->reserve_run(count + 1);
+    if (!reserved) return reserved.error();
+    Identity origin(actor_id(), reserved.value()), timestamp(actor_id(), reserved.value()+count);
+    Fragment fragment(origin, link, static_cast<uint32_t>(text.size()), static_cast<uint32_t>(count), text);
+    fragment.marker = marker;
+    if (!SequenceOrder::integrate(frags, std::move(fragment)))
+        return Error(ErrorCode::history_unavailable, "insertion gap is unavailable");
+    EditOperation op;
+    op.marker_edit = marker; op.timestamp = timestamp; op.deletion_id = timestamp; op.version = m_version;
+    op.inserted_fragments.push_back({origin, link, text, static_cast<uint32_t>(count), marker});
+    UndoEntry entry; entry.group_id = timestamp; entry.operation_ids = {timestamp}; entry.retained_bytes = charge;
+    for (uint32_t i=0; i<count; ++i) entry.inserted_keys.emplace_back(Identity(origin.actor, origin.counter+i));
+    set_fragments(std::move(frags)); m_version.observe(timestamp);
+    commit_local_history(std::move(entry));
+    if (m_on_change) m_on_change();
+    return Operation(std::move(op));
+}
+
+Result<Operation> Buffer::try_remove_marker(Identity target) {
+    if (auto valid = check_allocator(); !valid) return valid.error();
+    auto frags = get_fragments();
+    auto found = std::find_if(frags.begin(), frags.end(), [&](const auto& f){return f.origin == target && f.marker;});
+    if (found == frags.end()) return Error(ErrorCode::history_unavailable, "marker is not retained");
+    if (!found->visible) return Error(ErrorCode::detached, "marker is hidden");
+    const size_t charge = sizeof(Identity);
+    if (charge > m_max_undo_bytes) return Error(ErrorCode::limit_exceeded, "removal exceeds undo byte budget");
+    if (auto budget = check_retirement_budget_for_new_entry(charge, 0, 1); !budget) return budget.error();
+    auto reserved = m_allocator->reserve_run(1); if (!reserved) return reserved.error();
+    Identity timestamp(actor_id(), reserved.value());
+    EditOperation op; op.marker_edit = true; op.timestamp = timestamp; op.deletion_id = timestamp;
+    op.version = m_version; op.deletion_runs.push_back({target, 1});
+    found->deletions.push_back(timestamp);
+    UndoEntry entry; entry.group_id = timestamp; entry.operation_ids = {timestamp};
+    entry.deletion_ids = {timestamp}; entry.retained_bytes = charge;
+    set_fragments(std::move(frags)); m_version.observe(timestamp); commit_local_history(std::move(entry));
+    if (m_on_change) m_on_change();
+    return Operation(std::move(op));
 }
 
 // ---------------------------------------------------------------------------
@@ -1174,6 +1324,30 @@ Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
     // follows the general placement algorithm.
     auto frags = get_fragments();
 
+    if (op.marker_edit && !op.deletion_runs.empty()) {
+        const auto target = SequenceOrder::find_item(frags, op.deletion_runs[0].first);
+        if (!target) {
+            m_apply_error = Error(ErrorCode::history_unavailable, "marker target is not retained");
+            return ApplyStep::malformed;
+        }
+        if (!frags[target->run].marker) {
+            m_apply_error = Error(ErrorCode::malformed, "marker deletion targets text");
+            return ApplyStep::malformed;
+        }
+    } else {
+        // Ordinary text deletion examines only marker identities for type
+        // confusion; avoid a second text-run/deletion-run cross product.
+        for (const auto& f : frags) {
+            if (!f.marker) continue;
+            for (const auto& run : op.deletion_runs) {
+                if (f.origin.actor == run.first.actor && f.origin.counter >= run.first.counter &&
+                    f.origin.counter - run.first.counter < run.count) {
+                    m_apply_error = Error(ErrorCode::malformed, "text deletion targets a marker");
+                    return ApplyStep::malformed;
+                }
+            }
+        }
+    }
     apply_deletion_runs(frags, op.deletion_runs, op.deletion_id);
 
     for (auto &ins : op.inserted_fragments) {
@@ -1192,6 +1366,7 @@ Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
         }
         Fragment frag(ins.origin, ins.link, static_cast<uint32_t>(ins.content.size()),
                       ins.length, ins.content);
+        frag.marker = ins.marker;
         if (!SequenceOrder::integrate(frags, std::move(frag))) {
             // The run hangs off an element this replica does not hold even though the
             // operation's frontier says it was observed: no honest replica produces

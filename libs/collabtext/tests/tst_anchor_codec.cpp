@@ -66,7 +66,7 @@ private slots:
                         replace_byte(empty,8,1),replace_byte(empty,11,1),replace_byte(empty,21,0),replace_byte(empty,22,2)}) {
             auto decoded=decode_position(bytes); QVERIFY(!decoded.ok()); QCOMPARE(refused_code(decoded),ErrorCode::malformed);
         }
-        auto newer=replace_byte(empty,5,2);
+        auto newer=replace_byte(empty,5,3);
         QCOMPARE(refused_code(decode_position(newer)),ErrorCode::unsupported_version);
         QCOMPARE(refused_code(decode_position("future")),ErrorCode::unknown_format);
         QCOMPARE(refused_code(decode_position(std::string((64u<<10)+1,'x'))),ErrorCode::malformed);

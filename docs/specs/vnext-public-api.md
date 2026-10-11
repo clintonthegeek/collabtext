@@ -1,3 +1,10 @@
+> Current 2026-10-11 extension: [Wave Core adoption](wave-core-adoption.md)
+> specifies typed zero-width text markers, CTBO/0002–0003 archival reading,
+> CTPT/1–2, public local-history composition and projection identities. It takes
+> precedence where this earlier specification describes historical capability
+> limits. Installed signatures are in the public headers; roadmap task completion
+> and the capability manifest distinguish implementation from target examples.
+
 # vNext public API guide
 
 **Status:** binding design-gate artifact (P01). This is the API that P02–P08, the
@@ -160,7 +167,7 @@ identity and are rejected before mutation. Public callers cannot construct a
 payload or access a variant alternative; construction comes from engine output
 or decoding. Identity/counter remain the narrow existing accessor contract.
 P07 adds the document/stream/epoch envelope; opacity alone does not create that
-context. Version 1 codecs use CTBO/CTLO/CTGV/CTGP frames and exact-width hex
+context. Current codecs use CTBO/0002–0003, CTLO/0002 and CTGV/CTGP/0001 with exact-width hex
 integers, with distinguishable format/version/schema errors. See
 [vnext-operation-codec.md](vnext-operation-codec.md) for mandatory schemas,
 bounds and allocated intervals. `CounterGap` is owned terminal interval metadata,
