@@ -110,7 +110,7 @@ Compile each installed header in a separate translation unit and run the externa
 
 ## A03 — Implement a single complete Qt document adapter
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** complete
 **Depends on:** A02, L07, S05  
 **Coverage:** R3, R8, R9  
 
@@ -121,6 +121,8 @@ Compile each installed header in a separate translation unit and run the externa
 - `libs/collabtext/src/CrdtEngine.cpp`
 - `libs/collabtext/src/SyncManager.cpp`
 - `libs/collabtext/tests/tst_document_adapter.cpp`
+- `libs/collabtext/tests/tst_editor_recovery.cpp`
+- `libs/collabtext/tests/tst_multicursor.cpp`
 - `libs/collabtext/tests/tst_scroll_stability.cpp`
 - `libs/collabtext/CMakeLists.txt`
 - `app/collabedit/CollabPane.h`
@@ -141,7 +143,7 @@ Compile each installed header in a separate translation unit and run the externa
 
 **Verification:**
 
-Run `./tools/verify-roadmap.sh debug 'tst_document_adapter|tst_editor_recovery|tst_multicursor|tst_scroll_stability'`; include QInputMethodEvent and programmatic QTextCursor paths.
+Run `./tools/verify-roadmap.sh {debug,release,asan} 'tst_document_adapter|tst_editor_recovery|tst_multicursor|tst_scroll_stability'`; all four targets passed in Debug (`20261011T044136Z-2`), Release (`20261011T044153Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T044216Z-2`). Adapter tests exercise QInputMethodEvent commits, programmatic QTextCursor edits, selection replacements, non-BMP and multi-cursor input, engine-owned undo/redo, remote deltas without echoes, and stable scroll anchors.
 
 ## A04 — Implement batch outcomes, subscriptions, and safe notification policy
 
