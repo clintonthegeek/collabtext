@@ -43,7 +43,7 @@ Result<std::vector<CollabText::detail::PositionItem>> Buffer::position_items() c
     return items;
 }
 
-void Buffer::local_clear() noexcept {
+void Buffer::discard_local_view() noexcept {
     auto allocator = m_allocator;
     auto version = m_version;
     auto retired = std::move(m_retired_undo_entries);

@@ -76,8 +76,8 @@ Result<int> CrdtEngine::compare(const TextBoundary& a, const TextBoundary& b) co
     auto y = resolve(b); if (!y) return y.error();
     return x.value().byte_offset < y.value().byte_offset ? -1 : x.value().byte_offset > y.value().byte_offset ? 1 : 0;
 }
-void CrdtEngine::local_clear() noexcept {
-    m_impl->buffer.local_clear();
+void CrdtEngine::discard_local_view() noexcept {
+    m_impl->buffer.discard_local_view();
     m_impl->position_history_available = false;
 }
 

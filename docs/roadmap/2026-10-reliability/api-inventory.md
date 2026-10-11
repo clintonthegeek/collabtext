@@ -89,23 +89,24 @@ is undefined" is the honest contract until A04 writes one down.
 
 ---
 
-## 4. IdList reset semantics
+## 4. Reset semantics
 
-`IdList::local_clear()` exists (commit `b1f7ed6`) and is *not* a collaboration
-operation:
+A05 removes the ambiguous public `local_clear()` name. Both public engine
+facades expose `discard_local_view()` with the same local-only contract: it
+preserves allocator/actor and observed version, limits, callbacks, and pending
+undo-retirement obligations; it drops visible and retained CRDT content, active
+undo/redo state, and deferred/quarantined input; and it invalidates scoped
+position history. It emits no operation or callback. Replaying operations
+already covered by the preserved version is a duplicate and cannot rebuild the
+discarded view.
 
-- Drops visible entries, tombstones, the undo stack, and the deferred queue.
-- Preserves `replica_id`, clock, version, `max_undo_depth`, and callbacks.
-- Preserves `m_version`, so replaying previously seen Lamport values after a
-  clear is a silent no-op. Rebuilds must supply fresh operations (a re-parse and
-  insert pass), not a replay of the original log.
-- Fires neither `on_change` nor `on_local_op`.
-- Peers do not see the clear. Replacing a connected session's content is a
-  higher-layer concern and is currently undocumented as unsupported.
-
-`Buffer` has no equivalent. `CrdtEngine` exposes no reset. A04/A05 should either
-give both primitives the same explicit reset contract or state that only IdList
-has one; today the asymmetry is undocumented.
+A collaborative clear is expressed as ordinary delete operations (`try_replace`
+for text and `try_remove_at` for list elements) and those operations are
+published to peers. Recovery uses a fresh engine state, valid checkpoint import,
+or `DocumentSession::open()` recovery from retained logs/checkpoint; it never
+discards a version-bearing engine and then replays that engine's covered log.
+See `vnext-public-api.md` §10.4 for examples and the callback/identity/anchor
+lifetime table.
 
 ---
 

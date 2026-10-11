@@ -690,14 +690,14 @@ json.dump({
     "note": "CTPT/1 is a supported position-token version when listed above: a later "
             "supported release keeps its reader and these bytes, or translates them. "
             "It is not a pin and does not survive reclamation, an epoch change, "
-            "local_clear() or store recovery. No store or checkpoint format exists.",
+            "discard_local_view() or store recovery. No store or checkpoint format exists.",
   },
   "verification_evidence": json.load(open(sys.argv[2])),
   "known_limits": [
     "Not a supported release and not published.",
     "C++ API/ABI is unstable between candidates; pin the SHA and rebuild.",
     "No crash recovery, no persistent undo/redo, no durable pins, no GC (G-series pending).",
-    "CTPT/1 is a supported serialized token version, but a token is not a pin: it does not survive reclamation, an epoch change, local_clear() or store recovery, and physical GC is disabled.",
+    "CTPT/1 is a supported serialized token version, but a token is not a pin: it does not survive reclamation, an epoch change, discard_local_view() or store recovery, and physical GC is disabled.",
     "Qt widget layer and file transport are optional and not part of the headless Core path.",
   ],
 }, open("$candidate_json", "w"), indent=2)

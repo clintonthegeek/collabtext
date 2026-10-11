@@ -53,7 +53,7 @@ What a supported version does **not** buy a consumer, and must not be read as:
 - **No store recovery.** The token survives engine destruction and fresh-process
   replay of operations the consumer itself retained. L05/L08 own recovered
   stores, and S04 certifies the composition.
-- **No reset survival.** `local_clear()` invalidates position history, including
+- **No reset survival.** `discard_local_view()` invalidates position history, including
   for empty-edge tokens; stored bytes then report `history_unavailable`.
 
 **Representation evidence.** The token's fields are logical — scope strings, kind,

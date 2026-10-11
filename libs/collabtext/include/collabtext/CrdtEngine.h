@@ -26,9 +26,14 @@ public:
     Result<ResolvedTextPosition> resolve(const TextBoundary&) const;
     Result<ResolvedTextPosition> resolve(const TextAttachment&) const;
     Result<int> compare(const TextBoundary&, const TextBoundary&) const;
-    /// Clears local retained history without resetting the allocator/version.
-    /// Invalidates position history, including empty edge tokens; no callback/op.
-    void local_clear() noexcept;
+    /// Discard this engine's local view without creating a collaborative edit.
+    /// Preserves its allocator, observed version and callbacks, but drops CRDT
+    /// content, undo/redo state, and deferred/quarantined input. Existing
+    /// scoped positions become unavailable. Replaying already-observed
+    /// operations will be treated as duplicates and cannot rebuild this view.
+    /// Use a fresh engine or a valid checkpoint restore for recovery; remove
+    /// content collaboratively with try_replace() to emit an operation.
+    void discard_local_view() noexcept;
 
     /// Takes the allocator this engine mints identities from, which is also where
     /// it learns its actor.

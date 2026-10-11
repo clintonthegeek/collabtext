@@ -16,7 +16,7 @@ scope immutably on engine construction. Existing allocator-only facades may
 continue editing temporarily, but cannot mint or accept scoped positions until
 constructed with an explicit scope. The Result-returning `create(allocator, scope)`
 factory validates scope before constructing the bound engine.
-There is no default document shared by all engines. A local_clear marks position
+There is no default document shared by all engines. A discard_local_view marks position
 history unavailable, including for old START/END-only tokens: preserving a version
 counter cannot manufacture missing history. Queries/mints refuse until complete
 same-history recovery restores that state or a new engine is created with a fresh
@@ -86,7 +86,7 @@ Resolve pseudocode (uint64 accumulation, checked uint32 result):
    lookup or causal-state test**. Return the corresponding typed scope failure.
 2. If integrated state does not cover mint frontier, return `awaiting_state`.
    Do not resolve to a guessed location, even if an endpoint happens to exist.
-3. If local_clear invalidated retained history, return history_unavailable, even
+3. If discard_local_view invalidated retained history, return history_unavailable, even
    for empty-edge tokens. Otherwise traverse retained items in logical order. `lower` is the visible prefix
    **through** the left item, or zero for START. `upper` is the visible prefix
    **before** the right item, or visible length for END. Hidden items contribute

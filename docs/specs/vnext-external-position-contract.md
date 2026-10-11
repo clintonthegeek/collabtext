@@ -263,7 +263,7 @@ S04a resolves the pending deletion rules in
 collapses as a caret to byte 1 with lost_right, while a strict following-referent
 attachment detaches without an offset. A valid undo restoring b makes the same
 attachment resolve at byte 1; a redo detaches. Loss of only its other neighbor
-need not detach it. Empty/end are scoped edge tags; local_clear invalidates
+need not detach it. Empty/end are scoped edge tags; discard_local_view invalidates
 position history even when a token has only edge tags. These are specified and
 model-checked choices; S04b still implements production behavior and token bytes.
 

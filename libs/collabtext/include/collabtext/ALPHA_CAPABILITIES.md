@@ -117,7 +117,7 @@ Storing these bytes is safe. What it does **not** buy you:
   disabled. G01/G06 must connect those obligations to validated certificates.
 - **It does not survive an epoch change.** A token from another epoch reports
   `wrong_epoch`; G01/G02 own translation.
-- **It does not survive `local_clear()`.** That invalidates position history,
+- **It does not survive `discard_local_view()`.** That invalidates position history,
   including for empty-edge tokens; stored bytes then report `history_unavailable`.
 - **It is not a built-in recovered store.** A consumer supplies its canonical
   persistence callback and replays pin events before enabling future GC. The

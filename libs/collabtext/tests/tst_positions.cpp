@@ -136,7 +136,7 @@ private slots:
         auto delayed=checked_codec(CrdtEngine::create(Test::test_counter(2),text_scope()));
         auto result=delayed->resolve(token); QVERIFY(!result.ok()); QCOMPARE(refused_code(result),ErrorCode::awaiting_state);
         QVERIFY(CollabText::Test::apply_succeeded(delayed->apply_remote(ops[0]))); QVERIFY(delayed->resolve(token).ok());
-        const auto next=allocator->peek(); source->local_clear();
+        const auto next=allocator->peek(); source->discard_local_view();
         QVERIFY(source->text().empty()); QCOMPARE(allocator->peek(),next);
         QCOMPARE(refused_code(source->resolve(empty)),ErrorCode::history_unavailable);
         QCOMPARE(refused_code(source->resolve(token)),ErrorCode::history_unavailable);
@@ -180,7 +180,7 @@ private slots:
         auto foreign_scope=list_scope(); foreign_scope.stream="different";
         auto foreign=checked_codec(IdListEngine::create(Test::test_counter(2),foreign_scope));
         QCOMPARE(refused_code(foreign->resolve(original)),ErrorCode::wrong_stream);
-        list->local_clear(); QCOMPARE(refused_code(list->resolve(empty)),ErrorCode::history_unavailable);
+        list->discard_local_view(); QCOMPARE(refused_code(list->resolve(empty)),ErrorCode::history_unavailable);
         QCOMPARE(refused_code(list->element_of(UINT64_MAX)),ErrorCode::history_unavailable);
     }
     void differential_native_text_histories() {

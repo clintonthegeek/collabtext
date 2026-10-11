@@ -164,14 +164,14 @@ public:
 
     // ---- reset ----
 
-    /// Single-replica reset: drop every element, the undo stack and the deferred
-    /// queue. Preserves the actor, the version vector and the undo depth limit.
-    ///
-    /// Because the version vector is preserved, replaying operations that were
-    /// already applied is a silent no-op; a caller that rebuilds content must
-    /// supply fresh operations rather than a raw replay. Remote peers do not see
-    /// this — it is not a CRDT operation.
-    void local_clear() noexcept;
+    /// Discard this engine's local view without creating a collaborative edit.
+    /// Preserves its actor, observed version, undo limits and callbacks, but
+    /// drops entries, undo/redo state, and deferred/quarantined input. Existing
+    /// scoped positions become unavailable. Replaying already-observed
+    /// operations will be treated as duplicates and cannot rebuild this view.
+    /// Use a fresh engine or a valid checkpoint restore for recovery; remove
+    /// elements collaboratively with try_remove_at() to emit operations.
+    void discard_local_view() noexcept;
 
     ~IdListEngine();
     IdListEngine(IdListEngine &&) noexcept;

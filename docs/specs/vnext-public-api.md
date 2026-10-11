@@ -400,10 +400,9 @@ Two consequences worth stating:
   an error (R6). Today's integer fallback to document end is the behavior replaced.
   Encoding/decoding a token does not register a retention pin.
 
-`IdList::local_clear()` keeps its current semantics (documented in
-`api-inventory.md` §4) and returns a `Result` so a caller can tell a failed clear
-from a successful one. It is not a collaboration operation and peers never see
-it.
+Reset behavior is explicit in §10.4. `discard_local_view()` is a local-only
+discard that preserves observed coverage; it is not a synchronized clear or a
+recovery primitive. Collaborative clear emits ordinary removal operations.
 
 ### 6.1 Implemented scoped positions
 
@@ -430,7 +429,8 @@ positions are refused. Resolutions contain scalar-aligned UTF-8 byte offsets or
 list indices with `lost_left`, `lost_right` and `collapsed()`. Strict selected-item
 loss returns `detached` without an offset. Undo can restore the original token.
 Text editing retains its existing UTF-16 units; position reads use UTF-8 bytes.
-`local_clear()` makes retained position history unavailable, including edge tokens.
+`discard_local_view()` makes retained position history unavailable, including
+edge tokens.
 
 Typed failures include `off_end`, `not_scalar_boundary`, `not_found`,
 `wrong_document`, `wrong_stream`, `wrong_primitive`, `wrong_epoch`,
@@ -656,24 +656,52 @@ assert(comment.value().context().id.counter == 1); // fresh, independent streams
 assert(text.value().context().stream != comment.value().context().stream);
 ```
 
-### 10.4 A structural list, with reset semantics stated
+### 10.4 Reset, collaborative clear, and recovery
+
+Use operation APIs to clear shared content. This list example produces one
+removal operation per currently visible item and publishes each operation as it
+succeeds, so peers receive the same clear:
 
 ```cpp
-CollabText::Result<CollabText::IdListOperation> append(CollabText::IdList& list,
-                                                        uint64_t id) {
-    const auto ids = list.ids();
-    if (ids.empty()) return CollabText::Error(
-        CollabText::ErrorCode::unresolvable_anchor, "append example requires an element");
-    auto anchor = list.anchor_of(ids.back(), CollabText::Affinity::Left);
-    if (!anchor.ok()) return anchor.error();
-    return list.insert_after(anchor.value(), id);
-}
-
-// A clear is local, is not a collaboration operation, and can fail visibly.
-if (const auto cleared = list.local_clear(); !cleared.ok()) {
-    report(cleared.error().message());
+const auto current_ids = list.ids();
+for (uint64_t value : current_ids) {
+    auto anchor = list.try_anchor_of(value);
+    if (!anchor) { report(anchor.error()); return; }
+    auto removal = list.try_remove_at(anchor.value());
+    if (!removal) { report(removal.error()); return; }
+    transport.publish(removal.value());
 }
 ```
+
+Text uses one ordinary replacement operation:
+
+```cpp
+auto removal = text_engine.try_replace(0, text_engine.length(), "");
+if (!removal) { report(removal.error()); return; }
+transport.publish(removal.value());
+```
+
+`IdListEngine::discard_local_view()` and `CrdtEngine::discard_local_view()` are
+for a detached local view being replaced outside collaboration. They emit no
+operation or callback; preserve the actor allocator and observed version; clear
+current content, undo/redo, and deferred/quarantined input; and invalidate
+scoped position tokens. Old legacy anchors are not promised to resolve after
+their retained items are discarded. Replaying previously observed operations
+into a discarded engine yields duplicates, leaving its view empty. Do not use
+these methods before replay or recovery.
+
+Recovery uses fresh engine state, or imports a valid checkpoint and replays only
+uncovered retained operations. `DocumentSession::open()` performs that recovery
+from its retained log and optional validated checkpoint. Replacing a shared
+document is an epoch-aware lifecycle decision: publish edits in the current
+epoch or bootstrap a new document/epoch through membership protocol. It is not
+a local discard.
+
+| Action | Preserves | Clears or invalidates | Emits |
+|---|---|---|---|
+| `discard_local_view()` | Actor/allocator counter, observed version, configured limits, callbacks, pending undo-retirement records | Current CRDT content, active undo/redo, deferred/quarantined input, scoped positions | No operation or callback |
+| Collaborative text/list clear | Actor state; retained CRDT identities and tombstones remain subject to normal retention | Visible items through ordinary delete operations; local undo may restore the caller's own edits | Local operation and change callbacks; peers apply the same operations |
+| Fresh replay/checkpoint recovery | Durable actor reservation and supported actor-local history from the selected recovery source | Rebuilds state from baseline plus retained operations/checkpoint; listeners must be reattached | No synthetic local edits during replay |
 
 ### 10.5 Callback lifecycle, done explicitly
 

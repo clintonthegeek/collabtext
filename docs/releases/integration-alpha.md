@@ -148,7 +148,7 @@ Stated so a consumer designs around them rather than discovering them:
   return zero and retain everything. Physical GC is disabled on purpose.
 - **A token that survives everything.** `CTPT/1` is supported as *bytes*, which is
   a promise about reading stored tokens — not about pinning, reclamation, epoch
-  changes, `local_clear()` or store recovery. The full list is in "What this
+  changes, `discard_local_view()` or store recovery. The full list is in "What this
   candidate guarantees, exactly". Do not substitute a stored tree link
   (`parent`, `side`, `right_origin`) for a token; that is the mistake the token
   format exists to prevent.

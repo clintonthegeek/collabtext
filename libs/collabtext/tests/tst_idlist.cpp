@@ -162,13 +162,13 @@ private slots:
         QCOMPARE(list.tombstone_count(), size_t{1});
     }
 
-    void local_clear_empties_the_list() {
+    void discard_local_view_empties_the_list() {
         IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
         list.insert_after(list.anchor_of(100, Bias::Right), 200);
         QCOMPARE(list.size(), 2u);
 
-        list.local_clear();
+        list.discard_local_view();
 
         QCOMPARE(list.size(), 0u);
         QCOMPARE(list.tombstone_count(), size_t{0});
@@ -177,13 +177,13 @@ private slots:
         QCOMPARE(list.actor_id(), actor(1));
     }
 
-    void local_clear_preserves_clock_monotonicity() {
+    void discard_local_view_preserves_clock_monotonicity() {
         IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
         auto op1 = list.insert_after(list.anchor_of(100, Bias::Right), 200);
         const Identity stampBefore = get_idlist_op_identity(op1);
 
-        list.local_clear();
+        list.discard_local_view();
 
         auto op2 = list.insert_after(Anchor::min(), 300);
         const Identity stampAfter = get_idlist_op_identity(op2);
@@ -192,7 +192,7 @@ private slots:
         QVERIFY(stampBefore < stampAfter);
     }
 
-    void local_clear_does_not_fire_callbacks() {
+    void discard_local_view_does_not_fire_callbacks() {
         IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
 
@@ -201,7 +201,7 @@ private slots:
         list.set_on_change([&]{ ++changeCalls; });
         list.set_on_local_op([&](const IdListOperation &){ ++localOpCalls; });
 
-        list.local_clear();
+        list.discard_local_view();
 
         QCOMPARE(changeCalls, 0);
         QCOMPARE(localOpCalls, 0);
@@ -212,12 +212,12 @@ private slots:
         QCOMPARE(localOpCalls, 1);
     }
 
-    void local_clear_then_insert_chain_works() {
+    void discard_local_view_then_insert_chain_works() {
         IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 100);
         list.insert_after(list.anchor_of(100, Bias::Right), 200);
 
-        list.local_clear();
+        list.discard_local_view();
 
         list.insert_after(Anchor::min(), 300);
         list.insert_after(list.anchor_of(300, Bias::Right), 400);

@@ -136,7 +136,7 @@ Additional recommendations use the following traceability IDs in tasks:
 | R11 | Honest guarantees/status, signing stub scope, architecture/docs | V08, D01, E04–E06 |
 | R12 | Informational design/benchmark comparisons; replacement recommendation rejected by the user | S02, X10, E04; Q4 in DECISIONS.md |
 | R13 | Package install/export, platform support, fresh versioned formats, installed examples | P01, P06–P07, A01–A07, E03–E06 |
-| R14 | Explicit local_clear, recovery, and collaborative reset semantics | V08, A05, E03 |
+| R14 | Explicit discard_local_view, recovery, and collaborative reset semantics | V08, A05, E03 |
 
 No recommendation is considered complete merely because it appears in a plan. E05 records implementation commits and exact passing acceptance tests or explicit user-approved deferrals. Tasks initially start `not_started`; TASKS.json records current completion and evidence.
 

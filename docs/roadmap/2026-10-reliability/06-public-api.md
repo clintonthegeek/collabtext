@@ -171,7 +171,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_document_adapter|tst_editor_recovery|t
 
 Run `./tools/verify-roadmap.sh debug 'tst_callbacks|tst_document_adapter|tst_transport_commit_contract'`; ASan verifies listener teardown/lifetime cases.
 
-## A05 — Define local_clear and other reset semantics across epochs
+## A05 — Define discard_local_view and other reset semantics across epochs
 
 **Status:** see TASKS.json (initially not started)  
 **Depends on:** A02, G05  
@@ -186,14 +186,14 @@ Run `./tools/verify-roadmap.sh debug 'tst_callbacks|tst_document_adapter|tst_tra
 
 **Steps:**
 
-1. Remove or rename ambiguous local_clear behavior. Specify recovery-state reset independently from collaborative clear; no obsolete source signature or version-retaining discard needs to be preserved.
+1. Remove or rename ambiguous discard_local_view behavior. Specify recovery-state reset independently from collaborative clear; no obsolete source signature or version-retaining discard needs to be preserved.
 2. Expose an explicitly named local-view discard only if consumers need it; collaborative clear produces operations, while replacing a store/checkpoint uses an explicit epoch-aware recovery operation.
 3. Document which callbacks, identity, clocks, anchors, deferred input, and undo groups survive each action. Reject replay into a cleared engine whose preserved coverage would deduplicate required operations.
 
 **Acceptance:**
 
 - Consumer reset examples are unambiguous; a local clear cannot masquerade as a synced document reset.
-- Replay/restoration uses fresh recovery state or valid checkpoint import, never preserved-version local_clear.
+- Replay/restoration uses fresh recovery state or valid checkpoint import, never preserved-version discard_local_view.
 
 **Verification:**
 

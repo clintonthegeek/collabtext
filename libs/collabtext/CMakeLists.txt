@@ -480,6 +480,7 @@ target_compile_definitions(tst_session_recovery
     PRIVATE COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS)
 add_crdt_test(tst_opstream_idempotent)
 add_crdt_test(tst_idlist)
+add_crdt_test(tst_reset_semantics)
 add_crdt_test(tst_idlist_anchor)
 add_crdt_test(tst_idlist_convergence)
 add_crdt_test(tst_idlist_undo)

@@ -223,23 +223,13 @@ public:
     /// and rejected.
     [[nodiscard]] ApplyOutcome apply_remote_op_checked(const IdListOperation& op);
 
-    /// Single-replica reset primitive. Drops all entries (visible +
-    /// tombstones), the undo stack, and the deferred-op queue.
-    /// Preserves actor, clock, version, max_undo_depth, and
-    /// registered callbacks. Does NOT fire set_on_change or
-    /// set_on_local_op. For use when the canonical content is
-    /// replaced from outside the CRDT (file reload, revert-to-saved,
-    /// programmatic content swap); calling on a connected collab
-    /// session is allowed but remote peers will not see the clear —
-    /// that's a higher-layer concern.
-    ///
-    /// Note: m_version is preserved, so calling apply_ops() or
-    /// apply_remote_op() with previously-seen timestamps after a
-    /// local_clear() will be silent no-ops. Rebuild must supply
-    /// fresh ops with new timestamps (e.g. via a re-parse + insert
-    /// pass), not a raw replay of the original CRDT log.
-    ///
-    void local_clear() noexcept;
+    /// Discard local list state while detached from collaborative use. Drops
+    /// entries/tombstones, undo/redo, deferred and quarantined input. Preserves
+    /// the allocator, observed version, undo limits, callbacks, and pending
+    /// undo-retirement records. Fires no callbacks. Since version is preserved,
+    /// already-observed operations are duplicates and cannot restore this view;
+    /// recovery must use a fresh engine or a valid checkpoint restore.
+    void discard_local_view() noexcept;
 
     Result<std::vector<CollabText::detail::PositionItem>> position_items() const;
 

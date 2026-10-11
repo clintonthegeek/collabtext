@@ -158,8 +158,8 @@ size_t IdListEngine::undo_history_bytes() const {
     return m_impl->list.undo_history_bytes();
 }
 
-void IdListEngine::local_clear() noexcept {
-    m_impl->list.local_clear();
+void IdListEngine::discard_local_view() noexcept {
+    m_impl->list.discard_local_view();
     m_impl->position_history_available = false;
 }
 

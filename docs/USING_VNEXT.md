@@ -170,7 +170,7 @@ Right affinity at that same original gap resolves to byte 2. Carets expose
 preceding/following item; hiding that selected item returns `detached` with no
 usable offset. Selective undo can restore the same original token. Resolve also
 reports wrong document/stream/primitive/epoch, awaiting mint state or unavailable
-history explicitly. `local_clear()` invalidates history even for empty-edge
+history explicitly. `discard_local_view()` invalidates history even for empty-edge
 tokens. Allocator-only engines can edit but have no position scope.
 
 `encode_position` returns library-owned **binary** CTPT v1 bytes; persist those
@@ -226,7 +226,7 @@ It is **not**:
 - safe against reclamation — physical GC is disabled, and when S05/G06/G08 enable
   it a live pin must keep its referent or a stub must keep the bytes resolving;
 - safe across an epoch change — that reports `wrong_epoch`;
-- safe across `local_clear()` — that reports `history_unavailable`;
+- safe across `discard_local_view()` — that reports `history_unavailable`;
 - a recovered store — the bytes resolve in a fresh process given operations you
   retained yourself; L05/L08 own recovered stores.
 
