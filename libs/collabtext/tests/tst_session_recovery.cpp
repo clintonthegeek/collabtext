@@ -1211,6 +1211,14 @@ private slots:
         QCOMPARE(quarantined.value().front().reason, *expected_reason);
       else
         expected_reason = quarantined.value().front().reason;
+      if (reopen == 0) {
+        auto retried = session->recover();
+        QVERIFY(retried.ok());
+        QCOMPARE(session->recovery_report().rejected, size_t(2));
+        auto deduplicated = session->quarantined_deliveries();
+        QVERIFY(deduplicated.ok());
+        QCOMPARE(deduplicated.value().size(), size_t(1));
+      }
       QVERIFY(session->close().ok());
     }
 
@@ -1225,6 +1233,17 @@ private slots:
     QVERIFY(!omitted.ok());
     QCOMPARE(omitted.error().code(), ErrorCode::limit_exceeded);
     QVERIFY(limited->close().ok());
+
+    auto byte_limited_config = config;
+    byte_limited_config.private_state = root / "byte-limited-device";
+    byte_limited_config.max_quarantined_bytes = 0;
+    auto byte_limited_open = DocumentSession::open(byte_limited_config);
+    QVERIFY(byte_limited_open.ok());
+    auto byte_limited = std::move(byte_limited_open).value();
+    auto omitted_by_bytes = byte_limited->quarantined_deliveries();
+    QVERIFY(!omitted_by_bytes.ok());
+    QCOMPARE(omitted_by_bytes.error().code(), ErrorCode::limit_exceeded);
+    QVERIFY(byte_limited->close().ok());
   }
 
   void consumer_event_log_correlates_undo_and_redo_groups_append_only() {
