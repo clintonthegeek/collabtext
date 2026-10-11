@@ -226,6 +226,14 @@ private slots:
     QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("a🌊z"));
     QVERIFY(adapter.redo());
     QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("Ra🌊z"));
+
+    QApplication::clipboard()->setText(QString::fromUtf8("paste 🌿"));
+    Ui::CollabPlainTextEdit editor;
+    editor.setDocument(adapter.qtDocument());
+    editor.paste();
+    QCOMPARE(adapter.qtDocument()->toPlainText(),
+             QString::fromUtf8("paste 🌿Ra🌊z"));
+    QCOMPARE(session->text(), std::string("paste 🌿Ra🌊z"));
   }
 };
 
