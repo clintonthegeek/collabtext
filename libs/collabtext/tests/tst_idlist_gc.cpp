@@ -115,6 +115,144 @@ private slots:
                  CollabText::ErrorCode::history_unavailable);
         QCOMPARE(bob.ids(), std::vector<uint64_t>{0xAA});
     }
+
+    void certified_collection_reclaims_tombstone_and_rejects_late_dependencies() {
+        IdList author(CollabText::Test::test_counter(1));
+        IdList deleter(CollabText::Test::test_counter(2));
+        IdList collected(CollabText::Test::test_counter(3));
+        IdList unreclaimed(CollabText::Test::test_counter(4));
+        const auto inserted = author.insert_after(Anchor::min(), 0xAA);
+        QCOMPARE(collected.apply_remote_op_checked(inserted).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(unreclaimed.apply_remote_op_checked(inserted).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(deleter.apply_remote_op_checked(inserted).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        const Identity origin(actor(1), 1);
+        const auto removed = deleter.remove_at(Anchor(origin, Bias::Left));
+        QCOMPARE(collected.apply_remote_op_checked(removed).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(unreclaimed.apply_remote_op_checked(removed).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        const auto undo = deleter.undo();
+        QVERIFY(undo.has_value());
+        QCOMPARE(collected.apply_remote_op_checked(*undo).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(unreclaimed.apply_remote_op_checked(*undo).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        const auto redo = deleter.redo();
+        QVERIFY(redo.has_value());
+        QCOMPARE(collected.apply_remote_op_checked(*redo).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(unreclaimed.apply_remote_op_checked(*redo).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(collected.ids(), std::vector<uint64_t>{});
+        QCOMPARE(collected.tombstone_count(), size_t{1});
+
+        auto checkpoint = collected.checkpoint_state();
+        checkpoint.reclamation = {
+            "id-list-stream", std::string(64, 'a'), std::string(64, 'b'),
+            {{actor(1), checkpoint.version.get(actor(1))},
+             {actor(2), checkpoint.version.get(actor(2))}}};
+        QVERIFY(collected.restore_checkpoint_state(checkpoint).ok());
+        QCOMPARE(collected.collect_garbage(std::set<Identity>{origin}).value(),
+                 size_t{0});
+        QCOMPARE(collected.tombstone_count(), size_t{1});
+        auto reclaimed = collected.collect_garbage({});
+        QVERIFY(reclaimed.ok());
+        QCOMPARE(reclaimed.value(), size_t{1});
+        QCOMPARE(collected.entry_count(), size_t{0});
+        QCOMPARE(collected.tombstone_count(), size_t{0});
+        QVERIFY(collected.checkpoint_state().undo_entries.empty());
+
+        const auto late_undo = deleter.undo();
+        QVERIFY(late_undo.has_value());
+        const auto refused_undo = collected.apply_remote_op_checked(*late_undo);
+        QCOMPARE(refused_undo.kind(), CollabText::ApplyOutcomeKind::rejected);
+        QVERIFY(refused_undo.error().has_value());
+        QCOMPARE(refused_undo.error()->code(),
+                 CollabText::ErrorCode::history_unavailable);
+        QCOMPARE(collected.ids(), std::vector<uint64_t>{});
+
+        IdList placement_peer(CollabText::Test::test_counter(5));
+        const auto placement_history = placement_peer.apply_ops(
+            {inserted, removed, *undo, *redo});
+        QCOMPARE(placement_history.size(), size_t(4));
+        for (const auto &outcome : placement_history)
+            QCOMPARE(outcome.kind(), CollabText::ApplyOutcomeKind::applied);
+        const auto late_insert = placement_peer.insert_after(
+            Anchor(origin, Bias::Left), 0xBB);
+        const auto refused_insert = collected.apply_remote_op_checked(late_insert);
+        QCOMPARE(refused_insert.kind(), CollabText::ApplyOutcomeKind::rejected);
+        QVERIFY(refused_insert.error().has_value());
+        QCOMPARE(refused_insert.error()->code(),
+                 CollabText::ErrorCode::history_unavailable);
+        QCOMPARE(unreclaimed.apply_remote_op_checked(*late_undo).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        QCOMPARE(unreclaimed.apply_remote_op_checked(late_insert).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        const std::vector<uint64_t> expected_ids{0xAA, 0xBB};
+        QCOMPARE(unreclaimed.ids(), expected_ids);
+    }
+
+    void certified_collection_preserves_local_history_and_live_placements() {
+        IdList local(CollabText::Test::test_counter(8));
+        local.insert_after(Anchor::min(), 0x10);
+        local.remove_at(Anchor(Identity(actor(8), 1), Bias::Left));
+        auto local_checkpoint = local.checkpoint_state();
+        local_checkpoint.reclamation = {
+            "id-list-stream", std::string(64, 'c'), std::string(64, 'd'),
+            {{actor(8), local_checkpoint.version.get(actor(8))}}};
+        QVERIFY(local.restore_checkpoint_state(local_checkpoint).ok());
+        auto local_result = local.collect_garbage({});
+        QVERIFY(local_result.ok());
+        QCOMPARE(local_result.value(), size_t{0});
+        QCOMPARE(local.tombstone_count(), size_t{1});
+
+        IdList author(CollabText::Test::test_counter(9));
+        IdList deleter(CollabText::Test::test_counter(10));
+        IdList collected(CollabText::Test::test_counter(11));
+        const auto first = author.insert_after(Anchor::min(), 0x20);
+        const auto child = author.insert_after(
+            Anchor(Identity(actor(9), 1), Bias::Left), 0x21);
+        for (const auto &operation : {first, child}) {
+            QCOMPARE(deleter.apply_remote_op_checked(operation).kind(),
+                     CollabText::ApplyOutcomeKind::applied);
+            QCOMPARE(collected.apply_remote_op_checked(operation).kind(),
+                     CollabText::ApplyOutcomeKind::applied);
+        }
+        const Identity first_origin(actor(9), 1);
+        const auto remove_first =
+            deleter.remove_at(Anchor(first_origin, Bias::Left));
+        QCOMPARE(collected.apply_remote_op_checked(remove_first).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        auto checkpoint = collected.checkpoint_state();
+        checkpoint.reclamation = {
+            "id-list-stream", std::string(64, 'e'), std::string(64, 'f'),
+            {{actor(9), checkpoint.version.get(actor(9))},
+             {actor(10), checkpoint.version.get(actor(10))}}};
+        QVERIFY(collected.restore_checkpoint_state(checkpoint).ok());
+        auto first_pass = collected.collect_garbage({});
+        QVERIFY(first_pass.ok());
+        QCOMPARE(first_pass.value(), size_t{0});
+
+        const auto remove_child = deleter.remove_at(
+            Anchor(Identity(actor(9), 2), Bias::Left));
+        QCOMPARE(collected.apply_remote_op_checked(remove_child).kind(),
+                 CollabText::ApplyOutcomeKind::applied);
+        checkpoint = collected.checkpoint_state();
+        checkpoint.reclamation.operation_frontier[actor(10)] =
+            checkpoint.version.get(actor(10));
+        QVERIFY(collected.restore_checkpoint_state(checkpoint).ok());
+        auto child_pass = collected.collect_garbage({});
+        QVERIFY(child_pass.ok());
+        QCOMPARE(child_pass.value(), size_t{1});
+        QCOMPARE(collected.entry_count(), size_t{1});
+        auto parent_pass = collected.collect_garbage({});
+        QVERIFY(parent_pass.ok());
+        QCOMPARE(parent_pass.value(), size_t{1});
+        QCOMPARE(collected.entry_count(), size_t{0});
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIdListGc)

@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace CollabText::Crdt {
@@ -191,9 +192,13 @@ public:
     /// The allocator this list borrows.
     const SharedIdentityAllocator &allocator() const { return m_allocator; }
 
-    /// Temporarily retains all entries, including restoration/anchor context.
-    /// Returns zero until certified reclamation is implemented.
+    /// Uncertified legacy collection hook; remains inert because it carries no
+    /// stream certificate or external pin projection.
     size_t collect_garbage();
+    /// Internal collection path for an already provider-validated checkpoint
+    /// binding. The owner must keep its private undo and pin projections stable.
+    [[nodiscard]] Result<size_t> collect_garbage(
+        const std::set<Identity> &pinned_identities);
 
     std::vector<IdListEntry> entries() const;
     [[nodiscard]] IdListCheckpointState checkpoint_state() const;

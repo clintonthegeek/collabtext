@@ -696,6 +696,113 @@ size_t IdList::collect_garbage() {
     return 0;
 }
 
+Result<size_t> IdList::collect_garbage(
+    const std::set<Identity> &pinned_identities) {
+    if (!reclamation_binding_is_well_formed(m_reclamation) ||
+        m_reclamation.empty())
+        return Error(ErrorCode::awaiting_state,
+                     "IdList collection requires an installed certified frontier");
+    for (const auto &[actor, through] : m_reclamation.operation_frontier)
+        if (m_version.get(actor) < through)
+            return Error(ErrorCode::counter_regression,
+                         "installed IdList reclamation frontier exceeds causal state");
+
+    auto entries = get_entries();
+    std::vector<bool> remove(entries.size(), false);
+    size_t reclaimed = 0;
+    const auto undo_snapshot = m_undo_map.entries();
+    const auto retained_by_local_history = [&](const IdListEntry &entry) {
+        for (const auto &undo : m_undo_stack) {
+            for (const auto &key : undo.inserted_keys)
+                if (key.position == entry.origin) return true;
+            for (const auto &deletion : undo.deletion_ids)
+                if (std::find(entry.deletions.begin(), entry.deletions.end(),
+                              deletion) != entry.deletions.end())
+                    return true;
+        }
+        for (const auto &undo : m_retired_undo_entries) {
+            if (std::find(undo.inserted_items.begin(), undo.inserted_items.end(),
+                          entry.origin) != undo.inserted_items.end())
+                return true;
+            for (const auto &deletion : undo.deletion_operations)
+                if (std::find(entry.deletions.begin(), entry.deletions.end(),
+                              deletion) != entry.deletions.end())
+                    return true;
+        }
+        return false;
+    };
+
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const auto &entry = entries[i];
+        if (entry.visible ||
+            !tombstone_is_covered(m_reclamation.operation_frontier,
+                                  entry.origin, 1, entry.deletions) ||
+            retained_by_local_history(entry) ||
+            pinned_identities.contains(entry.origin))
+            continue;
+
+        bool referenced = false;
+        for (size_t j = 0; j < entries.size() && !referenced; ++j) {
+            if (i == j) continue;
+            const auto &link = entries[j].link;
+            referenced = (link.parent && *link.parent == entry.origin) ||
+                         (link.right_origin &&
+                          *link.right_origin == entry.origin);
+        }
+        if (referenced) continue;
+
+        bool has_uncovered_undo = false;
+        for (const auto &event : undo_snapshot) {
+            const bool targets_entry =
+                event.key.edit_id == entry.origin ||
+                std::find(entry.deletions.begin(), entry.deletions.end(),
+                          event.key.edit_id) != entry.deletions.end();
+            if (targets_entry && !operation_is_covered(
+                                     m_reclamation.operation_frontier,
+                                     event.key.undo_id)) {
+                has_uncovered_undo = true;
+                break;
+            }
+        }
+        if (!has_uncovered_undo) {
+            remove[i] = true;
+            ++reclaimed;
+        }
+    }
+
+    if (reclaimed == 0) return size_t{0};
+    const auto is_reclaimed_target = [&](const Identity &identity) {
+        for (size_t i = 0; i < entries.size(); ++i)
+            if (remove[i] &&
+                (entries[i].origin == identity ||
+                 std::find(entries[i].deletions.begin(),
+                           entries[i].deletions.end(), identity) !=
+                     entries[i].deletions.end()))
+                return true;
+        return false;
+    };
+
+    auto undo_entries = m_undo_map.entries();
+    std::erase_if(undo_entries, [&](const UndoMapEntry &event) {
+        return is_reclaimed_target(event.key.edit_id);
+    });
+    UndoMap rebuilt_undo;
+    if (auto restored = rebuilt_undo.restore_entries(undo_entries);
+        !restored.ok())
+        return restored.error();
+
+    IdListTree rebuilt_tree;
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (remove[i]) continue;
+        auto &entry = entries[i];
+        entry.visible = entry.compute_visible(rebuilt_undo);
+        rebuilt_tree.push_item(std::move(entry));
+    }
+    m_undo_map = std::move(rebuilt_undo);
+    m_entry_tree = std::move(rebuilt_tree);
+    return reclaimed;
+}
+
 std::vector<IdListEntry> IdList::entries() const {
     return m_entry_tree.items();
 }
@@ -1002,6 +1109,21 @@ void IdList::enqueue_deferred(IdListOpEntry entry) {
 
 bool IdList::apply_concrete(const IdListInsertOp& op) {
     auto entries = get_entries();
+    for (const auto *dependency : {&op.link.parent, &op.link.right_origin}) {
+        if (*dependency &&
+            std::none_of(entries.begin(), entries.end(), [&](const auto &entry) {
+                return entry.origin == **dependency;
+            }) &&
+            operation_is_covered(m_reclamation.operation_frontier,
+                                 **dependency)) {
+            m_apply_error = Error(
+                ErrorCode::history_unavailable,
+                "inserted element depends on a reclaimed placement identity",
+                "placement dependency " + (*dependency)->actor.to_string() +
+                    "/" + std::to_string((*dependency)->counter));
+            return false;
+        }
+    }
     IdListEntry e(op.timestamp, op.link, op.id);
     if (!SequenceOrder::integrate(entries, std::move(e))) {
         m_apply_error = Error(ErrorCode::malformed,
@@ -1034,6 +1156,11 @@ bool IdList::apply_concrete(const IdListRemoveOp& op) {
         // recorded as applied: the old code asserted and then observed the
         // clock and version anyway, which advanced coverage over a removal that
         // never happened.
+        if (operation_is_covered(m_reclamation.operation_frontier,
+                                 op.target_origin))
+            m_apply_error = Error(
+                ErrorCode::history_unavailable,
+                "remove targets an element reclaimed at the certified frontier");
         return false;
     }
     observe_remote(op.timestamp);
