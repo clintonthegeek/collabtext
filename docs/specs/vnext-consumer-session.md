@@ -49,6 +49,18 @@ Malformed operation payloads and rejected operations remain in their source
 logs and keep the session incomplete. Corrupt envelope framing stops open with
 a typed recovery error.
 
+Membership enforcement remains consumer-owned. Configure
+`DocumentSessionConfig::authorize_local_mutation` to return a nonnull lease
+which holds the membership coordinator stable through durable local
+publication. The same check gates recovery of a durable pending local edit; if
+the actor is no longer authorized in that epoch, the session stays read-only
+and leaves the original delivery available through `export_local_branch()`.
+Configure `authorize_inbound_delivery` to return a nonnull lease which keeps
+producer membership stable while replay or poll applies each delivery.
+Rejected envelopes are retained in the bounded quarantine snapshot and do not
+advance receipts. Without these callbacks, `DocumentSession` is deliberately
+uncoordinated and must not be treated as enforcing epoch membership itself.
+
 `DocumentSessionConfig::initial_text` supplies deterministic seed content for
 sidecar formats that reconstruct their seed locally instead of storing it as a
 normal operation. The session applies that content-derived seed operation

@@ -2884,7 +2884,8 @@
         "libs/collabtext/tests/tst_membership.cpp",
         "libs/collabtext/tests/tst_undo_retirement.cpp",
         "libs/collabtext/tests/tst_session_recovery.cpp",
-        "libs/collabtext/CMakeLists.txt"
+        "libs/collabtext/CMakeLists.txt",
+        "docs/specs/vnext-consumer-session.md"
       ],
       "steps": [
         "Persist enrollment/retirement/epoch events in per-producer immutable records using L01; validate them against G01 before changing eligible peer sets.",

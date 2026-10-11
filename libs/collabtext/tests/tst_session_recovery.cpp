@@ -1037,6 +1037,140 @@ private slots:
     QVERIFY(recovered->close().ok());
   }
 
+  void retired_actorDoesNotPublishPendingCommitIntoOldEpoch() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "doc-retired-pending", "text-retired-pending", 9};
+    ActorId owner;
+    {
+      auto opened = DocumentSession::open(config);
+      QVERIFY(opened.ok());
+      auto session = std::move(opened).value();
+      owner = session->actor();
+      QVERIFY(session->close().ok());
+    }
+
+    auto allocator = std::make_shared<Test::VolatileCounter>(owner);
+    Crdt::Buffer source(allocator);
+    auto local = source.try_apply_local_edit({{0, 0}}, {"unsynced"});
+    QVERIFY(local.ok());
+    auto wire = encode_operation(local.value());
+    QVERIFY(wire.ok());
+    const std::string history_key = config.document + std::string(1, '\0') +
+                                    config.stream + std::string(1, '\0') +
+                                    std::to_string(config.epoch);
+    auto history_open = Storage::LocalHistoryLog::open(
+        root / "device" /
+            ("local-history-" + sha256_hex(history_key) + ".snapshot"), owner);
+    QVERIFY(history_open.ok());
+    auto history = std::move(history_open).value();
+    QVERIFY(history.store_pending(
+        {1, wire.value(), source.local_history_snapshot()}).ok());
+    QVERIFY(history.close().ok());
+
+    bool enrolled = false;
+    config.authorize_local_mutation = [&](const DocumentId &, const StreamId &,
+                                          uint64_t epoch, const ActorId &actor)
+        -> Result<std::shared_ptr<void>> {
+      if (epoch != config.epoch || actor != owner)
+        return Error(ErrorCode::wrong_epoch, "unexpected mutation scope");
+      if (!enrolled)
+        return Error(ErrorCode::wrong_epoch, "actor was retired from this epoch");
+      return std::static_pointer_cast<void>(std::make_shared<int>(1));
+    };
+
+    auto reopened = DocumentSession::open(config);
+    QVERIFY(reopened.ok());
+    auto session = std::move(reopened).value();
+    QVERIFY(!session->ready());
+    QCOMPARE(session->text(), std::string());
+    LocalBranchExport metadata;
+    std::vector<OutboundDelivery> exported;
+    QVERIFY(session->export_local_branch(metadata,
+        [&](const OutboundDelivery &delivery) -> Result<void> {
+          exported.push_back(delivery);
+          return {};
+        }).ok());
+    QCOMPARE(exported.size(), size_t(1));
+    QCOMPARE(exported.front().token.producer, owner);
+    QCOMPARE(exported.front().token.epoch, config.epoch);
+    QCOMPARE(exported.front().payload, wire.value());
+
+    DocumentSessionConfig observer_config{root / "shared", root / "observer",
+                                           config.document, config.stream, config.epoch};
+    auto observer_opened = DocumentSession::open(observer_config);
+    QVERIFY(observer_opened.ok());
+    auto observer = std::move(observer_opened).value();
+    QCOMPARE(observer->text(), std::string());
+    QVERIFY(observer->close().ok());
+
+    enrolled = true;
+    auto recovered = session->recover();
+    QVERIFY(recovered.ok());
+    QVERIFY(session->ready());
+    QCOMPARE(session->text(), std::string("unsynced"));
+    QVERIFY(session->pending_undo_retirements().empty());
+    QVERIFY(session->close().ok());
+  }
+
+  void inboundRetiredEpochDeliveryIsQuarantinedBeforeApply() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    DocumentSessionConfig sender_config{root / "shared", root / "sender",
+                                        "doc-inbound-membership",
+                                        "text-inbound-membership", 5};
+    auto sender_opened = DocumentSession::open(sender_config);
+    QVERIFY(sender_opened.ok());
+    auto sender = std::move(sender_opened).value();
+    const auto sender_actor = sender->actor();
+    auto edit = sender->apply_local({{0, 0}}, {"retired"});
+    QVERIFY(edit.ok());
+    auto wire = encode_operation(edit.value());
+    QVERIFY(wire.ok());
+    QVERIFY(sender->close().ok());
+
+    DocumentSessionConfig receiver_config{root / "shared", root / "receiver",
+                                          sender_config.document,
+                                          sender_config.stream,
+                                          sender_config.epoch};
+    bool sender_allowed = false;
+    receiver_config.authorize_inbound_delivery =
+        [&](const DocumentId &document, const StreamId &stream, uint64_t epoch,
+            const DeliveryToken &token) -> Result<std::shared_ptr<void>> {
+      if (document != sender_config.document || stream != sender_config.stream ||
+          epoch != sender_config.epoch || token.producer != sender_actor)
+        return Error(ErrorCode::malformed,
+                     "inbound authorization received an unexpected delivery");
+      if (!sender_allowed)
+        return Error(ErrorCode::wrong_epoch,
+                     "sender no longer belongs to the active epoch");
+      return std::static_pointer_cast<void>(std::make_shared<int>(1));
+    };
+
+    auto denied_opened = DocumentSession::open(receiver_config);
+    QVERIFY(denied_opened.ok());
+    auto denied = std::move(denied_opened).value();
+    QVERIFY(!denied->ready());
+    QCOMPARE(denied->text(), std::string());
+    auto quarantined = denied->quarantined_deliveries();
+    QVERIFY(quarantined.ok());
+    QCOMPARE(quarantined.value().size(), size_t(1));
+    QCOMPARE(quarantined.value().front().delivery.payload, wire.value());
+    QCOMPARE(quarantined.value().front().delivery.token.producer, sender_actor);
+    QVERIFY(denied->close().ok());
+
+    sender_allowed = true;
+    auto accepted_opened = DocumentSession::open(receiver_config);
+    QVERIFY(accepted_opened.ok());
+    auto accepted = std::move(accepted_opened).value();
+    QVERIFY(accepted->ready());
+    QCOMPARE(accepted->text(), std::string("retired"));
+    QVERIFY(accepted->close().ok());
+  }
+
   void reopened_local_undo_preserves_a_peers_edit() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());

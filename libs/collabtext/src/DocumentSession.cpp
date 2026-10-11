@@ -47,6 +47,7 @@ struct DocumentSession::Impl {
   bool quarantine_snapshot_complete = true;
   bool closed = false;
   bool poisoned = false;
+  bool membership_blocked = false;
 
   Result<std::shared_ptr<void>> authorize_local_mutation() const {
     if (!config.authorize_local_mutation) return std::shared_ptr<void>{};
@@ -64,6 +65,26 @@ struct DocumentSession::Impl {
     } catch (...) {
       return Error(ErrorCode::io_error,
                    "membership authorization callback threw an unknown exception");
+    }
+  }
+
+  Result<std::shared_ptr<void>>
+  authorize_inbound_delivery(const DeliveryToken &token) const {
+    if (!config.authorize_inbound_delivery) return std::shared_ptr<void>{};
+    try {
+      auto permit = config.authorize_inbound_delivery(
+          config.document, config.stream, config.epoch, token);
+      if (!permit.ok()) return permit.error();
+      if (!permit.value())
+        return Error(ErrorCode::malformed,
+                     "inbound membership authorization returned no lease");
+      return permit;
+    } catch (const std::exception &error) {
+      return Error(ErrorCode::io_error, error.what(),
+                   "checking inbound delivery membership");
+    } catch (...) {
+      return Error(ErrorCode::io_error,
+                   "inbound membership callback threw an unknown exception");
     }
   }
 
@@ -492,7 +513,22 @@ struct DocumentSession::Impl {
   Result<void> reconcile_pending_history() {
     auto pending = local_history->recover_pending();
     if (!pending.ok()) return pending.error();
-    if (!pending.value()) return {};
+    if (!pending.value()) {
+      if (membership_blocked) report.issue.reset();
+      membership_blocked = false;
+      return {};
+    }
+    // Reconciliation publishes a previously staged local mutation. Hold the
+    // membership lease through its durable append, or retain the exact branch
+    // for export if this actor no longer has authority in the old epoch.
+    auto authorization = authorize_local_mutation();
+    if (!authorization.ok()) {
+      membership_blocked = true;
+      report.complete = false;
+      report.issue = authorization.error().with_context(
+          "pending local branch is retained for reconciliation");
+      return {};
+    }
     const auto &commit = *pending.value();
     if (commit.sequence == UINT64_MAX)
       return Error(ErrorCode::counter_exhausted,
@@ -513,11 +549,17 @@ struct DocumentSession::Impl {
     auto checkpoint = local_history->store_snapshot(commit.snapshot);
     if (!checkpoint.ok()) return checkpoint.error().with_context(
         "reconciling pending local history checkpoint");
-    return local_history->clear_pending();
+    auto cleared = local_history->clear_pending();
+    if (cleared.ok()) {
+      if (membership_blocked) report.issue.reset();
+      membership_blocked = false;
+    }
+    return cleared;
   }
 
   void update_completeness() {
-    if (buffer->deferred_count() == 0 && report.rejected == 0 && !poisoned) {
+    if (buffer->deferred_count() == 0 && report.rejected == 0 && !poisoned &&
+        !membership_blocked) {
       report.complete = true;
       if (report.issue && report.issue->code() == ErrorCode::awaiting_state)
         report.issue.reset();
@@ -532,6 +574,11 @@ struct DocumentSession::Impl {
         return Error(ErrorCode::counter_exhausted,
                      "local envelope sequence exhausted");
       next_envelope = std::max(next_envelope, delivery.token.sequence + 1);
+    }
+    auto authorized = authorize_inbound_delivery(delivery.token);
+    if (!authorized.ok()) {
+      quarantine(delivery, authorized.error());
+      return {};
     }
     const auto key = token_key(delivery.token);
     if (const auto known = replayed_payload_hashes.find(key);
@@ -689,6 +736,11 @@ DocumentSession::open_with_writer_config(
     auto *raw = impl.get();
     auto subscribed = impl->transport->subscribe(
         scope, [raw](const InboundDelivery &delivery) {
+          auto authorized = raw->authorize_inbound_delivery(delivery.token);
+          if (!authorized.ok()) {
+            raw->quarantine(delivery, authorized.error());
+            return DeliveryDecision::quarantine(authorized.error());
+          }
           auto decoded = decode_operation(delivery.payload);
           if (!decoded.ok()) {
             raw->quarantine(delivery, decoded.error());

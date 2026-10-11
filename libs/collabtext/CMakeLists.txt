@@ -318,6 +318,7 @@ add_library(collabtext_public_headers_core OBJECT
     tests/public-headers/only_AnchorPins_h.cpp
     tests/public-headers/only_ApplyOutcome_h.cpp
     tests/public-headers/only_CrdtEngine_h.cpp
+    tests/public-headers/only_DocumentSession_h.cpp
     tests/public-headers/only_Engine_h.cpp
     tests/public-headers/only_Identity_h.cpp
     tests/public-headers/only_IdentityProjector_h.cpp
