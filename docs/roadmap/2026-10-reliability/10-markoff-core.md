@@ -14,6 +14,8 @@ TASKS.json owns status and dependencies. These steps mirror its exact contract.
 - `libs/collabtext/src/IdListEngine.cpp`
 - `tests/consumer-smoke/markoff_core.cpp`
 
+- `libs/collabtext/tests/reference/BoundaryApiContract.h`
+
 **Steps:**
 
 1. Project visible native list entries to owned application_value/Identity values, preserving order and duplicate values. Reject invalid retained state and discarded views instead of silently omitting entries.

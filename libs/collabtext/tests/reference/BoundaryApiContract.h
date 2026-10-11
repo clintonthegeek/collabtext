@@ -23,6 +23,8 @@ static_assert(std::is_same_v<decltype(&CrdtEngine::boundary_at),
     Result<TextBoundary> (CrdtEngine::*)(uint32_t, Affinity) const>);
 static_assert(std::is_same_v<decltype(&IdListEngine::boundary_at),
     Result<ListBoundary> (IdListEngine::*)(uint32_t, Affinity) const>);
-static_assert(std::is_same_v<decltype(&IdListEngine::element_of),
+static_assert(std::is_same_v<decltype(static_cast<Result<ListElement> (IdListEngine::*)(uint64_t) const>(&IdListEngine::element_of)),
     Result<ListElement> (IdListEngine::*)(uint64_t) const>);
+static_assert(std::is_same_v<decltype(static_cast<Result<ListElement> (IdListEngine::*)(const Crdt::Identity&) const>(&IdListEngine::element_of)),
+    Result<ListElement> (IdListEngine::*)(const Crdt::Identity&) const>);
 } // namespace CollabText::PositionApiTarget
