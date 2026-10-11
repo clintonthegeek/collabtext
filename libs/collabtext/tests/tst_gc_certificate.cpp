@@ -280,18 +280,67 @@ private slots:
     QVERIFY(!certificate.value().common_delivery().contains("text"));
   }
 
+  void coverageCannotRegressMembershipBaseFrontiers() {
+    auto base = descriptor();
+    auto text = std::find_if(base.base_frontiers.begin(), base.base_frontiers.end(),
+        [](const auto &frontier) { return frontier.stream == "text"; });
+    QVERIFY(text != base.base_frontiers.end());
+    text->operation[actor(20)] = 4;
+    text->delivery[actor(20)] = 7;
+    auto sealed = seal_membership_descriptor(std::move(base));
+    QVERIFY(sealed.ok());
+    const auto d = std::move(sealed.value());
+
+    std::vector<PeerCoverageEvidence> peers;
+    for (const auto &member : d.members) {
+      auto peer = evidence(d, member);
+      peer.operation["text"][actor(20)] = 4;
+      peer.delivery["text"][actor(20)] = 7;
+      peers.push_back(std::move(peer));
+    }
+    auto at_base = certify_common_coverage(
+        d, peers, [](const auto &, const auto &) { return Result<void>{}; },
+        model_eligibility());
+    QVERIFY(at_base.ok());
+
+    auto operation_regression = peers;
+    operation_regression.front().operation["text"][actor(20)] = 3;
+    QVERIFY(!certify_common_coverage(
+        d, operation_regression,
+        [](const auto &, const auto &) { return Result<void>{}; },
+        model_eligibility()).ok());
+
+    auto delivery_regression = peers;
+    delivery_regression.front().delivery["text"][actor(20)] = 6;
+    QVERIFY(!certify_common_coverage(
+        d, delivery_regression,
+        [](const auto &, const auto &) { return Result<void>{}; },
+        model_eligibility()).ok());
+  }
+
   void coveragePublicationRecoversOnlyAfterCheckpointRevalidation() {
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
     namespace fs = std::filesystem;
     const auto root = fs::path(temporary.path().toStdString());
-    const auto d = descriptor();
-    const auto owner = d.members.front();
     const auto candidate_checkpoint = sha256_hex("stored candidate checkpoint");
     const DeliveryCoverage coverage{{"text", {{actor(20), 9}}},
                                     {"ids", {{actor(21), 3}}}};
     const OperationCoverage operations{{"text", {{actor(20), 5}}},
                                        {"ids", {{actor(21), 2}}}};
+    auto base = descriptor();
+    for (auto &frontier : base.base_frontiers) {
+      if (auto found = operations.find(frontier.stream); found != operations.end())
+        for (const auto &[producer, through] : found->second)
+          frontier.operation[producer] = through;
+      if (auto found = coverage.find(frontier.stream); found != coverage.end())
+        for (const auto &[producer, through] : found->second)
+          frontier.delivery[producer] = through;
+    }
+    auto sealed = seal_membership_descriptor(std::move(base));
+    QVERIFY(sealed.ok());
+    const auto d = std::move(sealed.value());
+    const auto owner = d.members.front();
     size_t validations = 0;
     const CheckpointCoverageVerifier valid_checkpoint =
         [&](const auto &checked_descriptor, std::string_view checked_hash,
@@ -316,6 +365,20 @@ private slots:
     {
       auto opened = CoverageStore::open(root, owner, &hook);
       QVERIFY(opened.ok());
+      auto regressed_operations = operations;
+      regressed_operations["text"][actor(20)] = 4;
+      QVERIFY(!opened.value().publish(
+          d, candidate_checkpoint, regressed_operations, coverage,
+          [](const auto &, std::string_view, const auto &, const auto &) {
+            return Result<void>{};
+          }).ok());
+      auto regressed_delivery = coverage;
+      regressed_delivery["text"][actor(20)] = 8;
+      QVERIFY(!opened.value().publish(
+          d, candidate_checkpoint, operations, regressed_delivery,
+          [](const auto &, std::string_view, const auto &, const auto &) {
+            return Result<void>{};
+          }).ok());
       auto uncertain = opened.value().publish(d, candidate_checkpoint,
                                               operations, coverage, valid_checkpoint);
       QVERIFY(!uncertain.ok());

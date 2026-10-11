@@ -24,6 +24,20 @@ Result<void> validate_frontier(const MembershipDescriptor &descriptor,
         return Error(ErrorCode::corrupt_record,
                      "coverage producer is absent from the descriptor frontier", stream);
   }
+  for (const auto &base : descriptor.base_frontiers) {
+    const auto &required = select(base);
+    const auto stream = coverage.find(base.stream);
+    for (const auto &[producer, through] : required) {
+      if (through == 0) continue;
+      if (stream == coverage.end())
+        return Error(ErrorCode::corrupt_record,
+                     "coverage regresses below the membership base frontier", base.stream);
+      const auto observed = stream->second.find(producer);
+      if (observed == stream->second.end() || observed->second < through)
+        return Error(ErrorCode::corrupt_record,
+                     "coverage regresses below the membership base frontier", base.stream);
+    }
+  }
   return {};
 }
 

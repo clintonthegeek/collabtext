@@ -13,8 +13,9 @@ using CheckpointCoverageVerifier = std::function<Result<void>(
     const MembershipDescriptor &, std::string_view checkpoint_hash,
     const OperationCoverage &, const DeliveryCoverage &)>;
 
-/// Durable, owner-local coverage for immutable membership/checkpoint pairs.
-/// Every read revalidates the named checkpoint through the caller's resolver.
+/// Durable, owner-local operation and delivery coverage for immutable
+/// membership/checkpoint pairs. Every read revalidates the named checkpoint
+/// through the caller's resolver.
 class CoverageStore {
 public:
   [[nodiscard]] static Result<CoverageStore>
