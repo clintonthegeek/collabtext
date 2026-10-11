@@ -22,6 +22,14 @@
 namespace CollabText {
 using namespace Crdt;
 
+namespace {
+struct SessionCallbackScope {
+  explicit SessionCallbackScope(bool &active) : flag(active) { flag = true; }
+  ~SessionCallbackScope() { flag = false; }
+  bool &flag;
+};
+} // namespace
+
 struct DocumentSession::Impl {
   struct DeferredState {
     DeliveryToken token;
@@ -48,9 +56,21 @@ struct DocumentSession::Impl {
   bool closed = false;
   bool poisoned = false;
   bool membership_blocked = false;
+  mutable bool callback_active = false;
+
+  Result<void> ensure_mutation_allowed() const {
+    if (callback_active)
+      return Error(ErrorCode::reentrant_mutation,
+                   "session mutation from a callback is not allowed");
+    return {};
+  }
 
   Result<std::shared_ptr<void>> authorize_local_mutation() const {
     if (!config.authorize_local_mutation) return std::shared_ptr<void>{};
+    if (callback_active)
+      return Error(ErrorCode::reentrant_mutation,
+                   "session authorization callback was reentered");
+    SessionCallbackScope callback_scope(callback_active);
     try {
       auto permit = config.authorize_local_mutation(
           config.document, config.stream, config.epoch, replica->actor());
@@ -71,6 +91,10 @@ struct DocumentSession::Impl {
   Result<std::shared_ptr<void>>
   authorize_inbound_delivery(const DeliveryToken &token) const {
     if (!config.authorize_inbound_delivery) return std::shared_ptr<void>{};
+    if (callback_active)
+      return Error(ErrorCode::reentrant_mutation,
+                   "session authorization callback was reentered");
+    SessionCallbackScope callback_scope(callback_active);
     try {
       auto permit = config.authorize_inbound_delivery(
           config.document, config.stream, config.epoch, token);
@@ -823,6 +847,7 @@ DocumentSession::open_with_writer_config(
 Result<SessionRecoveryReport> DocumentSession::recover() {
   if (!m_impl || m_impl->closed)
     return Error(ErrorCode::writer_conflict, "session is closed");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   try {
     const auto scope = StreamScope{m_impl->config.stream, m_impl->config.epoch};
     if (auto reconciled = m_impl->reconcile_pending_history();
@@ -858,6 +883,7 @@ Result<Operation> DocumentSession::apply_local(
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; local edits are disabled");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   auto authorized = m_impl->authorize_local_mutation();
   if (!authorized.ok()) return authorized.error();
   auto operation = m_impl->buffer->try_apply_local_edit(ranges, replacements);
@@ -870,6 +896,7 @@ Result<Operation> DocumentSession::undo() {
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; undo is disabled");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   auto authorized = m_impl->authorize_local_mutation();
   if (!authorized.ok()) return authorized.error();
   auto operation = m_impl->buffer->try_undo();
@@ -883,6 +910,7 @@ Result<Operation> DocumentSession::redo() {
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; redo is disabled");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   auto authorized = m_impl->authorize_local_mutation();
   if (!authorized.ok()) return authorized.error();
   auto operation = m_impl->buffer->try_redo();
@@ -919,6 +947,7 @@ Result<void> DocumentSession::acknowledge_undo_retirements(
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; undo retirement is disabled");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   auto acknowledged = m_impl->buffer->acknowledge_undo_retirements(group_ids);
   if (!acknowledged.ok()) return acknowledged.error();
   auto checkpoint = m_impl->local_history->store_snapshot(
@@ -935,6 +964,7 @@ Result<bool> DocumentSession::coalesce_last_undo() {
   if (!m_impl || !m_impl->ready())
     return Error(ErrorCode::awaiting_state,
                  "session recovery is incomplete; undo coalescing is disabled");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   auto authorized = m_impl->authorize_local_mutation();
   if (!authorized.ok()) return authorized.error();
   if (!m_impl->buffer->coalesce_last_undo()) return false;
@@ -951,6 +981,7 @@ Result<bool> DocumentSession::coalesce_last_undo() {
 Result<PollReport> DocumentSession::poll(PollBudget budget) {
   if (!m_impl || m_impl->closed)
     return Error(ErrorCode::writer_conflict, "session is closed");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   try {
     auto report = m_impl->transport->poll(
         StreamScope{m_impl->config.stream, m_impl->config.epoch}, budget);
@@ -1043,6 +1074,7 @@ Result<SessionCheckpointCapture> DocumentSession::publish_checkpoint(
   if (!m_impl || m_impl->closed)
     return Error(ErrorCode::writer_conflict,
                  "session is unavailable for checkpoint publication");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   if (m_impl->config.checkpoint_store.empty())
     return Error(ErrorCode::awaiting_state,
                  "checkpoint publication requires a configured store");
@@ -1054,6 +1086,7 @@ Result<SessionCheckpointCapture> DocumentSession::publish_checkpoint(
   if (!capture.ok()) return capture.error();
   Result<void> validated;
   try {
+    SessionCallbackScope callback_scope(m_impl->callback_active);
     validated = m_impl->config.validate_checkpoint_candidate(
         capture.value().shareable_artifact_bytes,
         capture.value().local_companion_artifact_bytes);
@@ -1127,6 +1160,7 @@ Result<bool> DocumentSession::checkpoint_due() const {
 Result<void> DocumentSession::save() {
   if (!m_impl || m_impl->closed)
     return Error(ErrorCode::writer_conflict, "session is closed");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   auto flushed = m_impl->transport->flush();
   if (!flushed.ok())
     return flushed.error();
@@ -1141,6 +1175,7 @@ Result<void> DocumentSession::export_local_branch(
     const std::function<Result<void>(const OutboundDelivery&)>& visitor) {
   if (!m_impl || m_impl->closed)
     return Error(ErrorCode::writer_conflict, "session is closed");
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   if (!visitor)
     return Error(ErrorCode::malformed, "local branch export visitor is empty");
 
@@ -1206,6 +1241,7 @@ Result<void> DocumentSession::export_local_branch(
                 ErrorCode::corrupt_record,
                 "pending local branch delivery is missing before retained history"));
           }
+          SessionCallbackScope callback_scope(m_impl->callback_active);
           return visitor(local);
         });
     if (!replayed.ok()) return replayed.error();
@@ -1214,6 +1250,7 @@ Result<void> DocumentSession::export_local_branch(
       if (pending_delivery->token.sequence != expected)
         return Error(ErrorCode::corrupt_record,
                      "pending local branch delivery does not extend retained history");
+      SessionCallbackScope callback_scope(m_impl->callback_active);
       auto delivered = visitor(*pending_delivery);
       if (!delivered.ok()) return delivered.error();
     }
@@ -1228,6 +1265,7 @@ Result<void> DocumentSession::export_local_branch(
 Result<void> DocumentSession::close() {
   if (!m_impl || m_impl->closed)
     return {};
+  if (auto allowed = m_impl->ensure_mutation_allowed(); !allowed.ok()) return allowed.error();
   auto saved = save();
   if (!saved.ok())
     return saved.error();

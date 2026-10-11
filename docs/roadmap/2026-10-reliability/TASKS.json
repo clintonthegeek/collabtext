@@ -3245,7 +3245,8 @@
         "docs/specs/vnext-public-api.md",
         "libs/collabtext/src/transport/StreamSync.h",
         "libs/collabtext/src/crdt/StreamSync.cpp",
-        "libs/collabtext/tests/tst_opstream_replay.cpp"
+        "libs/collabtext/tests/tst_opstream_replay.cpp",
+        "libs/collabtext/tests/tst_session_recovery.cpp"
       ],
       "steps": [
         "Provide batch remote application outcomes and one visible-change notification per applied batch, with exact deltas. Duplicate/deferred/rejected operations do not claim visible change.",
@@ -3256,7 +3257,7 @@
         "Callback order/count and invalid/deferred behavior match P01; remote ops never echo as local ops.",
         "Destroyed/unsubscribed listeners are not called; reentrant mutation has tested deterministic behavior."
       ],
-      "verification": "The focused callback group `tst_callbacks|tst_crdtengine_op_api|tst_document_adapter|tst_transport_commit_contract` passed in Debug (`20261011T044830Z-2`), Release (`20261011T044625Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T044722Z-2`). Remaining: session subscription teardown/lifetime, session mutation reentrancy, and bounded pending byte/count backpressure tests. FileOpStream callback reentrancy regression in `tst_opstream_replay|tst_transport_commit_contract` passes Debug (`20261011T045514Z-2`), Release (`20261011T045523Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T045534Z-2`). Nested poll and push from delivery and replay callbacks return `writer_conflict`, while outer delivery commits once.",
+      "verification": "The focused callback group `tst_callbacks|tst_crdtengine_op_api|tst_document_adapter|tst_transport_commit_contract` passed in Debug (`20261011T044830Z-2`), Release (`20261011T044625Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T044722Z-2`). Remaining: session subscription teardown/lifetime, session mutation reentrancy, and bounded pending byte/count backpressure tests. FileOpStream callback reentrancy regression in `tst_opstream_replay|tst_transport_commit_contract` passes Debug (`20261011T045514Z-2`), Release (`20261011T045523Z-2`), and ASan/UBSan with `ASAN_OPTIONS=detect_leaks=0` (`20261011T045534Z-2`). Nested poll and push from delivery and replay callbacks return `writer_conflict`, while outer delivery commits once. DocumentSession inbound authorization now rejects same-session reentrant mutation before it can change local state. The expanded `tst_session_recovery` passed Debug (`20261011T045836Z-2`), Release (`20261011T045855Z-2`), and ASan/UBSan with leak detection disabled (`20261011T045924Z-2`); the regression verifies inbound delivery still commits and text contains only the authorized remote edits.",
       "addresses": [
         "R9"
       ],

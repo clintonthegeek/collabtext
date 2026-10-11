@@ -55,7 +55,9 @@ struct DocumentSessionConfig {
   /// publication completes. If a pending edit is denied, the session stays
   /// read-only and retains the original branch for export/reconciliation. An
   /// empty callback leaves the session in its uncoordinated mode for callers
-  /// that manage authorization externally.
+  /// that manage authorization externally. Authorization callbacks are
+  /// single-owner and non-reentrant: mutation attempts against this session
+  /// return ErrorCode::reentrant_mutation.
   std::function<Result<std::shared_ptr<void>>(
       const DocumentId &, const StreamId &, uint64_t, const ActorId &)>
       authorize_local_mutation;
@@ -73,6 +75,7 @@ struct DocumentSessionConfig {
   /// membership coordinator stable through application. Consumers enforcing
   /// epoch retirement should reject deliveries outside the active membership;
   /// rejected bytes are quarantined intact and do not advance the receipt.
+  /// The same non-reentrant session rule applies while this callback runs.
   std::function<Result<std::shared_ptr<void>>(
       const DocumentId &, const StreamId &, uint64_t, const DeliveryToken &)>
       authorize_inbound_delivery;

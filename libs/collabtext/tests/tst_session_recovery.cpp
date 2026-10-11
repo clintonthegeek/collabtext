@@ -179,6 +179,53 @@ private slots:
     QVERIFY(session->close().ok());
   }
 
+  void inboundAuthorizationCallbackCannotReenterSessionMutation() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    DocumentSessionConfig sender_config{root / "shared", root / "sender",
+                                        "doc-auth-reentry", "text-auth-reentry", 3};
+    auto sender_opened = DocumentSession::open(sender_config);
+    QVERIFY(sender_opened.ok());
+    auto sender = std::move(sender_opened).value();
+    QVERIFY(sender->apply_local({{0, 0}}, {"a"}).ok());
+    QVERIFY(sender->close().ok());
+
+    DocumentSession *receiver_ptr = nullptr;
+    ErrorCode nested_error = ErrorCode::malformed;
+    DocumentSessionConfig receiver_config{root / "shared", root / "receiver",
+                                          sender_config.document,
+                                          sender_config.stream,
+                                          sender_config.epoch};
+    receiver_config.authorize_inbound_delivery =
+        [&](const DocumentId &, const StreamId &, uint64_t,
+            const DeliveryToken &) -> Result<std::shared_ptr<void>> {
+      if (receiver_ptr) {
+        auto nested = receiver_ptr->apply_local({{0, 0}}, {"x"});
+        nested_error = nested.ok() ? ErrorCode::malformed : nested.error().code();
+      }
+      return std::static_pointer_cast<void>(std::make_shared<int>(1));
+    };
+    auto receiver_opened = DocumentSession::open(receiver_config);
+    QVERIFY(receiver_opened.ok());
+    auto receiver = std::move(receiver_opened).value();
+    receiver_ptr = receiver.get();
+    QVERIFY(receiver->ready());
+    QCOMPARE(receiver->text(), std::string("a"));
+
+    sender_opened = DocumentSession::open(sender_config);
+    QVERIFY(sender_opened.ok());
+    sender = std::move(sender_opened).value();
+    QVERIFY(sender->apply_local({{1, 1}}, {"b"}).ok());
+    auto polled = receiver->poll();
+    QVERIFY(polled.ok());
+    QCOMPARE(polled.value().committed, size_t(2));
+    QCOMPARE(nested_error, ErrorCode::reentrant_mutation);
+    QCOMPARE(receiver->text(), std::string("ab"));
+    QVERIFY(sender->close().ok());
+    QVERIFY(receiver->close().ok());
+  }
+
   void mutationPermitSerializesPublicationAgainstRetirement() {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
