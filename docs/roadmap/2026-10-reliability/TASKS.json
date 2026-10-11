@@ -2938,7 +2938,8 @@
         "F5"
       ],
       "gate": null,
-      "status": "not_started"
+      "status": "in_progress",
+      "notes": "Started after G02 acceptance audit on 2026-10-11. Existing foundations include contiguous per-producer delivery-log scans (`FileOpStream::delivery_frontiers`), bounded checkpoint coverage encoding, membership-bound per-stream base frontiers, and receipt persistence that checks claimed delivery frontiers against retained logs. These foundations are not yet a certificate: there is no durable epoch-scoped peer coverage store, true membership intersection, or immutable revalidated certificate. The implementation must preserve stream identity (including IdList) and keep engine operation vectors distinct from producer delivery sequences. Next slice: specify and implement durable coverage evidence tied to validated checkpoint artifacts, then test true intersection and silent/missing members against GcModel before certificate construction."
     },
     {
       "id": "G04",

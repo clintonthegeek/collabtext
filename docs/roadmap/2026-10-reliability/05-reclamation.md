@@ -40,7 +40,7 @@ Run GcModel against all F1/F2/F3 histories and adversarial membership traces; pu
 
 ## G02 — Implement durable membership and undo-retirement publication
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json (in progress)  
 **Depends on:** G01, L06  
 **Coverage:** F1, F2, R10  
 
@@ -83,7 +83,9 @@ Run `./tools/verify-roadmap.sh debug 'tst_membership|tst_undo_retirement|tst_per
 
 ## G03 — Implement per-stream durable coverage and certificate construction
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json (in progress)
+
+**Implementation note (2026-10-11):** G02 provides contiguous per-producer delivery frontier scans and checkpoint coverage encoding/binding, but those records are not yet accumulated into certified peer coverage. G03 must add durable epoch-scoped evidence and compute true intersection over the active membership; a missing peer or stream must contribute zero. Engine operation vectors and envelope delivery counters remain separate spaces.  
 **Depends on:** G02, L04, P03  
 **Coverage:** F2, F3, F5  
 
@@ -111,7 +113,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_gc_certificate|tst_transport_commit_co
 
 ## G04 — Implement full engine checkpoint serialization
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json (in progress)  
 **Depends on:** S06, L06, P08  
 **Coverage:** F5, F7, R10  
 
@@ -154,7 +156,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_checkpoint_codec|tst_sequence_model|ts
 
 ## G05 — Publish checkpoints atomically and accelerate recovery
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json (in progress)  
 **Depends on:** G04, L08  
 **Coverage:** F5, R5, R10  
 
@@ -181,7 +183,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_checkpoint_recovery|tst_store_lifecycl
 
 ## G06 — Implement certificate-based tombstone and UndoMap reclamation
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json (in progress)  
 **Depends on:** G03, G05, S05, V03  
 **Coverage:** F1, F2, F3, F7, R7, R10  
 
@@ -214,7 +216,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_gc|tst_idlist_gc|tst_anchor_retention|
 
 ## G07 — Reclaim covered log segments and old checkpoints safely
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json (in progress)  
 **Depends on:** G06  
 **Coverage:** F5, F6, R10  
 
@@ -241,7 +243,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_store_compaction|tst_checkpoint_recove
 
 ## G08 — Validate long-lived editing and reclaimable memory/disk bounds
 
-**Status:** see TASKS.json (initially not started)  
+**Status:** see TASKS.json (in progress)  
 **Depends on:** G07, S07, V05  
 **Coverage:** F1, F2, F3, F7, R4, R7, R10  
 
