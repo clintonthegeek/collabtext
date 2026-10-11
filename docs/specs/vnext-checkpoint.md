@@ -2,8 +2,10 @@
 
 **Status:** format contract for G04; bounded framing, all shareable section
 codecs, private companion section codecs, the combined core validator, and
-in-memory engine snapshot adapters are implemented. Provider/session
-integration and atomic artifact publication remain in progress.
+in-memory engine snapshot adapters are implemented. Content-addressed artifact
+storage and alternating atomic manifests are implemented. DocumentSession
+capture/restore, provider validation during session startup, and replay from
+checkpoint coverage remain in progress.
 
 This format defines a validated shareable snapshot and a separately bound
 actor-local companion. It is not a replacement for the retained operation log
@@ -316,10 +318,47 @@ ASan/UBSan with the same allocation and byte budgets as production.
 
 ## 6. Implementation boundary
 
-The bounded framing codec and in-memory text/IdList logical snapshot and
-failure-atomic restore adapters now exist, with focused Debug, Release, and
-ASan/UBSan regressions. Section payload serialization is still incomplete, as
-are provider-owned coverage/pin/translation records, original deferred envelope
-bytes and tokens, and validation of those fields against membership evidence.
-The format is not yet a complete durable checkpoint. Atomic files, checkpoint
-selection, cursor publication, and replay fallback remain G05.
+The bounded framing codec, every typed shareable and local section codec, the
+cross-section validator, and in-memory text/IdList logical snapshot and
+failure-atomic restore adapters are implemented. Session deferred envelopes
+retain original bytes and delivery tokens. Focused Debug, Release, and
+ASan/UBSan tests cover the codecs and engine continuation behavior. The
+DocumentSession does not yet capture or restore these complete structures, and
+provider-owned pin/translation state is not yet gathered or checked as part of
+session startup.
+
+## 7. Durable store and remaining recovery work
+
+`CheckpointStore` writes artifacts under their SHA-256 content names. It
+publishes shareable bytes and an optional local companion with
+`replace_atomically` before publishing a manifest, so the manifest never names
+an artifact whose write and directory sync have not succeeded. The store holds
+an OS process lease while open. It does not delete previous checkpoint files or
+covered logs; G06 owns reclamation.
+
+Each manifest is exactly 113 bytes:
+
+```text
+8 bytes   "CTCPTR01"
+8 bytes   nonzero big-endian generation
+1 byte    local companion present (0 or 1)
+32 bytes  raw SHA-256 of shareable artifact
+32 bytes  raw SHA-256 of local artifact, or zero bytes when absent
+32 bytes  SHA-256 of all preceding manifest bytes
+```
+
+Odd generations replace `manifest-1`; even generations replace `manifest-0`.
+The untouched slot is the previous publication. Recovery checks candidates in
+descending generation order, validates the content hash and typed sections,
+checks local owner/context/hash binding, and calls a mandatory application
+validator before selecting a candidate. That validator must compare membership
+and provider-owned pin/translation state. A rejected, missing, or corrupt
+candidate falls back to the other manifest. The shareable digest is the
+checkpoint ID suitable for a transport recovery point.
+
+This storage layer does not yet let `DocumentSession` capture a checkpoint,
+restore local history and allocator state, advance transport cursors only after
+checkpoint publication, or replay only uncovered records. Full-log replay
+remains the recovery path until those behaviors and full-replay equivalence are
+implemented and tested. Threshold/manual creation and separate recovery-time
+measurement are also outstanding.
