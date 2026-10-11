@@ -1155,6 +1155,21 @@ private slots:
     QCOMPARE(deferred.size(), size_t(1));
     QCOMPARE(deferred[0].token, expected_deferred->token);
     QCOMPARE(deferred[0].payload, expected_deferred->payload);
+    Storage::CheckpointShareableCore deferred_core;
+    deferred_core.context.document = c_config.document;
+    deferred_core.context.stream = c_config.stream;
+    deferred_core.context.epoch = c_config.epoch;
+    deferred_core.pins.canonical_projection_hash = sha256_hex("");
+    deferred_core.translations.supported_token_versions = {1};
+    auto captured_deferred = DocumentSessionTestAccess::checkpoint_core(
+        *c, deferred_core);
+    QVERIFY(captured_deferred.ok());
+    QCOMPARE(captured_deferred.value().deferred.size(), size_t(1));
+    QCOMPARE(captured_deferred.value().deferred.front().operation_bytes,
+             expected_deferred->payload);
+    QVERIFY(!captured_deferred.value().deferred.front().quarantined);
+    QVERIFY(!captured_deferred.value().coverage.delivery.contains(
+        expected_deferred->token.producer));
     auto edit_while_incomplete = c->apply_local({{0, 0}}, {"unsafe"});
     QVERIFY(!edit_while_incomplete.ok());
 
@@ -1165,6 +1180,13 @@ private slots:
     QVERIFY(delivery_poll.ok());
     QVERIFY(c->ready());
     QCOMPARE(c->text(), std::string("AB"));
+    auto captured_after_dependency = DocumentSessionTestAccess::checkpoint_core(
+        *c, deferred_core);
+    QVERIFY(captured_after_dependency.ok());
+    QVERIFY(captured_after_dependency.value().deferred.empty());
+    QCOMPARE(captured_after_dependency.value().coverage.delivery.at(
+                 expected_deferred->token.producer),
+             uint64_t(1));
     QVERIFY(c->poll().ok()); // commits any earlier deferred envelope after its
                              // dependency arrived
     QVERIFY(c->deferred_deliveries().empty());
@@ -1251,6 +1273,73 @@ private slots:
     QVERIFY(!omitted_by_bytes.ok());
     QCOMPARE(omitted_by_bytes.error().code(), ErrorCode::limit_exceeded);
     QVERIFY(byte_limited->close().ok());
+  }
+
+  void sessionCheckpointCapturesOnlyRepresentedDeliveryPrefix() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const std::filesystem::path root = tmp.path().toStdString();
+    const StreamScope scope{"checkpoint-capture-stream", 1};
+    const auto producer = Test::actor(138);
+    const std::string payload{static_cast<char>(0xff), 'c', '\0', 'p'};
+    const InboundDelivery inbound{
+        DeliveryToken{scope.stream, scope.epoch, producer, 1}, payload};
+    DocumentSessionConfig config{root / "shared", root / "device",
+                                 "checkpoint-capture-doc", scope.stream,
+                                 scope.epoch};
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    auto local = session->apply_local({{0, 0}}, {"local"});
+    QVERIFY(local.ok());
+
+    {
+      Crdt::FileOpStream writer(root / "shared", producer);
+      QVERIFY(writer.start().ok());
+      QVERIFY(writer.register_stream(scope).ok());
+      QVERIFY(writer.push(OutboundDelivery{inbound.token, payload},
+                          PushDurability::durable).ok());
+      QVERIFY(writer.close().ok());
+    }
+
+    Storage::CheckpointShareableCore provider;
+    provider.context.document = config.document;
+    provider.context.stream = config.stream;
+    provider.context.epoch = config.epoch;
+    provider.context.engine = Storage::CheckpointEngineKind::Text;
+    provider.pins.canonical_projection_hash = sha256_hex("");
+    provider.translations.supported_token_versions = {1};
+    auto before_poll = DocumentSessionTestAccess::checkpoint_core(
+        *session, provider);
+    QVERIFY(before_poll.ok());
+    QCOMPARE(before_poll.value().coverage.delivery.at(session->actor()),
+             uint64_t(1));
+    QVERIFY(!before_poll.value().coverage.delivery.contains(producer));
+    QVERIFY(before_poll.value().deferred.empty());
+
+    auto polled = session->poll();
+    QVERIFY(polled.ok());
+    QCOMPARE(polled.value().quarantined, size_t(1));
+    auto after_poll = DocumentSessionTestAccess::checkpoint_core(
+        *session, provider);
+    QVERIFY2(after_poll.ok(), after_poll.error().message().data());
+    QVERIFY(!after_poll.value().coverage.delivery.contains(producer));
+    QCOMPARE(after_poll.value().deferred.size(), size_t(1));
+    QCOMPARE(after_poll.value().deferred.front().token, inbound.token);
+    QCOMPARE(after_poll.value().deferred.front().operation_bytes, payload);
+    QVERIFY(after_poll.value().deferred.front().quarantined);
+
+    auto encoded = Storage::encode_checkpoint_core(after_poll.value());
+    QVERIFY(encoded.ok());
+    auto artifact = Storage::decode_checkpoint(
+        encoded.value(), Storage::CheckpointKind::Shareable);
+    QVERIFY(artifact.ok());
+    auto decoded = Storage::decode_checkpoint_core(artifact.value());
+    QVERIFY(decoded.ok());
+    QCOMPARE(decoded.value().deferred, after_poll.value().deferred);
+    QCOMPARE(decoded.value().coverage.delivery,
+             after_poll.value().coverage.delivery);
+    QVERIFY(session->close().ok());
   }
 
   void consumer_event_log_correlates_undo_and_redo_groups_append_only() {

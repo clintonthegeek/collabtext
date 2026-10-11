@@ -4,8 +4,12 @@
 #include "crdt/SeedOp.h"
 #include "core/Sha256.h"
 #include "identity/ReplicaAllocator.h"
+#include "storage/CheckpointCodec.h"
 #include "storage/LocalHistoryLog.h"
 #include "transport/StreamSync.h"
+#ifdef COLLABTEXT_ENABLE_DOCUMENT_SESSION_TEST_ACCESS
+#include "DocumentSessionTestAccess.h"
+#endif
 #include <collabtext/Serialization.h>
 
 #include <algorithm>
@@ -31,7 +35,7 @@ struct DocumentSession::Impl {
   SessionRecoveryReport report;
   Global history_floor;
   uint64_t next_envelope = 1;
-  std::unordered_set<std::string> replayed_tokens;
+  std::unordered_map<std::string, std::string> replayed_payload_hashes;
   std::unordered_map<std::string, DeferredState> deferred_tokens;
   std::vector<SessionQuarantinedDelivery> quarantined_deliveries;
   size_t quarantined_bytes = 0;
@@ -90,7 +94,13 @@ struct DocumentSession::Impl {
       return pushed.error().with_context(
           "local operation applied but log publication failed; reopen to reconcile");
     }
-    replayed_tokens.insert(token_key(delivery.token));
+    if (auto remembered = remember_replayed_delivery(
+            InboundDelivery{delivery.token, delivery.payload});
+        !remembered.ok()) {
+      poisoned = true;
+      return remembered.error().with_context(
+          "durable local delivery conflicts with represented checkpoint input");
+    }
     ++next_envelope;
     auto checkpoint = local_history->store_snapshot(snapshot);
     if (!checkpoint.ok()) {
@@ -179,6 +189,112 @@ struct DocumentSession::Impl {
     return token.producer.to_string() + ":" + std::to_string(token.sequence);
   }
 
+  Result<void> remember_replayed_delivery(const InboundDelivery &delivery) {
+    const auto key = token_key(delivery.token);
+    const auto payload_hash = sha256_hex(delivery.payload);
+    auto [found, inserted] = replayed_payload_hashes.emplace(key, payload_hash);
+    if (!inserted && found->second != payload_hash)
+      return Error(ErrorCode::corrupt_record,
+                   "replayed delivery token was reused with different payload bytes");
+    return {};
+  }
+
+  Result<Storage::CheckpointShareableCore>
+  checkpoint_core(Storage::CheckpointShareableCore core) const {
+    if (closed || poisoned || !buffer || !transport)
+      return Error(ErrorCode::writer_conflict,
+                   "session cannot capture a checkpoint in its current state");
+    if (core.context.document != config.document ||
+        core.context.stream != config.stream || core.context.epoch != config.epoch ||
+        core.context.engine != Storage::CheckpointEngineKind::Text)
+      return Error(ErrorCode::wrong_epoch,
+                   "checkpoint provider context does not match the document session");
+    if (!quarantine_snapshot_complete)
+      return Error(ErrorCode::limit_exceeded,
+                   "checkpoint quarantine snapshot exceeded its configured budget");
+
+    const auto state = buffer->checkpoint_state();
+    core.engine.kind = Storage::CheckpointEngineKind::Text;
+    core.engine.fragments = state.fragments;
+    core.engine.entries.clear();
+    core.causal.version = state.version;
+    core.causal.undo_entries = state.undo_entries;
+    core.coverage.operation.clear();
+    for (size_t i = 0; i < state.version.pair_count(); ++i) {
+      const auto [actor, counter] = state.version.pair(i);
+      core.coverage.operation.emplace(actor, counter);
+    }
+
+    core.deferred.clear();
+    core.deferred.reserve(deferred_tokens.size() + quarantined_deliveries.size());
+    for (const auto &[_, deferred] : deferred_tokens) {
+      if (state.version.observed(get_op_timestamp(deferred.operation)))
+        continue; // Buffer drained this deferred operation after its dependency arrived.
+      core.deferred.push_back({deferred.token, deferred.payload, false, {}});
+    }
+    for (const auto &quarantined : quarantined_deliveries)
+      core.deferred.push_back({quarantined.delivery.token,
+                               quarantined.delivery.payload, true,
+                               std::string(quarantined.reason.message())});
+    std::sort(core.deferred.begin(), core.deferred.end(),
+              [](const auto &left, const auto &right) {
+                if (left.token.producer != right.token.producer)
+                  return left.token.producer < right.token.producer;
+                return left.token.sequence < right.token.sequence;
+              });
+
+    core.coverage.delivery.clear();
+    std::unordered_set<std::string> producer_prefix_broken;
+    std::unordered_map<std::string, const SessionQuarantinedDelivery *>
+        quarantined_by_token;
+    quarantined_by_token.reserve(quarantined_deliveries.size());
+    for (const auto &record : quarantined_deliveries)
+      quarantined_by_token.emplace(token_key(record.delivery.token), &record);
+    auto scanned = transport->replay_all(
+        StreamScope{config.stream, config.epoch},
+        [&](const InboundDelivery &delivery) -> Result<void> {
+          const auto key = token_key(delivery.token);
+          bool checkpointed_outstanding = false;
+          if (const auto deferred = deferred_tokens.find(key);
+              deferred != deferred_tokens.end() &&
+              !state.version.observed(get_op_timestamp(deferred->second.operation))) {
+            if (deferred->second.payload != delivery.payload)
+              return Error(ErrorCode::corrupt_record,
+                           "checkpoint log payload differs from deferred session input");
+            checkpointed_outstanding = true;
+          }
+          if (const auto quarantined = quarantined_by_token.find(key);
+              quarantined != quarantined_by_token.end()) {
+            if (quarantined->second->delivery.payload != delivery.payload)
+              return Error(ErrorCode::corrupt_record,
+                           "checkpoint log payload differs from quarantined session input");
+            checkpointed_outstanding = true;
+          }
+          bool represented = false;
+          if (!checkpointed_outstanding) {
+            if (const auto applied = replayed_payload_hashes.find(key);
+                applied != replayed_payload_hashes.end()) {
+              if (applied->second != sha256_hex(delivery.payload))
+                return Error(ErrorCode::corrupt_record,
+                             "checkpoint log payload differs from replayed session input");
+              represented = true;
+            }
+          }
+          const auto producer = delivery.token.producer.to_string();
+          if (!represented) {
+            producer_prefix_broken.insert(producer);
+          } else if (!producer_prefix_broken.contains(producer)) {
+            core.coverage.delivery[delivery.token.producer] =
+                delivery.token.sequence;
+          }
+          return {};
+        });
+    if (!scanned.ok()) return scanned.error();
+    auto encoded = Storage::encode_checkpoint_core(core);
+    if (!encoded.ok()) return encoded.error();
+    return core;
+  }
+
   static std::filesystem::path history_path(const DocumentSessionConfig &config) {
     std::string key = config.document + std::string(1, '\0') + config.stream +
                       std::string(1, '\0') + std::to_string(config.epoch);
@@ -231,8 +347,13 @@ struct DocumentSession::Impl {
       next_envelope = std::max(next_envelope, delivery.token.sequence + 1);
     }
     const auto key = token_key(delivery.token);
-    if (replayed_tokens.contains(key))
+    if (const auto known = replayed_payload_hashes.find(key);
+        known != replayed_payload_hashes.end()) {
+      if (known->second != sha256_hex(delivery.payload))
+        return Error(ErrorCode::corrupt_record,
+                     "replayed delivery token was reused with different payload bytes");
       return {};
+    }
     auto decoded = decode_operation(delivery.payload);
     if (!decoded.ok()) {
       quarantine(delivery, decoded.error().with_context("full session replay"));
@@ -248,11 +369,13 @@ struct DocumentSession::Impl {
     auto outcomes = buffer->apply_ops({decoded.value()});
     if (!outcomes.empty()) {
       classify(outcomes.front());
-      if (outcomes.front().kind() != ApplyOutcomeKind::rejected)
-        replayed_tokens.insert(key);
-      else
+      if (outcomes.front().kind() != ApplyOutcomeKind::rejected) {
+        if (auto remembered = remember_replayed_delivery(delivery); !remembered.ok())
+          return remembered.error();
+      } else {
         retain_quarantine(delivery, outcomes.front().error().value_or(
             Error(ErrorCode::malformed, "operation was rejected during recovery")));
+      }
       if (outcomes.front().kind() == ApplyOutcomeKind::deferred)
         deferred_tokens.emplace(
             key, DeferredState{delivery.token, decoded.value(), delivery.payload});
@@ -266,6 +389,15 @@ DocumentSession::DocumentSession(std::unique_ptr<Impl> impl)
 DocumentSession::~DocumentSession() {
   if (m_impl && !m_impl->closed)
     (void)close();
+}
+
+Result<Storage::CheckpointShareableCore>
+DocumentSessionTestAccess::checkpoint_core(
+    DocumentSession &session, Storage::CheckpointShareableCore core) {
+  if (!session.m_impl)
+    return Error(ErrorCode::writer_conflict,
+                 "session is unavailable for checkpoint capture");
+  return session.m_impl->checkpoint_core(std::move(core));
 }
 
 Result<std::unique_ptr<DocumentSession>>
@@ -364,7 +496,11 @@ DocumentSession::open_with_writer_config(
                     op_identity(waiting->second.operation)))
               return DeliveryDecision::retry();
             raw->deferred_tokens.erase(waiting);
-            raw->replayed_tokens.insert(token_key);
+            if (auto remembered = raw->remember_replayed_delivery(delivery);
+                !remembered.ok()) {
+              raw->quarantine(delivery, remembered.error());
+              return DeliveryDecision::quarantine(remembered.error());
+            }
             raw->update_completeness();
             return DeliveryDecision::commit(
                 RecoveryPoint::replay_from_beginning());
@@ -375,7 +511,11 @@ DocumentSession::open_with_writer_config(
           const auto &outcome = outcomes.front();
           if (outcome.kind() == ApplyOutcomeKind::applied ||
               outcome.kind() == ApplyOutcomeKind::duplicate) {
-            raw->replayed_tokens.insert(token_key);
+            if (auto remembered = raw->remember_replayed_delivery(delivery);
+                !remembered.ok()) {
+              raw->quarantine(delivery, remembered.error());
+              return DeliveryDecision::quarantine(remembered.error());
+            }
             raw->update_completeness();
             return DeliveryDecision::commit(
                 RecoveryPoint::replay_from_beginning());
@@ -386,7 +526,11 @@ DocumentSession::open_with_writer_config(
             raw->deferred_tokens.emplace(
                 token_key, Impl::DeferredState{delivery.token, decoded.value(),
                                                delivery.payload});
-            raw->replayed_tokens.insert(token_key);
+            if (auto remembered = raw->remember_replayed_delivery(delivery);
+                !remembered.ok()) {
+              raw->quarantine(delivery, remembered.error());
+              return DeliveryDecision::quarantine(remembered.error());
+            }
             return DeliveryDecision::retry();
           }
           const auto error = outcome.error().value_or(

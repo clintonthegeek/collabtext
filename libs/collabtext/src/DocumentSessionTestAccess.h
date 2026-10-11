@@ -3,6 +3,7 @@
 #include <collabtext/DocumentSession.h>
 
 #include "crdt/SegmentWriter.h"
+#include "storage/CheckpointCodec.h"
 
 namespace CollabText {
 
@@ -14,6 +15,9 @@ public:
     return DocumentSession::open_with_writer_config(std::move(config),
                                                      writer_config);
   }
+
+  [[nodiscard]] static Result<Storage::CheckpointShareableCore>
+  checkpoint_core(DocumentSession &, Storage::CheckpointShareableCore);
 };
 
 } // namespace CollabText
