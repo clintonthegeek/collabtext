@@ -1,6 +1,6 @@
 # collabtext alpha capability manifest
 
-**Version:** 13
+**Version:** 14
 **Introduced by:** roadmap task A02a
 **Package version at this manifest revision:** `0.2.0-alpha.2`
 **Branch:** `feat/fuguemax-placement` (the workstream label "v2" is not a
@@ -12,6 +12,15 @@ not been given. `0.2.0-alpha.2` is a SemVer **prerelease**. CMake's
 `collabtext-config-version.cmake` reports `0.2.0` and a `find_package` request
 cannot name the prerelease label — ask for no version or for `0.2.0`, and read
 `COLLABTEXT_VERSION_STRING` from the config file for the full label.
+
+**What changed at version 14:** The consumer adoption handoff pins the current
+branch with `collabtext-adoption-2026-10-11` and defines an explicit master merge
+gate. Stale lifecycle statements below are corrected: session recovery, persistent
+undo, pin projection, checkpointing, and certified collection exist in source;
+complete certificate/provider construction is not an installed turnkey service.
+Initial consumer adoption retains history and leaves reclamation disabled. See
+`docs/handoff/consumer-adoption.md` in the tagged source. This update declares no
+new format support and no C++ stability guarantee.
 
 **What changed at version 13:** `MembershipCoordinator::commit_transitions()`
 atomically advances multiple document/stream scopes under one durable callback;
@@ -72,7 +81,7 @@ These are stated so a consumer designs around them rather than discovering them.
 
 | Capability | State | Why / who owns it |
 |---|---|---|
-| **Terminal gap integration and transactional transport/recovery.** Gap codecs only validate metadata. Legacy FileSync/StreamSync retain and block a failed codec batch before cursor commit; this is containment, not recovery or durable coverage certification. | **not implemented** | P07/L02/L03/L08 own gap publication, terminal coverage, retries and recovered state/cursor transactions. |
+| **Terminal gap integration and the complete transport/recovery matrix.** Gap codecs validate metadata; decoding alone does not advance coverage. DocumentSession supplies replay and persistent undo, but that does not certify arbitrary consumer transport transactions or terminal gap publication. | **partial; terminal gap publication is not an adoption guarantee** | `tst_session_recovery`, `tst_transport_commit_contract`; P07/L08 retain the broader protocol/recovery obligations. Legacy FileSync/StreamSync containment is not certified recovery. |
 | **Persisting legacy Anchor fields.** Scoped `TextBoundary`/`TextAttachment`/`ListBoundary`/`ListElement` and `encode_position` are the supported API shape. Legacy internal resolution still ignores bias or falls back on a miss. | **unsupported legacy helper path** | S04b adds the checked scoped path; A02/S04 and presence integration retire remaining legacy usage. Do not serialize raw layout. |
 | **Ordering repair — concurrent insertion (F8).** Two or more peers pasting or typing at the same position keep each author's text contiguous, forward and in reverse, and an author's run is not split into the middle by a peer editing inside it. Placement is FugueMax (a tree link per inserted run), for text and for lists. | **available** | `tst_sequence_differential` (240 seeded traces, production against a literal reference, every minted link compared), `tst_sequence_semantics` (all 18 S01 fixtures through the engines, every arrival order), `tst_evaluation_regressions::f8_*`, `tst_fuguemax_model`. Spec: `docs/specs/vnext-sequence-algorithm.md` §0. |
 | **Typed outcome on the text facade.** `CrdtEngine::apply_remote` returns `ApplyOutcome`; `apply_ops` returns one outcome per offered operation. | **available** | `tst_crdtengine_op_api`, `tst_operation_validation`, installed `consumer_main`; duplicate, deferred/drained, rejected, and batch-order cases are covered. |
@@ -81,9 +90,9 @@ These are stated so a consumer designs around them rather than discovering them.
 | **Returning-device local branch export.** `DocumentSession::export_local_branch()` streams only the local producer's retained deliveries for the original document/stream/epoch, preserving tokens and payload bytes and including a recoverable pending commit. | **available** | `tst_session_recovery::localBranchExportKeepsOriginalScopeAndExcludesPeerOperations`, pending-commit export and duplicate reconciliation cases; relocated FileTransport package consumer calls the installed API. Consumers must stage output and publish it only after success; they remain responsible for explicit validation and reconciliation before a newer epoch can use the branch. |
 | **Membership authorization coordination.** `MembershipCoordinator` supplies local and inbound RAII permits, atomically advances one or more scopes under a durable callback, and blocks every scope in an uncertain batch until exact full-batch retry or recovery. | **partial** | `tst_session_recovery::membershipCoordinatorFailsClosedAndPublishesOnlyDurableTransitions`, `membershipCoordinatorTransitionsMultipleScopesAsOneGate`, `uncertainMembershipBatchRequiresExactWholeBatchRetry`, and installed Core consumer smoke. Consumers must configure both `DocumentSession` authorization callbacks and provide a durable callback that validates and commits the matching membership event/checkpoint. |
 | **Durable identity for consumers.** A `ReplicaAllocator` exists in the source tree but is not exported or installed. | **partial** | Not part of the installed public surface. A consumer supplies its own `IdentityAllocator` and is responsible for durability. Making `ReplicaAllocator` public is a separate decision, because it means committing to its persistence format. |
-| **Epoch / document / stream on the operation.** An operation carries no epoch, so a receiver cannot check one. | **not implemented** | P07 owns the envelope; L04 owns its persistence. |
+| **Epoch / document / stream routing.** Core operation values do not carry complete routing context. Public delivery tokens carry stream/epoch/producer/sequence; DocumentSession binds its document scope. | **partial** | `OpStream.h`, `tst_transport_commit_contract`, `tst_session_recovery`; Core consumers must validate their envelope and membership before application. |
 | **Automatic returning-branch reconciliation or branch rebase.** Export preserves the original epoch context and the coordinator does not replay or transform operations into a newer descriptor. | **not implemented** | G01/G02 own transition validation and explicit reconciliation; arbitrary old-epoch edits are not promised to merge losslessly. |
-| **GC, pins, checkpoints, reclamation.** | **not implemented, and inert** | G01–G08. `collect_garbage()` and `compact()` return zero and retain everything. **Do not call them expecting reclamation.** |
+| **GC, pins, checkpoints, reclamation.** | **implemented composition with consumer-owned provider obligations; not turnkey installed GC** | `tst_gc_certificate`, `tst_gc_model`, `tst_anchor_retention`, and `tst_session_recovery::sessionCheckpointBindsReceiptAndPreservesTranslatedPinsThroughCollection`. Public pin projection and session checkpoint methods exist. Certified collection requires validated membership/coverage/pins/history and a provider stability lease; certificate construction remains internal. Initial adoption must retain history and disable physical GC. Legacy no-argument collection remains inert. |
 | **Formatting / annotation layer.** | **not planned** | Deliberately out of scope. A consumer's document layer owns it over character CRDTs. |
 | **Qt widget layer** | **available, not part of Core** | `CollabText::Widgets`. The alpha's headless path is Core alone. |
 
@@ -120,13 +129,15 @@ make a resolve succeed.
 Storing these bytes is safe. What it does **not** buy you:
 
 - **It is not a pin.** Storing a token creates no retention obligation, and
-  `collect_garbage()` currently retains everything anyway, so nothing can be
-  reclaimed out from under one yet.
-- **It does not survive reclamation.** `AnchorPinRegistry` exposes durable
-  consumer-event projection and live-pin obligations, but physical GC is still
-  disabled. G01/G06 must connect those obligations to validated certificates.
-- **It does not survive an epoch change.** A token from another epoch reports
-  `wrong_epoch`; G01/G02 own translation.
+  consumers must project durable registration/release events before enabling
+  certified reclamation.
+- **Bytes alone do not protect against reclamation.** `AnchorPinRegistry`
+  exposes consumer-event projection and live-pin obligations. Source-level
+  certified collection protects validated pins, including translated pins;
+  consumers must supply canonical durable records and provider validation.
+  Initial installed-consumer adoption leaves physical GC disabled.
+- **It does not automatically survive an epoch change.** A token from another
+  epoch reports `wrong_epoch`; consumer-owned validated translations are required.
 - **It does not survive `discard_local_view()`.** That invalidates position history,
   including for empty-edge tokens; stored bytes then report `history_unavailable`.
 - **It is not a built-in recovered store.** A consumer supplies its canonical
@@ -139,9 +150,11 @@ converted: there is no production data to convert.
 Retained golden bytes for all four token kinds, and the reader fixture that keeps
 them working, are `tests/fixtures/position-tokens/` in the source repository.
 
-There is no supported **store** or **checkpoint** format: none exists. There is
-nothing to migrate — the user confirmed there is no production data, history or
-store — and no pre-vNext format is supported or will be converted.
+Private state, local-history journals, and checkpoint artifacts exist, but no
+cross-version **store/checkpoint** reader obligation is declared here. Bind
+adoption stores to the exact candidate. Before an upgrade with populated stores,
+validate a reader/translation and preserve recovery input. No pre-vNext format
+is supported or will be converted.
 
 ## Supported configuration
 
@@ -164,10 +177,11 @@ store — and no pre-vNext format is supported or will be converted.
 
 ## Known limits that are not capability gaps
 
-- **Placement is O(n) on purpose.** Every insertion walks the tree. This is not a
-  capability gap and was not an oversight; it is what makes a placement change
-  safe to review. A performance task may change it later, and
-  `tst_sequence_differential` is what makes such a change safe.
+- **Mutation is not logarithmic end to end.** Buffer edits copy fragments and
+  rebuild the tree. General placement rebuilds a sorted identity index and can
+  climb ancestry; a checked tail append skips general placement only. Scoped
+  position queries materialize individual retained items. Performance changes
+  must preserve ordering/position semantics and installed consumer gates.
 - Passage order is verified against the independent model over the enumerated S01
   histories and 240 seeded differential traces, not proven exhaustively for all
   histories. S06 owns bounded enumeration of combined sequence/undo histories.

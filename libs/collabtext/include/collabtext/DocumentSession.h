@@ -129,6 +129,7 @@ struct SessionRecoveryReport {
   std::vector<Error> diagnostics;
 };
 
+/// Half-open UTF-8 byte range in the OLD visible text, replaced by new_text.
 struct SessionTextEdit {
   uint32_t old_start = 0;
   uint32_t old_end = 0;
@@ -201,6 +202,8 @@ public:
   DocumentSession &operator=(const DocumentSession &) = delete;
 
   [[nodiscard]] Result<SessionRecoveryReport> recover();
+  /// Half-open ranges in the old visible text, in UTF-8 bytes at scalar
+  /// boundaries. Unlike CrdtEngine edits, these are not UTF-16 offsets.
   [[nodiscard]] Result<Crdt::Operation>
   apply_local(const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
               const std::vector<std::string> &replacements);

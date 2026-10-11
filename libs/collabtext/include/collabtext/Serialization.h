@@ -17,7 +17,8 @@ struct CounterGap {
     Global prior;
 };
 
-/// Version 1: CTBO/CTLO/CTGV/CTGP + 0001: + bounded JSON, fixed hex integers.
+/// CTBO/CTLO version 0002; CTGV/CTGP version 0001. Frames contain bounded
+/// JSON and fixed-width hex integers; use the checked codecs, not manual parsing.
 /// Default limits: 8 MiB frame, 4 MiB string, 32 nesting, 100,000 JSON values,
 /// 1,024-byte keys, 512 actors. Unknown/newer formats remain caller-owned.
 Result<std::string> encode_operation(const Operation& op);
