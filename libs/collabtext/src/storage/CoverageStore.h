@@ -13,6 +13,15 @@ using CheckpointCoverageVerifier = std::function<Result<void>(
     const MembershipDescriptor &, std::string_view checkpoint_hash,
     const OperationCoverage &, const DeliveryCoverage &)>;
 
+using MembershipCheckpointBundleResolver =
+    std::function<Result<std::string>(std::string_view checkpoint_hash)>;
+
+/// Build a verifier that resolves a content-addressed multi-stream checkpoint
+/// bundle and proves its per-stream operation and delivery maps match evidence.
+[[nodiscard]] CheckpointCoverageVerifier
+make_membership_checkpoint_coverage_verifier(
+    MembershipCheckpointBundleResolver resolve_bundle);
+
 /// Durable, owner-local operation and delivery coverage for immutable
 /// membership/checkpoint pairs. Every read revalidates the named checkpoint
 /// through the caller's resolver.

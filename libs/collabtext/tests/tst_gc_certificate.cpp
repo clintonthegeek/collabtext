@@ -2,6 +2,7 @@
 #include <QTemporaryDir>
 
 #include "storage/CoverageStore.h"
+#include "storage/CheckpointCodec.h"
 #include "storage/GcCertificate.h"
 #include "core/Sha256.h"
 #include "reference/GcModel.h"
@@ -316,6 +317,70 @@ private slots:
         d, delivery_regression,
         [](const auto &, const auto &) { return Result<void>{}; },
         model_eligibility()).ok());
+  }
+
+  void membershipCheckpointVerifierBindsBothCoverageMaps() {
+    auto d = descriptor();
+    const OperationCoverage operation{{"text", {{actor(20), 8}}},
+                                      {"ids", {{actor(21), 3}}}};
+    const DeliveryCoverage delivery{{"text", {{actor(20), 14}}},
+                                    {"ids", {{actor(21), 9}}}};
+    std::vector<MembershipCheckpointBundleEntry> entries;
+    std::string translation_manifest_hash;
+    for (const auto &base : d.base_frontiers) {
+      CheckpointShareableCore core;
+      core.context = CheckpointContext{
+          "coverage-document", base.stream, d.epoch, d.parent_hash,
+          CheckpointEngineKind::Text};
+      core.coverage.operation = operation.contains(base.stream)
+                                    ? operation.at(base.stream)
+                                    : std::map<ActorId, uint64_t>{};
+      core.coverage.delivery = delivery.contains(base.stream)
+                                   ? delivery.at(base.stream)
+                                   : std::map<ActorId, uint64_t>{};
+      for (const auto &[producer, through] : core.coverage.operation)
+        core.causal.version.observe(Crdt::Identity{producer, through});
+      core.pins.canonical_projection_hash = sha256_hex("");
+      core.translations.supported_token_versions = d.supported_token_versions;
+      auto bytes = encode_checkpoint_core(core);
+      QVERIFY(bytes.ok());
+      auto frame = decode_checkpoint(bytes.value(), CheckpointKind::Shareable);
+      QVERIFY(frame.ok());
+      auto decoded = decode_checkpoint_core(frame.value());
+      QVERIFY(decoded.ok());
+      if (translation_manifest_hash.empty())
+        translation_manifest_hash = decoded.value().translations.manifest_hash;
+      QCOMPARE(decoded.value().translations.manifest_hash,
+               translation_manifest_hash);
+      entries.push_back({base.stream, std::move(bytes.value())});
+    }
+    d.translation_manifest_hash = translation_manifest_hash;
+    auto sealed = seal_membership_descriptor(std::move(d));
+    QVERIFY(sealed.ok());
+    d = std::move(sealed.value());
+    auto bundle = encode_membership_checkpoint_bundle(std::move(entries));
+    QVERIFY(bundle.ok());
+    const auto checkpoint_hash = sha256_hex(bundle.value());
+    const auto verifier = make_membership_checkpoint_coverage_verifier(
+        [&](std::string_view requested_hash) -> Result<std::string> {
+          if (requested_hash != checkpoint_hash)
+            return Error(ErrorCode::awaiting_state,
+                         "candidate checkpoint bundle is unavailable");
+          return bundle.value();
+        });
+    QVERIFY(static_cast<bool>(verifier));
+    QVERIFY(verifier(d, checkpoint_hash, operation, delivery).ok());
+
+    auto wrong_operation = operation;
+    wrong_operation["text"][actor(20)]++;
+    QVERIFY(!verifier(d, checkpoint_hash, wrong_operation, delivery).ok());
+    auto wrong_delivery = delivery;
+    wrong_delivery["ids"][actor(21)]++;
+    QVERIFY(!verifier(d, checkpoint_hash, operation, wrong_delivery).ok());
+    auto unsupported = operation;
+    unsupported["unknown"][actor(20)] = 1;
+    QVERIFY(!verifier(d, checkpoint_hash, unsupported, delivery).ok());
+    QVERIFY(!verifier(d, sha256_hex("different candidate"), operation, delivery).ok());
   }
 
   void coveragePublicationRecoversOnlyAfterCheckpointRevalidation() {

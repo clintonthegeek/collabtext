@@ -1,6 +1,7 @@
 #include "storage/CoverageStore.h"
 
 #include "core/Sha256.h"
+#include "storage/CheckpointCodec.h"
 
 #include <algorithm>
 #include <charconv>
@@ -253,6 +254,93 @@ Result<void> verify_checkpoint(const CheckpointCoverageVerifier &verify,
   }
 }
 } // namespace
+
+CheckpointCoverageVerifier make_membership_checkpoint_coverage_verifier(
+    MembershipCheckpointBundleResolver resolve_bundle) {
+  if (!resolve_bundle) return {};
+  return [resolve_bundle = std::move(resolve_bundle)](
+             const MembershipDescriptor &descriptor,
+             std::string_view checkpoint_hash,
+             const OperationCoverage &operation,
+             const DeliveryCoverage &delivery) -> Result<void> {
+    if (auto valid = validate_membership_descriptor(descriptor); !valid)
+      return valid.error().with_context("coverage checkpoint descriptor");
+    auto bundle_bytes = resolve_bundle(checkpoint_hash);
+    if (!bundle_bytes)
+      return bundle_bytes.error().with_context("resolving coverage checkpoint bundle");
+    if (bundle_bytes.value().size() > kCheckpointMaxBytes)
+      return Error(ErrorCode::limit_exceeded,
+                   "coverage checkpoint bundle exceeds its byte limit");
+    if (sha256_hex(bundle_bytes.value()) != checkpoint_hash)
+      return Error(ErrorCode::corrupt_record,
+                   "coverage checkpoint bundle hash does not match its reference");
+    auto entries = decode_membership_checkpoint_bundle(bundle_bytes.value());
+    if (!entries) return entries.error().with_context("coverage checkpoint bundle");
+    if (entries.value().size() != descriptor.base_frontiers.size())
+      return Error(ErrorCode::corrupt_record,
+                   "coverage checkpoint does not contain every membership stream");
+
+    const auto empty = std::map<ActorId, uint64_t>{};
+    std::string document;
+    for (size_t i = 0; i < entries.value().size(); ++i) {
+      const auto &entry = entries.value()[i];
+      const auto &base = descriptor.base_frontiers[i];
+      if (entry.stream != base.stream)
+        return Error(ErrorCode::corrupt_record,
+                     "coverage checkpoint stream set differs from membership",
+                     entry.stream);
+      auto artifact = decode_checkpoint(entry.artifact_bytes,
+                                        CheckpointKind::Shareable);
+      if (!artifact)
+        return artifact.error().with_context("coverage checkpoint stream");
+      auto core = decode_checkpoint_core(artifact.value());
+      if (!core)
+        return core.error().with_context("coverage checkpoint stream");
+      if (core.value().context.stream != entry.stream ||
+          core.value().context.epoch != descriptor.epoch ||
+          core.value().context.parent_descriptor_hash != descriptor.parent_hash)
+        return Error(ErrorCode::wrong_epoch,
+                     "coverage checkpoint stream context differs from membership",
+                     entry.stream);
+      if (document.empty())
+        document = core.value().context.document;
+      else if (core.value().context.document != document)
+        return Error(ErrorCode::actor_conflict,
+                     "coverage checkpoint streams belong to different documents",
+                     entry.stream);
+      if (auto valid = validate_checkpoint_translations(
+              core.value().translations, descriptor); !valid)
+        return valid.error().with_context("coverage checkpoint translations");
+
+      const auto expected_operation = operation.find(entry.stream);
+      const auto expected_delivery = delivery.find(entry.stream);
+      const auto &operation_frontier = expected_operation == operation.end()
+                                           ? empty : expected_operation->second;
+      const auto &delivery_frontier = expected_delivery == delivery.end()
+                                          ? empty : expected_delivery->second;
+      if (core.value().coverage.operation != operation_frontier ||
+          core.value().coverage.delivery != delivery_frontier)
+        return Error(ErrorCode::corrupt_record,
+                     "checkpoint per-stream coverage differs from peer evidence",
+                     entry.stream);
+    }
+    const auto supported_stream = [&](const auto &name) {
+      const auto found = std::lower_bound(
+          descriptor.base_frontiers.begin(), descriptor.base_frontiers.end(), name,
+          [](const auto &base, const auto &stream) { return base.stream < stream; });
+      return found != descriptor.base_frontiers.end() && found->stream == name;
+    };
+    for (const auto &[stream, _] : operation)
+      if (!supported_stream(stream))
+        return Error(ErrorCode::corrupt_record,
+                     "operation evidence names a stream absent from membership", stream);
+    for (const auto &[stream, _] : delivery)
+      if (!supported_stream(stream))
+        return Error(ErrorCode::corrupt_record,
+                     "delivery evidence names a stream absent from membership", stream);
+    return {};
+  };
+}
 
 Result<CoverageStore> CoverageStore::open(std::filesystem::path directory,
                                            ActorId owner,
