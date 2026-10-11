@@ -293,6 +293,10 @@ if(COLLABTEXT_BUILD_BENCHMARKS)
     add_executable(tst_benchmark EXCLUDE_FROM_ALL tests/tst_benchmark.cpp)
     target_link_libraries(tst_benchmark PRIVATE CollabText::TestSupport Qt6::Test)
     target_include_directories(tst_benchmark PRIVATE ${COLLABTEXT_INTERNAL_INCLUDES})
+    add_executable(tst_checkpoint_recovery_benchmark EXCLUDE_FROM_ALL
+                   tests/tst_checkpoint_recovery_benchmark.cpp)
+    target_link_libraries(tst_checkpoint_recovery_benchmark
+                          PRIVATE CollabText::TestSupport Qt6::Core)
     # Run explicitly; neither the normal build nor any CTest selection runs it.
 endif()
 
