@@ -171,6 +171,11 @@ private slots:
     shareable.context = context;
     shareable.engine = CheckpointEngineState{};
     shareable.causal = causal;
+    const auto covered_actor = Test::actor(99);
+    shareable.causal.version.observe(Crdt::Identity(covered_actor, 4));
+    shareable.engine.reclamation = {
+        "main", sha256_hex("membership descriptor"),
+        sha256_hex("certificate source checkpoint"), {{covered_actor, 4}}};
     shareable.pins = empty_pins;
     shareable.translations.supported_token_versions = {1};
     const auto framed = encode_checkpoint_core(shareable);
@@ -184,10 +189,18 @@ private slots:
     QVERIFY(decoded_causal);
     QVERIFY(core);
     QCOMPARE(decoded_context.value(), context);
-    QCOMPARE(decoded_causal.value().version, causal.version);
+    QCOMPARE(decoded_causal.value().version, shareable.causal.version);
     QVERIFY(decoded_causal.value().undo_entries.empty());
     QCOMPARE(core.value().context, context);
     QCOMPARE(core.value().engine.kind, CheckpointEngineKind::Text);
+    QCOMPARE(core.value().engine.reclamation, shareable.engine.reclamation);
+
+    auto beyond_causal = shareable;
+    beyond_causal.engine.reclamation.operation_frontier[covered_actor] = 5;
+    QVERIFY(!encode_checkpoint_core(beyond_causal));
+    auto wrong_stream = shareable;
+    wrong_stream.engine.reclamation.stream = "comments";
+    QVERIFY(!encode_checkpoint_core(wrong_stream));
     QCOMPARE(core.value().coverage.operation.size(), size_t(0));
 
     auto uncovered = shareable;

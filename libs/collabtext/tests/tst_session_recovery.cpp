@@ -2376,9 +2376,9 @@ private slots:
     auto expected_binding = std::make_shared<ExpectedReclamationBinding>();
     config.validate_checkpoint_candidate =
         [](std::string_view shareable,
-           const std::optional<std::string> &local) -> Result<void> {
-      if (shareable.empty() || !local)
-        return Error(ErrorCode::malformed, "incomplete checkpoint bundle");
+           const std::optional<std::string> &) -> Result<void> {
+      if (shareable.empty())
+        return Error(ErrorCode::malformed, "empty checkpoint artifact");
       return {};
     };
     config.validate_reclamation_frontier =
@@ -2527,7 +2527,70 @@ private slots:
     QVERIFY(reopened_result.ok());
     auto reopened = std::move(reopened_result).value();
     QVERIFY(reopened->validate_reclamation_frontier(*certified_frontier).ok());
+    const auto local_actor = reopened->actor();
     QVERIFY(reopened->close().ok());
+
+    auto bound_artifact = Storage::decode_checkpoint(
+        published.value().shareable_artifact_bytes,
+        Storage::CheckpointKind::Shareable);
+    QVERIFY(bound_artifact.ok());
+    auto bound_core = Storage::decode_checkpoint_core(bound_artifact.value());
+    QVERIFY(bound_core.ok());
+    bound_core.value().engine.reclamation.stream = scope.stream;
+    bound_core.value().engine.reclamation.descriptor_hash = descriptor.hash;
+    bound_core.value().engine.reclamation.certificate_checkpoint_hash =
+        published.value().shareable_artifact_hash;
+    bound_core.value().engine.reclamation.operation_frontier =
+        captured.value().operation_coverage;
+    auto bound_bytes = Storage::encode_checkpoint_core(bound_core.value());
+    QVERIFY(bound_bytes.ok());
+    {
+      auto store = Storage::CheckpointStore::open(root / "checkpoints");
+      QVERIFY(store.ok());
+      auto bound_checkpoint =
+          store.value().publish(bound_bytes.value(), {}, local_actor);
+      QVERIFY(bound_checkpoint.ok());
+      auto selected_bound = store.value().recover(
+          local_actor,
+          [](std::string_view, const std::optional<std::string> &) -> Result<void> {
+            return {};
+          }, bound_core.value().context);
+      QVERIFY(selected_bound.ok());
+      QVERIFY(selected_bound.value().has_value());
+      QCOMPARE(selected_bound.value()->shareable_bytes, bound_bytes.value());
+    }
+
+    bool binding_validated = false;
+    config.validate_reclamation_binding =
+        [&binding_validated, expected_binding, scope](
+            const DocumentId &document, const StreamId &stream, uint64_t epoch,
+            std::string_view descriptor_hash, std::string_view checkpoint_hash,
+            const std::map<ActorId, uint64_t> &frontier) -> Result<void> {
+      binding_validated = true;
+      if (expected_binding->refuse || document != "checkpoint-receipt-doc" ||
+          stream != scope.stream || epoch != scope.epoch ||
+          descriptor_hash != expected_binding->descriptor_hash ||
+          checkpoint_hash != expected_binding->checkpoint_hash || frontier.empty())
+        return Error(ErrorCode::awaiting_state,
+                     "test provider rejected persisted reclamation binding");
+      return {};
+    };
+    auto bound_open = DocumentSession::open(config);
+    QVERIFY(bound_open.ok());
+    auto bound_session = std::move(bound_open).value();
+    QVERIFY(binding_validated);
+    QCOMPARE(bound_session->text(), std::string("peer"));
+    QVERIFY(bound_session->recovery_report().diagnostics.empty());
+    QVERIFY(bound_session->close().ok());
+
+    expected_binding->refuse = true;
+    binding_validated = false;
+    auto refused_open = DocumentSession::open(config);
+    QVERIFY(refused_open.ok());
+    auto refused_session = std::move(refused_open).value();
+    QVERIFY(binding_validated);
+    QCOMPARE(refused_session->text(), std::string("peer"));
+    QVERIFY(refused_session->close().ok());
   }
 
   void invalidCheckpointCoverageResetsBeforeFullReplayFallback() {

@@ -5,6 +5,7 @@
 #include <collabtext/AnchorPins.h>
 #include <collabtext/LocalHistory.h>
 #include "crdt/Fragment.h"
+#include "crdt/ReclamationPolicy.h"
 #include "crdt/IdList.h"
 #include "crdt/UndoMap.h"
 
@@ -54,6 +55,7 @@ struct CheckpointEngineState {
   CheckpointEngineKind kind = CheckpointEngineKind::Text;
   std::vector<Crdt::Fragment> fragments;
   std::vector<Crdt::IdListEntry> entries;
+  Crdt::ReclamationBinding reclamation;
 };
 
 struct CheckpointShareableCore {

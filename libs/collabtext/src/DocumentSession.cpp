@@ -270,6 +270,7 @@ struct DocumentSession::Impl {
     core.engine.kind = Storage::CheckpointEngineKind::Text;
     core.engine.fragments = state.fragments;
     core.engine.entries.clear();
+    core.engine.reclamation = state.reclamation;
     core.causal.version = state.version;
     core.causal.undo_entries = state.undo_entries;
     core.coverage.operation.clear();
@@ -381,6 +382,28 @@ struct DocumentSession::Impl {
           core.value().context.engine != Storage::CheckpointEngineKind::Text)
         return Error(ErrorCode::wrong_epoch,
                      "checkpoint candidate does not match this text session");
+      const auto &binding = core.value().engine.reclamation;
+      if (!binding.empty()) {
+        if (!config.validate_reclamation_binding)
+          return Error(ErrorCode::awaiting_state,
+                       "checkpoint reclamation binding requires provider revalidation");
+        try {
+          SessionCallbackScope callback_scope(callback_active);
+          auto verified = config.validate_reclamation_binding(
+              config.document, config.stream, config.epoch,
+              binding.descriptor_hash, binding.certificate_checkpoint_hash,
+              binding.operation_frontier);
+          if (!verified.ok())
+            return verified.error().with_context(
+                "revalidating checkpoint reclamation binding");
+        } catch (const std::exception &error) {
+          return Error(ErrorCode::io_error, error.what(),
+                       "revalidating checkpoint reclamation binding");
+        } catch (...) {
+          return Error(ErrorCode::io_error,
+                       "reclamation binding validator threw an unknown exception");
+        }
+      }
       return config.validate_checkpoint_candidate(shareable, local);
     };
     auto recovered = store.recover(replica->actor(), validator);
@@ -408,6 +431,7 @@ struct DocumentSession::Impl {
     state.version = core.causal.version;
     state.fragments = core.engine.fragments;
     state.undo_entries = core.causal.undo_entries;
+    state.reclamation = core.engine.reclamation;
     std::unordered_map<std::string, DeferredState> restored_deferred;
     std::unordered_map<std::string, std::string> restored_payload_hashes;
     std::vector<SessionQuarantinedDelivery> restored_quarantine;

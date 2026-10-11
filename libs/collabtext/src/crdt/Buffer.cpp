@@ -46,6 +46,7 @@ Result<std::vector<CollabText::detail::PositionItem>> Buffer::position_items() c
 void Buffer::discard_local_view() noexcept {
     auto allocator = m_allocator;
     auto version = m_version;
+    auto reclamation = m_reclamation;
     auto retired = std::move(m_retired_undo_entries);
     const auto retired_bytes = m_retired_undo_bytes;
     const auto undo_limit = max_undo_depth();
@@ -53,6 +54,7 @@ void Buffer::discard_local_view() noexcept {
     auto changed = std::move(m_on_change);
     *this = Buffer(std::move(allocator));
     m_version = std::move(version);
+    m_reclamation = std::move(reclamation);
     m_retired_undo_entries = std::move(retired);
     m_retired_undo_bytes = retired_bytes;
     m_on_change = std::move(changed);
@@ -85,6 +87,7 @@ std::vector<Fragment> Buffer::fragments() const {
 BufferCheckpointState Buffer::checkpoint_state() const {
     BufferCheckpointState snapshot;
     snapshot.version = m_version;
+    snapshot.reclamation = m_reclamation;
     snapshot.fragments = get_fragments();
     snapshot.undo_entries = m_undo_map.entries();
     snapshot.deferred = m_deferred_queue.items();
@@ -174,6 +177,7 @@ Result<void> Buffer::restore_checkpoint_state(
     if (const auto issue = SequenceOrder::check_consistency(snapshot.fragments))
         return Error(ErrorCode::malformed, *issue, "checkpoint.engine.text.links");
     rebuilt.m_version = snapshot.version;
+    rebuilt.m_reclamation = snapshot.reclamation;
     auto fragments = snapshot.fragments;
     rebuilt.set_fragments(std::move(fragments));
 

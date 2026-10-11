@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <string>
 #include <vector>
 
 namespace CollabText::Crdt {
@@ -13,6 +14,21 @@ namespace CollabText::Crdt {
 /// intentionally the actor-counter map for one stream; delivery sequence
 /// numbers and another stream's counters are not interchangeable here.
 using ReclamationFrontier = std::map<ActorId, uint64_t>;
+
+/// Persisted provenance for an installed reclamation cutoff. The source
+/// checkpoint is the artifact named by the GC certificate; the containing
+/// checkpoint may be a later durable descendant that carries this proof.
+struct ReclamationBinding {
+  std::string stream;
+  std::string descriptor_hash;
+  std::string certificate_checkpoint_hash;
+  ReclamationFrontier operation_frontier;
+  [[nodiscard]] bool empty() const {
+    return stream.empty() && descriptor_hash.empty() &&
+           certificate_checkpoint_hash.empty() && operation_frontier.empty();
+  }
+  bool operator==(const ReclamationBinding &) const = default;
+};
 
 /// Whether an identity is within the certified operation frontier for its
 /// stream. Missing actors, invalid identities and zero counters fail closed.

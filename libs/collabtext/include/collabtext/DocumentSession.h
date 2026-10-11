@@ -90,6 +90,14 @@ struct DocumentSessionConfig {
   std::function<Result<void>(const DocumentId &, const StreamId &, uint64_t,
                              const Storage::CertifiedOperationFrontier &)>
       validate_reclamation_frontier;
+  /// Revalidate a persisted reclamation binding before restoring a checkpoint
+  /// that carries an installed cutoff. This callback must confirm the source
+  /// certificate remains valid for the exact stream, descriptor, source
+  /// checkpoint, and operation frontier recorded in the binding.
+  std::function<Result<void>(const DocumentId &, const StreamId &, uint64_t,
+                             std::string_view, std::string_view,
+                             const std::map<ActorId, uint64_t> &)>
+      validate_reclamation_binding;
 };
 
 /// Local producer deliveries retained for one original document epoch.

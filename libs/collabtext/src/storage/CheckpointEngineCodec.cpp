@@ -29,6 +29,10 @@ void put_u64(std::string &out, uint64_t value) {
   for (int shift = 56; shift >= 0; shift -= 8)
     out.push_back(static_cast<char>(value >> shift));
 }
+void put_string(std::string &out, std::string_view value) {
+  put_u32(out, static_cast<uint32_t>(value.size()));
+  out.append(value);
+}
 void put_identity(std::string &out, const Crdt::Identity &id) {
   for (auto byte : id.actor.bytes()) out.push_back(static_cast<char>(byte));
   put_u64(out, id.counter);
@@ -62,6 +66,11 @@ struct Reader {
       value = (value << 8) | static_cast<uint8_t>(bytes[cursor++]);
     return value;
   }
+  std::string_view string(uint32_t size) {
+    const auto value = bytes.substr(cursor, size);
+    cursor += size;
+    return value;
+  }
   Crdt::Identity identity() {
     std::array<uint8_t, ActorId::kBytes> raw{};
     for (auto &byte : raw) byte = static_cast<uint8_t>(bytes[cursor++]);
@@ -76,6 +85,76 @@ Error malformed(std::string message) {
 
 bool valid_identity(const Crdt::Identity &id) {
   return id.actor.valid() && id.counter != 0 && id.counter != UINT64_MAX;
+}
+
+bool valid_hash(std::string_view value) {
+  return value.size() == 64 && std::all_of(value.begin(), value.end(), [](char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+  });
+}
+
+Result<void> put_reclamation(std::string &out,
+                             const Crdt::ReclamationBinding &binding) {
+  if (binding.empty()) {
+    put_u8(out, 0);
+    return {};
+  }
+  if (binding.stream.empty() || binding.stream.size() > 4096 ||
+      !valid_hash(binding.descriptor_hash) ||
+      !valid_hash(binding.certificate_checkpoint_hash) ||
+      binding.operation_frontier.empty() ||
+      binding.operation_frontier.size() > kMaxEntries)
+    return malformed("checkpoint reclamation binding is incomplete");
+  if (out.size() > kCheckpointMaxBytes - kSectionHeaderBytes - 1 - 4 -
+                       binding.stream.size() - 128 - 4 ||
+      binding.operation_frontier.size() >
+          (kCheckpointMaxBytes - kSectionHeaderBytes - out.size() -
+           1 - 4 - binding.stream.size() - 128 - 4) / 24)
+    return Error(ErrorCode::limit_exceeded,
+                 "checkpoint reclamation binding exceeds byte limit",
+                 "checkpoint.engine.reclamation");
+  put_u8(out, 1);
+  put_string(out, binding.stream);
+  out.append(binding.descriptor_hash);
+  out.append(binding.certificate_checkpoint_hash);
+  put_u32(out, static_cast<uint32_t>(binding.operation_frontier.size()));
+  for (const auto &[actor, through] : binding.operation_frontier) {
+    if (!actor.valid() || through == 0 || through == UINT64_MAX)
+      return malformed("checkpoint reclamation frontier identity is invalid");
+    for (auto byte : actor.bytes()) out.push_back(static_cast<char>(byte));
+    put_u64(out, through);
+  }
+  return {};
+}
+
+bool read_reclamation(Reader &reader, Crdt::ReclamationBinding &binding) {
+  if (!reader.need(1)) return false;
+  const auto present = reader.u8();
+  if (present > 1) return false;
+  if (!present) return true;
+  if (!reader.need(4)) return false;
+  const auto stream_size = reader.u32();
+  if (stream_size == 0 || stream_size > 4096 || !reader.need(stream_size + 64 + 64 + 4))
+    return false;
+  binding.stream = reader.string(stream_size);
+  binding.descriptor_hash = reader.string(64);
+  binding.certificate_checkpoint_hash = reader.string(64);
+  if (!valid_hash(binding.descriptor_hash) ||
+      !valid_hash(binding.certificate_checkpoint_hash)) return false;
+  const auto count = reader.u32();
+  if (count == 0 || count > kMaxEntries || count > (reader.bytes.size() - reader.cursor) / 24)
+    return false;
+  for (uint32_t i = 0; i < count; ++i) {
+    if (!reader.need(24)) return false;
+    std::array<uint8_t, ActorId::kBytes> raw{};
+    for (auto &byte : raw) byte = static_cast<uint8_t>(reader.bytes[reader.cursor++]);
+    const auto actor = ActorId::from_bytes(raw);
+    const auto through = reader.u64();
+    if (!actor.valid() || through == 0 || through == UINT64_MAX ||
+        !binding.operation_frontier.emplace(actor, through).second)
+      return false;
+  }
+  return true;
 }
 
 Result<void> put_link(std::string &out, const Crdt::Link &link) {
@@ -213,13 +292,19 @@ Result<CheckpointSection> encode_checkpoint_engine(
     if (const auto issue = Crdt::SequenceOrder::check_consistency(state.entries))
       return malformed(*issue);
   }
-  return CheckpointSection{2, 1, std::move(payload)};
+  if (auto valid = put_reclamation(payload, state.reclamation); !valid)
+    return valid.error();
+  if (payload.size() > kCheckpointMaxBytes - kSectionHeaderBytes)
+    return Error(ErrorCode::limit_exceeded,
+                 "checkpoint engine section exceeds byte limit",
+                 "checkpoint.engine");
+  return CheckpointSection{2, 2, std::move(payload)};
 }
 
 Result<CheckpointEngineState> decode_checkpoint_engine(
     const CheckpointSection &section) {
   if (section.id != 2) return malformed("checkpoint engine state must be section 2");
-  if (section.version != 1)
+  if (section.version != 1 && section.version != 2)
     return Error(ErrorCode::unsupported_version, "checkpoint engine section version is unsupported", "checkpoint.engine");
   if (section.bytes.size() > kCheckpointMaxBytes - kSectionHeaderBytes)
     return Error(ErrorCode::limit_exceeded, "checkpoint engine section exceeds byte limit", "checkpoint.engine");
@@ -291,6 +376,8 @@ Result<CheckpointEngineState> decode_checkpoint_engine(
     if (const auto issue = Crdt::SequenceOrder::check_consistency(state.entries))
       return malformed(*issue);
   }
+  if (section.version >= 2 && !read_reclamation(reader, state.reclamation))
+    return malformed("checkpoint reclamation binding is invalid or truncated");
   if (reader.cursor != reader.bytes.size())
     return malformed("checkpoint engine section has trailing bytes");
   return state;
@@ -332,6 +419,18 @@ Result<void> validate_core_relationships(const CheckpointShareableCore &core) {
     }
   } else {
     return malformed("checkpoint engine kind is invalid");
+  }
+  const auto &reclamation = core.engine.reclamation;
+  if (!reclamation.empty()) {
+    if (reclamation.stream != core.context.stream ||
+        !valid_hash(reclamation.descriptor_hash) ||
+        !valid_hash(reclamation.certificate_checkpoint_hash) ||
+        reclamation.operation_frontier.empty())
+      return malformed("checkpoint reclamation binding does not match its stream context");
+    for (const auto &[actor, through] : reclamation.operation_frontier)
+      if (!actor.valid() || through == 0 || through == UINT64_MAX ||
+          core.causal.version.get(actor) < through)
+        return malformed("checkpoint reclamation frontier exceeds causal state");
   }
   for (const auto &entry : core.causal.undo_entries)
     if (!covered(entry.key.edit_id) || !covered(entry.key.undo_id))
