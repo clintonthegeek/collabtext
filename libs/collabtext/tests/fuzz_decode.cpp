@@ -52,6 +52,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         bytes, CollabText::Storage::CheckpointKind::Shareable);
     if (shareable) {
         const auto core = CollabText::Storage::decode_checkpoint_core(shareable.value());
+        if (core) (void)CollabText::Storage::encode_checkpoint_core(core.value());
         if (core && !core.value().translations.supported_token_versions.empty()) {
             auto descriptor = CollabText::Storage::MembershipDescriptor{};
             descriptor.epoch = core.value().context.epoch;

@@ -163,29 +163,15 @@ private slots:
     CheckpointContext context{"project", "main", 7, "",
                               CheckpointEngineKind::Text};
     CheckpointCausalState causal;
-    auto context_section = encode_checkpoint_context(context);
-    auto engine_section = encode_checkpoint_engine(CheckpointEngineState{});
-    auto causal_section = encode_checkpoint_causal(causal);
-    auto deferred_section = encode_checkpoint_deferred({}, context, causal.version);
-    auto coverage_section = encode_checkpoint_coverage({});
     CheckpointShareableCore::Pins empty_pins;
     empty_pins.canonical_projection_hash = sha256_hex("");
-    auto pins_section = encode_checkpoint_pins(empty_pins, context);
-    QVERIFY(context_section);
-    QVERIFY(engine_section);
-    QVERIFY(causal_section);
-    QVERIFY(deferred_section);
-    QVERIFY(coverage_section);
-    QVERIFY(pins_section);
-
-    auto sections = shared_sections();
-    sections[0] = context_section.value();
-    sections[1] = engine_section.value();
-    sections[2] = causal_section.value();
-    sections[3] = deferred_section.value();
-    sections[4] = coverage_section.value();
-    sections[5] = pins_section.value();
-    const auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
+    CheckpointShareableCore shareable;
+    shareable.context = context;
+    shareable.engine = CheckpointEngineState{};
+    shareable.causal = causal;
+    shareable.pins = empty_pins;
+    shareable.translations.supported_token_versions = {1};
+    const auto framed = encode_checkpoint_core(shareable);
     QVERIFY(framed);
     const auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
     QVERIFY(artifact);
@@ -198,11 +184,23 @@ private slots:
     QCOMPARE(decoded_context.value(), context);
     QCOMPARE(decoded_causal.value().version, causal.version);
     QVERIFY(decoded_causal.value().undo_entries.empty());
+    QCOMPARE(core.value().context, context);
+    QCOMPARE(core.value().engine.kind, CheckpointEngineKind::Text);
+    QCOMPARE(core.value().coverage.operation.size(), size_t(0));
+
+    auto uncovered = shareable;
+    const auto actor = Test::actor(77);
+    uncovered.coverage.operation.emplace(actor, 1);
+    QVERIFY(!encode_checkpoint_core(uncovered));
+    auto mismatched_engine = shareable;
+    mismatched_engine.engine.kind = CheckpointEngineKind::IdList;
+    QVERIFY(!encode_checkpoint_core(mismatched_engine));
 
     auto wrong_context = encode_checkpoint_context(
         CheckpointContext{"project", "main", 7, "",
                           CheckpointEngineKind::IdList});
     QVERIFY(wrong_context);
+    auto sections = artifact.value().sections;
     sections[0] = wrong_context.value();
     const auto mismatched_frame = encode_checkpoint(CheckpointKind::Shareable, sections);
     QVERIFY(mismatched_frame);
@@ -361,35 +359,17 @@ private slots:
     QVERIFY(source_text.try_apply_local_edit({{0, 0}}, {"A\xf0\x9f\x99\x82" "B"}));
     QVERIFY(source_text.try_apply_local_edit({{1, 5}}, {""}));
     auto text_snapshot = source_text.checkpoint_state();
-    CheckpointEngineState text_state;
-    text_state.fragments = text_snapshot.fragments;
-    auto text_payload = encode_checkpoint_engine(text_state);
-    QVERIFY(text_payload);
     CheckpointContext text_context{"doc", "main", 1, "",
                                    CheckpointEngineKind::Text};
-    CheckpointCausalState text_causal{text_snapshot.version,
-                                      text_snapshot.undo_entries};
-    auto context_section = encode_checkpoint_context(text_context);
-    auto causal_section = encode_checkpoint_causal(text_causal);
-    auto deferred_section = encode_checkpoint_deferred(
-        {}, text_context, text_causal.version);
-    auto coverage_section = encode_checkpoint_coverage({});
     CheckpointShareableCore::Pins empty_pins;
     empty_pins.canonical_projection_hash = sha256_hex("");
-    auto pins_section = encode_checkpoint_pins(empty_pins, text_context);
-    QVERIFY(context_section);
-    QVERIFY(causal_section);
-    QVERIFY(deferred_section);
-    QVERIFY(coverage_section);
-    QVERIFY(pins_section);
-    auto sections = shared_sections();
-    sections[0] = context_section.value();
-    sections[1] = text_payload.value();
-    sections[2] = causal_section.value();
-    sections[3] = deferred_section.value();
-    sections[4] = coverage_section.value();
-    sections[5] = pins_section.value();
-    auto framed = encode_checkpoint(CheckpointKind::Shareable, sections);
+    CheckpointShareableCore text_core;
+    text_core.context = text_context;
+    text_core.engine.fragments = text_snapshot.fragments;
+    text_core.causal = {text_snapshot.version, text_snapshot.undo_entries};
+    text_core.pins = empty_pins;
+    text_core.translations.supported_token_versions = {1};
+    auto framed = encode_checkpoint_core(text_core);
     QVERIFY(framed);
     auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
     QVERIFY(artifact);
@@ -406,39 +386,58 @@ private slots:
       QCOMPARE(restored_text.resolve_anchor(source_text.anchor_at(offset)),
                source_text.resolve_anchor(source_text.anchor_at(offset)));
 
+    const auto text_history = source_text.local_history_snapshot();
+    Crdt::Buffer continued_text(CollabText::Test::test_counter(
+        1, source_text.allocator()->peek()));
+    QVERIFY(continued_text.restore_checkpoint_state(text_snapshot));
+    QVERIFY(continued_text.restore_local_history(text_history));
+    Crdt::Buffer peer_text(CollabText::Test::test_counter(9));
+    QVERIFY(peer_text.restore_checkpoint_state(text_snapshot));
+    const auto append_at = source_text.visible_length();
+    auto source_future = source_text.try_apply_local_edit({{append_at, append_at}}, {"!"});
+    auto continued_future = continued_text.try_apply_local_edit(
+        {{append_at, append_at}}, {"!"});
+    QVERIFY(source_future && continued_future);
+    QCOMPARE(Crdt::encode_operation(source_future.value()).value(),
+             Crdt::encode_operation(continued_future.value()).value());
+    auto peer_outcome = peer_text.apply_ops({source_future.value()});
+    QCOMPARE(peer_outcome.front().kind(), ApplyOutcomeKind::applied);
+    auto source_undo = source_text.try_undo();
+    auto continued_undo = continued_text.try_undo();
+    QVERIFY(source_undo && continued_undo && source_undo.value() &&
+            continued_undo.value());
+    QCOMPARE(Crdt::encode_operation(*source_undo.value()).value(),
+             Crdt::encode_operation(*continued_undo.value()).value());
+    peer_outcome = peer_text.apply_ops({*source_undo.value()});
+    QCOMPARE(peer_outcome.front().kind(), ApplyOutcomeKind::applied);
+    auto source_redo = source_text.try_redo();
+    auto continued_redo = continued_text.try_redo();
+    QVERIFY(source_redo && continued_redo && source_redo.value() &&
+            continued_redo.value());
+    QCOMPARE(Crdt::encode_operation(*source_redo.value()).value(),
+             Crdt::encode_operation(*continued_redo.value()).value());
+    peer_outcome = peer_text.apply_ops({*source_redo.value()});
+    QCOMPARE(peer_outcome.front().kind(), ApplyOutcomeKind::applied);
+    QCOMPARE(continued_text.text(), source_text.text());
+    QCOMPARE(peer_text.text(), source_text.text());
+    for (uint32_t offset = 0; offset <= source_text.visible_length(); ++offset)
+      QCOMPARE(peer_text.resolve_anchor(source_text.anchor_at(offset)), offset);
+
     Crdt::IdList source_list(CollabText::Test::test_counter(3));
     source_list.insert_after(Crdt::Anchor::min(), 10);
     source_list.insert_after(source_list.anchor_of(10), 20);
     QVERIFY(source_list.try_remove_at(source_list.anchor_of(10)));
     auto list_snapshot = source_list.checkpoint_state();
-    CheckpointEngineState list_state;
-    list_state.kind = CheckpointEngineKind::IdList;
-    list_state.entries = list_snapshot.entries;
-    auto list_payload = encode_checkpoint_engine(list_state);
-    QVERIFY(list_payload);
     CheckpointContext list_context{"doc", "main", 1, "",
                                    CheckpointEngineKind::IdList};
-    CheckpointCausalState list_causal{list_snapshot.version,
-                                      list_snapshot.undo_entries};
-    context_section = encode_checkpoint_context(list_context);
-    causal_section = encode_checkpoint_causal(list_causal);
-    deferred_section = encode_checkpoint_deferred(
-        {}, list_context, list_causal.version);
-    coverage_section = encode_checkpoint_coverage({});
-    pins_section = encode_checkpoint_pins(empty_pins, list_context);
-    QVERIFY(context_section);
-    QVERIFY(causal_section);
-    QVERIFY(deferred_section);
-    QVERIFY(coverage_section);
-    QVERIFY(pins_section);
-    sections = shared_sections();
-    sections[0] = context_section.value();
-    sections[1] = list_payload.value();
-    sections[2] = causal_section.value();
-    sections[3] = deferred_section.value();
-    sections[4] = coverage_section.value();
-    sections[5] = pins_section.value();
-    framed = encode_checkpoint(CheckpointKind::Shareable, sections);
+    CheckpointShareableCore list_core;
+    list_core.context = list_context;
+    list_core.engine.kind = CheckpointEngineKind::IdList;
+    list_core.engine.entries = list_snapshot.entries;
+    list_core.causal = {list_snapshot.version, list_snapshot.undo_entries};
+    list_core.pins = empty_pins;
+    list_core.translations.supported_token_versions = {1};
+    framed = encode_checkpoint_core(list_core);
     QVERIFY(framed);
     artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
     QVERIFY(artifact);
@@ -453,6 +452,42 @@ private slots:
     QCOMPARE(restored_list.entries().size(), source_list.entries().size());
     QCOMPARE(restored_list.resolve_anchor(source_list.anchor_of(20)),
              source_list.resolve_anchor(source_list.anchor_of(20)));
+
+    const auto list_history = source_list.local_history_snapshot();
+    Crdt::IdList continued_list(CollabText::Test::test_counter(
+        3, source_list.allocator()->peek()));
+    QVERIFY(continued_list.restore_checkpoint_state(list_snapshot));
+    QVERIFY(continued_list.restore_local_history(list_history));
+    Crdt::IdList peer_list(CollabText::Test::test_counter(10));
+    QVERIFY(peer_list.restore_checkpoint_state(list_snapshot));
+    auto source_insert = source_list.try_insert_after(source_list.anchor_of(20), 30);
+    auto continued_insert = continued_list.try_insert_after(
+        continued_list.anchor_of(20), 30);
+    QVERIFY(source_insert && continued_insert);
+    QCOMPARE(Crdt::encode_idlist_operation(source_insert.value()).value(),
+             Crdt::encode_idlist_operation(continued_insert.value()).value());
+    auto list_outcome = peer_list.apply_ops({source_insert.value()});
+    QCOMPARE(list_outcome.front().kind(), ApplyOutcomeKind::applied);
+    auto source_list_undo = source_list.try_undo();
+    auto continued_list_undo = continued_list.try_undo();
+    QVERIFY(source_list_undo && continued_list_undo && source_list_undo.value() &&
+            continued_list_undo.value());
+    QCOMPARE(Crdt::encode_idlist_operation(*source_list_undo.value()).value(),
+             Crdt::encode_idlist_operation(*continued_list_undo.value()).value());
+    list_outcome = peer_list.apply_ops({*source_list_undo.value()});
+    QCOMPARE(list_outcome.front().kind(), ApplyOutcomeKind::applied);
+    auto source_list_redo = source_list.try_redo();
+    auto continued_list_redo = continued_list.try_redo();
+    QVERIFY(source_list_redo && continued_list_redo && source_list_redo.value() &&
+            continued_list_redo.value());
+    QCOMPARE(Crdt::encode_idlist_operation(*source_list_redo.value()).value(),
+             Crdt::encode_idlist_operation(*continued_list_redo.value()).value());
+    list_outcome = peer_list.apply_ops({*source_list_redo.value()});
+    QCOMPARE(list_outcome.front().kind(), ApplyOutcomeKind::applied);
+    QCOMPARE(continued_list.ids(), source_list.ids());
+    QCOMPARE(peer_list.ids(), source_list.ids());
+    QCOMPARE(continued_list.entries().size(), source_list.entries().size());
+    QCOMPARE(peer_list.entries().size(), source_list.entries().size());
   }
 
   void deferredSectionPreservesDeliveryAndOpaqueQuarantine() {

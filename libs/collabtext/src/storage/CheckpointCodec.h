@@ -144,6 +144,10 @@ decode_checkpoint_causal(const CheckpointSection &section);
 encode_checkpoint_engine(const CheckpointEngineState &state);
 [[nodiscard]] Result<CheckpointEngineState>
 decode_checkpoint_engine(const CheckpointSection &section);
+/// Encode all shareable sections from one typed snapshot in canonical order.
+/// The corresponding core decoder enforces cross-section consistency.
+[[nodiscard]] Result<std::string>
+encode_checkpoint_core(const CheckpointShareableCore &core);
 [[nodiscard]] Result<CheckpointShareableCore>
 decode_checkpoint_core(const CheckpointArtifact &artifact);
 [[nodiscard]] Result<CheckpointSection>

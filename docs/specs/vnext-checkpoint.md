@@ -63,6 +63,11 @@ A shareable checkpoint has the following required sections:
 | 6 | Pins | canonical external pin projection identity and frontier, including completeness metadata |
 | 7 | Anchor translation | supported token versions, translation manifest hash, and translations required to preserve live pins |
 
+The typed `encode_checkpoint_core` path builds these sections in this canonical
+order and validates cross-section causal references, coverage, and deferred
+delivery state before framing. `decode_checkpoint_core` applies the matching
+cross-section checks after decoding each bounded section.
+
 The context deliberately does not contain the child descriptor hash: that
 descriptor contains the checkpoint digest, so embedding it would create a hash
 cycle. A membership transition verifier compares the checkpoint's document,
