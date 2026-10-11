@@ -2728,11 +2728,46 @@ private slots:
     QVERIFY(!unavailable_history.ok());
     QCOMPARE(unavailable_history.error().code(), ErrorCode::history_unavailable);
 
+    Crdt::Buffer unreclaimed_reference(Test::test_counter(191));
+    auto reference_history = unreclaimed_reference.apply_ops(
+        {peer_operation.value(), peer_delete.value()});
+    QCOMPARE(reference_history.size(), size_t(2));
+    QVERIFY(Test::apply_succeeded(reference_history[0]));
+    QVERIFY(Test::apply_succeeded(reference_history[1]));
+    const auto fresh_actor = Test::actor(190);
+    auto fresh_writer = CrdtEngine::create(Test::test_counter(190), pin_scope);
+    QVERIFY(fresh_writer.ok());
+    auto fresh_operation = fresh_writer.value()->try_insert(0, "fresh");
+    QVERIFY(fresh_operation.ok());
+    auto fresh_reference =
+        unreclaimed_reference.apply_ops({fresh_operation.value()});
+    QCOMPARE(fresh_reference.size(), size_t(1));
+    QVERIFY(Test::apply_succeeded(fresh_reference.front()));
+    auto fresh_payload = Crdt::encode_operation(fresh_operation.value());
+    QVERIFY(fresh_payload.ok());
+    {
+      Crdt::FileOpStream peer(root / "shared", fresh_actor);
+      QVERIFY(peer.start().ok());
+      QVERIFY(peer.register_stream(scope).ok());
+      QVERIFY(peer.push({{scope.stream, scope.epoch, fresh_actor, 1},
+                         fresh_payload.value()},
+                        PushDurability::durable).ok());
+      QVERIFY(peer.close().ok());
+    }
+    auto fresh_poll = bound_session->poll();
+    QVERIFY(fresh_poll.ok());
+    QCOMPARE(fresh_poll.value().committed, size_t(1));
+    QCOMPARE(bound_session->text(), std::string("fresh"));
+    QCOMPARE(bound_session->text(), unreclaimed_reference.text());
+
     auto late_undo = peer_engine.value()->try_undo();
     QVERIFY(late_undo.ok());
     QVERIFY(late_undo.value().has_value());
     auto late_undo_payload = Crdt::encode_operation(*late_undo.value());
     QVERIFY(late_undo_payload.ok());
+    auto reference_undo = unreclaimed_reference.apply_ops({*late_undo.value()});
+    QCOMPARE(reference_undo.size(), size_t(1));
+    QVERIFY(Test::apply_succeeded(reference_undo.front()));
     {
       Crdt::FileOpStream peer(root / "shared", producer);
       QVERIFY(peer.start().ok());
@@ -2746,7 +2781,7 @@ private slots:
     auto late_undo_poll = bound_session->poll();
     QVERIFY(late_undo_poll.ok());
     QCOMPARE(late_undo_poll.value().quarantined, size_t(1));
-    QVERIFY(bound_session->text().empty());
+    QCOMPARE(bound_session->text(), std::string("fresh"));
     auto refused_undo = bound_session->quarantined_deliveries();
     QVERIFY(refused_undo.ok());
     QCOMPARE(refused_undo.value().size(), size_t(1));
@@ -2757,6 +2792,10 @@ private slots:
     QVERIFY(late_placement.ok());
     auto late_placement_payload = Crdt::encode_operation(late_placement.value());
     QVERIFY(late_placement_payload.ok());
+    auto reference_placement =
+        unreclaimed_reference.apply_ops({late_placement.value()});
+    QCOMPARE(reference_placement.size(), size_t(1));
+    QVERIFY(Test::apply_succeeded(reference_placement.front()));
     {
       Crdt::FileOpStream peer(root / "shared", producer);
       QVERIFY(peer.start().ok());
@@ -2770,7 +2809,7 @@ private slots:
     auto late_placement_poll = bound_session->poll();
     QVERIFY(late_placement_poll.ok());
     QCOMPARE(late_placement_poll.value().quarantined, size_t(1));
-    QVERIFY(bound_session->text().empty());
+    QCOMPARE(bound_session->text(), std::string("fresh"));
     auto quarantined_after_placement = bound_session->quarantined_deliveries();
     QVERIFY(quarantined_after_placement.ok());
     QCOMPARE(quarantined_after_placement.value().size(), size_t(1));
@@ -2786,7 +2825,7 @@ private slots:
     QVERIFY(binding_validated);
     // The older unbound checkpoint still has the complete history, so after
     // provider refusal both the late undo and its descendant insertion replay.
-    QCOMPARE(refused_session->text(), std::string("pexer"));
+    QCOMPARE(refused_session->text(), unreclaimed_reference.text());
     QVERIFY(refused_session->close().ok());
   }
 
