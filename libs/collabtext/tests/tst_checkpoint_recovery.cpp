@@ -62,6 +62,37 @@ private slots:
     QVERIFY(!recovered.value()->local_bytes);
   }
 
+  void restartRecoversShareableAndLocalFilesUnderOneWriterLease() {
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto actor = Test::actor(115);
+    const CheckpointContext context{"restart-document", "main", 1, "",
+                                    CheckpointEngineKind::Text};
+    const auto shareable = checkpoint(context.document);
+    CheckpointLocalCore local;
+    local.owner = {actor, sha256_hex(shareable)};
+    local.writer = {actor, context.document, context.stream, context.epoch, 1, 0};
+    auto local_bytes = encode_checkpoint_local_core(local, context, shareable);
+    QVERIFY(local_bytes);
+    {
+      auto store = CheckpointStore::open(temp.path().toStdString());
+      QVERIFY(store);
+      QVERIFY(store.value().publish(shareable, local_bytes.value(), actor));
+      auto competing_writer = CheckpointStore::open(temp.path().toStdString());
+      QVERIFY(!competing_writer);
+      QCOMPARE(competing_writer.error().code(), ErrorCode::writer_conflict);
+    }
+
+    auto restarted = CheckpointStore::open(temp.path().toStdString());
+    QVERIFY(restarted);
+    auto recovered = restarted.value().recover(actor, accept_checkpoint, context);
+    QVERIFY(recovered);
+    QVERIFY(recovered.value());
+    QCOMPARE(recovered.value()->shareable_bytes, shareable);
+    QCOMPARE(recovered.value()->local_bytes,
+             std::optional<std::string>(local_bytes.value()));
+  }
+
   void failedPublicationKeepsPreviousManifestAndCorruptNewestFallsBack() {
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
