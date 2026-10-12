@@ -34,7 +34,10 @@ the identity overloads when values repeat. Returned values contain no tree state
 Use the insertion identity as BlockId within a stable document namespace.
 Persist a host document key; an ordinary document copy retains or explicitly
 forks that namespace according to Markoff policy. Include the full actor and
-counter in an injective stream name (for example `block:<32 lowercase actor hex>:<16 lowercase counter hex>`).
+counter in an injective stream name. Markoff already provides
+`blockTextStreamName(BlockIdentity{entry.identity.actor, entry.identity.counter})`,
+with canonical `markoff/block/v1/<32 lowercase actor hex>/<16 lowercase counter hex>`
+names. Reuse that helper; names such as `block-1` do not satisfy its adapter contract.
 Keep the structural-list scope and epoch in the document's authority. Do not
 hash/truncate/map identities to uint64_t or use application values as addresses.
 Core cannot choose which two host files represent the same document.
@@ -129,3 +132,17 @@ referents or compensation targets. Core rejects these document records with
 actor_conflict and refuses abandoned tentative undo metadata with
 history_unavailable. Rebuild from the accepted prefix and restore only accepted
 owner history after a definitive append failure.
+
+## Markoff-owned probe follow-up
+
+The existing installed probe compiles against alpha.4, but fails before creating
+the Core engine: `tests/collabtext-vnext/main.cpp:64` uses `block-1`, while
+`ScopedTextStream::create` requires `parseBlockTextStreamName` to accept a
+canonical block identity. The same source fails against alpha.3 with the same
+message, so this is a consumer fixture mismatch, not an alpha.4 regression.
+
+Markoff should derive the shared fixture stream through `blockTextStreamName`
+from one stable BlockIdentity, then use that same scope for writer, peers,
+restart, routes and expected bundles. Do not weaken the adapter's canonical
+name validation. Rerun the probe and add the new identity/gap/archive acceptance
+trace to production-owned coverage. Its checkout was not modified by this work.

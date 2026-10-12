@@ -96,10 +96,16 @@ include/link isolation and unknown-component refusal passed. Core-only consumers
 configured with optional Qt/zstd/OpenSSL discovery disabled. Both producer and
 consumer were instrumented for the leak-enabled sanitizer gate.
 
-The Wave-shaped registry has 18 rows; two retained WP8 collection capability
-rows remain unsupported, outside the live strict set. Physical collection/log
-pruning is explicitly disabled during initial adoption. These fixtures do not
-certify production consumer acceptance or finish G06/G08.
+The Wave-shaped registry has 18 rows; all 18 observed results passed. The live
+strict set requires 16 rows; the two non-strict rows are WP6 concurrent paste and
+WP8 durable pin registration, both passing. Physical collection/log pruning is
+explicitly disabled during initial adoption. These fixtures do not certify
+production consumer acceptance or finish G06/G08.
+
+2026-10-12 evidence correction: earlier wording incorrectly described the two
+non-strict rows as unsupported WP8 collection cases. The retained alpha.3
+results show WP6 and WP8 passing; this correction changes no historical run or
+GC certification claim.
 
 ## Wave-owned probe evidence and limit
 

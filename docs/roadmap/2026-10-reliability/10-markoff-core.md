@@ -153,6 +153,8 @@ Run installed consumer_markoff_core in all three relocated package modes and ver
 - `docs/reports/2026-10-11-markoff-core-candidate.md`
 - `tests/consumer-smoke/README.md`
 
+- `docs/reports/2026-10-11-wave-core-candidate.md`
+
 **Steps:**
 
 1. Bump package alpha.4 and capability manifest v16; settle all three asks and host document-key/stream naming obligations in a public response. Align current roadmap/specs without rewriting historical Wave evidence.

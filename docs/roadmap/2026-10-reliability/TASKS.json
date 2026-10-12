@@ -5,21 +5,17 @@
   "contains_branch": "roadmap/reliability-v2",
   "status": "in_progress",
   "direction": {
-    "as_of": "2026-10-11",
+    "as_of": "2026-10-12",
     "document": "docs/roadmap/2026-10-reliability/DIRECTION.md",
     "placement": "FugueMax",
     "spec": "docs/specs/vnext-sequence-algorithm.md#0",
     "next": [
-      "M01",
-      "M02",
-      "M03",
-      "M04",
-      "M05"
+      "Q06",
+      "M06"
     ],
     "unblocked_not_next": [
       "G03",
-      "G06",
-      "Q06"
+      "G06"
     ],
     "operation_formats": {
       "CTBO": [
@@ -4311,10 +4307,32 @@
         "R14"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "cb43520e5bbfc9378fc49c0053192863caaa4eed",
+        "e4c98f94fbcaaf2da63a13f5968db8483877aa81",
+        "aad2cd1dce5f5f23e1a7c5b4e4a67050b55ab36c",
+        "c0a0ef55ea9b6a3e448b9ef5c258f09933ebb127"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-markoff-core-candidate.md",
+        "full_debug": "101/101 at c0a0ef5",
+        "full_release": "101/101 at c0a0ef5",
+        "full_asan_ubsan_leaks": "Serial 101/101 at c0a0ef5; prior contended timing failure retained; no suppression",
+        "installed_live": "Debug/Release/ASan 5/5 CTests, Wave 16/16 strict, Markdown 4/4 at c0a0ef5",
+        "ctlo_reader_upgrade": "Same literal archives 1/1 on alpha.3 and 1/1 on alpha.4",
+        "markoff_owned_probe": "Build passes; runtime 0/1 on both alpha.3 and alpha.4 because block-1 is not a canonical block stream name; consumer fixture fix required",
+        "artifacts": [
+          "build-roadmap-debug/verification/20261011T220608Z-changed-r7vzhlbq",
+          "build-roadmap-release/verification/20261011T220608Z-changed-mmxvouz_",
+          "build-roadmap-asan/verification/20261012T054015Z-changed-dwojgjlu",
+          "/tmp/ct-markoff-debug-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-release-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-asan-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-owned-source.json"
+        ]
+      }
     },
     {
       "id": "M02",
@@ -4340,10 +4358,32 @@
         "R14"
       ],
       "gate": "The model must pass before M03; a codec or scalar counter raise is insufficient.",
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "cb43520e5bbfc9378fc49c0053192863caaa4eed",
+        "e4c98f94fbcaaf2da63a13f5968db8483877aa81",
+        "aad2cd1dce5f5f23e1a7c5b4e4a67050b55ab36c",
+        "c0a0ef55ea9b6a3e448b9ef5c258f09933ebb127"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-markoff-core-candidate.md",
+        "full_debug": "101/101 at c0a0ef5",
+        "full_release": "101/101 at c0a0ef5",
+        "full_asan_ubsan_leaks": "Serial 101/101 at c0a0ef5; prior contended timing failure retained; no suppression",
+        "installed_live": "Debug/Release/ASan 5/5 CTests, Wave 16/16 strict, Markdown 4/4 at c0a0ef5",
+        "ctlo_reader_upgrade": "Same literal archives 1/1 on alpha.3 and 1/1 on alpha.4",
+        "markoff_owned_probe": "Build passes; runtime 0/1 on both alpha.3 and alpha.4 because block-1 is not a canonical block stream name; consumer fixture fix required",
+        "artifacts": [
+          "build-roadmap-debug/verification/20261011T220608Z-changed-r7vzhlbq",
+          "build-roadmap-release/verification/20261011T220608Z-changed-mmxvouz_",
+          "build-roadmap-asan/verification/20261012T054015Z-changed-dwojgjlu",
+          "/tmp/ct-markoff-debug-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-release-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-asan-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-owned-source.json"
+        ]
+      }
     },
     {
       "id": "M03",
@@ -4385,10 +4425,32 @@
         "R14"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "cb43520e5bbfc9378fc49c0053192863caaa4eed",
+        "e4c98f94fbcaaf2da63a13f5968db8483877aa81",
+        "aad2cd1dce5f5f23e1a7c5b4e4a67050b55ab36c",
+        "c0a0ef55ea9b6a3e448b9ef5c258f09933ebb127"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-markoff-core-candidate.md",
+        "full_debug": "101/101 at c0a0ef5",
+        "full_release": "101/101 at c0a0ef5",
+        "full_asan_ubsan_leaks": "Serial 101/101 at c0a0ef5; prior contended timing failure retained; no suppression",
+        "installed_live": "Debug/Release/ASan 5/5 CTests, Wave 16/16 strict, Markdown 4/4 at c0a0ef5",
+        "ctlo_reader_upgrade": "Same literal archives 1/1 on alpha.3 and 1/1 on alpha.4",
+        "markoff_owned_probe": "Build passes; runtime 0/1 on both alpha.3 and alpha.4 because block-1 is not a canonical block stream name; consumer fixture fix required",
+        "artifacts": [
+          "build-roadmap-debug/verification/20261011T220608Z-changed-r7vzhlbq",
+          "build-roadmap-release/verification/20261011T220608Z-changed-mmxvouz_",
+          "build-roadmap-asan/verification/20261012T054015Z-changed-dwojgjlu",
+          "/tmp/ct-markoff-debug-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-release-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-asan-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-owned-source.json"
+        ]
+      }
     },
     {
       "id": "M04",
@@ -4418,10 +4480,32 @@
         "R14"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "cb43520e5bbfc9378fc49c0053192863caaa4eed",
+        "e4c98f94fbcaaf2da63a13f5968db8483877aa81",
+        "aad2cd1dce5f5f23e1a7c5b4e4a67050b55ab36c",
+        "c0a0ef55ea9b6a3e448b9ef5c258f09933ebb127"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-markoff-core-candidate.md",
+        "full_debug": "101/101 at c0a0ef5",
+        "full_release": "101/101 at c0a0ef5",
+        "full_asan_ubsan_leaks": "Serial 101/101 at c0a0ef5; prior contended timing failure retained; no suppression",
+        "installed_live": "Debug/Release/ASan 5/5 CTests, Wave 16/16 strict, Markdown 4/4 at c0a0ef5",
+        "ctlo_reader_upgrade": "Same literal archives 1/1 on alpha.3 and 1/1 on alpha.4",
+        "markoff_owned_probe": "Build passes; runtime 0/1 on both alpha.3 and alpha.4 because block-1 is not a canonical block stream name; consumer fixture fix required",
+        "artifacts": [
+          "build-roadmap-debug/verification/20261011T220608Z-changed-r7vzhlbq",
+          "build-roadmap-release/verification/20261011T220608Z-changed-mmxvouz_",
+          "build-roadmap-asan/verification/20261012T054015Z-changed-dwojgjlu",
+          "/tmp/ct-markoff-debug-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-release-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-asan-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-owned-source.json"
+        ]
+      }
     },
     {
       "id": "M05",
@@ -4450,7 +4534,8 @@
         "docs/roadmap/2026-10-reliability/10-markoff-core.md",
         "docs/reports/vnext-task-log.md",
         "docs/reports/2026-10-11-markoff-core-candidate.md",
-        "tests/consumer-smoke/README.md"
+        "tests/consumer-smoke/README.md",
+        "docs/reports/2026-10-11-wave-core-candidate.md"
       ],
       "steps": [
         "Bump package alpha.4 and capability manifest v16; settle all three asks and host document-key/stream naming obligations in a public response. Align current roadmap/specs without rewriting historical Wave evidence.",
@@ -4466,10 +4551,32 @@
         "R14"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
-      "implementation_commits": [],
-      "verification_results": {}
+      "implementation_commits": [
+        "cb43520e5bbfc9378fc49c0053192863caaa4eed",
+        "e4c98f94fbcaaf2da63a13f5968db8483877aa81",
+        "aad2cd1dce5f5f23e1a7c5b4e4a67050b55ab36c",
+        "c0a0ef55ea9b6a3e448b9ef5c258f09933ebb127"
+      ],
+      "verification_results": {
+        "report": "docs/reports/2026-10-11-markoff-core-candidate.md",
+        "full_debug": "101/101 at c0a0ef5",
+        "full_release": "101/101 at c0a0ef5",
+        "full_asan_ubsan_leaks": "Serial 101/101 at c0a0ef5; prior contended timing failure retained; no suppression",
+        "installed_live": "Debug/Release/ASan 5/5 CTests, Wave 16/16 strict, Markdown 4/4 at c0a0ef5",
+        "ctlo_reader_upgrade": "Same literal archives 1/1 on alpha.3 and 1/1 on alpha.4",
+        "markoff_owned_probe": "Build passes; runtime 0/1 on both alpha.3 and alpha.4 because block-1 is not a canonical block stream name; consumer fixture fix required",
+        "artifacts": [
+          "build-roadmap-debug/verification/20261011T220608Z-changed-r7vzhlbq",
+          "build-roadmap-release/verification/20261011T220608Z-changed-mmxvouz_",
+          "build-roadmap-asan/verification/20261012T054015Z-changed-dwojgjlu",
+          "/tmp/ct-markoff-debug-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-release-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-asan-live-c0a0ef5/results.json",
+          "/tmp/ct-markoff-owned-source.json"
+        ]
+      }
     },
     {
       "id": "M06",
@@ -4501,8 +4608,8 @@
       "verification_results": {}
     }
   ],
-  "revised": "2026-10-11",
-  "revision_reason": "Markoff asks add ordered list identities, applicable terminal gap coverage and durable CTLO readers; M01\u2013M05 upstream implementation, M06/Q06 external acceptance.",
+  "revised": "2026-10-12",
+  "revision_reason": "M01\u2013M05 upstream Markoff capabilities completed with full Debug/Release/leak-enabled serial ASan and three relocated installed gates. Markoff-owned probe has a same-error alpha.3/alpha.4 canonical-name fixture mismatch; Q06/M06 production acceptance remains external.",
   "removed_tasks": [
     {
       "id": "E01",

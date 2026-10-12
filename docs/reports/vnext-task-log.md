@@ -3173,3 +3173,20 @@ acceptance remains external Q06. Full revisions, commands, counts and artifacts:
 New annotated candidate `collabtext-wave-core-2026-10-11`; prior adoption tag is
 unchanged. No push, consumer edit, publication or master merge. Broad performance
 and GC certification remain governed by their incomplete registry tasks.
+
+## 2026-10-12 — M01–M05: Markoff adoption requests
+
+Ordered full list identities and exact identity lookup, scoped terminal counter
+gaps with retained conflict/checkpoint evidence, and durable CTLO/0002/CTGP/0001
+reader commitments are implemented. The unused-counter compensation/history
+regression was reproduced and fixed. Final full Debug/Release and serial
+ASan/UBSan/LeakSanitizer suites passed 101/101; all three relocated installed
+Core gates passed 5/5, Wave 16/16 strict and Markdown 4/4. Literal CTLO archives
+passed against alpha.3 and alpha.4. Markoff's actual probe compiles but fails its
+own noncanonical block-1 fixture on both packages; the handoff names its existing
+canonical helper and leaves M06 external. Q06 is also open.
+
+[Markoff candidate report](2026-10-11-markoff-core-candidate.md) records exact
+revisions, commands, retained timing failure/rerun, source digest and artifacts.
+New annotated local tag collabtext-markoff-core-2026-10-11; neither earlier tag
+moved. No consumer edit, pin change, push, publication or master merge.

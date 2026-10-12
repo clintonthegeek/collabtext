@@ -1,56 +1,52 @@
 # Current direction
 
-As of 2026-10-11. Branch `feat/fuguemax-placement`, worktree
-`/home/clinton/dev/collabtext/.worktrees/reliability-v2`. This file selects the
-active lane; TASKS.json owns exact status and dependencies. Historical task
-steps and reports do not override these instructions.
+As of 2026-10-12. Branch `feat/fuguemax-placement`, worktree
+`/home/clinton/dev/collabtext/.worktrees/reliability-v2`. TASKS.json owns exact
+status/dependencies; completed phase procedures are history, not work to repeat.
 
-The user has authorized finishing Wave's Core requirements, including deep
-changes and optimization, before Markoff starts. Q01–Q05 and Q04a are complete; do not repeat them. Wave acceptance remains external Q06 in
-[09-wave-core.md](09-wave-core.md). The normative capability contract is
-[wave-core-adoption.md](../../specs/wave-core-adoption.md); the consumer-facing
-instructions are [wave-core-response.md](../../handoff/wave-core-response.md).
-Q06 is external Wave acceptance, not something an upstream fixture can certify.
+Wave Q01–Q05/Q04a and Markoff M01–M05 are upstream complete. The selected next
+steps are external **Q06 and M06**: production acceptance on the exact final
+candidate. Markoff has begun integration. Its existing installed probe builds,
+but currently fails its own canonical block stream-name precondition on both
+alpha.3 and alpha.4; see the Markoff response for the precise fix.
 
-Production ordering remains native FugueMax for text and IdList. P-series,
-L-series and S-series tasks are complete; E07a/E07b are complete. Do not repeat
-those tasks or resurrect Locator. Recovery, local undo and public pin composition
-exist. G03/G06 remain in progress; G07/G08 and remaining A/X/E work are pending.
-Certified source-level collection is not a turnkey installed consumer service.
-Initial Wave/Markoff adoption retains history and disables physical GC/pruning.
+Current candidate: local annotated `collabtext-markoff-core-2026-10-11`, package
+`0.2.0-alpha.4`, capability manifest v16. Earlier immutable tags:
+`collabtext-adoption-2026-10-11` at `0d21670896d02dda3dc44d18d37f9657935333ed`
+and `collabtext-wave-core-2026-10-11` at `ffe9875ee35a525f422eff3c1aaee2841f55d962`.
+Resolve the new tag for the final adoption pin. Local tags are not publication or
+consumer approval. The report records exact executable and evidence revisions.
 
-The earlier candidate is the immutable local tag
-`collabtext-adoption-2026-10-11` at `0d21670896d02dda3dc44d18d37f9657935333ed`.
-The new candidate is `collabtext-wave-core-2026-10-11`, package `0.2.0-alpha.3`. Neither local tagging nor package tests imply publication or approval
-by Wave. C++ ABI remains alpha; durable readers for supported CTBO/CTPT bytes are
-separate obligations. CTBO/0002 and CTPT/1 stay readable; marker operations use
-CTBO/0003 and marker tokens CTPT/2. Pre-vNext CTBO/0001 stays unsupported.
+Current normative extensions:
+[Wave contract](../../specs/wave-core-adoption.md),
+[Markoff contract](../../specs/markoff-core-adoption.md).
+Consumer responses:
+[Wave](../../handoff/wave-core-response.md),
+[Markoff](../../handoff/markoff-core-response.md).
+Evidence: [Markoff candidate report](../../reports/2026-10-11-markoff-core-candidate.md).
 
-One executor. Complete specification/model gates first, preserve independent
-oracles, use installed public headers for consumer traces, and record nonempty
-Debug/Release/sanitizer/package results. Benchmark separately before performance
-claims. Optimizations must preserve operation identity, ordering, compensation,
-coordinates, callback behavior and retained archive semantics.
+Native FugueMax remains the text/IdList production ordering. Markers share the
+text sequence. Ordered list projections expose full insertion identities;
+terminal counter gaps are scoped host-committed metadata, not placeholder edits.
+Current durable readers: CTBO/0002–0003, CTLO/0002, CTGP/0001 and CTPT/1–2.
+No earlier experimental-store migration obligation is assumed. Obsolete CME1,
+unbound checkpoint engine section 1 and ignored Qt constructor paths are gone.
+Checkpoint current writers use engine sections 2/3 or gap-bearing section 4;
+general private-store upgrade compatibility is not promised. Alpha ABI is not stable.
 
-The candidate report and handoff provide the exact pin and smallest installed test. Wave must
-rerun its own adapter and EventStore probes; Q06 stays open until its evidence
-exists. Do not edit Wave/Markoff, message consumers, merge master or publish
-without explicit instruction. Markoff's later acceptance remains a merge gate
-unless the user explicitly changes that policy. Remaining G/A/X/E tasks follow
-their actual registry dependencies; Q05 does not imply those tasks are complete.
+P/L/S and E07a/E07b tasks are complete. G03/G06 remain in progress; G07/G08 and
+remaining A/X/E tasks remain governed by their incomplete registry entries.
+Initial adoption retains history and disables physical collection/log pruning.
+Source collection composition is not turnkey installed consumer GC. Do not
+claim broad performance certification or logarithmic edit complexity.
 
+One executor. Preserve independent models, typed refusal and allocator authority.
+Consumer-owned fixtures must use installed public headers. Record nonempty
+Debug/Release/leak-enabled sanitizer/package evidence. Do not weaken tests or
+suppress findings; time-based checks need an uncontended verification run.
 
-2026-10-11 clean-cut amendment: the user requires no compatibility for earlier
-alpha stores. Superseded readers and source-compatibility parameters are removed
-once current replacements pass. CME1 and unbound checkpoint engine section 1 are
-unsupported; presence-only SyncManager no longer takes an ignored engine pointer.
-CTBO/0002–0003 and CTPT/1–2 remain current writer formats; the reader obligation
-above starts with this adoption candidate for newly durable Wave data. This is
-not an obligation to upgrade earlier experimental stores.
-
-Current active upstream lane: M01–M05 in [10-markoff-core.md](10-markoff-core.md),
-authorized by the user after Markoff began integration. Normative contract:
-[markoff-core-adoption.md](../../specs/markoff-core-adoption.md). Response:
-[markoff-core-response.md](../../handoff/markoff-core-response.md). New candidate
-alpha.4/manifest v16 promises durable CTLO/0002 and CTGP/0001 readers; exact prior
-Wave tag is unchanged. M06 and Q06 are independent external approval gates.
+Do not edit consumers, message them, push, publish or merge master without a new
+explicit instruction. Provide the handoff and local prefix; consumers must supply
+real adapter/transaction acceptance. Final same-candidate engine checks and both
+Wave/Markoff approvals precede explicit user merge authorization. Q06/M06 are
+not complete merely because upstream-shaped tests pass.
