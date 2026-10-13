@@ -126,6 +126,12 @@ public:
     bool redo();
     [[nodiscard]] Result<std::optional<Crdt::Operation>> try_undo();
     [[nodiscard]] Result<std::optional<Crdt::Operation>> try_redo();
+    /// Compensate the exact active local history group, even below newer groups.
+    [[nodiscard]] Result<std::optional<Crdt::Operation>>
+    try_undo_group(const Crdt::Identity &group_id);
+    /// Reapply the exact undone local history group without redoing other groups.
+    [[nodiscard]] Result<std::optional<Crdt::Operation>>
+    try_redo_group(const Crdt::Identity &group_id);
     [[nodiscard]] size_t undo_depth() const;
     [[nodiscard]] size_t undo_history_bytes() const;
     [[nodiscard]] size_t max_undo_depth() const;

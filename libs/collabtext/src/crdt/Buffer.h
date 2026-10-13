@@ -163,12 +163,16 @@ public:
     std::optional<Operation> undo();
     /// Checked undo that preserves allocator and identity-reservation errors.
     [[nodiscard]] Result<std::optional<Operation>> try_undo();
+    /// Undo an exact currently active group, including one below newer groups.
+    [[nodiscard]] Result<std::optional<Operation>> try_undo_group(const Identity &group_id);
 
     /// Redo the last undone local edit. Returns the operation to broadcast,
     /// or nullopt if there is nothing to redo.
     std::optional<Operation> redo();
     /// Checked redo that preserves allocator and identity-reservation errors.
     [[nodiscard]] Result<std::optional<Operation>> try_redo();
+    /// Redo an exact currently undone group without redoing newer selections.
+    [[nodiscard]] Result<std::optional<Operation>> try_redo_group(const Identity &group_id);
 
     /// Number of entries on the undo stack that can currently be undone.
     /// (Increases by one per local edit; decreases by one per undo; restored

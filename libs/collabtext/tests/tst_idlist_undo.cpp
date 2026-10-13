@@ -118,6 +118,45 @@ private slots:
         QCOMPARE(replayed.ids(), std::vector<uint64_t>{1});
         QVERIFY(!replayed.undo().has_value());
     }
+
+    void public_engine_selectively_undoes_and_redoes_non_top_group() {
+        CollabText::IdListEngine list(CollabText::Test::test_counter(19));
+        auto first = list.try_insert_after(Anchor::min(), 7);
+        QVERIFY(first.ok());
+        const auto first_group = list.next_undo_group();
+        QVERIFY(first_group.has_value());
+        const auto first_identity = idlist_op_identity(first.value());
+        auto second = list.try_insert_after(
+            Anchor(first_identity, Bias::Right), 7);
+        QVERIFY(second.ok());
+        const auto second_group = list.next_undo_group();
+        QVERIFY(second_group.has_value());
+
+        auto undo_first = list.try_undo_group(first_group->group_id);
+        QVERIFY(undo_first.ok() && undo_first.value().has_value());
+        QCOMPARE(list.ids(), std::vector<uint64_t>{7});
+        QCOMPARE(list.next_undo_group()->group_id, second_group->group_id);
+
+        auto undo_second = list.try_undo();
+        QVERIFY(undo_second.ok() && undo_second.value().has_value());
+        QVERIFY(list.ids().empty());
+        const auto saved = list.local_history_snapshot();
+        QCOMPARE(saved.cursor, size_t(0));
+        QCOMPARE(saved.entries[0].group_id, second_group->group_id);
+        QCOMPARE(saved.entries[1].group_id, first_group->group_id);
+
+        CollabText::IdListEngine reopened(CollabText::Test::test_counter(19, 100));
+        QCOMPARE(reopened.apply_ops({first.value(), second.value(),
+                                     *undo_first.value(), *undo_second.value()}).size(),
+                 size_t(4));
+        QVERIFY(reopened.restore_local_history(saved).ok());
+        auto redo_first = reopened.try_redo_group(first_group->group_id);
+        QVERIFY(redo_first.ok() && redo_first.value().has_value());
+        QCOMPARE(reopened.ids(), std::vector<uint64_t>{7});
+        auto redo_second = reopened.try_redo_group(second_group->group_id);
+        QVERIFY(redo_second.ok() && redo_second.value().has_value());
+        QCOMPARE(reopened.ids(), (std::vector<uint64_t>{7, 7}));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIdListUndo)

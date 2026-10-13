@@ -22,6 +22,9 @@ struct LocalUndoEntrySnapshot {
 /// Actor-local undo/redo cursor and retained steps. Restore only after operation
 /// replay; the engine rejects references outside the owner's replayed history.
 struct LocalHistorySnapshot {
+    /// Undoable groups occupy [0, cursor) in active undo order. Redoable groups
+    /// occupy [cursor, entries.size()) with the next ordinary redo first.
+    /// Selective group undo/redo may move entries while preserving this split.
     std::vector<LocalUndoEntrySnapshot> entries;
     /// Trimmed or redo-truncated groups awaiting durable retirement publication.
     /// Engines cap combined active and pending history at 100,000 groups and

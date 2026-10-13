@@ -384,6 +384,45 @@ private slots:
         bool result = CollabText::Test::apply_succeeded(engine2.apply_remote(*captured));
         QVERIFY(result);
     }
+
+    void selective_group_undo_preserves_newer_group_and_survives_restore() {
+        CrdtEngine owner(CollabText::Test::test_counter(31));
+        std::vector<Operation> history;
+        owner.setOnLocalOp([&](const Operation &op) { history.push_back(op); });
+        QVERIFY(owner.try_replace(0, 0, "A").ok());
+        const auto group_a = owner.next_undo_group();
+        QVERIFY(group_a.has_value());
+        QVERIFY(owner.try_replace(1, 0, "B").ok());
+        const auto group_b = owner.next_undo_group();
+        QVERIFY(group_b.has_value());
+
+        auto undo_a = owner.try_undo_group(group_a->group_id);
+        QVERIFY(undo_a.ok() && undo_a.value().has_value());
+        QCOMPARE(owner.text(), std::string("B"));
+        QCOMPARE(owner.undo_depth(), size_t(1));
+        QCOMPARE(owner.next_undo_group()->group_id, group_b->group_id);
+        QVERIFY(!owner.try_undo_group(group_a->group_id).ok());
+
+        auto undo_b = owner.try_undo();
+        QVERIFY(undo_b.ok() && undo_b.value().has_value());
+        QVERIFY(owner.text().empty());
+        const auto saved = owner.local_history_snapshot();
+        QCOMPARE(saved.cursor, size_t(0));
+        QCOMPARE(saved.entries.size(), size_t(2));
+        QCOMPARE(saved.entries[0].group_id, group_b->group_id);
+        QCOMPARE(saved.entries[1].group_id, group_a->group_id);
+
+        CrdtEngine reopened(CollabText::Test::test_counter(31, 100));
+        for (const auto &op : history)
+            QVERIFY(CollabText::Test::apply_succeeded(reopened.apply_remote(op)));
+        QVERIFY(reopened.restore_local_history(saved).ok());
+        auto redo_a = reopened.try_redo_group(group_a->group_id);
+        QVERIFY(redo_a.ok() && redo_a.value().has_value());
+        QCOMPARE(reopened.text(), std::string("A"));
+        auto redo_b = reopened.try_redo_group(group_b->group_id);
+        QVERIFY(redo_b.ok() && redo_b.value().has_value());
+        QCOMPARE(reopened.text(), std::string("AB"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCrdtEngineOpApi)

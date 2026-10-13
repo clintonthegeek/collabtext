@@ -1862,6 +1862,17 @@ Result<std::optional<Operation>> Buffer::try_undo() {
     if (m_undo_cursor == 0)
         return std::optional<Operation>{};
 
+    return try_undo_group(m_undo_stack[m_undo_cursor - 1].group_id);
+}
+
+Result<std::optional<Operation>> Buffer::try_undo_group(const Identity &group_id) {
+    auto found = std::find_if(m_undo_stack.begin(),
+                              m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor),
+                              [&](const UndoEntry &entry) { return entry.group_id == group_id; });
+    if (found == m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor))
+        return Error(ErrorCode::history_unavailable,
+                     "requested undo group is not active");
+
     // An undo inserts no items, so it reserves exactly one value: its own
     // identity (§3.2 with n == 0). The identities it targets are item
     // identities from a different domain, which is why no undo-map entry can be
@@ -1875,21 +1886,26 @@ Result<std::optional<Operation>> Buffer::try_undo() {
     auto reserved = m_allocator->reserve_run(1);
     if (!reserved.ok()) return reserved.error();
 
-    m_undo_cursor--;
-    auto &entry = m_undo_stack[m_undo_cursor];
+    UndoEntry entry = std::move(*found);
+    const auto index = static_cast<size_t>(std::distance(m_undo_stack.begin(), found));
+    m_undo_stack.erase(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(index));
+    --m_undo_cursor;
+    m_undo_stack.insert(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor),
+                        std::move(entry));
+    auto &undo_entry = m_undo_stack[m_undo_cursor];
 
     UndoOperation op;
     op.version = m_version;
     op.timestamp = Identity(m_allocator->actor(), reserved.value());
 
-    for (auto &key : entry.inserted_keys) {
+    for (auto &key : undo_entry.inserted_keys) {
         const Identity edit_id = key.position;
         uint32_t current = m_undo_map.undo_count(edit_id);
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
         op.counts.push_back({edit_id, current + 1});
     }
 
-    for (auto &deletion_id : entry.deletion_ids) {
+    for (auto &deletion_id : undo_entry.deletion_ids) {
         uint32_t current = m_undo_map.undo_count(deletion_id);
         m_undo_map.insert(
             UndoMapEntry{{deletion_id, op.timestamp}, current + 1});
@@ -1914,13 +1930,29 @@ Result<std::optional<Operation>> Buffer::try_redo() {
     if (m_undo_cursor >= m_undo_stack.size())
         return std::optional<Operation>{};
 
+    return try_redo_group(m_undo_stack[m_undo_cursor].group_id);
+}
+
+Result<std::optional<Operation>> Buffer::try_redo_group(const Identity &group_id) {
+    auto found = std::find_if(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor),
+                              m_undo_stack.end(),
+                              [&](const UndoEntry &entry) { return entry.group_id == group_id; });
+    if (found == m_undo_stack.end())
+        return Error(ErrorCode::history_unavailable,
+                     "requested redo group is not available");
+
     if (auto usable = check_allocator(); !usable.ok()) return usable.error();
 
     auto reserved = m_allocator->reserve_run(1);
     if (!reserved.ok()) return reserved.error();
 
-    auto &entry = m_undo_stack[m_undo_cursor];
-    m_undo_cursor++;
+    UndoEntry entry = std::move(*found);
+    const auto index = static_cast<size_t>(std::distance(m_undo_stack.begin(), found));
+    m_undo_stack.erase(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(index));
+    m_undo_stack.insert(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor),
+                        std::move(entry));
+    auto &redo_entry = m_undo_stack[m_undo_cursor];
+    ++m_undo_cursor;
 
     // An undo inserts no items, so it reserves exactly one value: its own
     // identity (§3.2 with n == 0). The identities it targets are item
@@ -1930,14 +1962,14 @@ Result<std::optional<Operation>> Buffer::try_redo() {
     op.version = m_version;
     op.timestamp = Identity(m_allocator->actor(), reserved.value());
 
-    for (auto &key : entry.inserted_keys) {
+    for (auto &key : redo_entry.inserted_keys) {
         const Identity edit_id = key.position;
         uint32_t current = m_undo_map.undo_count(edit_id);
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
         op.counts.push_back({edit_id, current + 1});
     }
 
-    for (auto &deletion_id : entry.deletion_ids) {
+    for (auto &deletion_id : redo_entry.deletion_ids) {
         uint32_t current = m_undo_map.undo_count(deletion_id);
         m_undo_map.insert(
             UndoMapEntry{{deletion_id, op.timestamp}, current + 1});

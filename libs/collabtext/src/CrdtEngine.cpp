@@ -308,6 +308,34 @@ Result<std::optional<Crdt::Operation>> CrdtEngine::try_redo() {
     return std::move(result).value();
 }
 
+Result<std::optional<Crdt::Operation>> CrdtEngine::try_undo_group(
+    const Crdt::Identity &group_id) {
+    if (m_impl->callback_active)
+        return Error(ErrorCode::reentrant_mutation,
+                     "cannot mutate an engine from its notification callback");
+    auto result = m_impl->buffer.try_undo_group(group_id);
+    if (!result.ok()) return result.error();
+    if (result.value()) {
+        m_impl->emit_op(*result.value());
+        m_impl->notify();
+    }
+    return std::move(result).value();
+}
+
+Result<std::optional<Crdt::Operation>> CrdtEngine::try_redo_group(
+    const Crdt::Identity &group_id) {
+    if (m_impl->callback_active)
+        return Error(ErrorCode::reentrant_mutation,
+                     "cannot mutate an engine from its notification callback");
+    auto result = m_impl->buffer.try_redo_group(group_id);
+    if (!result.ok()) return result.error();
+    if (result.value()) {
+        m_impl->emit_op(*result.value());
+        m_impl->notify();
+    }
+    return std::move(result).value();
+}
+
 size_t CrdtEngine::undo_depth() const { return m_impl->buffer.undo_depth(); }
 size_t CrdtEngine::undo_history_bytes() const { return m_impl->buffer.undo_history_bytes(); }
 size_t CrdtEngine::max_undo_depth() const { return m_impl->buffer.max_undo_depth(); }

@@ -412,6 +412,16 @@ consumer's canonical event log or make a multi-block transaction.
 `IdListEngine::try_undo()` and `try_redo()` return
 `Result<std::optional<IdListOperation>>`: an empty optional means the relevant
 history stack is empty, and an error reports a refused identity reservation.
+Both `CrdtEngine` and `IdListEngine` also expose `try_undo_group(group_id)` and
+`try_redo_group(group_id)`. These compensate the exact local-history group named
+by its full identity, even when it is below newer active groups or behind other
+redo entries. A missing or wrong-state group returns `history_unavailable`
+without consuming an identity. The resulting compensation is an ordinary
+replicated operation. The history snapshot keeps its existing vector/cursor
+shape: entries before the cursor are active in undo order; entries from the
+cursor onward are available in redo order, with normal redo selecting the first
+entry. Selective undo moves its group to the cursor, and selective redo moves its
+group to the active boundary. New local edits still discard the redo suffix.
 The legacy `undo()` and `redo()` wrappers remain available and return an empty
 optional for either condition.
 

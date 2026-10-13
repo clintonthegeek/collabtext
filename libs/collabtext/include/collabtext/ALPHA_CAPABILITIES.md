@@ -1,7 +1,7 @@
 # Collabtext alpha capability manifest
 
-**Version:** 16
-**Package:** `0.2.0-alpha.4`
+**Version:** 17
+**Package:** `0.2.0-alpha.5`
 **Branch:** `feat/fuguemax-placement`
 **Status:** local adoption candidate; not published. C++ API/ABI remains alpha.
 Pin the exact candidate SHA and rebuild. CMake numeric package comparison uses
@@ -23,7 +23,7 @@ The Core-only installed consumer is relocated and cannot use private includes.
 | Typed zero-width inline text markers with explicit before/after insertion, removal, detachment and undo restoration | Available through CrdtEngine; `tst_wave_core`, `tst_text_markers`, independent `tst_marker_model`, installed `consumer_wave_core` |
 | Marker operations in ordinary causal stream, preserved by adjacent/whole-body text deletion | Available; Unicode and both delivery orders in `tst_wave_core`; seeded independent-tree histories in `tst_text_markers` |
 | Checked shared undo/redo and bounded actor-local history | Available; `tst_persistent_undo`, `tst_idlist_undo`, `tst_wave_core` |
-| Core text history snapshots/restore, coalescing, next groups and retirement acknowledgments | Available; `tst_wave_core` public replay/restore/compensation trace. Consumer owns durable metadata; replay alone never reconstructs the local stack |
+| Core text and IdList history snapshots/restore, coalescing, next groups, selective historical-group compensation and retirement acknowledgments | Available; `tst_crdtengine_op_api`, `tst_idlist_undo`. Consumer owns durable metadata; replay alone never reconstructs the local stack |
 | Deterministic disposable projection actor/allocator | Available through ProjectionAllocator; frozen derivation golden and 600 independently translated transitions in `tst_wave_core`/installed consumer |
 | Permanent CTBO/0002 archive reader | Available; retained literal insert/undo plus identity, attachment and canonical-byte checks in installed `consumer_wave_core`; existing operation-codec goldens retained |
 | File-backed session replay and persistent local undo | Available with FileTransport; `tst_session_recovery`, `tst_editor_recovery`, `tst_persistent_undo`. Does not certify a consumer's EventStore transactions |

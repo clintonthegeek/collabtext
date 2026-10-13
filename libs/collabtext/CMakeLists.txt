@@ -14,7 +14,7 @@ cmake_minimum_required(VERSION 3.19)
 # "0.2.0", not "0.2.0-alpha.1", so a find_package request cannot name the
 # prerelease. COLLABTEXT_VERSION_STRING carries the full label.
 project(collabtext-lib VERSION 0.2.0 LANGUAGES CXX)
-set(COLLABTEXT_PRERELEASE "alpha.4")
+set(COLLABTEXT_PRERELEASE "alpha.5")
 set(COLLABTEXT_VERSION_STRING "${PROJECT_VERSION}-${COLLABTEXT_PRERELEASE}")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

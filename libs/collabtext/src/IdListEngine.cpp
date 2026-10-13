@@ -178,6 +178,16 @@ Result<std::optional<Crdt::IdListOperation>> IdListEngine::try_redo() {
     if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
     return m_impl->list.try_redo();
 }
+Result<std::optional<Crdt::IdListOperation>> IdListEngine::try_undo_group(
+    const Crdt::Identity &group_id) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
+    return m_impl->list.try_undo_group(group_id);
+}
+Result<std::optional<Crdt::IdListOperation>> IdListEngine::try_redo_group(
+    const Crdt::Identity &group_id) {
+    if (m_impl->callback_active) return Error(ErrorCode::reentrant_mutation, "mutation during callback");
+    return m_impl->list.try_redo_group(group_id);
+}
 std::optional<Crdt::IdListOperation> IdListEngine::undo() { auto result = try_undo(); return result ? result.value() : std::nullopt; }
 std::optional<Crdt::IdListOperation> IdListEngine::redo() { auto result = try_redo(); return result ? result.value() : std::nullopt; }
 size_t IdListEngine::undo_depth() const { return m_impl->list.undo_depth(); }

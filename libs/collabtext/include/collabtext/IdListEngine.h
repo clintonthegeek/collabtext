@@ -146,6 +146,12 @@ public:
     /// Redo the last undone mutation. Returns an error if identity allocation
     /// fails; an empty optional means there is nothing to redo.
     [[nodiscard]] Result<std::optional<Crdt::IdListOperation>> try_redo();
+    /// Compensate the exact active local history group, including a non-top group.
+    [[nodiscard]] Result<std::optional<Crdt::IdListOperation>>
+    try_undo_group(const Crdt::Identity &group_id);
+    /// Reapply the exact undone local history group without redoing other groups.
+    [[nodiscard]] Result<std::optional<Crdt::IdListOperation>>
+    try_redo_group(const Crdt::Identity &group_id);
     /// Compatibility wrapper; returns nullopt for empty history or a refused
     /// identity reservation. Prefer try_undo() to distinguish them.
     [[nodiscard]] std::optional<Crdt::IdListOperation> undo();
