@@ -3225,3 +3225,11 @@ canonical helper and leaves M06 external. Q06 is also open.
 revisions, commands, retained timing failure/rerun, source digest and artifacts.
 New annotated local tag collabtext-markoff-core-2026-10-11; neither earlier tag
 moved. No consumer edit, pin change, push, publication or master merge.
+
+
+## 2026-10-19 — X01 started
+
+Work starts from commit `0d9977c`; engine comparison baseline stays pinned to
+`d04f151b3a70b161b72c33a8de6895efbd1c13e2`. Start checks pass and no failures
+were inherited. X01 is marked `in_progress`; build/trace/harness work and its
+paired measurements are pending.

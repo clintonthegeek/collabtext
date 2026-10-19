@@ -44,7 +44,7 @@ artifacts if they are not part of your selected task.
 
 ## X01 — Freeze checked workloads and paired baseline measurement
 
-**Status:** see TASKS.json (not started)
+**Status:** in progress (started at `0d9977c`; see TASKS.json)
 **Depends on:** V06, V04, S07, A04, Q05, M05
 **Coverage:** R5, R12
 

@@ -4194,8 +4194,14 @@
         "R12"
       ],
       "gate": null,
-      "status": "not_started",
-      "baseline_revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2"
+      "status": "in_progress",
+      "baseline_revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
+      "work_started_revision": "0d9977c",
+      "verification_results": {
+        "start_commit": "0d9977c",
+        "measurement_baseline": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
+        "failures_at_start": "none; plan/registry checks pass"
+      }
     },
     {
       "id": "X02",
