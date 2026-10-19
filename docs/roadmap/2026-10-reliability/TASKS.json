@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "base_revision": "046d375",
-  "branch": "feat/fuguemax-placement",
-  "contains_branch": "roadmap/reliability-v2",
+  "branch": "master",
+  "contains_branch": "feat/fuguemax-placement",
   "status": "in_progress",
   "direction": {
-    "as_of": "2026-10-12",
+    "as_of": "2026-10-19",
     "document": "docs/roadmap/2026-10-reliability/DIRECTION.md",
     "placement": "FugueMax",
     "spec": "docs/specs/vnext-sequence-algorithm.md#0",
@@ -1330,7 +1330,7 @@
         "Implement a minimal consumer-owned Document adapter entirely in the installed consumer fixture: a block-ID-to-engine map, UTF-8 body access, local/remote operation routing, and capability-aware anchorAt/resolveAnchor forwarding. Keep block lifecycle/formatting/canonical events in this test consumer; do not edit Wave or prescribe its production adapter.",
         "Execute every WP1-WP8 scenario against the current installed alpha. Produce a versioned result matrix with exact assertions, expected versus observed outcome, capability, engine revision, seed/fixture hash, and subprocess exit status. Missing anchors/pins may be unsupported and known defects may remain known_failure, but neither classification satisfies later strict gates.",
         "Run wrong-object, malformed-token, and deleted-block scenarios in isolated child processes, recording signals and abnormal exits as errors. Cover local text/list operation transfer even before position support exists, so early packaging yields useful behavioral integration evidence rather than only header compilation.",
-        "Add CI on pushes/pull requests to roadmap/reliability-v2 that invokes the same local package/probe script for Linux Core-only builds and a Qt adapter configuration where available. Run the job without /tmp source harnesses, sibling checkouts, Rust, or network engine downloads; keep final A07 platform claims separate; retain machine-readable results on failure.",
+        "Add CI on pushes/pull requests to `master` that invokes the same local package/probe script for Linux Core-only builds and a Qt adapter configuration where available. Run the job without /tmp source harnesses, sibling checkouts, Rust, or network engine downloads; keep final A07 platform claims separate; retain machine-readable results on failure.",
         "Separate baseline mode from strict capability mode. Baseline succeeds only for its documented implemented behavior and exact known-failure allowlist; a new abort, assertion mismatch, unexpected unsupported feature, or unknown case fails. Strict mode requires the feature-owning task sets specified in the probe matrix and fails on known_failure/unsupported/error. Do not skip missing capability scenarios or remove existing regression markers merely to make baseline green. Use gate=baseline in the shared script and bind the known-failure allowlist to case ID, capability/format and expected failure outcome, not a wildcard or a forever exemption; update it deliberately as owning tasks pass."
       ],
       "acceptance": [

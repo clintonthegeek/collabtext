@@ -12,8 +12,9 @@ publication or master merge is authorized. One executor; model before gaps.
 
 # Reliability roadmap
 
-Execution branch: `feat/fuguemax-placement`. Worktree:
-`/home/clinton/dev/collabtext/.worktrees/reliability-v2`.
+Execution branch: `master` — the engine line merged 2026-10-19 and is tagged
+`collabtext-integration-2026-10-19`. The former `feat/fuguemax-placement`
+worktree (`.worktrees/reliability-v2`) was removed after the merge.
 Read [DIRECTION.md](DIRECTION.md), [DECISIONS.md](DECISIONS.md), then
 [EXECUTION.md](EXECUTION.md). [TASKS.json](TASKS.json) is the authoritative
 status/dependency registry. Numbered phase files mirror the registry exactly;

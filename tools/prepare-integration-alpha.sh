@@ -40,7 +40,7 @@ Usage: tools/prepare-integration-alpha.sh [options]
   --tag NAME         Proposed immutable annotated tag. Default: v<version>.
                      Fails if the tag already exists locally.
   --branch NAME      Branch this candidate may be prepared from.
-                     Default: feat/fuguemax-placement.
+                     Default: master.
   --remote NAME      Destination remote recorded in the checklist. Default: origin.
                      Recorded only; never contacted.
   --components LIST  Comma-separated: core, file-transport, qt. Default: core.
@@ -70,7 +70,7 @@ options. See PUBLICATION-CHECKLIST.md after running it.
 USAGE
 }
 
-version=""; tag=""; branch="feat/fuguemax-placement"; remote="origin"
+version=""; tag=""; branch="master"; remote="origin"
 components="core"; gate="package"; require_modes="debug,release,asan"
 output_dir=""; producer_build_in=""
 evidence_dirs=()

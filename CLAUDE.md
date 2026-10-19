@@ -9,10 +9,10 @@ v17). Read `AGENTS.md` and `docs/roadmap/2026-10-reliability/README.md` first;
 (E07a/E07b complete; Q06 Wave acceptance and M06 Markoff acceptance are next,
 then the G03/G06/G07/G08 reclamation series and the X-series performance work).
 
-Historical engine checkouts, both now ancestors of `master`:
-`feat/fuguemax-placement` (`.worktrees/reliability-v2`) and
-`roadmap/reliability-v2`. That roadmap supersedes the historical OpStream scope
-below.
+The engine branches `feat/fuguemax-placement` and `roadmap/reliability-v2`, and
+the `.worktrees/reliability-v2` checkout, were merged and deleted on 2026-10-19;
+their commits are reachable from `master` and the candidate tags. That roadmap
+supersedes the historical OpStream scope below.
 W1–W6 external consumer requirements are in `docs/specs/vnext-external-position-contract.md`. All product-policy questions are resolved
 in its `DECISIONS.md`: improve the existing C++ engine incrementally. No Rust
 rewrite, Yrs adoption, or replacement-engine trial is in scope. No Superpowers

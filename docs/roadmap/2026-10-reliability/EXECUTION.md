@@ -16,11 +16,17 @@ This document is intended to let a less-capable executor faithfully implement a 
 
 ## Workspace and authorization
 
-Execute breaking work only in `/home/clinton/dev/collabtext/.worktrees/reliability-v2`. The checked-out branch is `feat/fuguemax-placement`; it contains `roadmap/reliability-v2`. Read [DIRECTION.md](DIRECTION.md) before choosing work. Verify `pwd`, `git branch --show-current`, and `git status --short` before editing. Build directories and logs belong in this worktree or task-specific temporary directories. Do not accidentally build against the original checkout's generated files.
+Execute on `master`: the breaking-change worktree and its branches were merged on 2026-10-19 and removed. Read [DIRECTION.md](DIRECTION.md) before choosing work. Verify `pwd`, `git branch --show-current`, and `git status --short` before editing. Build directories and logs belong in task-specific temporary directories or the ignored `build*/` trees.
 
-The original checkout and master are the evaluated source baseline. The 2026-10-11 user authorized finishing Wave Core capabilities, including native refactoring and optimization. Supported CTBO/CTPT archive readers now must be retained; the original clean-start rule still excludes pre-vNext data. Follow Q01–Q06 and wave-core-adoption.md. Do not merge/rebase onto master, publish packages, send consumer messages, or edit external consumer repositories as part of a task. A new explicit user instruction is required for external publication or master integration. Routine code changes and local test runs within the selected task do not need repeated permission.
+The original checkout and master are the evaluated source baseline. The 2026-10-11 user authorized finishing Wave Core capabilities, including native refactoring and optimization. Supported CTBO/CTPT archive readers now must be retained; the original clean-start rule still excludes pre-vNext data. Follow Q01–Q06 and wave-core-adoption.md. Master integration and the
+`collabtext-integration-2026-10-19` publication were completed on 2026-10-19; do
+not move a published tag, publish packages, send consumer messages, or edit
+external consumer repositories as part of a task. A new explicit user
+instruction is required for any further external publication. Routine code
+changes and local test runs within the selected task do not need repeated
+permission.
 
-These plans supersede old CLAUDE.md restrictions about the completed OpStream extraction **on this isolated branch**. They do not authorize unrelated product features or a backend substitution. There is no dependency on an unavailable Superpowers skill or parallel agent workflow. One executor can follow the serial task order.
+These plans supersede old CLAUDE.md restrictions about the completed OpStream extraction **on this line**. They do not authorize unrelated product features or a backend substitution. There is no dependency on an unavailable Superpowers skill or parallel agent workflow. One executor can follow the serial task order.
 
 ## Choosing the next task
 

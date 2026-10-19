@@ -1,7 +1,8 @@
 # Current direction
 
-As of 2026-10-12. Branch `feat/fuguemax-placement`, worktree
-`/home/clinton/dev/collabtext/.worktrees/reliability-v2`. TASKS.json owns exact
+As of 2026-10-19. Branch `master`; the engine line merged on 2026-10-19 and is
+tagged `collabtext-integration-2026-10-19`. The former `feat/fuguemax-placement`
+worktree was removed after the merge. TASKS.json owns exact
 status/dependencies; completed phase procedures are history, not work to repeat.
 
 Wave Q01–Q05/Q04a and Markoff M01–M05 are upstream complete. The selected next
