@@ -67,11 +67,25 @@ merged `master` commit:
 | Release package gate (relocated install; `core,file-transport,qt`) | `tools/verify-consumer-package.sh --mode release --gate package --components core,file-transport,qt` | **PASS** — 3 installed consumers passed; unknown-component request refused |
 | Release live-position gate (`core`) | `tools/verify-consumer-package.sh --mode release --gate live --components core` | **PASS** — Wave 16/16 strict cases (18 rows, manifest v17), Markdown 4/4 |
 
-The release gates above were run at the alpha.5 candidate. Because the merge
-changed no library, test, fixture or packaging path, they were re-run at the
-tagged revision; those results are recorded in the
-`collabtext-integration-2026-10-19` tag annotation rather than here, so the
-annotation and the tree it names stay consistent.
+Wave's own consumers were then run against the relocated install of this
+revision, with Wave's working tree unchanged (it still pinned alpha.3 at the
+time):
+
+| Consumer check | Result |
+|---|---|
+| Wave standalone probe `tests/collabtext-adoption` (Release, `-DCMAKE_PREFIX_PATH=<prefix-b>`) | **1/1 passed** |
+| Wave in-tree `tst_collabtext_adoption`, `tst_collabtext_adapter`, `tst_collabtext_document` (Debug, `-Dcollabtext_DIR=<prefix-b>/lib/cmake/collabtext`) | **3/3 passed** |
+
+This is evidence that the integration candidate does not break Wave's current
+sources or its `find_package(collabtext 0.2.0 EXACT ...)` constraint. It is not
+Wave's recorded acceptance record, which remains Q06 and is consumer-owned.
+
+Revisions: the Debug suite ran at the alpha.5 candidate `e8a8e7d` and at the merge
+commit `cd4f4b9`; the release gates ran at the alpha.5 candidate and again at
+`7fac3f9b00c0fa4ab33f03439f13457899add8cb`. Every commit after `7fac3f9` on this
+line changes documentation and CI triggers only — no `libs/`, `app/`, `cmake/`,
+`tools/`, `tests/` or `CMakeLists.txt` content — so the tagged revision installs
+byte-identical artifacts to the revisions those gates ran against.
 
 ## Consumer evidence records
 
@@ -106,7 +120,14 @@ do not close Q06/M06.
 
 ## Publish actions taken with this review
 
-Assisted, user-instructed: merge into `master`, annotated tag
-`collabtext-integration-2026-10-19`, push of `master`, `feat/fuguemax-placement`
-and the candidate tags to `origin`. No GitHub release, package archive or
-downstream repository commit is created here.
+User-instructed: the merge into `master`, the annotated tag
+`collabtext-integration-2026-10-19`, and a push of `master` plus every candidate
+tag (`collabtext-adoption-2026-10-11`, `collabtext-wave-core-2026-10-11`,
+`collabtext-markoff-core-2026-10-11`, `collabtext-markoff-core-2026-10-13-alpha5`,
+`collabtext-integration-2026-10-19`) to `origin`.
+
+`feat/fuguemax-placement` and `roadmap/reliability-v2` are deliberately **not**
+pushed: every commit on them is reachable from `master` and from the pushed tags
+(verified with `git merge-base --is-ancestor` for every remote ref), so a
+published feature branch would only add a stale ref. No GitHub release, package
+archive or downstream repository commit is created here.
