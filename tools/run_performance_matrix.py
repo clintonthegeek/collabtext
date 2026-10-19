@@ -112,6 +112,7 @@ def main():
         "governor": next((p.read_text().strip() for p in
                           [Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")]
                           if p.is_file()), None),
+        "cpu_affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
         "build_flags": "-O3 -DNDEBUG; C++20; COLLABTEXT_ENABLE_SANITIZERS=OFF",
         "profile": "quick-smoke" if args.smoke else "full-paired-matrix",
         "repeats": 1 if args.smoke else args.repeats,
