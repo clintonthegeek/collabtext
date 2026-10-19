@@ -1,3 +1,23 @@
+# Performance sequencing amendment — 2026-10-19
+
+After master integration and a new measured evaluation, the user requested a
+clearly sequenced plan for another executor. [07-performance.md](07-performance.md)
+and [the target contract](../../specs/vnext-performance-targets.md) replace the
+unstarted X task definitions. The plan preserves existing contracts and readers;
+most improvements are internal. Expected speedups are goals to measure, with
+explicit keep/revert/split dispositions. No implementation has begun.
+
+Core optimization no longer depends on completing physical GC/log pruning or
+external consumer acceptance. Existing collection/retention tests remain required.
+Run-aware boundary reads precede deeper mutation; a new X04a design and independent
+model gate precedes incremental summary/index/splice changes. Layout work follows
+measured algorithmic cuts; codec work preserves canonical bytes. X09 scheduling
+remains separate behind G07. No new format, API, consumer edit, publication or
+merge is authorized by this planning step. Completed task history is unchanged.
+
+The older dated amendments below remain provenance where superseded by the
+integrated alpha.5/manifest-v17 baseline and current DIRECTION.
+
 # 2026-10-11 Markoff adoption amendment
 
 The user authorized facilitating Markoff's integration requests. M01–M05 in

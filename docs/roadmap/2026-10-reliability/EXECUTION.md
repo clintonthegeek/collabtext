@@ -1,3 +1,12 @@
+# Selected performance lane — 2026-10-19
+
+Start X01 in [07-performance.md](07-performance.md). Use
+[the target contract](../../specs/vnext-performance-targets.md) for paired
+measurement, expected improvements, design gates, miss dispositions and arc A/B/C
+verification. The historical adoption amendment below does not require preparing
+another alpha.4 tag. Master integration is complete; local performance work does
+not authorize external edits, messages, publication or a further merge.
+
 # 2026-10-11 Markoff adoption amendment
 
 The user authorized facilitating Markoff's integration requests. M01–M05 in
@@ -41,8 +50,9 @@ technical acceptance: check the referenced artifacts as well. Packaging
 A01/A02a/A06a, P06a, S01/W01 and S04a are complete. The S04a contract/model
 settles affinity, scope, collapse, strict referent restoration and codec rules.
 P06b codecs, S04b native live positions, W02 baseline probes, the W03 strict live
-gate and the S02 ordering specification are complete. S03 may now change
-integration; continue with S03 and E07a/E07b preparation. A model/fixture pass is not a production capability pass.
+gate, S02/S03 ordering and E07a/E07b preparation are complete. Their steps are
+history, not instructions to run again. A model/fixture pass is not a production
+capability pass. The selected local next task is X01.
 Read [current handoff](../../handoff/2026-10-05-state-at-handoff.md),
 [boundary contract](../../specs/vnext-boundary-semantics.md) and
 [external requirements](../../specs/vnext-external-position-contract.md).
@@ -73,10 +83,12 @@ User-facing questions belong in ordinary conversation/final text for this user, 
 Use a warm, affected subset while implementing. Run the required broader gates
 at a completed implementation arc, and record what they actually exercised.
 Benchmarks never run with tests, including `--all` or a fresh acceptance sweep.
-The 2026-10-11 user authorized performance work in the Wave lane. Correctness
+The 2026-10-19 user selected the revised X-series performance plan. Correctness
 and reader gates remain mandatory; benchmark separately before comparative
-claims. Q02 removes avoidable query/edit-conversion allocations, while broad
-X-series performance certification remains pending.
+claims. Q02 marker work is already complete; X07a now targets the measured
+scalar boundary projection, and X07 targets UTF-16 lookup. Follow arc A/B/C
+acceptance in vnext-performance-targets.md rather than treating performance as
+broad certification or repeating completed Q tasks.
 
 | Command | Use |
 | --- | --- |

@@ -1,0 +1,198 @@
+{
+  "revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
+  "platform": "Linux-6.18.49-1-MANJARO-x86_64-with-glibc2.44",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  8\nOn-line CPU(s) list:                     0-7\nVendor ID:                               GenuineIntel\nModel name:                              11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz\nCPU family:                              6\nModel:                                   140\nThread(s) per core:                      2\nCore(s) per socket:                      4\nSocket(s):                               1\nStepping:                                1\nMicrocode version:                       0xbe\nCPU(s) scaling MHz:                      49%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5990.40\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l2 cdp_l2 ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid movdiri movdir64b fsrm avx512_vp2intersect md_clear ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               192 KiB (4 instances)\nL1i cache:                               128 KiB (4 instances)\nL2 cache:                                5 MiB (4 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-7\nVulnerability Gather data sampling:      Mitigation; Microcode\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Mitigation; Aligned branch/return thunks\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI SW loop, KVM SW loop\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected\n",
+  "compiler": "c++ (GCC) 16.2.1 20260810\nCopyright (C) 2026 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "flags": "-O3 -DNDEBUG; sanitizers OFF; C++20",
+  "filesystem": "tmpfs",
+  "harness_sha256": "b973f4ffc2b395945a163943be45c2f4ef809267399b7b06656521f42f212006",
+  "methods": [
+    "single_replica_throughput",
+    "single_replica_large_doc",
+    "edit_patterns",
+    "edit_sizes",
+    "tombstone_degradation",
+    "tombstone_degradation_large",
+    "multi_replica_convergence",
+    "undo_redo_cycle",
+    "undo_stack_depth",
+    "fragment_proliferation",
+    "memory_growth",
+    "reconnect_sync_cost"
+  ],
+  "repeats": 5,
+  "commands": [
+    {
+      "label": "native-1",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/build/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 31.6213858127594,
+      "load_before": "3.29 3.91 4.40 6/2578 8",
+      "load_after": "3.76 3.97 4.40 1/2266 10"
+    },
+    {
+      "label": "native-2",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/build/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 29.60793399810791,
+      "load_before": "3.76 3.97 4.40 1/2266 10",
+      "load_after": "3.97 3.99 4.40 6/2260 12"
+    },
+    {
+      "label": "public-2",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/public_api"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 31.025099992752075,
+      "load_before": "3.97 3.99 4.40 6/2260 12",
+      "load_after": "5.45 4.33 4.50 5/2230 13"
+    },
+    {
+      "label": "native-3",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/build/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 33.61241006851196,
+      "load_before": "5.45 4.33 4.50 5/2230 13",
+      "load_after": "5.68 4.50 4.55 1/2222 15"
+    },
+    {
+      "label": "public-3",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/public_api"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 17.95206642150879,
+      "load_before": "5.68 4.50 4.55 1/2222 15",
+      "load_after": "4.48 4.31 4.48 2/2209 16"
+    },
+    {
+      "label": "native-4",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/build/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 27.043367385864258,
+      "load_before": "4.48 4.31 4.48 2/2209 16",
+      "load_after": "4.40 4.30 4.47 2/2211 18"
+    },
+    {
+      "label": "public-4",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/public_api"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 19.65831232070923,
+      "load_before": "4.40 4.30 4.47 2/2211 18",
+      "load_after": "3.86 4.18 4.43 3/2201 19"
+    },
+    {
+      "label": "native-5",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/build/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 35.90472745895386,
+      "load_before": "3.86 4.18 4.43 5/2201 19",
+      "load_after": "5.66 4.56 4.55 7/2252 21"
+    },
+    {
+      "label": "public-5",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/public_api"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 38.319756507873535,
+      "load_before": "5.66 4.56 4.55 8/2252 21",
+      "load_after": "6.96 5.08 4.73 8/2275 22"
+    },
+    {
+      "label": "recovery-512",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/build/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 0.8675401210784912,
+      "load_before": "6.96 5.08 4.73 6/2275 22",
+      "load_after": "6.96 5.08 4.73 7/2290 23"
+    },
+    {
+      "label": "recovery-2048",
+      "argv": [
+        "/tmp/collabtext-perf-2026-10-19/build/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "wall_seconds": 10.935083150863647,
+      "load_before": "6.96 5.08 4.73 7/2290 23",
+      "load_after": "7.11 5.18 4.76 6/2266 24"
+    }
+  ]
+}

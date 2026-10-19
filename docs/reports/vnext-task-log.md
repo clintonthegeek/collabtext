@@ -1,9 +1,44 @@
 # Reliability roadmap implementation log
 
-Worktree: `/home/clinton/dev/collabtext/.worktrees/reliability-v2`.
-Current branch: `feat/fuguemax-placement` (earlier work used `roadmap/reliability-v2`). Source baseline: `046d375`; approved native
-engine roadmap: `374f93c`. Task status and full implementation hashes are in
+Historical implementation used `.worktrees/reliability-v2` on
+`feat/fuguemax-placement` (earlier `roadmap/reliability-v2`); that worktree was
+retired after master integration on 2026-10-19. Current local work targets
+`master`. Original source baseline: `046d375`; approved native roadmap: `374f93c`.
+Task status and full implementation hashes remain in
 [TASKS.json](../roadmap/2026-10-reliability/TASKS.json).
+
+## 2026-10-19 — Performance evaluation and implementation plan
+
+Planning/evaluation only; no X implementation task is complete or in progress.
+The merged engine at `d04f151b3a70b161b72c33a8de6895efbd1c13e2` has a new
+[measured baseline](2026-10-19-performance-evaluation.md), with five repeats,
+checked public traces, native benchmark results, codec and warm recovery evidence.
+The user requested a sequenced plan for another executor.
+
+[07-performance.md](../roadmap/2026-10-reliability/07-performance.md) now mirrors
+revised registry tasks. Start X01; the Core sequence is X01, X02, X07a, X04a,
+X07, X04, X05, X06, X08, X03, X11, X12, X10. X04a is a required design/model
+gate. X09 transport scheduling remains separately behind G07. Dependencies on
+unfinished physical GC/external acceptance were explicitly removed from Core
+optimization/reporting; no GC, reader or consumer gate was marked complete.
+All non-X task definitions/statuses and historical candidate tags are preserved.
+
+[The target contract](../specs/vnext-performance-targets.md) defines expected
+improvements, source/model references, paired measurements, regression thresholds,
+miss dispositions and three correctness/package arcs. Current direction,
+execution, decisions and documentation map point to this lane. The frozen
+measurement archive has narrowly enumerated verification routes; unknown new
+benchmark source still fails routing, and no benchmark was added to CTest.
+
+Verification: registry/Markdown and acyclic serial order validation, strict scope
+check, all changed-document local links, preserved non-X task equality and Core
+independence from G06/G07/G08/X09/Q06/M06 were checked. The Python verifier suite
+passes 15/15 tests, including fail-closed routing for unknown files beside the
+archive. The routed `tst_verification_tools` CTest also passes 1/1 with
+`--no-tests=error`; evidence is retained in
+`build-roadmap-debug/verification/20261019T211245Z-changed-x1u2xgq6`.
+No engine suite/sanitizer certification is claimed for these planning and routing
+changes.
 
 ## 2026-10-03 — V01: reproducible verification
 

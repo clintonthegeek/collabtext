@@ -13,8 +13,20 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGING = r'(collabtext_.*|tst_.*)'
 BROAD = r'(collabtext_.*|tst_.*)'
+# Frozen measurement evidence, not shipped source or correctness executables.
+# Enumerate this archive explicitly: new benchmark code still needs a route.
+PERFORMANCE_EVIDENCE = [
+    'aggregate.py', 'bulk-limit.log', 'bulk_limit.cpp', 'configure.log',
+    'core-flags.txt', 'environment.json', 'progress.jsonl', 'public-1.err',
+    'public-1.jsonl', 'public_api.cpp', 'recovery-512.log', 'recovery-2048.log',
+    'repeat.py', 'run-recorded.py', 'summary.json',
+    *[f'native-{n}.log' for n in range(1, 6)],
+    *[f'public-{n}.log' for n in range(2, 6)],
+]
 # First match wins. Regexes describe complete families, not accidental prefixes.
 ROUTES = [
+    *[(f'docs/reports/2026-10-19-performance/{name}', 'tst_verification_tools')
+      for name in PERFORMANCE_EVIDENCE],
     ('.gitignore', ''), ('*.md', ''), ('docs/*.json', ''),
     ('docs/roadmap/*/*.py', 'tst_verification_tools'),
     ('tools/verify-consumer-package.sh', PACKAGING),

@@ -1,3 +1,11 @@
+# Current lane — 2026-10-19
+
+Start **X01** in [07-performance.md](07-performance.md), using the measured
+[d04f151 baseline](../../reports/2026-10-19-performance-evaluation.md) and
+[target/verification contract](../../specs/vnext-performance-targets.md).
+The revised X tasks supersede the old performance sequencing. The amendment
+below records historical adoption authorization; it is not today's selected lane.
+
 # 2026-10-11 Markoff adoption amendment
 
 The user authorized facilitating Markoff's integration requests. M01–M05 in
@@ -24,10 +32,10 @@ As of 2026-10-11, validation, native FugueMax ordering, checked protocol,
 recovery, semantic/pin work and early installed-package gates are complete.
 G03/G06 have unfinished broader certification work. Remaining reclamation,
 packaging, performance and release tasks retain their exact registry status.
-The active user-directed lane is [09 — Wave Core](09-wave-core.md): typed
-zero-width text markers, retained archive readers, consumer-owned local undo
-recovery, deterministic projection composition and a new tested candidate.
-External Wave acceptance remains separate from upstream tests.
+The active user-directed lane is [07 — measured performance](07-performance.md).
+[09 — Wave Core](09-wave-core.md) and [10 — Markoff Core](10-markoff-core.md)
+record completed upstream work and remaining external acceptance. Do not repeat
+completed implementation or treat external acceptance as an optimization prerequisite.
 
 | Area | Task specification |
 |---|---|
@@ -40,7 +48,8 @@ External Wave acceptance remains separate from upstream tests.
 | Public API and components | [06-public-api.md](06-public-api.md) |
 | Measured performance | [07-performance.md](07-performance.md) |
 | Release certification | [08-release.md](08-release.md) |
-| Current Wave requirements | [09-wave-core.md](09-wave-core.md) |
+| Wave adoption requirements | [09-wave-core.md](09-wave-core.md) |
+| Markoff adoption requirements | [10-markoff-core.md](10-markoff-core.md) |
 
 Select only tasks with completed dependencies, in the lane selected by DIRECTION.
 Use one executor. Record changes, task status and executable evidence together.

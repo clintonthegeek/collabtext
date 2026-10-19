@@ -15,6 +15,10 @@ Current consumer entry points:
 
 Current maintainer entry points:
 
+- [07-performance.md](roadmap/2026-10-reliability/07-performance.md): current sequenced implementation plan; start X01.
+- [vnext-performance-targets.md](specs/vnext-performance-targets.md): baseline, expected improvements, measurement and correctness gates.
+- [October 19 performance evaluation](reports/2026-10-19-performance-evaluation.md): measured merged-engine baseline and reproducible evidence.
+
 - [DIRECTION.md](roadmap/2026-10-reliability/DIRECTION.md): selected lane and policy.
 - [TASKS.json](roadmap/2026-10-reliability/TASKS.json): exact dependency/status registry.
 - [09-wave-core.md](roadmap/2026-10-reliability/09-wave-core.md): implementable Wave tasks.

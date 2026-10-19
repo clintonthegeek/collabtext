@@ -15,6 +15,18 @@ spec.loader.exec_module(verify)
 
 
 class VerificationTests(unittest.TestCase):
+    def test_frozen_performance_archive_does_not_allow_unknown_code(self):
+        paths = ['docs/reports/2026-10-19-performance/' + name
+                 for name in verify.PERFORMANCE_EVIDENCE]
+        routes, package = verify.route(paths)
+        self.assertEqual(set(routes.values()), {'tst_verification_tools'})
+        self.assertFalse(package)
+        for unknown in ('docs/reports/2026-10-19-performance/new.cpp',
+                        'docs/reports/2026-10-20-performance/public_api.cpp',
+                        'benchmarks/BenchmarkRunner.cpp'):
+            with self.subTest(unknown=unknown), self.assertRaisesRegex(ValueError, 'Unrouted'):
+                verify.route([paths[0], unknown])
+
     def test_mixed_documentation_and_unknown_code_fails(self):
         with self.assertRaisesRegex(ValueError, 'Unrouted'):
             verify.route(['docs/note.md', 'new-component/editor.cpp'])
