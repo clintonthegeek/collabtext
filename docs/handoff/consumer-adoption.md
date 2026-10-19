@@ -5,12 +5,13 @@
 `0.2.0-alpha.5`, capability manifest v17. Resolve it with
 `git rev-parse collabtext-integration-2026-10-19^{commit}`. Pin that commit SHA.
 
-The library tree at this tag is **byte-identical** to the alpha.5 candidate the
-consumers already installed, `collabtext-markoff-core-2026-10-13-alpha5`
-(`e8a8e7d1a95dd50e23f38d6727921b47b814e44b`). The merge changed repository-level
-files plus the manifest's branch/status metadata only; no Core, FileTransport,
-Qt, test, fixture or packaging file differs. Source evidence:
-`git diff --stat collabtext-markoff-core-2026-10-13-alpha5 collabtext-integration-2026-10-19 -- libs app cmake CMakeLists.txt tools tests`.
+The library tree at this tag differs from the alpha.5 candidate the consumers
+already installed, `collabtext-markoff-core-2026-10-13-alpha5`
+(`e8a8e7d1a95dd50e23f38d6727921b47b814e44b`), in **one file under `libs/`**: the
+installed capability manifest's `Branch:`/`Status:` metadata lines. No capability,
+API, behavior, wire format, fixture or CMake target changed, and `app/`, `cmake/`,
+`tools/`, `tests/` and `CMakeLists.txt` are byte-identical. Verify with
+`git diff --stat collabtext-markoff-core-2026-10-13-alpha5 collabtext-integration-2026-10-19 -- libs`.
 
 History (unchanged, all immutable): `collabtext-adoption-2026-10-11` at
 `0d21670896d02dda3dc44d18d37f9657935333ed`; `collabtext-wave-core-2026-10-11` at

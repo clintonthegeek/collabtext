@@ -11,8 +11,8 @@ package candidate reports **`0.2.0-alpha.5`** (capability manifest v17), and its
 C++ API/ABI remains alpha. Earlier candidate tags
 (`collabtext-adoption-2026-10-11`, `collabtext-wave-core-2026-10-11`,
 `collabtext-markoff-core-2026-10-11`, `collabtext-markoff-core-2026-10-13-alpha5`)
-stay immutable; the integration tree is byte-identical to alpha.5 for every
-library, test, fixture and packaging path.
+stay immutable; relative to alpha.5, only the installed capability manifest's
+`Branch:`/`Status:` lines differ under `libs/`.
 
 The [installed capability manifest](../libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md)
 describes supported formats and component limits. CTBO/0002–0003 operation

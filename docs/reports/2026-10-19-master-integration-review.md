@@ -40,10 +40,21 @@ Merge order: `origin/master` into local `master` (clean, one file), then
 | `.gitignore` | union of both sides | `master`'s generated-artifact patterns and the branch's `build-consumer-verify/` are unrelated. |
 | `docs/roadmap/2026-10-reliability/validate-plan.py` | `feat/fuguemax-placement` side wins | Strict superset: adds the early-consumer-gate transitive checks and WP1–WP8 ownership validation. |
 
-Tree identity: the merged tree differs from `feat/fuguemax-placement` in
-`.gitignore` only. `libs/`, `app/`, `cmake/`, `tools/`, `tests/`, `CMakeLists.txt`
-are byte-identical, so **no library, test, fixture or packaging content changed
-in this merge**.
+Tree identity: the merge commit's tree differs from `feat/fuguemax-placement` in
+`.gitignore` only — `libs/`, `app/`, `cmake/`, `tools/`, `tests/` and
+`CMakeLists.txt` are byte-identical, so **no library, test, fixture or packaging
+content changed in the merge itself**.
+
+Relative to the alpha.5 candidate tag `collabtext-markoff-core-2026-10-13-alpha5`,
+the tagged revision differs only in repository-level documents, the CI workflow,
+`.gitignore`, `validate-plan.py` and three `Branch:`/`Status:` lines of the
+installed capability manifest:
+
+| Path | Delta vs `collabtext-markoff-core-2026-10-13-alpha5` |
+|---|---|
+| `libs/**` | one file: `ALPHA_CAPABILITIES.md` (3 metadata lines; no capability, promise, format or target change) |
+| `app/`, `cmake/`, `tools/`, `tests/`, `CMakeLists.txt` | none |
+| `docs/**`, `README.md`, `CLAUDE.md`, `.gitignore`, `.github/workflows/consumer-alpha.yml` | status, candidate-pin and CI corrections |
 
 ## Evidence
 

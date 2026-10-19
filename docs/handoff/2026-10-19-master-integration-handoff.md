@@ -23,20 +23,19 @@ Earlier candidate tags are immutable and stay valid:
 ## What actually changed, and what did not
 
 **No library change.** The merge of `feat/fuguemax-placement` into `master` adds
-the reliability engine line to trunk; the tree at the new tag is byte-identical to
-`collabtext-markoff-core-2026-10-13-alpha5` for every library, test, fixture and
-packaging path:
+the reliability engine line to trunk. Relative to `collabtext-markoff-core-2026-10-13-alpha5`,
+the only file that differs anywhere under `libs/` is the installed capability
+manifest, and there only its `Branch:`/`Status:` metadata lines:
 
 ```sh
-git diff --stat collabtext-markoff-core-2026-10-13-alpha5 collabtext-integration-2026-10-19 \
-  -- libs app cmake CMakeLists.txt tools tests
+git diff --stat collabtext-markoff-core-2026-10-13-alpha5 collabtext-integration-2026-10-19 -- libs
 ```
 
-is empty. The only differences in the merged tree are repository-level docs, the
-CI workflow, `.gitignore`, `validate-plan.py`, and the installed manifest's
-branch/status lines. So: **no Core API, behavior, wire format or CMake target
-changed**; nothing you verified at alpha.5 needs re-verification beyond recording
-your acceptance against the new pin, which the gate requires.
+reports that one file and nothing else; there is no difference at all under
+`app/`, `cmake/`, `tools/`, `tests/` or `CMakeLists.txt`. So **no Core API,
+behavior, wire format, fixture or CMake target changed**; nothing you verified at
+alpha.5 needs re-verification beyond recording your acceptance against the new
+pin, which the gate requires.
 
 Two consequences worth knowing:
 

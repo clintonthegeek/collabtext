@@ -9,9 +9,9 @@ The reliability engine line is merged into `master` and tagged
 (capability manifest v17). Read the
 [consumer handoff](docs/handoff/consumer-adoption.md) and
 [Wave Core response](docs/handoff/wave-core-response.md) before integration.
-Earlier candidate tags are preserved and immutable; the integration tree is
-byte-identical to the `collabtext-markoff-core-2026-10-13-alpha5` candidate for
-every library, test, fixture and packaging path.
+Earlier candidate tags are preserved and immutable; relative to the
+`collabtext-markoff-core-2026-10-13-alpha5` candidate, only the installed
+capability manifest's `Branch:`/`Status:` lines differ under `libs/`.
 
 ## Use the installed library
 
