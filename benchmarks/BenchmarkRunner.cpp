@@ -1,4 +1,5 @@
 #include "crdt/Buffer.h"
+#include "crdt/Diagnostics.h"
 
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/IdListEngine.h>
@@ -92,13 +93,16 @@ void begin_case(std::string name) {
     case_name = std::move(name);
     samples.clear();
     case_attempts = case_accepted = case_refused = case_noop = 0;
+    Diagnostics::reset();
 }
 
 template<class F>
 auto timed(F&& function) {
     ++case_attempts;
     const auto start = Clock::now();
+    Diagnostics::begin_sample();
     auto result = function();
+    Diagnostics::end_sample();
     const auto finish = Clock::now();
     ++case_accepted;
     samples.push_back(static_cast<uint64_t>(
@@ -128,7 +132,18 @@ void report_case(uint64_t visible_bytes, uint64_t prior_edits,
     std::cout << ",\"tombstone_fragments\":";
     if (fragments) std::cout << tombstones; else std::cout << "null";
     std::cout << ",\"result_fnv1a64\":\"" << result_digest << "\""
-              << ",\"operation_fnv1a64\":\"" << operation_digest << "\"}\n";
+              << ",\"operation_fnv1a64\":\"" << operation_digest << "\"";
+    if (Diagnostics::enabled()) {
+        const auto counters = Diagnostics::snapshot();
+        std::cout << ",\"diagnostics\":{";
+        for (size_t i = 0; i < Diagnostics::counter_count; ++i) {
+            if (i) std::cout << ',';
+            std::cout << '"' << Diagnostics::counter_names[i] << "\":"
+                      << counters.values[i];
+        }
+        std::cout << '}';
+    }
+    std::cout << "}\n";
 }
 
 void seed_text(CrdtEngine& engine, std::string& expected, size_t bytes,
@@ -476,6 +491,8 @@ int main(int argc, char** argv) {
         std::cout << "{\"record\":\"header\",\"schema\":\"collabtext-performance-samples/1\","
                   << "\"profile\":\"" << (edit_samples == 5 ? "quick" : "full")
                   << "\",\"seed\":" << workload_seed
+                  << ",\"diagnostics_available\":"
+                  << (Diagnostics::enabled() ? "true" : "false")
                   << ",\"percentile\":\"lower_order_statistic_floor_q_n_minus_1\"}\n";
         for (size_t bytes : {1'000u, 10'000u, 100'000u, 1'000'000u}) {
             public_edits(bytes, 0);

@@ -291,6 +291,10 @@ if(COLLABTEXT_BUILD_TESTS OR COLLABTEXT_BUILD_BENCHMARKS)
                                                ${CMAKE_CURRENT_SOURCE_DIR}/tests)
         add_test(NAME ${name} COMMAND ${name})
     endfunction()
+
+    if(COLLABTEXT_ENABLE_PERF_DIAGNOSTICS)
+        add_crdt_test(tst_perf_diagnostics)
+    endif()
 endif()
 
 if(COLLABTEXT_BUILD_BENCHMARKS)

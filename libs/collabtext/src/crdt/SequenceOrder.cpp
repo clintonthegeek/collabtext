@@ -2,6 +2,7 @@
 
 #include "crdt/Fragment.h"
 #include "crdt/IdList.h"
+#include "crdt/Diagnostics.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -28,17 +29,25 @@ template <class Run>
 class Index {
 public:
     explicit Index(const std::vector<Run>& frags) : m_frags(frags) {
+        Diagnostics::record(Diagnostics::Counter::placement_index_builds);
+        Diagnostics::record(Diagnostics::Counter::placement_index_runs,
+                            frags.size());
         for (size_t i = 0; i < frags.size(); ++i)
             m_by_actor[frags[i].origin.actor].emplace_back(frags[i].origin.counter, i);
         for (auto& [_, runs] : m_by_actor) std::sort(runs.begin(), runs.end());
     }
 
     std::optional<Pos> find(const Identity& id) const {
+        Diagnostics::record(Diagnostics::Counter::placement_identity_queries);
         const auto found = m_by_actor.find(id.actor);
         if (found == m_by_actor.end()) return std::nullopt;
         const auto& runs = found->second;
         auto at = std::upper_bound(runs.begin(), runs.end(), id.counter,
-                                   [](uint64_t c, const auto& run) { return c < run.first; });
+                                   [](uint64_t c, const auto& run) {
+                                       Diagnostics::record(
+                                           Diagnostics::Counter::placement_identity_comparisons);
+                                       return c < run.first;
+                                   });
         if (at == runs.begin()) return std::nullopt;
         --at;
         const Run& f = m_frags[at->second];

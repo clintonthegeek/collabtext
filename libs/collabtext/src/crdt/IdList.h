@@ -5,6 +5,7 @@
 #include "crdt/Anchor.h"
 #include "crdt/IdentityAllocator.h"
 #include "crdt/Clock.h"
+#include "crdt/Diagnostics.h"
 #include "crdt/Placement.h"
 #include "crdt/OperationValidation.h"
 #include "crdt/ReclamationPolicy.h"
@@ -70,9 +71,12 @@ struct IdListEntry {
     bool was_visible() const { return deletions.empty(); }
 
     bool compute_visible(const UndoMap& undo_map) const {
+        Diagnostics::record(Diagnostics::Counter::visibility_recomputations);
         if (undo_map.is_undone(origin)) return false;
-        for (const auto& del : deletions)
+        for (const auto& del : deletions) {
+            Diagnostics::record(Diagnostics::Counter::visibility_deletion_checks);
             if (!undo_map.is_undone(del)) return false;
+        }
         return true;
     }
 

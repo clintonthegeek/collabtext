@@ -1,0 +1,13 @@
+Binary: /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark
+Source revision: 1701d35fe9f88a4071d4fb9e71224cd5d8a429bd
+
+Native run:
+  /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark single_replica_large_doc
+
+CPU profile:
+  perf record -e cpu-clock -F 99 -g --call-graph dwarf -o /tmp/collabtext-x02-single-large.perf.data -- /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark single_replica_large_doc
+  perf report --stdio -i /tmp/collabtext-x02-single-large.perf.data --sort symbol --percent-limit 3 --children
+
+Heap profile:
+  valgrind --tool=massif --time-unit=B --massif-out-file=/tmp/collabtext-x02-single-large.massif.out /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark single_replica_large_doc
+  ms_print /tmp/collabtext-x02-single-large.massif.out

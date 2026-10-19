@@ -7,7 +7,8 @@ an old trace after recording results.
 
 The C++ harness writes JSON Lines using schema `collabtext-performance-samples/1`:
 
-- `header` identifies schema, full/quick profile, seed and percentile rule.
+- `header` identifies schema, full/quick profile, seed, percentile rule and
+  whether compile-time performance diagnostics are enabled.
 - `sample` records one timed checked call in integer nanoseconds, with a stable
   workload name, sample index and unit `call`.
 - `case` records attempted/accepted/refused/no-op counts, setup dimensions,
@@ -15,6 +16,15 @@ The C++ harness writes JSON Lines using schema `collabtext-performance-samples/1
   and encoded-operation fingerprints.
 - `limit` records the one intentional default-budget refusal separately from
   accepted-work throughput.
+
+When configured with `COLLABTEXT_ENABLE_PERF_DIAGNOSTICS=ON`, each `case`
+record also has a `diagnostics` object containing the fixed counter set from
+`crdt/Diagnostics.h`. Counters are reset per case and increment only inside
+timed calls; setup, expected-result checks and JSON output are excluded. The
+default build compiles each counter update to a no-op and emits
+`diagnostics_available: false`. Diagnostic and default runs must preserve case
+counts and logical/operation fingerprints. Diagnostic timings are overhead
+measurements, not publishable engine timings.
 
 A failure exits nonzero with an explanatory message. A failed process may emit
 partial samples; its paired run must be retained and the case is not a passing

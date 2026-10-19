@@ -1,0 +1,13 @@
+********* Start testing of TestBenchmark *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestBenchmark::initTestCase()
+QDEBUG : TestBenchmark::single_replica_large_doc() 
+=== Single-Replica Large Doc (1M) ===
+  1M doc, random edit: wall=114.744 ms (114744382 ns), work=100 local edits, 1.14744e+06 ns/local edits, 871.502 local edits/s, source_edits=100, remote_applications=0, fragments=1244, tombstones=82, visible_bytes=999979, process_rss=46720 KB
+{"name":"1M doc, random edit","wall_ns":114744382,"work_label":"local edits","work_items":100,"source_edits":100,"remote_applications":0,"ns_per_work_item":1.14744e+06,"work_per_sec":871.502,"process_rss_kb":46720,"fragments":1244,"tombstones":82,"visible_bytes":999979,"deleted_bytes":214}
+PASS   : TestBenchmark::single_replica_large_doc()
+PASS   : TestBenchmark::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 483ms
+********* Finished testing of TestBenchmark *********
+[ perf record: Woken up 2 times to write data ]
+[ perf record: Captured and wrote 0.437 MB /tmp/collabtext-x02-single-large.perf.data (43 samples) ]

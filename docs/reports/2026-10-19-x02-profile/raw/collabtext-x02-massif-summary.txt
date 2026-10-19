@@ -1,0 +1,963 @@
+--------------------------------------------------------------------------------
+Command:            /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark single_replica_large_doc
+Massif arguments:   --time-unit=B --massif-out-file=/tmp/collabtext-x02-single-large.massif.out
+ms_print arguments: /tmp/collabtext-x02-single-large.massif.out
+--------------------------------------------------------------------------------
+
+
+    MB
+26.75^                                                            #           
+     |                                                        ::::#  ::@::::::
+     |                                                     ::::: :#::::@::::::
+     |                                                 ::::::::: :#: ::@::::::
+     |                                        @::::::::::: ::::: :#: ::@::::::
+     |                                     :@@@: : : ::::: ::::: :#: ::@::::::
+     |                                @:::::@ @: : : ::::: ::::: :#: ::@::::::
+     |                           : :::@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |                       @:@@::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |                   ::@@@:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |               ::::: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |            @:::: :: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |          ::@:::: :: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |        ::::@:::: :: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |      ::: ::@:::: :: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |     :::: ::@:::: :: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |   @@:::: ::@:::: :: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     |  :@ :::: ::@:::: :: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     | ::@ :::: ::@:::: :: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+     | ::@ :::: ::@:::: :: @ @:@ ::: :@: :::@ @: : : ::::: ::::: :#: ::@::::::
+   0 +----------------------------------------------------------------------->GB
+     0                                                                   2.365
+
+Number of snapshots: 58
+ Detailed snapshots: [3, 10, 17, 18, 20, 25, 30, 31, 46 (peak), 50]
+
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+  0              0                0                0             0            0
+  1     41,442,912        3,450,368        3,441,267         9,101            0
+  2     92,279,472        5,461,072        5,446,339        14,733            0
+  3    130,422,216        6,700,760        6,683,191        17,569            0
+99.74% (6,683,191B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->86.56% (5,799,936B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->86.56% (5,799,936B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->86.56% (5,799,936B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->86.56% (5,799,936B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->86.56% (5,799,936B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|         ->86.56% (5,799,936B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           ->86.56% (5,799,936B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|             ->86.56% (5,799,936B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|               ->86.56% (5,799,936B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                 ->86.56% (5,799,936B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->86.56% (5,799,936B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                     
+->07.08% (474,474B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->06.74% (451,451B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.51% (101,101B) in 19 places, all below massif's threshold (1.00%)
+| | | 
+| | ->01.05% (70,070B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.05% (70,070B) in 6 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.05% (70,070B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.05% (70,070B) in 6 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.05% (70,070B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.05% (70,070B) in 6 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.05% (70,070B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.05% (70,070B) in 6 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.05% (70,070B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| |   ->01.05% (70,070B) in 6 places, all below massif's threshold (1.00%)
+| |     
+| ->00.34% (23,023B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.63% (175,968B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->02.56% (171,456B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | ->02.49% (166,944B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | ->01.75% (117,312B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | ->01.75% (117,312B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |   ->01.75% (117,312B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |     ->01.75% (117,312B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |       ->01.75% (117,312B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |         ->01.75% (117,312B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |           ->01.75% (117,312B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |             ->01.75% (117,312B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | |               ->01.75% (117,312B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | |                 ->01.75% (117,312B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                   ->01.75% (117,312B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                     ->01.75% (117,312B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                       ->01.75% (117,312B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                         ->01.75% (117,312B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |                           
+| | | ->00.74% (49,632B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | 
+| | ->00.07% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.07% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.37% (159,085B) in 98 places, all below massif's threshold (1.00%)
+| 
+->01.10% (73,728B) 0x523194F: ??? (in /usr/lib/libstdc++.so.6.0.36)
+  ->01.10% (73,728B) 0x41051EE: ??? (in /usr/lib/ld-linux-x86-64.so.2)
+    ->01.10% (73,728B) 0x41052CC: ??? (in /usr/lib/ld-linux-x86-64.so.2)
+      ->01.10% (73,728B) 0x41208BF: ??? (in /usr/lib/ld-linux-x86-64.so.2)
+        ->01.10% (73,728B) 0x1: ???
+          ->01.10% (73,728B) 0x1FFEFFF9A2: ???
+            ->01.10% (73,728B) 0x1FFEFFF9FB: ???
+              
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+  4    180,055,456        7,667,504        7,649,613        17,891            0
+  5    226,020,976        8,788,192        8,766,451        21,741            0
+  6    260,092,304        9,389,600        9,366,759        22,841            0
+  7    314,988,464       10,436,400       10,412,114        24,286            0
+  8    364,738,424       11,388,568       11,360,945        27,623            0
+  9    398,343,144       11,822,104       11,793,721        28,383            0
+ 10    447,637,912       12,749,640       12,719,057        30,583            0
+99.76% (12,719,057B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->87.32% (11,132,928B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->87.32% (11,132,928B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->87.32% (11,132,928B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->87.32% (11,132,928B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->87.32% (11,132,928B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|         ->87.32% (11,132,928B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           ->87.32% (11,132,928B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|             ->87.32% (11,132,928B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|               ->87.32% (11,132,928B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                 ->87.32% (11,132,928B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->87.32% (11,132,928B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                     
+->07.13% (908,908B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->06.93% (883,883B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.11% (142,142B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.11% (142,142B) in 12 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.11% (142,142B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.11% (142,142B) in 12 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.11% (142,142B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.11% (142,142B) in 12 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.11% (142,142B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.11% (142,142B) in 12 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.11% (142,142B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.11% (142,142B) in 12 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.05% (134,134B) 0x4063016: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.05% (134,134B) in 12 places, all below massif's threshold (1.00%)
+| | |   
+| | ->00.31% (39,039B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.20% (25,025B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.66% (338,821B) in 99 places, all below massif's threshold (1.00%)
+| 
+->02.65% (338,400B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  ->02.62% (333,888B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | ->02.58% (329,376B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | ->02.19% (279,744B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | ->02.19% (279,744B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | |   ->02.19% (279,744B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | |     ->02.19% (279,744B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | |       ->02.19% (279,744B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | |         ->02.19% (279,744B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | |           ->02.19% (279,744B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | |             ->02.19% (279,744B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | | |               ->02.19% (279,744B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | | |                 ->02.19% (279,744B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | | |                   ->02.19% (279,744B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | | |                     ->02.19% (279,744B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+  | | |                       ->02.19% (279,744B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+  | | |                         ->02.19% (279,744B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | |                           
+  | | ->00.39% (49,632B) in 1+ places, all below ms_print's threshold (01.00%)
+  | | 
+  | ->00.04% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+  | 
+  ->00.04% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+  
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 11    480,632,624       13,033,648       13,004,371        29,277            0
+ 12    518,128,640       13,802,464       13,769,540        32,924            0
+ 13    558,657,808       14,140,592       14,107,181        33,411            0
+ 14    589,620,952       14,704,600       14,670,635        33,965            0
+ 15    642,266,096       14,486,384       14,459,130        27,254            0
+ 16    704,285,968       15,808,416       15,774,587        33,829            0
+ 17    760,564,264       16,760,792       16,721,641        39,151            0
+99.77% (16,721,641B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->86.95% (14,573,568B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->86.95% (14,573,568B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->86.95% (14,573,568B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->86.95% (14,573,568B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->86.95% (14,573,568B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|         ->86.95% (14,573,568B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           ->86.95% (14,573,568B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|             ->86.95% (14,573,568B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|               ->86.95% (14,573,568B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                 ->86.95% (14,573,568B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->86.95% (14,573,568B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                     
+->07.10% (1,189,188B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->06.93% (1,162,161B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.13% (190,190B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.13% (190,190B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.13% (190,190B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.13% (190,190B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.13% (190,190B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.13% (190,190B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.13% (190,190B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.13% (190,190B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.12% (188,188B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.12% (188,188B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.09% (182,182B) 0x4063016: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.09% (182,182B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->00.19% (31,031B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.16% (27,027B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.64% (442,176B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->02.61% (437,664B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | ->02.58% (433,152B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | ->02.29% (383,520B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | ->01.78% (297,792B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | | ->01.78% (297,792B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |   ->01.78% (297,792B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |     ->01.78% (297,792B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |       ->01.78% (297,792B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |         ->01.78% (297,792B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |           ->01.78% (297,792B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |             ->01.78% (297,792B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |               ->01.78% (297,792B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                 ->01.78% (297,792B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                   ->01.78% (297,792B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                     ->01.78% (297,792B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                       ->01.78% (297,792B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |                         
+| | | | ->00.51% (85,728B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | | 
+| | | ->00.30% (49,632B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | 
+| | ->00.03% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.03% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.01% (336,485B) in 98 places, all below massif's threshold (1.00%)
+| 
+->01.08% (180,224B) 0x4062D9B: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+  ->01.08% (180,224B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+  | ->01.08% (180,224B) 0x4063106: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+  | | ->01.08% (180,224B) 0x4048F20: CollabText::Crdt::Buffer::get_fragments() const (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |   ->01.08% (180,224B) 0x4056D86: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |     ->01.08% (180,224B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |       ->01.08% (180,224B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |         ->01.08% (180,224B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |           ->01.08% (180,224B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | |             ->01.08% (180,224B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | |               ->01.08% (180,224B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | |                 ->01.08% (180,224B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | |                   ->01.08% (180,224B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+  | |                     ->01.08% (180,224B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+  | |                       ->01.08% (180,224B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |                         
+  | ->00.00% (0B) in 1+ places, all below ms_print's threshold (01.00%)
+  | 
+  ->00.00% (0B) in 1+ places, all below ms_print's threshold (01.00%)
+  
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 18    815,922,296       17,338,680       17,298,331        40,349            0
+99.77% (17,298,331B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->87.03% (15,089,664B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->87.03% (15,089,664B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->87.03% (15,089,664B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->87.03% (15,089,664B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->87.03% (15,089,664B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|         ->87.03% (15,089,664B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           ->87.03% (15,089,664B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|             ->87.03% (15,089,664B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|               ->87.03% (15,089,664B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                 ->87.03% (15,089,664B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->87.03% (15,089,664B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                     
+->07.10% (1,231,230B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->06.95% (1,204,203B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.10% (190,190B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.10% (190,190B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.10% (190,190B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.10% (190,190B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.10% (190,190B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.10% (190,190B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.10% (190,190B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.10% (190,190B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.09% (188,188B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.09% (188,188B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.05% (182,182B) 0x4063016: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.05% (182,182B) in 22 places, all below massif's threshold (1.00%)
+| | |   
+| | ->00.42% (73,073B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.16% (27,027B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.65% (460,224B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->02.63% (455,712B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | ->02.60% (451,200B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | ->02.32% (401,568B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | ->01.72% (297,792B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | | ->01.72% (297,792B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |   ->01.72% (297,792B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |     ->01.72% (297,792B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |       ->01.72% (297,792B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |         ->01.72% (297,792B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |           ->01.72% (297,792B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |             ->01.72% (297,792B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |               ->01.72% (297,792B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                 ->01.72% (297,792B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                   ->01.72% (297,792B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                     ->01.72% (297,792B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                       ->01.72% (297,792B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |                         
+| | | | ->00.60% (103,776B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | | 
+| | | ->00.29% (49,632B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | 
+| | ->00.03% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.03% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->01.94% (336,989B) in 98 places, all below massif's threshold (1.00%)
+| 
+->01.04% (180,224B) 0x4062D9B: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+  ->01.04% (180,224B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+  | ->01.04% (180,224B) 0x4063106: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+  | | ->01.04% (180,224B) 0x4048F20: CollabText::Crdt::Buffer::get_fragments() const (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |   ->01.04% (180,224B) 0x4056D86: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |     ->01.04% (180,224B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |       ->01.04% (180,224B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |         ->01.04% (180,224B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |           ->01.04% (180,224B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | |             ->01.04% (180,224B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | |               ->01.04% (180,224B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | |                 ->01.04% (180,224B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | |                   ->01.04% (180,224B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+  | |                     ->01.04% (180,224B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+  | |                       ->01.04% (180,224B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | |                         
+  | ->00.00% (0B) in 1+ places, all below ms_print's threshold (01.00%)
+  | 
+  ->00.00% (0B) in 1+ places, all below ms_print's threshold (01.00%)
+  
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 19    850,569,320       17,422,648       17,382,461        40,187            0
+ 20    891,750,488       18,107,768       18,065,747        42,021            0
+99.77% (18,065,747B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->87.13% (15,777,792B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->87.13% (15,777,792B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->87.13% (15,777,792B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->87.13% (15,777,792B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->87.13% (15,777,792B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|         ->87.13% (15,777,792B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           ->87.13% (15,777,792B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|             ->87.13% (15,777,792B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|               ->87.13% (15,777,792B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                 ->87.13% (15,777,792B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->87.13% (15,777,792B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                     
+->07.11% (1,287,286B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->06.96% (1,260,259B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.12% (202,202B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.12% (202,202B) in 23 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.12% (202,202B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.12% (202,202B) in 23 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.12% (202,202B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.12% (202,202B) in 23 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.12% (202,202B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.12% (202,202B) in 23 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.11% (200,200B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.11% (200,200B) in 23 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.07% (194,194B) 0x4063016: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.07% (194,194B) in 23 places, all below massif's threshold (1.00%)
+| | |   
+| | ->00.32% (57,057B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.15% (27,027B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.88% (522,397B) in 99 places, all below massif's threshold (1.00%)
+| 
+->02.64% (478,272B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  ->02.62% (473,760B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | ->02.59% (469,248B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | ->02.32% (419,616B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | ->01.64% (297,792B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | | ->01.64% (297,792B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |   ->01.64% (297,792B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |     ->01.64% (297,792B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |       ->01.64% (297,792B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |         ->01.64% (297,792B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |           ->01.64% (297,792B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | | | |             ->01.64% (297,792B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | | | |               ->01.64% (297,792B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | | | |                 ->01.64% (297,792B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | | | |                   ->01.64% (297,792B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+  | | | |                     ->01.64% (297,792B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+  | | | |                       ->01.64% (297,792B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |                         
+  | | | ->00.67% (121,824B) in 1+ places, all below ms_print's threshold (01.00%)
+  | | | 
+  | | ->00.27% (49,632B) in 1+ places, all below ms_print's threshold (01.00%)
+  | | 
+  | ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+  | 
+  ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+  
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 21    958,064,648       18,395,896       18,354,279        41,617            0
+ 22  1,005,939,712       18,174,416       18,139,402        35,014            0
+ 23  1,045,450,864       19,428,272       19,383,471        44,801            0
+ 24  1,104,726,552       19,580,664       19,538,355        42,309            0
+ 25  1,154,038,176       20,565,264       20,517,751        47,513            0
+99.77% (20,517,751B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->80.31% (16,515,072B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->80.31% (16,515,072B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->80.31% (16,515,072B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->80.31% (16,515,072B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->80.31% (16,515,072B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|         ->80.31% (16,515,072B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           ->80.31% (16,515,072B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|             ->80.31% (16,515,072B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|               ->80.31% (16,515,072B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                 ->80.31% (16,515,072B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->80.31% (16,515,072B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                     
+->07.14% (1,467,466B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->07.00% (1,440,439B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.16% (238,238B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.16% (238,238B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.16% (238,238B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.16% (238,238B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.16% (238,238B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.16% (238,238B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.16% (238,238B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.16% (238,238B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.15% (236,236B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.15% (236,236B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.12% (230,230B) 0x4063016: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.12% (230,230B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->00.10% (21,021B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.13% (27,027B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->07.00% (1,440,000B) 0x4041B0A: CollabText::Crdt::Buffer::snapshot_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) const (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->07.00% (1,440,000B) 0x4041DCA: CollabText::Crdt::Buffer::retire_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->07.00% (1,440,000B) 0x404226F: CollabText::Crdt::Buffer::trim_undo_stack() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->07.00% (1,440,000B) 0x4057740: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->07.00% (1,440,000B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|         ->07.00% (1,440,000B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|           ->07.00% (1,440,000B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|             ->07.00% (1,440,000B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|               ->07.00% (1,440,000B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|                 ->07.00% (1,440,000B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->07.00% (1,440,000B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|                     ->07.00% (1,440,000B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                       ->07.00% (1,440,000B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                         ->07.00% (1,440,000B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                           
+->02.67% (549,261B) in 101 places, all below massif's threshold (1.00%)
+| 
+->02.65% (545,952B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  ->02.63% (541,440B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | ->02.61% (536,928B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | ->02.37% (487,296B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | ->01.45% (297,792B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | | ->01.45% (297,792B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |   ->01.45% (297,792B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |     ->01.45% (297,792B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |       ->01.45% (297,792B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |         ->01.45% (297,792B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |           ->01.45% (297,792B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | | | |             ->01.45% (297,792B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+  | | | |               ->01.45% (297,792B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | | | |                 ->01.45% (297,792B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+  | | | |                   ->01.45% (297,792B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+  | | | |                     ->01.45% (297,792B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+  | | | |                       ->01.45% (297,792B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  | | | |                         
+  | | | ->00.92% (189,504B) in 1+ places, all below ms_print's threshold (01.00%)
+  | | | 
+  | | ->00.24% (49,632B) in 1+ places, all below ms_print's threshold (01.00%)
+  | | 
+  | ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+  | 
+  ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+  
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 26  1,190,337,008       20,300,512       20,256,991        43,521            0
+ 27  1,240,165,224       20,797,512       20,753,270        44,242            0
+ 28  1,277,131,008       20,315,904       20,278,843        37,061            0
+ 29  1,334,220,360       21,330,632       21,288,617        42,015            0
+ 30  1,369,133,088       22,408,896       22,357,343        51,553            0
+99.77% (22,357,343B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->73.70% (16,515,072B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->73.70% (16,515,072B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->73.70% (16,515,072B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->73.70% (16,515,072B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->73.70% (16,515,072B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|         ->73.70% (16,515,072B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           ->73.70% (16,515,072B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|             ->73.70% (16,515,072B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|               ->73.70% (16,515,072B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                 ->73.70% (16,515,072B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->73.70% (16,515,072B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                     
+->13.71% (3,072,000B) 0x4041B0A: CollabText::Crdt::Buffer::snapshot_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) const (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->13.71% (3,072,000B) 0x4041DCA: CollabText::Crdt::Buffer::retire_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->13.71% (3,072,000B) 0x404226F: CollabText::Crdt::Buffer::trim_undo_stack() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->13.71% (3,072,000B) 0x4057740: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->13.71% (3,072,000B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|         ->13.71% (3,072,000B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|           ->13.71% (3,072,000B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|             ->13.71% (3,072,000B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|               ->13.71% (3,072,000B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|                 ->13.71% (3,072,000B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->13.71% (3,072,000B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|                     ->13.71% (3,072,000B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                       ->13.71% (3,072,000B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                         ->13.71% (3,072,000B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                           
+->07.16% (1,603,602B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->07.04% (1,576,575B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.14% (256,256B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.14% (256,256B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.14% (256,256B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.14% (256,256B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.14% (256,256B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.14% (256,256B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.14% (256,256B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.14% (256,256B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.13% (254,254B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.13% (254,254B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.11% (248,248B) 0x4063016: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.11% (248,248B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->00.22% (49,049B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.12% (27,027B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.68% (600,096B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->02.66% (595,584B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | ->02.64% (591,072B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | ->02.42% (541,440B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | ->01.33% (297,792B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | | ->01.33% (297,792B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |   ->01.33% (297,792B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |     ->01.33% (297,792B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |       ->01.33% (297,792B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |         ->01.33% (297,792B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |           ->01.33% (297,792B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |             ->01.33% (297,792B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |               ->01.33% (297,792B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                 ->01.33% (297,792B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                   ->01.33% (297,792B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                     ->01.33% (297,792B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                       ->01.33% (297,792B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |                         
+| | | | ->01.09% (243,648B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |   ->01.09% (243,648B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |     ->01.09% (243,648B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |       ->01.09% (243,648B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |         ->01.09% (243,648B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |           ->01.09% (243,648B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |             ->01.09% (243,648B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |               ->01.09% (243,648B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | |                 ->01.09% (243,648B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | |                   ->01.09% (243,648B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                     ->01.09% (243,648B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                       ->01.09% (243,648B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                         ->01.09% (243,648B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                           ->01.09% (243,648B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |                             
+| | | ->00.22% (49,632B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | 
+| | ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.53% (566,573B) in 101 places, all below massif's threshold (1.00%)
+  
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 31  1,425,065,976       22,876,936       22,824,377        52,559            0
+99.77% (22,824,377B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->72.19% (16,515,072B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->72.19% (16,515,072B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->72.19% (16,515,072B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->72.19% (16,515,072B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->72.19% (16,515,072B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|         ->72.19% (16,515,072B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           ->72.19% (16,515,072B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|             ->72.19% (16,515,072B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|               ->72.19% (16,515,072B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                 ->72.19% (16,515,072B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->72.19% (16,515,072B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                     
+->15.21% (3,480,000B) 0x4041B0A: CollabText::Crdt::Buffer::snapshot_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) const (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->15.21% (3,480,000B) 0x4041DCA: CollabText::Crdt::Buffer::retire_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->15.21% (3,480,000B) 0x404226F: CollabText::Crdt::Buffer::trim_undo_stack() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->15.21% (3,480,000B) 0x4057740: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->15.21% (3,480,000B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|         ->15.21% (3,480,000B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|           ->15.21% (3,480,000B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|             ->15.21% (3,480,000B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|               ->15.21% (3,480,000B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|                 ->15.21% (3,480,000B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->15.21% (3,480,000B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|                     ->15.21% (3,480,000B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                       ->15.21% (3,480,000B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                         ->15.21% (3,480,000B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                           
+->07.16% (1,637,636B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->07.04% (1,610,609B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.15% (262,262B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.15% (262,262B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.15% (262,262B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.15% (262,262B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.15% (262,262B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.15% (262,262B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.15% (262,262B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.15% (262,262B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.14% (260,260B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.14% (260,260B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.11% (254,254B) 0x4063016: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.11% (254,254B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->00.21% (47,047B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.12% (27,027B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.67% (611,376B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->02.65% (606,864B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | ->02.63% (602,352B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | ->02.42% (552,720B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | ->01.30% (297,792B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | | ->01.30% (297,792B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |   ->01.30% (297,792B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |     ->01.30% (297,792B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |       ->01.30% (297,792B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |         ->01.30% (297,792B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |           ->01.30% (297,792B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |             ->01.30% (297,792B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |               ->01.30% (297,792B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                 ->01.30% (297,792B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                   ->01.30% (297,792B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                     ->01.30% (297,792B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |                       ->01.30% (297,792B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |                         
+| | | | ->01.11% (254,928B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |   ->01.11% (254,928B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |     ->01.11% (254,928B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |       ->01.11% (254,928B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |         ->01.11% (254,928B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |           ->01.11% (254,928B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |             ->01.11% (254,928B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |               ->01.11% (254,928B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | |                 ->01.11% (254,928B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | |                   ->01.11% (254,928B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                     ->01.11% (254,928B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                       ->01.11% (254,928B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                         ->01.11% (254,928B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |                           ->01.11% (254,928B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |                             
+| | | ->00.22% (49,632B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | 
+| | ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.54% (580,293B) in 101 places, all below massif's threshold (1.00%)
+  
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 32  1,474,125,512       22,647,224       22,599,966        47,258            0
+ 33  1,534,601,000       22,731,144       22,686,023        45,121            0
+ 34  1,596,095,688       23,002,856       22,959,046        43,810            0
+ 35  1,658,534,528       23,247,152       23,205,109        42,043            0
+ 36  1,693,759,248       23,491,744       23,449,399        42,345            0
+ 37  1,761,112,912       24,396,592       24,350,751        45,841            0
+ 38  1,797,110,592       24,802,736       24,754,737        47,999            0
+ 39  1,833,469,664       25,238,800       25,188,604        50,196            0
+ 40  1,870,025,976       25,655,784       25,603,362        52,422            0
+ 41  1,906,887,224       26,079,416       26,024,619        54,797            0
+ 42  1,944,047,088       26,489,040       26,432,116        56,924            0
+ 43  2,000,550,856       26,861,448       26,803,995        57,453            0
+ 44  2,042,057,784       27,507,416       27,445,323        62,093            0
+ 45  2,083,949,072       27,608,176       27,545,505        62,671            0
+ 46  2,118,624,816       28,044,176       27,979,474        64,702            0
+99.77% (27,979,474B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->58.80% (16,491,024B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->58.80% (16,491,024B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->58.80% (16,491,024B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->58.80% (16,490,496B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     | ->58.80% (16,490,496B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|     |   ->58.80% (16,490,496B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|     |     ->58.80% (16,490,496B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|     |       ->58.80% (16,490,496B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|     |         ->58.80% (16,490,496B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|     |           ->58.80% (16,490,496B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|     |             ->58.80% (16,490,496B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     |               
+|     ->00.00% (528B) in 1+ places, all below ms_print's threshold (01.00%)
+|     
+->28.16% (7,896,000B) 0x4041B0A: CollabText::Crdt::Buffer::snapshot_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) const (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->28.16% (7,896,000B) 0x4041DCA: CollabText::Crdt::Buffer::retire_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->28.16% (7,896,000B) 0x404226F: CollabText::Crdt::Buffer::trim_undo_stack() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->28.16% (7,896,000B) 0x4057740: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->28.16% (7,896,000B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|         ->28.16% (7,896,000B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|           ->28.16% (7,896,000B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|             ->28.16% (7,896,000B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|               ->28.16% (7,896,000B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|                 ->28.16% (7,896,000B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|                   ->28.16% (7,896,000B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|                     ->28.16% (7,896,000B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|                       ->28.16% (7,896,000B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|                         ->28.16% (7,896,000B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|                           
+->07.14% (2,001,978B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->07.06% (1,979,956B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.19% (333,351B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.19% (333,351B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.19% (332,404B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.19% (332,404B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.17% (328,695B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.17% (328,695B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.16% (325,380B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.16% (325,380B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.15% (323,203B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.15% (323,203B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.12% (313,898B) 0x4063016: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.12% (313,898B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->00.08% (23,025B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.08% (22,022B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->02.74% (767,040B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->02.72% (762,528B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | ->02.70% (758,016B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | ->02.53% (708,384B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | ->01.46% (410,592B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | | ->01.46% (410,592B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |   ->01.46% (410,592B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |     ->01.46% (410,592B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |       ->01.46% (410,592B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |         ->01.46% (410,592B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |           ->01.46% (410,592B) 0x40168DF: random_edit(CollabText::Crdt::Buffer&, std::mersenne_twister_engine<unsigned long, 32ul, 624ul, 397ul, 31ul, 2567483615ul, 11ul, 4294967295ul, 7ul, 2636928640ul, 15ul, 4022730752ul, 18ul, 1812433253ul>&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |           | ->01.46% (410,592B) 0x40214C0: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |           |   ->01.46% (410,592B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |           |     ->01.46% (410,592B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | | |           |       ->01.46% (410,592B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |           |         ->01.46% (410,592B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |           |           ->01.46% (410,592B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |           |             ->01.46% (410,592B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | | | |           |               ->01.46% (410,592B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | |           |                 
+| | | | |           ->00.00% (0B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | | |           
+| | | | ->01.06% (297,792B) 0x40609F0: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item(CollabText::Crdt::Fragment) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |   ->01.06% (297,792B) 0x404429C: CollabText::Crdt::Buffer::set_fragments(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |     ->01.06% (297,792B) 0x40576BB: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |       ->01.06% (297,792B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |         ->01.06% (297,792B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |           ->01.06% (297,792B) 0x40168DF: random_edit(CollabText::Crdt::Buffer&, std::mersenne_twister_engine<unsigned long, 32ul, 624ul, 397ul, 31ul, 2567483615ul, 11ul, 4294967295ul, 7ul, 2636928640ul, 15ul, 4022730752ul, 18ul, 1812433253ul>&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |           | ->01.06% (297,792B) 0x40214C0: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |           |   ->01.06% (297,792B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | |           |     ->01.06% (297,792B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | | |           |       ->01.06% (297,792B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |           |         ->01.06% (297,792B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |           |           ->01.06% (297,792B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |           |             ->01.06% (297,792B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | | |           |               ->01.06% (297,792B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | |           |                 
+| | | |           ->00.00% (0B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | |           
+| | | ->00.18% (49,632B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | 
+| | ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.02% (4,512B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->01.65% (462,984B) in 108 places, all below massif's threshold (1.00%)
+| 
+->01.29% (360,448B) 0x403CDF5: CollabText::Crdt::split_at_visible_offset(std::vector<CollabText::Crdt::Fragment, std::allocator<CollabText::Crdt::Fragment> >&, unsigned int) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+  ->01.29% (360,448B) 0x40573DF: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+    ->01.29% (360,448B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+      ->01.29% (360,448B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+        ->01.29% (360,448B) 0x40168DF: random_edit(CollabText::Crdt::Buffer&, std::mersenne_twister_engine<unsigned long, 32ul, 624ul, 397ul, 31ul, 2567483615ul, 11ul, 4294967295ul, 7ul, 2636928640ul, 15ul, 4022730752ul, 18ul, 1812433253ul>&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+          ->01.29% (360,448B) 0x40214C0: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+            ->01.29% (360,448B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+              ->01.29% (360,448B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+                ->01.29% (360,448B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+                  ->01.29% (360,448B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+                    ->01.29% (360,448B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+                      ->01.29% (360,448B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+                        ->01.29% (360,448B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+                          
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 47  2,176,108,432       26,451,552       26,399,776        51,776            0
+ 48  2,233,400,080       27,745,600       27,680,409        65,191            0
+ 49  2,290,599,592       27,677,560       27,614,001        63,559            0
+ 50  2,321,850,688       27,734,528       27,667,864        66,664            0
+99.76% (27,667,864B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->59.38% (16,469,016B) 0x405720D: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->59.38% (16,469,016B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->59.38% (16,469,016B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->59.37% (16,465,920B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     | ->59.37% (16,465,920B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|     |   ->59.37% (16,465,920B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|     |     ->59.37% (16,465,920B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|     |       ->59.37% (16,465,920B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|     |         ->59.37% (16,465,920B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|     |           ->59.37% (16,465,920B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|     |             ->59.37% (16,465,920B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     |               
+|     ->00.01% (3,096B) in 1+ places, all below ms_print's threshold (01.00%)
+|     
+->28.56% (7,920,000B) 0x4041B0A: CollabText::Crdt::Buffer::snapshot_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) const (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->28.56% (7,920,000B) 0x4041DCA: CollabText::Crdt::Buffer::retire_undo_entry(CollabText::Crdt::Buffer::UndoEntry const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|   ->28.56% (7,920,000B) 0x404226F: CollabText::Crdt::Buffer::trim_undo_stack() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|     ->28.56% (7,920,000B) 0x4057740: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|       ->28.56% (7,920,000B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|         ->28.56% (7,920,000B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|           ->28.47% (7,896,000B) 0x40213E1: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|           | ->28.47% (7,896,000B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           |   ->28.47% (7,896,000B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+|           |     ->28.47% (7,896,000B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|           |       ->28.47% (7,896,000B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+|           |         ->28.47% (7,896,000B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+|           |           ->28.47% (7,896,000B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+|           |             ->28.47% (7,896,000B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+|           |               
+|           ->00.09% (24,000B) in 1+ places, all below ms_print's threshold (01.00%)
+|           
+->06.87% (1,904,747B) 0x40275C3: void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->06.80% (1,885,714B) 0x4062CE1: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.19% (330,156B) 0x4063016: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.19% (330,156B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.18% (327,030B) 0x4063034: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.18% (327,030B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.16% (320,639B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.16% (320,639B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.13% (314,063B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.13% (314,063B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.06% (294,453B) 0x40630AC: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.06% (294,453B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->01.04% (288,361B) 0x4063070: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.04% (288,361B) in 24 places, all below massif's threshold (1.00%)
+| | |   
+| | ->00.04% (11,012B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.07% (19,033B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->01.95% (540,672B) 0x4062D9B: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| ->01.30% (360,448B) 0x4063052: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | ->01.30% (360,448B) 0x406308E: void CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::for_each_node<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::items() const::{lambda(CollabText::Crdt::Fragment const&)
+| | | ->01.30% (360,448B) 0x4048F80: CollabText::Crdt::Buffer::get_fragments() const (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | |   ->01.30% (360,448B) 0x4056D86: CollabText::Crdt::Buffer::try_apply_validated_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | |     ->01.30% (360,448B) 0x4058D7B: CollabText::Crdt::Buffer::try_apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | |       ->01.30% (360,448B) 0x405964D: CollabText::Crdt::Buffer::apply_local_edit(std::vector<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int> > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | |         ->01.30% (360,448B) 0x40168DF: random_edit(CollabText::Crdt::Buffer&, std::mersenne_twister_engine<unsigned long, 32ul, 624ul, 397ul, 31ul, 2567483615ul, 11ul, 4294967295ul, 7ul, 2636928640ul, 15ul, 4022730752ul, 18ul, 1812433253ul>&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | |           ->01.30% (360,448B) 0x40214C0: TestBenchmark::single_replica_large_doc() [clone .isra.0] (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | |             ->01.30% (360,448B) 0x4C8A840: QMetaMethodInvoker::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | |               ->01.30% (360,448B) 0x4C8B345: QMetaMethod::invokeImpl(QMetaMethod, void*, Qt::ConnectionType, long long, void const* const*, char const* const*, QtPrivate::QMetaTypeInterface const* const*) (in /usr/lib/libQt6Core.so.6.11.2)
+| | |                 ->01.30% (360,448B) 0x49BE58E: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | |                   ->01.30% (360,448B) 0x49C2833: ??? (in /usr/lib/libQt6Test.so.6.11.2)
+| | |                     ->01.30% (360,448B) 0x49CFF8E: QTest::qRun() (in /usr/lib/libQt6Test.so.6.11.2)
+| | |                       ->01.30% (360,448B) 0x49D0EC5: QTest::qExec(QObject*, int, char**) (in /usr/lib/libQt6Test.so.6.11.2)
+| | |                         ->01.30% (360,448B) 0x4014DCD: main (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | |                           
+| | ->00.00% (0B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.65% (180,224B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->01.53% (424,128B) 0x405D2C8: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::make_leaf() (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| ->01.52% (421,872B) 0x405F813: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | ->01.51% (419,616B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | ->01.42% (394,800B) 0x405FB58: CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::push_item_recursive(std::shared_ptr<CollabText::Crdt::SumTree<CollabText::Crdt::Fragment, 6ul>::Node>&, CollabText::Crdt::Fragment, CollabText::Crdt::FragmentSummary const&) (in /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark)
+| | | | ->01.42% (394,800B) in 2 places, all below massif's threshold (1.00%)
+| | | |   
+| | | ->00.09% (24,816B) in 1+ places, all below ms_print's threshold (01.00%)
+| | | 
+| | ->00.01% (2,256B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.01% (2,256B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->01.48% (409,301B) in 109 places, all below massif's threshold (1.00%)
+  
+--------------------------------------------------------------------------------
+  n        time(B)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 51  2,352,833,504       26,647,168       26,591,499        55,669            0
+ 52  2,383,797,416       27,838,168       27,771,212        66,956            0
+ 53  2,414,797,000       27,017,032       26,956,657        60,375            0
+ 54  2,445,760,480       26,797,632       26,742,735        54,897            0
+ 55  2,476,729,456       27,722,592       27,653,525        69,067            0
+ 56  2,507,693,240       26,949,112       26,891,363        57,749            0
+ 57  2,538,960,640       27,719,680       27,649,612        70,068            0

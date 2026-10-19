@@ -1,0 +1,110 @@
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string_view>
+
+namespace CollabText::Crdt::Diagnostics {
+
+enum class Counter : size_t {
+    sumtree_items_visited,
+    sumtree_items_flattened,
+    sumtree_items_pushed,
+    fragment_snapshots,
+    fragment_snapshot_items,
+    fragment_snapshot_text_bytes,
+    fragment_snapshot_deletion_ids,
+    fragment_tree_rebuild_items,
+    idlist_snapshots,
+    idlist_snapshot_entries,
+    idlist_tree_rebuild_entries,
+    position_items_materialized,
+    position_scalars_materialized,
+    fragment_splits,
+    fragment_split_bytes_copied,
+    visibility_recomputations,
+    visibility_deletion_checks,
+    origin_lookup_comparisons,
+    placement_index_builds,
+    placement_index_runs,
+    placement_identity_queries,
+    placement_identity_comparisons,
+    undo_map_queries,
+    undo_map_entries_examined,
+    undo_retirement_groups,
+    undo_retirement_operation_ids,
+    undo_retirement_inserted_items,
+    undo_retirement_deletions,
+    undo_retirement_budget_bytes,
+    codec_frontier_actors_encoded,
+    codec_frontier_actors_decoded,
+    count,
+};
+
+inline constexpr size_t counter_count = static_cast<size_t>(Counter::count);
+
+struct Snapshot {
+    std::array<uint64_t, counter_count> values{};
+
+    uint64_t get(Counter counter) const noexcept {
+        return values[static_cast<size_t>(counter)];
+    }
+};
+
+inline constexpr std::array<std::string_view, counter_count> counter_names{
+    "sumtree_items_visited",
+    "sumtree_items_flattened",
+    "sumtree_items_pushed",
+    "fragment_snapshots",
+    "fragment_snapshot_items",
+    "fragment_snapshot_text_bytes",
+    "fragment_snapshot_deletion_ids",
+    "fragment_tree_rebuild_items",
+    "idlist_snapshots",
+    "idlist_snapshot_entries",
+    "idlist_tree_rebuild_entries",
+    "position_items_materialized",
+    "position_scalars_materialized",
+    "fragment_splits",
+    "fragment_split_bytes_copied",
+    "visibility_recomputations",
+    "visibility_deletion_checks",
+    "origin_lookup_comparisons",
+    "placement_index_builds",
+    "placement_index_runs",
+    "placement_identity_queries",
+    "placement_identity_comparisons",
+    "undo_map_queries",
+    "undo_map_entries_examined",
+    "undo_retirement_groups",
+    "undo_retirement_operation_ids",
+    "undo_retirement_inserted_items",
+    "undo_retirement_deletions",
+    "undo_retirement_budget_bytes",
+    "codec_frontier_actors_encoded",
+    "codec_frontier_actors_decoded",
+};
+
+#if defined(COLLABTEXT_ENABLE_PERF_DIAGNOSTICS)
+inline thread_local Snapshot current;
+inline thread_local bool recording = false;
+
+inline constexpr bool enabled() noexcept { return true; }
+inline void record(Counter counter, uint64_t amount = 1) noexcept {
+    if (recording) current.values[static_cast<size_t>(counter)] += amount;
+}
+inline Snapshot snapshot() noexcept { return current; }
+inline void reset() noexcept { current = {}; }
+inline void begin_sample() noexcept { recording = true; }
+inline void end_sample() noexcept { recording = false; }
+#else
+inline constexpr bool enabled() noexcept { return false; }
+inline constexpr void record(Counter, uint64_t = 1) noexcept {}
+inline constexpr Snapshot snapshot() noexcept { return {}; }
+inline constexpr void reset() noexcept {}
+inline constexpr void begin_sample() noexcept {}
+inline constexpr void end_sample() noexcept {}
+#endif
+
+}  // namespace CollabText::Crdt::Diagnostics

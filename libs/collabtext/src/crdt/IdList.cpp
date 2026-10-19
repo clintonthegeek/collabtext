@@ -1,4 +1,5 @@
 #include "crdt/IdList.h"
+#include "crdt/Diagnostics.h"
 #include "crdt/LocalHistoryBudget.h"
 #include "crdt/SequenceOrder.h"
 #include <algorithm>
@@ -35,6 +36,7 @@ Result<std::vector<CollabText::detail::PositionItem>> IdList::position_items() c
     for (const auto& entry : get_entries()) {
         if (!entry.origin.actor.valid() || !entry.origin.counter || entry.origin.counter == UINT64_MAX)
             return Error(ErrorCode::history_unavailable, "retained list identity is invalid");
+        Diagnostics::record(Diagnostics::Counter::position_items_materialized);
         items.push_back({entry.origin, 1, entry.visible, entry.id});
     }
     return items;
@@ -52,6 +54,7 @@ IdList::IdList(SharedIdentityAllocator allocator)
 size_t IdList::find_origin(const std::vector<IdListEntry>& entries,
                            const Anchor& target) const {
     for (size_t i = 0; i < entries.size(); ++i) {
+        Diagnostics::record(Diagnostics::Counter::origin_lookup_comparisons);
         if (entries[i].origin == target.position) {
             return i;
         }
@@ -436,6 +439,17 @@ void IdList::trim_undo_stack() {
 }
 
 void IdList::retire_undo_entry(const UndoEntry &entry) {
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_groups);
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_operation_ids,
+                        entry.operation_ids.size());
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_inserted_items,
+                        entry.inserted_keys.size());
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_deletions,
+                        entry.deletion_ids.size());
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_budget_bytes,
+        detail::local_undo_retirement_charge(entry.operation_ids.size(),
+                                             entry.inserted_keys.size(),
+                                             entry.deletion_ids.size()));
     auto snapshot = snapshot_undo_entry(entry);
     m_retired_undo_bytes += detail::local_undo_retirement_charge(snapshot);
     m_retired_undo_entries.push_back(std::move(snapshot));
@@ -1024,10 +1038,16 @@ size_t IdList::entry_count() const {
 }
 
 std::vector<IdListEntry> IdList::get_entries() const {
-    return m_entry_tree.items();
+    auto entries = m_entry_tree.items();
+    Diagnostics::record(Diagnostics::Counter::idlist_snapshots);
+    Diagnostics::record(Diagnostics::Counter::idlist_snapshot_entries,
+                        entries.size());
+    return entries;
 }
 
 void IdList::set_entries(std::vector<IdListEntry>&& entries) {
+    Diagnostics::record(Diagnostics::Counter::idlist_tree_rebuild_entries,
+                        entries.size());
     for (auto& e : entries)
         e.visible = e.compute_visible(m_undo_map);
     IdListTree tree;

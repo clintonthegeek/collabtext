@@ -1,0 +1,17 @@
+==12== Massif, a heap profiler
+==12== Copyright (C) 2003-2024, and GNU GPL'd, by Nicholas Nethercote et al.
+==12== Using Valgrind-3.25.1 and LibVEX; rerun with -h for copyright info
+==12== Command: /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark single_replica_large_doc
+==12== 
+********* Start testing of TestBenchmark *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestBenchmark::initTestCase()
+QDEBUG : TestBenchmark::single_replica_large_doc() 
+=== Single-Replica Large Doc (1M) ===
+  1M doc, random edit: wall=427.344 ms (427344480 ns), work=100 local edits, 4.27344e+06 ns/local edits, 234.003 local edits/s, source_edits=100, remote_applications=0, fragments=1244, tombstones=82, visible_bytes=999979, process_rss=79724 KB
+{"name":"1M doc, random edit","wall_ns":427344480,"work_label":"local edits","work_items":100,"source_edits":100,"remote_applications":0,"ns_per_work_item":4.27344e+06,"work_per_sec":234.003,"process_rss_kb":79724,"fragments":1244,"tombstones":82,"visible_bytes":999979,"deleted_bytes":214}
+PASS   : TestBenchmark::single_replica_large_doc()
+PASS   : TestBenchmark::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 2292ms
+********* Finished testing of TestBenchmark *********
+==12== 

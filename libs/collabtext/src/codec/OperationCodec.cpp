@@ -1,6 +1,7 @@
 #include "crdt/Serialization.h"
 #include "crdt/OperationPayload.h"
 #include "crdt/OperationValidation.h"
+#include "crdt/Diagnostics.h"
 #include "codec/JsonReader.h"
 #include <algorithm>
 #include <initializer_list>
@@ -103,6 +104,7 @@ public:
         if (g.pair_count() > actor_limit) { error = malformed("frontier exceeds 512 actors"); return; }
         raw("{");
         for (size_t i=0; i<g.pair_count(); ++i) {
+            Diagnostics::record(Diagnostics::Counter::codec_frontier_actors_encoded);
             const auto [actor, counter] = g.pair(i);
             if (!usable({actor,counter})) { error = invalid_identity("invalid frontier component"); return; }
             if (i) raw(",");
@@ -199,6 +201,7 @@ public:
         Global g;
         if(!v.is_object() || v.members().size()>actor_limit) { fail("invalid or oversized frontier"); return g; }
         for(const auto& [key,value]:v.members()) {
+            Diagnostics::record(Diagnostics::Counter::codec_frontier_actors_decoded);
             auto who=ActorId::parse(key);
             if(!who || who.value().to_string()!=key) { if(!error) error=invalid_identity("invalid or noncanonical frontier actor"); break; }
             const auto n=number(value);

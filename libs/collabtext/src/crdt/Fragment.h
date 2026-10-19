@@ -1,6 +1,7 @@
 #pragma once
 
 #include "crdt/Clock.h"
+#include "crdt/Diagnostics.h"
 #include "crdt/Placement.h"
 #include "crdt/UndoMap.h"
 #include <cstdint>
@@ -134,6 +135,9 @@ struct Fragment {
         tail.origin = item_at(k);
         tail.link = link_at(k);
         tail.text = text.substr(byte);
+        Diagnostics::record(Diagnostics::Counter::fragment_splits);
+        Diagnostics::record(Diagnostics::Counter::fragment_split_bytes_copied,
+                            tail.text.size());
         tail.byte_length = static_cast<uint32_t>(tail.text.size());
         tail.length = length - k;
         tail.deletions = deletions;
@@ -150,8 +154,10 @@ struct Fragment {
     /// Compute visibility from deletions and undo_map.
     /// Use this when building the tree to set the `visible` flag.
     bool compute_visible(const UndoMap &undo_map) const {
+        Diagnostics::record(Diagnostics::Counter::visibility_recomputations);
         if (undo_map.is_undone(origin)) return false;
         for (auto &del : deletions) {
+            Diagnostics::record(Diagnostics::Counter::visibility_deletion_checks);
             if (!undo_map.is_undone(del)) return false;
         }
         return true;

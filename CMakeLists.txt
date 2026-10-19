@@ -34,6 +34,12 @@ option(COLLABTEXT_BUILD_BENCHMARKS     "Build standalone benchmarks (never regis
 option(COLLABTEXT_BUILD_QT             "Build the Qt adapter and widget components" ON)
 option(COLLABTEXT_BUILD_APPS           "Build the dogfood applications"        ON)
 option(COLLABTEXT_BUILD_FILE_TRANSPORT "Build the file-backed transport component" ON)
+option(COLLABTEXT_ENABLE_PERF_DIAGNOSTICS
+    "Enable internal per-thread performance counters for profiling builds" OFF)
+
+if(COLLABTEXT_ENABLE_PERF_DIAGNOSTICS)
+    add_compile_definitions(COLLABTEXT_ENABLE_PERF_DIAGNOSTICS=1)
+endif()
 
 # QtTest is only ever needed by tests, and Qt Widgets only by the widget
 # component and the apps. Deriving the requirement here rather than in the

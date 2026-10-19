@@ -1,5 +1,7 @@
 #pragma once
 
+#include "crdt/Diagnostics.h"
+
 #include <collabtext/Engine.h> // Bias
 
 #include <algorithm>
@@ -440,13 +442,21 @@ public:
     /// Iterate all items in order.
     template<typename F>
     void for_each(F&& fn) const {
-        if (m_root) for_each_node(m_root.get(), fn);
+        if (!m_root) return;
+        auto counted = [&](const Item& item) {
+            Diagnostics::record(Diagnostics::Counter::sumtree_items_visited);
+            fn(item);
+        };
+        for_each_node(m_root.get(), counted);
     }
 
     /// Flatten to a vector of items.
     std::vector<Item> items() const {
         std::vector<Item> result;
-        for_each([&](const Item& item) { result.push_back(item); });
+        for_each([&](const Item& item) {
+            Diagnostics::record(Diagnostics::Counter::sumtree_items_flattened);
+            result.push_back(item);
+        });
         return result;
     }
 
@@ -474,6 +484,7 @@ public:
 
     /// Append a single item.
     void push_item(Item item) {
+        Diagnostics::record(Diagnostics::Counter::sumtree_items_pushed);
         Summary item_sum = item.summary();
 
         if (!m_root) {

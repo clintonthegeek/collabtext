@@ -1,5 +1,6 @@
 #include "crdt/Utf16.h"
 #include "crdt/Buffer.h"
+#include "crdt/Diagnostics.h"
 #include "crdt/LocalHistoryBudget.h"
 #include "crdt/OperationQueue.h"
 #include "crdt/SequenceOrder.h"
@@ -59,6 +60,7 @@ Result<std::vector<CollabText::detail::PositionItem>> Buffer::position_items() c
             fragment.length > UINT64_MAX - fragment.origin.counter))
             return Error(ErrorCode::history_unavailable, "retained item interval is invalid");
         if (fragment.marker) {
+            Diagnostics::record(Diagnostics::Counter::position_items_materialized);
             items.push_back({fragment.origin, 0, fragment.visible, std::nullopt, true});
             continue;
         }
@@ -66,6 +68,8 @@ Result<std::vector<CollabText::detail::PositionItem>> Buffer::position_items() c
         for (uint32_t scalar = 0; scalar < fragment.length; ++scalar) {
             const auto lead = static_cast<unsigned char>(fragment.text[byte]);
             const uint32_t width = lead < 0x80 ? 1 : lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4;
+            Diagnostics::record(Diagnostics::Counter::position_items_materialized);
+            Diagnostics::record(Diagnostics::Counter::position_scalars_materialized);
             items.push_back({fragment.item_at(scalar), width, fragment.visible, std::nullopt});
             byte += width;
         }
@@ -97,10 +101,22 @@ void Buffer::discard_local_view() noexcept {
 // ---------------------------------------------------------------------------
 
 std::vector<Fragment> Buffer::get_fragments() const {
-    return m_fragment_tree.items();
+    auto fragments = m_fragment_tree.items();
+    Diagnostics::record(Diagnostics::Counter::fragment_snapshots);
+    Diagnostics::record(Diagnostics::Counter::fragment_snapshot_items,
+                        fragments.size());
+    for (const auto& fragment : fragments) {
+        Diagnostics::record(Diagnostics::Counter::fragment_snapshot_text_bytes,
+                            fragment.text.size());
+        Diagnostics::record(Diagnostics::Counter::fragment_snapshot_deletion_ids,
+                            fragment.deletions.size());
+    }
+    return fragments;
 }
 
 void Buffer::set_fragments(std::vector<Fragment>&& frags) {
+    Diagnostics::record(Diagnostics::Counter::fragment_tree_rebuild_items,
+                        frags.size());
     for (auto& f : frags) {
         f.visible = f.compute_visible(m_undo_map);
         assert(f.byte_length == f.text.size());
@@ -378,6 +394,17 @@ void Buffer::trim_undo_stack() {
 }
 
 void Buffer::retire_undo_entry(const UndoEntry &entry) {
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_groups);
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_operation_ids,
+                        entry.operation_ids.size());
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_inserted_items,
+                        entry.inserted_keys.size());
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_deletions,
+                        entry.deletion_ids.size());
+    Diagnostics::record(Diagnostics::Counter::undo_retirement_budget_bytes,
+        detail::local_undo_retirement_charge(entry.operation_ids.size(),
+                                             entry.inserted_keys.size(),
+                                             entry.deletion_ids.size()));
     auto snapshot = snapshot_undo_entry(entry);
     m_retired_undo_bytes += detail::local_undo_retirement_charge(snapshot);
     m_retired_undo_entries.push_back(std::move(snapshot));

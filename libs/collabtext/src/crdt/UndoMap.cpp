@@ -1,4 +1,5 @@
 #include "crdt/UndoMap.h"
+#include "crdt/Diagnostics.h"
 
 namespace CollabText::Crdt {
 
@@ -18,11 +19,13 @@ void UndoMap::insert(UndoMapEntry entry) {
 }
 
 uint32_t UndoMap::undo_count(Identity edit_id) const {
+    Diagnostics::record(Diagnostics::Counter::undo_map_queries);
     uint32_t max_count = 0;
     UndoTreeKey start_key{edit_id, Identity::min()};
     auto cursor = m_tree.cursor<UndoTreeKeyDim>();
     cursor.seek(UndoTreeKeyDim{start_key}, Bias::Left);
     while (auto *entry = cursor.item()) {
+        Diagnostics::record(Diagnostics::Counter::undo_map_entries_examined);
         if (!(entry->key.edit_id == edit_id))
             break;
         if (entry->undo_count > max_count)
@@ -37,11 +40,13 @@ bool UndoMap::is_undone(Identity edit_id) const {
 }
 
 bool UndoMap::was_undone(Identity edit_id, const Global &version) const {
+    Diagnostics::record(Diagnostics::Counter::undo_map_queries);
     uint32_t max_count = 0;
     UndoTreeKey start_key{edit_id, Identity::min()};
     auto cursor = m_tree.cursor<UndoTreeKeyDim>();
     cursor.seek(UndoTreeKeyDim{start_key}, Bias::Left);
     while (auto *entry = cursor.item()) {
+        Diagnostics::record(Diagnostics::Counter::undo_map_entries_examined);
         if (!(entry->key.edit_id == edit_id))
             break;
         if (version.observed(entry->key.undo_id)) {
