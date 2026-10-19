@@ -1,0 +1,24 @@
+# behavior 1
+# name: buffer_partition_then_heal
+# provenance: the partition contract in NetworkSim.h (V05): a disconnect blocks
+#   both directions and queues what it blocked.
+# status: desired
+# scope: partition, multiple producers
+# expect converged yes
+# note: replica 1 disconnects, both sides edit, then replica 1 reconnects and
+#   delivers. Before the heal the replicas must differ; the deliveries after the
+#   heal are what make the final state identical.
+#collabtext-trace 1
+#model buffer
+#label partition-then-heal
+#seed 42
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 61
+deliver 1 0
+disconnect 1
+edit 0 1 1 62
+edit 1 0 0 63
+reconnect 1
+deliver 1 1
+deliver 0 2

@@ -1,0 +1,11 @@
+#collabtext-trace 1
+#model networksim
+#label networksim_basic_convergence
+#seed 7443446261276893935
+#replicas 3
+#net 50 200 500 1
+edit 0 0 0 68656c6c6f
+tick 300
+edit 1 0 0 776f726c6420
+tick 300
+drain

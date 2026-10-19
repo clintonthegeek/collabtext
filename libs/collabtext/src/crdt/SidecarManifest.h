@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/Sha256.h"
+
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -7,7 +9,7 @@
 namespace CollabText::Crdt {
 
 struct SidecarManifest {
-    int         schema_version = 3;
+    int         schema_version = 4;
     std::string doc_id;
     std::string enrolled_at;        // ISO 8601 UTC
     std::string original_filename;
@@ -15,13 +17,25 @@ struct SidecarManifest {
 };
 
 /// SHA-256 of arbitrary bytes, lower-case hex.
-std::string sha256_hex(const std::string& data);
+///
+/// Forwarded from <core/Sha256.h>, which is where it lives: Core needs a digest
+/// for actor derivation, so it cannot live only in the file-format component
+/// (roadmap task A01). The output is byte-identical to what this used to
+/// produce through QCryptographicHash.
 
 /// Serialize a manifest to a one-line JSON string.
 std::string manifest_to_json(const SidecarManifest& m);
 
 /// Parse a manifest. Returns nullopt for malformed JSON or
-/// schema_version != 3 (schema_version 3 adds IdList operations).
+/// schema_version != 4.
+///
+/// 3 added IdList operations. 4 changed how an identity is written: the 16-bit
+/// `replica_id`/32-bit `value` pair became a 128-bit actor hex plus a 64-bit
+/// counter, and the version vector became a sparse object keyed by actor hex
+/// instead of a dense array indexed by replica id. Schema 3 records do not load,
+/// and that is deliberate: there is no production data to migrate, and a
+/// compatibility path for a field that was never an identity would be worse
+/// than the cut. P06b replaces both encodings with the versioned sparse codec.
 std::optional<SidecarManifest> manifest_from_json(const std::string& json);
 
 /// Atomically write the manifest to a path (write-temp + rename).

@@ -1,0 +1,147 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp3-containing-block-gone",
+ "probe": "WP3",
+ "title": "A deleted containing block is a consumer-owned Gone result",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp3-containing-block-gone",
+  "stream": "block-b1",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/6",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "r"
+    },
+    {
+     "id": "A/2",
+     "value": "e"
+    },
+    {
+     "id": "A/3",
+     "value": "p"
+    },
+    {
+     "id": "A/4",
+     "value": "l"
+    },
+    {
+     "id": "A/5",
+     "value": "y"
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/6"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "reply-end",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/5",
+    "END"
+   ],
+   "affinity": "right"
+  }
+ ],
+ "attachment_kinds": {
+  "reply-end": "strict"
+ },
+ "invalid_requests": [
+  {
+   "kind": "wrong_scope",
+   "target_stream": "block-b2",
+   "note": "The consumer block map reports block-b2 deleted before any engine lookup.",
+   "error": "gone"
+  },
+  {
+   "kind": "unknown_token_in_live_block",
+   "target_stream": "block-b1",
+   "note": "A nonempty token that no longer resolves inside a live block is Stale.",
+   "error": "stale"
+  }
+ ],
+ "expectations": [
+  {
+   "id": "missing_containing_block_is_gone",
+   "kind": "gone",
+   "source": "wave_protocol_normative",
+   "citation": "wave 0001-protocol:667"
+  },
+  {
+   "id": "unknown_token_retains_bytes_as_stale",
+   "kind": "stale",
+   "source": "wave_protocol_normative",
+   "citation": "wave 0001-protocol:666"
+  },
+  {
+   "id": "block_existence_is_checked_before_engine_lookup",
+   "kind": "consumer_owned_check",
+   "source": "roadmap_inference",
+   "citation": "W2; 00-consumer-integration.md"
+  },
+  {
+   "id": "engine_enforces_token_scope_without_asserting",
+   "kind": "no_assert_no_abort",
+   "source": "consumer_asserted",
+   "citation": "W2; wave ask2:148-150"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "W02"
+  ],
+  "strict": [
+   "W03"
+  ]
+ },
+ "third_party_observations": [
+  {
+   "library": "Automerge",
+   "version": "3.5",
+   "claim": "Silent relocation to a plausible offset inside a container that no longer exists.",
+   "citation": "wave ask2:141",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  }
+ ],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "A/2",
+   "A/3",
+   "A/4",
+   "A/5"
+  ],
+  "hidden": [],
+  "text": "reply",
+  "positions": {
+   "reply-end": {
+    "offset": 5,
+    "state": "resolved"
+   }
+  },
+  "comparisons": []
+ }
+}

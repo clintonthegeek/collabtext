@@ -1,0 +1,106 @@
+# State at handoff — 2026-10-05, corrected after independent review
+
+**Superseded for current status by
+[2026-10-06-s03-progress.md](2026-10-06-s03-progress.md).** S03 is complete at
+`0984d93` on `feat/fuguemax-placement`. The 2026-10-05 text below is the record
+of that day. Where it says the engine still interleaves, or that no production
+ordering code has changed, that statement is historical.
+
+Execute only in `.worktrees/reliability-v2`, branch `roadmap/reliability-v2`.
+`TASKS.json` is authoritative. The earlier version of this handoff mistakenly
+called W01/S01 complete and S04a ready. The correction below uses actual artifacts
+and registry dependencies; a prose assertion does not complete a task.
+
+## Completed work
+
+V01–V08, D01, P01–P06b, L01, S01, S02, W01–W03, S04a/S04b and packaging A01/A02a/A06a.
+P06a includes the final public operation-opacity step (`01614af`, `d52dceb`),
+with immutable shared values and affected Debug/Release/leak-enabled sanitizers.
+S04a supplies a full scoped-boundary contract, implementation map, compile-checked
+target signatures and independent model. Exact W01 collapse/restoration rules are
+resolved; corrected WP2/WP8 fixtures select the actual referent. S04b implements native live scoped positions and experimental CTPT v1 bytes.
+Full F7 recovery/retention, F8 ordering, durable undo/pins and store recovery remain pending.
+
+## Next implementation work
+
+1. **P06b is complete:** checked CTBO/CTLO/CTGV/CTGP version 1 codecs, fixed-width
+   scalars, allocation/gap metadata and bounded readers/writers. Debug 72/72,
+   Release/sanitizers 14/14, installed package passes. Failures retain and block
+   decoder batches; full store recovery/gap integration remains P07/L02/L03/L08.
+2. **S04b is complete:** native live scoped queries, exact affinity/collapse/strict
+   restore, bounded token codec and original-byte fresh-process replay. Debug
+   74/74, Release/sanitizers 7/7 and relocated installed Core package pass.
+   W03's strict installed live gate is complete too. No backward compatibility
+   is needed; all consumers will adapt. Token format is experimental/unpublished.
+3. **W02 is complete:** the relocated installed baseline has 17 exact cases in
+   Debug/Release (15 pass, WP6 exact known failure, WP8 durable-pins unsupported),
+   plus negative expectation/abort and optional Qt/export checks.
+4. **S02 is complete and S03 is unblocked:** the root cause is `Buffer::normalize_fragments`
+   atomizing a same-`Locator` run and ordering its scalars, which interleaves
+   concurrent pastes into `aXbYcZ`. The fix keeps whole operations contiguous and
+   orders same-position operations by first inserted item (counter, then actor
+   bytes), as the pre-order of the insert-after tree. Evidence: 8/8
+   `tst_sequence_model` in Debug/Release/ASan, 75/75 routed. No production code
+   changed; ordering is **not** repaired until S03 lands. S03 may now change
+   integration; S04 then re-runs the installed position probes.
+5. **W03 is complete:** `--gate live` certifies 16 strict rows (WP1-WP5/WP7 plus
+   the no-GC containment smoke) in Debug, Release and installed ASan, including a
+   two-process replay of originally minted tokens and a second independent
+   Markdown consumer at 4/4. Both baseline exceptions remain in place. Continue
+   with E07a/E07b preparation; recovery/order/pin tasks follow registry
+   dependencies.
+   No product-policy question is outstanding. No backend substitution, consumer
+   edits/messages, publication or master integration is authorized by these tasks.
+
+The model ran 21 token-bearing fixtures (50 minted gaps, 48 exact placements,
+24 comparisons), 472 supplied orders and 75,328 visibility states, with two
+identical fixed-seed traces. Debug/Release/ASan/UBSan/LSan pass. This is independent
+boundary evidence over supplied orders; it is not production integration proof.
+The current fixture validator rejects 37 corruption kinds / 362 applications.
+Details and artifacts belong to TASKS.json / vnext-task-log.md.
+
+## Verification cadence
+
+```sh
+tools/verify-changed.sh                          # affected bounded correctness
+tools/verify-changed.sh --target '^tst_buffer$'   # narrow iteration
+tools/verify-changed.sh --thorough                # include routed long simulation
+tools/verify-changed.sh --all                     # every correctness test
+tools/verify-roadmap.sh --fresh debug '.'         # fresh acceptance once per arc
+```
+
+Benchmarks are **absent from CTest**, including all/fresh runs. They are opt-in
+standalone binaries, excluded from the default build even when enabled. The user
+deferred engine optimization and performance comparisons. Do not tune the old
+benchmark watchdog or run benchmarks as acceptance tests.
+
+The runners use available CPU workers, automatic bounded local ccache and one
+aggregate build traversal. The package gate builds enabled libraries rather than
+unrelated tests/apps. Compilation cache does not cache test execution. Default
+TMPDIR is inside the worktree; an explicit value is honored. Use EXECUTION.md
+for environment controls and full verification requirements.
+
+The reviewed broad bounded Debug gate passed **70/70** CTest tests plus a relocated
+installed Core consumer and negative-component checks: 153.178 seconds including
+configuration/build/package work; CTest itself took 25.62 seconds. A repeated warm
+three-test check went from 12.833 to 4.421 seconds. Neither number measures a clean
+full build. `tst_realistic` remains deliberately excluded from ordinary routing
+and must run when its affected subject/acceptance gate requires it. No benchmark
+ran in this review. See the throughput report for evidence and limits.
+
+Unknown changed paths, invalid Git baselines, empty selections, stale routes and
+build/test failures return nonzero. Regression tests exercise failure paths;
+never weaken assertions to shorten verification.
+
+## Remaining limitations and authorization
+
+F7/F8 remain known defects: ignored affinity/unsafe text anchor fallback and
+concurrent text interleaving. Current smoke convergence does not prove repaired
+passage order. GC remains disabled; stores/session recovery and persistent history
+remain later tasks. `ReplicaAllocator` is source-tree only; consumers supply their
+own public `IdentityAllocator` and own durability. File transport `StreamSync`
+is implemented but not advertised as an installed self-sufficient public class.
+
+Publications, master integration, edits to Wave/Markoff and messages to consumers
+are separate actions requiring explicit user instruction. Prepare reviewable
+alpha artifacts locally. S04a changes no production integration algorithm.

@@ -1,5 +1,21 @@
 # collabtext — orientation
 
+## Current isolated workstream: reliability roadmap
+
+On branch `feat/fuguemax-placement` in this worktree, read `AGENTS.md` and
+`docs/roadmap/2026-10-reliability/README.md` first. That roadmap supersedes the
+historical OpStream scope below for this branch. Current status is
+`docs/roadmap/2026-10-reliability/DIRECTION.md`: S03 is complete. Next is
+E07a, then E07b. Continue from that file and the registry.
+W1–W6 external consumer requirements are in `docs/specs/vnext-external-position-contract.md`. All product-policy questions are resolved
+in its `DECISIONS.md`: improve the existing C++ engine incrementally. No Rust
+rewrite, Yrs adoption, or replacement-engine trial is in scope. No Superpowers
+skill or subagent workflow is required.
+
+The rest of this file preserves the previous project orientation as historical
+context. It remains the legacy checkout's orientation until its work is updated
+separately.
+
 ## Active project: `OpStream` extraction (post-IdList β)
 
 The current work is extracting a transport-agnostic `OpStream` boundary on the public collabtext surface, with `StreamSync` adopting that boundary as the file-backed reference implementation. This was committed to in `docs/specs/2026-05-08-d5-negotiation-response.md` as the response to Markoff's D5 negotiation opener.

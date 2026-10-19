@@ -1,0 +1,117 @@
+#collabtext-trace 1
+#model buffer
+#label deep_undo_redo_with_remote
+#seed 8966798208749343619
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 c3b5
+edit 0 2 2 e4b8a1c3bc79
+edit 0 8 8 f09f9fb5
+edit 0 5 12 7879c3b56e
+edit 0 6 9 7163
+edit 0 5 5 76
+edit 0 0 10 e4b9bdc3ae66e4b890f09f988d
+edit 0 0 9 f09f9fae7a
+edit 0 0 0 -
+edit 0 5 5 6461e4ba886f
+edit 0 0 11 e4b8b56f
+edit 0 8 8 -
+edit 0 0 4 c3ac6cc3b5c3b4
+edit 0 7 11 6c68
+edit 0 8 9 -
+edit 0 3 8 e4b98767c3b1f09f98a6e4ba80
+edit 0 6 13 c3a26e
+edit 0 0 8 -
+edit 0 0 4 61
+edit 0 0 0 6f
+edit 1 0 0 796c
+edit 1 1 1 -
+edit 1 2 2 e4b98079
+edit 1 1 5 f09f9c92c3bd
+edit 1 7 7 -
+edit 1 8 8 70
+edit 1 5 9 -
+edit 1 1 1 f09f9e9669
+edit 1 1 10 746a
+edit 1 1 2 69f09f9d94c3aec3b0f09f9d92
+edit 1 2 15 c3abe4b9b97a
+edit 1 0 2 -
+edit 1 0 2 f09f9e9b78
+edit 1 4 4 71
+edit 1 6 10 e4baa769f09f98aa6a
+edit 1 5 10 f09f9995e4bb9d7a
+edit 1 5 18 -
+edit 1 5 5 6b
+edit 1 6 6 e4b8a56ae4b9a3e4b98a7a
+edit 1 9 10 69
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+deliver 0 20
+deliver 0 21
+deliver 0 22
+deliver 0 23
+deliver 0 24
+deliver 0 25
+deliver 0 26
+deliver 0 27
+deliver 0 28
+deliver 0 29
+deliver 0 30
+deliver 0 31
+deliver 0 32
+deliver 0 33
+deliver 0 34
+deliver 0 35
+deliver 0 36
+deliver 0 37
+deliver 0 38
+deliver 0 39
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+deliver 1 0
+deliver 1 1
+deliver 1 2
+deliver 1 3
+deliver 1 4
+deliver 1 5
+deliver 1 6
+deliver 1 7
+deliver 1 8
+deliver 1 9
+deliver 1 10
+deliver 1 11
+deliver 1 12
+deliver 1 13
+deliver 1 14
+deliver 1 15
+deliver 1 16
+deliver 1 17
+deliver 1 18
+deliver 1 19
+deliver 1 40
+deliver 1 41
+deliver 1 42
+deliver 1 43
+deliver 1 44
+deliver 1 45
+deliver 1 46
+deliver 1 47
+deliver 1 48
+deliver 1 49
+deliver 1 50
+deliver 1 51
+deliver 1 52
+deliver 1 53
+deliver 1 54
+settle

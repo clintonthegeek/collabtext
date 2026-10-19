@@ -17,9 +17,9 @@ void UndoMap::insert(UndoMapEntry entry) {
     m_tree = std::move(new_tree);
 }
 
-uint32_t UndoMap::undo_count(Lamport edit_id) const {
+uint32_t UndoMap::undo_count(Identity edit_id) const {
     uint32_t max_count = 0;
-    UndoTreeKey start_key{edit_id, Lamport::min()};
+    UndoTreeKey start_key{edit_id, Identity::min()};
     auto cursor = m_tree.cursor<UndoTreeKeyDim>();
     cursor.seek(UndoTreeKeyDim{start_key}, Bias::Left);
     while (auto *entry = cursor.item()) {
@@ -32,13 +32,13 @@ uint32_t UndoMap::undo_count(Lamport edit_id) const {
     return max_count;
 }
 
-bool UndoMap::is_undone(Lamport edit_id) const {
+bool UndoMap::is_undone(Identity edit_id) const {
     return undo_count(edit_id) % 2 == 1;
 }
 
-bool UndoMap::was_undone(Lamport edit_id, const Global &version) const {
+bool UndoMap::was_undone(Identity edit_id, const Global &version) const {
     uint32_t max_count = 0;
-    UndoTreeKey start_key{edit_id, Lamport::min()};
+    UndoTreeKey start_key{edit_id, Identity::min()};
     auto cursor = m_tree.cursor<UndoTreeKeyDim>();
     cursor.seek(UndoTreeKeyDim{start_key}, Bias::Left);
     while (auto *entry = cursor.item()) {
@@ -57,6 +57,33 @@ size_t UndoMap::size() const {
     size_t count = 0;
     m_tree.for_each([&](const UndoMapEntry &) { ++count; });
     return count;
+}
+
+std::vector<UndoMapEntry> UndoMap::entries() const {
+    return m_tree.items();
+}
+
+Result<void> UndoMap::restore_entries(
+    const std::vector<UndoMapEntry> &entries) {
+    UndoMap rebuilt;
+    std::optional<UndoTreeKey> previous;
+    for (const auto &entry : entries) {
+        const auto &edit = entry.key.edit_id;
+        const auto &undo = entry.key.undo_id;
+        if (!edit.actor.valid() || edit.counter == 0 ||
+            !undo.actor.valid() || undo.counter == 0 || entry.undo_count == 0)
+            return Error(ErrorCode::malformed,
+                         "checkpoint UndoMap entry has an invalid identity or count",
+                         "checkpoint.causal.undo_map");
+        if (previous && !(*previous < entry.key))
+            return Error(ErrorCode::malformed,
+                         "checkpoint UndoMap entries are duplicated or unordered",
+                         "checkpoint.causal.undo_map");
+        rebuilt.insert(entry);
+        previous = entry.key;
+    }
+    m_tree = std::move(rebuilt.m_tree);
+    return Result<void>::success();
 }
 
 void UndoMap::clear() {

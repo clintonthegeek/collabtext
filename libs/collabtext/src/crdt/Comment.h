@@ -1,5 +1,6 @@
 #pragma once
-#include "crdt/StreamSync.h"
+#include <collabtext/Anchor.h>
+#include "transport/StreamSync.h"
 #include "crdt/Anchor.h"
 #include <cstdint>
 #include <optional>
@@ -17,10 +18,16 @@ struct Comment {
     std::string body;
     Anchor      range_start;
     Anchor      range_end;
+    /// Optional scoped CTPT endpoints, preserved byte-for-byte while causal
+    /// dependencies are unavailable. Legacy Anchor fields are not durable pins.
+    std::optional<std::string> range_start_token;
+    std::optional<std::string> range_end_token;
     bool        resolved    = false;
 };
 
 StreamEntry              comment_to_entry(const Comment& comment);
 std::optional<Comment>   comment_from_entry(const StreamEntry& entry);
+Result<Comment>          comment_from_entry(const StreamEntry& entry,
+                                             const PositionScope& expected_scope);
 
 } // namespace CollabText::Crdt

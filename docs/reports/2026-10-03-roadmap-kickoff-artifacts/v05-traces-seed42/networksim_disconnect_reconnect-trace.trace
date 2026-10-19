@@ -1,0 +1,14 @@
+#collabtext-trace 1
+#model networksim
+#label networksim_disconnect_reconnect
+#seed 3603343105140399241
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 616263
+tick 300
+disconnect 1
+edit 0 3 3 646566
+tick 300
+reconnect 1
+tick 300
+drain

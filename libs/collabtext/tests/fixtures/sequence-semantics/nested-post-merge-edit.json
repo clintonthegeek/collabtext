@@ -1,0 +1,111 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "nested-post-merge-edit",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "nested-post-merge-edit",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [],
+  "operations": [
+    {
+      "id": "A/4",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "START",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "A/1",
+          "value": "a"
+        },
+        {
+          "id": "A/2",
+          "value": "b"
+        },
+        {
+          "id": "A/3",
+          "value": "c"
+        }
+      ]
+    },
+    {
+      "id": "B/4",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "START",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "B/1",
+          "value": "X"
+        },
+        {
+          "id": "B/2",
+          "value": "Y"
+        },
+        {
+          "id": "B/3",
+          "value": "Z"
+        }
+      ]
+    },
+    {
+      "id": "B/6",
+      "kind": "insert",
+      "after": [
+        "A/4",
+        "B/4"
+      ],
+      "between": [
+        "A/1",
+        "A/2"
+      ],
+      "items": [
+        {
+          "id": "B/5",
+          "value": "!"
+        }
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/4",
+      "B/4",
+      "B/6"
+    ],
+    [
+      "B/6",
+      "B/4",
+      "A/4"
+    ]
+  ],
+  "tokens": [],
+  "expected": {
+    "order": [
+      "A/1",
+      "B/5",
+      "A/2",
+      "A/3",
+      "B/1",
+      "B/2",
+      "B/3"
+    ],
+    "hidden": [],
+    "positions": {},
+    "text": "a!bcXYZ",
+    "comparisons": []
+  }
+}

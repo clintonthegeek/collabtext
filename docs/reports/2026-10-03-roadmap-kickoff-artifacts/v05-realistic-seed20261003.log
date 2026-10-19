@@ -1,0 +1,25 @@
+********* Start testing of TestRealistic *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestRealistic::initTestCase()
+PASS   : TestRealistic::networksim_basic_convergence()
+PASS   : TestRealistic::networksim_disconnect_reconnect()
+[seed] suite=tst_realistic scenario=networksim_strategies_compile campaign_seed=20261003 effective_seed=5586446842889857479 source=fixed kind=networksim
+PASS   : TestRealistic::networksim_strategies_compile()
+PASS   : TestRealistic::networksim_compact_all()
+[seed] suite=tst_realistic scenario=sustained_3_client_convergence campaign_seed=20261003 effective_seed=15810734832497264778 source=fixed kind=networksim
+PASS   : TestRealistic::sustained_3_client_convergence()
+[seed] suite=tst_realistic scenario=disconnect_reconnect_cycle campaign_seed=20261003 effective_seed=2086493070919971081 source=fixed kind=networksim
+PASS   : TestRealistic::disconnect_reconnect_cycle()
+[seed] suite=tst_realistic scenario=cascading_disconnects campaign_seed=20261003 effective_seed=3290709591390062311 source=fixed kind=networksim
+PASS   : TestRealistic::cascading_disconnects()
+[seed] suite=tst_realistic scenario=long_partition_with_gc campaign_seed=20261003 effective_seed=15936411928728048651 source=fixed kind=networksim
+PASS   : TestRealistic::long_partition_with_gc()
+[seed] suite=tst_realistic scenario=asymmetric_link_partition campaign_seed=20261003 effective_seed=11317963592336482044 source=fixed kind=networksim
+PASS   : TestRealistic::asymmetric_link_partition()
+[seed] suite=tst_realistic scenario=monotone_transport_convergence campaign_seed=20261003 effective_seed=1813703438572933675 source=fixed kind=networksim
+PASS   : TestRealistic::monotone_transport_convergence()
+[seed] suite=tst_realistic scenario=ten_client_sustained campaign_seed=20261003 effective_seed=11554465907232067348 source=fixed kind=networksim
+PASS   : TestRealistic::ten_client_sustained()
+PASS   : TestRealistic::cleanupTestCase()
+Totals: 13 passed, 0 failed, 0 skipped, 0 blacklisted, 169659ms
+********* Finished testing of TestRealistic *********

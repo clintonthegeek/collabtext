@@ -1,0 +1,29 @@
+# behavior 1
+# name: comment_anchor_tracks_edits
+# provenance: Comment.h carries Anchor range boundaries; the comment must keep
+#   pointing at the same text while other producers edit around it. Anchors are
+#   boundaries with affinity and context, and an unresolvable anchor must be an
+#   explicit outcome (S04-S06 own the affinity fix).
+# status: desired
+# scope: comments
+# expect converged yes
+# expect comment_anchor 0 2 l 1
+# note: the document is built one character at a time, so the comment's range
+#   start can name an entry that exists before the later characters do. The 'b'
+#   is the second item this replica inserted, and once the document is "abcd" an
+#   anchor on it must resolve to offset 1. Fields: buffer replica, item ordinal
+#   (1-based, counted over the items that replica inserted), bias, expected
+#   offset. The ordinal replaced a raw Lamport pair when P06a adopted
+#   run-interval allocation: the behaviour under test is unchanged and the
+#   position is now named the way the fixture means it.
+#collabtext-trace 1
+#model buffer
+#label comment-anchor
+#seed 42
+#replicas 1
+#net 50 200 500 1
+edit 0 0 0 61
+deliver 0 0
+edit 0 1 1 62
+edit 0 2 2 63
+edit 0 3 3 64

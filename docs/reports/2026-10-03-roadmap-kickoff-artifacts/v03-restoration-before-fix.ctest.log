@@ -1,0 +1,60 @@
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+    Start 15: tst_evaluation_regressions
+1/1 Test #15: tst_evaluation_regressions .......***Failed    0.02 sec
+********* Start testing of TestEvaluationRegressions *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestEvaluationRegressions::initTestCase()
+PASS   : TestEvaluationRegressions::ordinary_remote_undo_redo(buffer)
+PASS   : TestEvaluationRegressions::ordinary_remote_undo_redo(idlist)
+FAIL!  : TestEvaluationRegressions::f1_local_gc_preserves_insertion_redo(buffer) Compared values are not the same
+   Actual   (a.text())          : ""
+   Expected (std::string("abc")): "abc"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(87)]
+PASS   : TestEvaluationRegressions::f1_local_gc_preserves_insertion_redo(idlist)
+FAIL!  : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(buffer) Compared values are not the same
+   Actual   (b.text()): ""
+   Expected (a.text()): "abc"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(119)]
+FAIL!  : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(idlist) Compared values are not the same
+   Actual   (b.ids()): std::vector()
+   Expected (a.ids()): std::vector(42)
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(106)]
+FAIL!  : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(buffer) Compared values are not the same
+   Actual   (a.text()): ""
+   Expected (b.text()): "abc"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(155)]
+FAIL!  : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(idlist) Compared values are not the same
+   Actual   (a.ids()): std::vector()
+   Expected (b.ids()): std::vector(42)
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(141)]
+XFAIL  : TestEvaluationRegressions::f3_absent_actor_constrains_common_coverage() F3 / P03: a peer with an absent actor must constrain common coverage to zero
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(165)]
+PASS   : TestEvaluationRegressions::f3_absent_actor_constrains_common_coverage()
+XFAIL  : TestEvaluationRegressions::f4_sender_restart_delivers_distinct_operation() F4 / P02,L04: restarted sender reuses an envelope ID and suppresses a fresh operation
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(206)]
+PASS   : TestEvaluationRegressions::f4_sender_restart_delivers_distinct_operation()
+XFAIL  : TestEvaluationRegressions::f5_receiver_restart_recovers_consumed_state() F5 / L03,L05: persisted read progress cannot bootstrap a fresh engine without recovered state
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(234)]
+PASS   : TestEvaluationRegressions::f5_receiver_restart_recovers_consumed_state()
+XFAIL  : TestEvaluationRegressions::f6_late_segment_is_delivered_in_order() F6 / L03: committing segment 2 prevents a late segment 1 from ever being read
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(267)]
+PASS   : TestEvaluationRegressions::f6_late_segment_is_delivered_in_order()
+XFAIL  : TestEvaluationRegressions::f7_insertion_obeys_boundary_affinity() F7 / S04: left affinity stays before insertion at that boundary
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(279)]
+PASS   : TestEvaluationRegressions::f7_insertion_obeys_boundary_affinity()
+XFAIL  : TestEvaluationRegressions::f8_concurrent_passages_remain_contiguous() F8 / S02,S03: concurrent whole passages must not interleave character by character
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(290)]
+PASS   : TestEvaluationRegressions::f8_concurrent_passages_remain_contiguous()
+PASS   : TestEvaluationRegressions::cleanupTestCase()
+Totals: 11 passed, 5 failed, 0 skipped, 0 blacklisted, 5ms
+********* Finished testing of TestEvaluationRegressions *********
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   0.02 sec
+
+The following tests FAILED:
+	 15 - tst_evaluation_regressions (Failed)
+Errors while running CTest
+Verification exit: 8; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213126Z-2

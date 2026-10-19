@@ -1,6 +1,9 @@
 #include <QTest>
 #include "crdt/Buffer.h"
 #include <random>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -9,7 +12,7 @@ class TestRopeIntegration : public QObject {
 private slots:
 
     void rope_tracks_inserts() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         QCOMPARE(buf.visible_rope_len(), 5u);
         QCOMPARE(buf.deleted_rope_len(), 0u);
@@ -22,7 +25,7 @@ private slots:
     }
 
     void rope_tracks_deletes() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello world"});
         QCOMPARE(buf.visible_rope_len(), 11u);
         QCOMPARE(buf.deleted_rope_len(), 0u);
@@ -35,7 +38,7 @@ private slots:
     }
 
     void rope_tracks_undo() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello world"});
         buf.apply_local_edit({{5, 11}}, {""}); // delete " world"
         QCOMPARE(buf.visible_rope_len(), 5u);
@@ -47,7 +50,7 @@ private slots:
     }
 
     void rope_tracks_redo() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello world"});
         buf.apply_local_edit({{5, 11}}, {""}); // delete " world"
         buf.undo();
@@ -60,7 +63,7 @@ private slots:
     }
 
     void rope_tracks_remote_edit() {
-        Buffer a(1), b(2);
+        Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2));
 
         auto op1 = a.apply_local_edit({{0, 0}}, {"hello"});
         b.apply_ops({op1});
@@ -79,7 +82,7 @@ private slots:
     void rope_consistency_invariant() {
         // 100 random edits — after each, assert rope byte totals match fragments.
         std::mt19937 rng(42);
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"the quick brown fox jumps over the lazy dog"});
 
         for (int i = 0; i < 100; ++i) {
@@ -116,7 +119,7 @@ private slots:
     }
 
     void rope_survives_convergence() {
-        Buffer a(1), b(2), c(3);
+        Buffer a(CollabText::Test::test_counter(1)), b(CollabText::Test::test_counter(2)), c(CollabText::Test::test_counter(3));
 
         auto op1 = a.apply_local_edit({{0, 0}}, {"hello"});
         auto op2 = b.apply_local_edit({{0, 0}}, {"world"});

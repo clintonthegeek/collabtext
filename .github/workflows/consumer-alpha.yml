@@ -1,0 +1,49 @@
+name: Installed alpha consumers
+on:
+  push:
+    branches: [roadmap/reliability-v2]
+  pull_request:
+    branches: [roadmap/reliability-v2]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  installed-consumer:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [debug, release]
+    env:
+      COLLABTEXT_VERIFY_JOBS: 4
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installed Core baseline (no Qt/zstd/crypto discovery)
+        run: tools/verify-consumer-package.sh --mode ${{ matrix.mode }} --gate baseline --components core
+      - name: Installed strict live-position gate (WP1-WP5/WP7 + Markdown fixture)
+        run: tools/verify-consumer-package.sh --mode ${{ matrix.mode }} --gate live --components core
+      - name: Optional Qt consumer when Qt 6.8 or newer is available
+        shell: bash
+        run: |
+          mkdir -p build-consumer-verify/qt-discovery
+          cat > build-consumer-verify/qt-discovery/CMakeLists.txt <<'CMAKE'
+          cmake_minimum_required(VERSION 3.21)
+          project(qt_discovery CXX)
+          find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets)
+          CMAKE
+          if cmake -S build-consumer-verify/qt-discovery -B build-consumer-verify/qt-discovery/build > build-consumer-verify/qt-discovery.log 2>&1; then
+            tools/verify-consumer-package.sh --mode ${{ matrix.mode }} --gate live --components core,qt
+          else
+            echo 'Optional Qt configuration not run: Qt >= 6.8 unavailable on this runner.' | tee build-consumer-verify/optional-qt-not-run.txt
+          fi
+      - name: Retain package/probe results and logs on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consumer-${{ matrix.mode }}
+          path: |
+            build-consumer-verify/**/results.json
+            build-consumer-verify/**/*.log
+            build-consumer-verify/optional-qt-not-run.txt
+          if-no-files-found: error

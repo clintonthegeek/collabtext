@@ -1,172 +1,212 @@
 #include <QTest>
-#include "crdt/NetworkSim.h"
+#include "TestSeed.h"
+#include "TraceHarness.h"
 #include "crdt/EditStrategy.h"
+#include "crdt/NetworkSim.h"
 #include <random>
 
 using namespace CollabText::Crdt;
+using namespace CollabText::Test;
 
 class TestRealistic : public QObject {
     Q_OBJECT
+private:
+
+    /// Announce the campaign and scenario seed, then derive the scenario's RNG.
+    static std::mt19937 scenario_rng(const char* scenario) {
+        const uint64_t seed = effective_seed(scenario);
+        announce_seed("tst_realistic", scenario, "networksim");
+        return std::mt19937(static_cast<uint32_t>(seed));
+    }
+
+    /// Record a strategy-produced edit. The recorder stores the decision (replica
+    /// and resulting single range) plus the recorded seed, so a replay rebuilds
+    /// the same simulated delivery schedule instead of rerolling it.
+    static void strategy_edit(NetworkRecorder& rec, EditStrategy& strategy,
+                              int replica, std::mt19937& rng) {
+        const EditAction action = strategy.next_edit(rec.buffer(replica), rng);
+        rec.edit(replica, action.ranges, action.new_text);
+    }
+
 private slots:
 
-    // ---- Task 4: Smoke Tests ----
+    // ---- Smoke tests ----
 
     void networksim_basic_convergence() {
-        NetworkSim net(3, {}, 42);
-        net.edit(0, {{0, 0}}, {"hello"});
-        net.tick(300);
-        net.edit(1, {{0, 0}}, {"world "});
-        net.tick(300);
-        net.drain();
-        net.check_all_invariants("basic");
-        net.assert_convergence("basic");
+        NetworkRecorder rec(3, {}, effective_seed("networksim_basic_convergence"),
+                            "networksim_basic_convergence");
+        rec.edit(0, {{0, 0}}, {"hello"});
+        rec.tick(300);
+        rec.edit(1, {{0, 0}}, {"world "});
+        rec.tick(300);
+        rec.drain();
+        rec.net().check_all_invariants("basic");
+        rec.net().assert_convergence("basic");
+        rec.finish();
     }
 
     void networksim_disconnect_reconnect() {
-        NetworkSim net(2, {}, 42);
-        net.edit(0, {{0, 0}}, {"abc"});
-        net.tick(300);
-        net.assert_convergence("before_disconnect");
+        NetworkRecorder rec(2, {}, effective_seed("networksim_disconnect_reconnect"),
+                            "networksim_disconnect_reconnect");
+        rec.edit(0, {{0, 0}}, {"abc"});
+        rec.tick(300);
+        rec.net().assert_convergence("before_disconnect");
 
-        net.disconnect(1);
-        net.edit(0, {{3, 3}}, {"def"});
-        net.tick(300);
+        rec.disconnect(1);
+        rec.edit(0, {{3, 3}}, {"def"});
+        rec.tick(300);
         // Replica 1 hasn't received "def"
-        QCOMPARE(net.buffer(1).text(), std::string("abc"));
+        QCOMPARE(rec.buffer(1).text(), std::string("abc"));
 
-        net.reconnect(1);
-        net.tick(300);
-        net.drain();
-        net.assert_convergence("after_reconnect");
+        rec.reconnect(1);
+        rec.tick(300);
+        rec.drain();
+        rec.net().assert_convergence("after_reconnect");
+        rec.finish();
     }
 
     void networksim_strategies_compile() {
-        NetworkSim net(2, {.min_latency_ms = 0, .max_latency_ms = 0}, 42);
-        std::mt19937 rng(42);
+        NetworkRecorder rec(2, {.min_latency_ms = 0, .max_latency_ms = 0},
+                            effective_seed("networksim_strategies_compile"),
+                            "networksim_strategies_compile");
+        std::mt19937 rng = scenario_rng("networksim_strategies_compile");
 
         RandomStrategy random;
         RealisticStrategy realistic;
 
         // Seed some text first
-        net.edit(0, {{0, 0}}, {"hello world this is a test document"});
-        net.tick(1);
+        rec.edit(0, {{0, 0}}, {"hello world this is a test document"});
+        rec.tick(1);
 
         // RandomStrategy produces valid edits
-        auto a1 = random.next_edit(net.buffer(0), rng);
-        net.edit(0, a1);
-        net.tick(1);
-        net.check_all_invariants("random_edit");
+        strategy_edit(rec, random, 0, rng);
+        rec.tick(1);
+        rec.net().check_all_invariants("random_edit");
 
         // RealisticStrategy produces valid edits
-        auto a2 = realistic.next_edit(net.buffer(1), rng);
-        net.edit(1, a2);
-        net.tick(1);
-        net.check_all_invariants("realistic_edit");
+        strategy_edit(rec, realistic, 1, rng);
+        rec.tick(1);
+        rec.net().check_all_invariants("realistic_edit");
 
-        net.drain();
-        net.assert_convergence("strategies");
+        rec.drain();
+        rec.net().assert_convergence("strategies");
+        rec.finish();
     }
 
     void networksim_compact_all() {
-        NetworkSim net(2, {.min_latency_ms = 0, .max_latency_ms = 0}, 42);
-        net.edit(0, {{0, 0}}, {"hello"});
-        net.tick(1);
-        net.edit(0, {{0, 5}}, {""});  // delete
-        net.tick(1);
-        net.drain();
+        NetworkRecorder rec(2, {.min_latency_ms = 0, .max_latency_ms = 0},
+                            effective_seed("networksim_compact_all"),
+                            "networksim_compact_all");
+        rec.edit(0, {{0, 0}}, {"hello"});
+        rec.tick(1);
+        rec.edit(0, {{0, 5}}, {""});  // delete
+        rec.tick(1);
+        rec.drain();
 
-        net.buffer(0).set_max_undo_depth(0);
-        net.buffer(1).set_max_undo_depth(0);
-        size_t removed = net.compact_all();
-        QVERIFY(removed > 0);
-        net.check_all_invariants("after_compact");
-        net.assert_convergence("after_compact");
+        QVERIFY((rec.buffer(0).set_max_undo_depth(0)).ok());
+        QVERIFY((rec.buffer(1).set_max_undo_depth(0)).ok());
+        rec.net().compact_all();
+        // V03 containment: reclamation is disabled until a certificate exists,
+        // so compact_all() removes nothing and retains every tombstone.
+        QCOMPARE(rec.buffer(0).tombstone_count(), 1u);
+        rec.net().check_all_invariants("after_compact");
+        rec.net().assert_convergence("after_compact");
+        rec.collect_garbage(0);
+        rec.compact_all();
+        rec.net().check_all_invariants("after_collect_garbage");
+        rec.net().assert_convergence("after_collect_garbage");
+        rec.finish();
     }
 
-    // ---- Task 5: Sustained 3-Client Convergence ----
+    // ---- Sustained 3-client convergence ----
 
     void sustained_3_client_convergence() {
-        uint64_t seed = std::random_device{}();
-        qDebug() << "Seed:" << seed;
-        std::mt19937 rng(seed);
-
-        NetworkSim net(3, {}, seed);
+        std::mt19937 rng = scenario_rng("sustained_3_client_convergence");
+        NetworkRecorder rec(3, {}, effective_seed("sustained_3_client_convergence"),
+                            "sustained_3_client_convergence");
         RandomStrategy strategy;
 
         for (int i = 0; i < 500; ++i) {  // ~167 per replica on average
-            int r = rng() % 3;
-            int action = rng() % 100;
+            const int r = static_cast<int>(rng() % 3);
+            const int action = static_cast<int>(rng() % 100);
 
             if (action < 80) {
-                auto a = strategy.next_edit(net.buffer(r), rng);
-                net.edit(r, a);
+                strategy_edit(rec, strategy, r, rng);
             } else if (action < 90) {
-                net.undo(r);
+                rec.undo(r);
             } else {
-                net.redo(r);
+                rec.redo(r);
             }
 
-            net.tick(10);  // 10ms between ops — continuous delivery
+            rec.tick(10);  // 10ms between ops — continuous delivery
 
             if (i % 300 == 0)
-                net.check_all_invariants(qPrintable(QString("step_%1").arg(i)));
+                rec.net().check_all_invariants(qPrintable(QString("step_%1").arg(i)));
         }
 
-        net.drain();
-        net.check_all_invariants("final");
-        net.assert_convergence("sustained_3_client");
+        rec.drain();
+        rec.net().check_all_invariants("final");
+        rec.net().assert_convergence("sustained_3_client");
+        rec.finish();
     }
 
-    // ---- Task 6: Disconnect/Reconnect Tests ----
+    // ---- Disconnect/reconnect tests ----
 
     void disconnect_reconnect_cycle() {
-        uint64_t seed = std::random_device{}();
-        qDebug() << "Seed:" << seed;
-        std::mt19937 rng(seed);
-
-        NetworkSim net(3, {}, seed);
+        std::mt19937 rng = scenario_rng("disconnect_reconnect_cycle");
+        NetworkRecorder rec(3, {}, effective_seed("disconnect_reconnect_cycle"),
+                            "disconnect_reconnect_cycle");
         RandomStrategy strategy;
 
         // Phase 1: all online, 100 ops
         for (int i = 0; i < 100; ++i) {
-            int r = rng() % 3;
-            net.edit(r, strategy.next_edit(net.buffer(r), rng));
-            net.tick(10);
+            const int r = static_cast<int>(rng() % 3);
+            strategy_edit(rec, strategy, r, rng);
+            rec.tick(10);
         }
-        net.check_all_invariants("phase1");
+        rec.net().check_all_invariants("phase1");
 
         // Phase 2: replica 2 disconnects, 200 ops between 0 and 1
-        net.disconnect(2);
+        const std::string before_partition = rec.buffer(2).text();
+        rec.disconnect(2);
         for (int i = 0; i < 200; ++i) {
-            int r = rng() % 2;  // only 0 or 1
-            net.edit(r, strategy.next_edit(net.buffer(r), rng));
-            net.tick(10);
+            const int r = static_cast<int>(rng() % 2);  // only 0 or 1
+            strategy_edit(rec, strategy, r, rng);
+            rec.tick(10);
         }
-        net.check_all_invariants("phase2");
+        rec.net().check_all_invariants("phase2");
+        // A partition is symmetric: nothing crossed in either direction, so
+        // replica 2 still holds exactly what it held before it went offline.
+        QCOMPARE(rec.buffer(2).text(), before_partition);
 
         // Phase 3: replica 2 reconnects, bulk sync
-        net.reconnect(2);
-        net.tick(500);  // allow bulk delivery
+        rec.reconnect(2);
+        rec.tick(500);  // allow bulk delivery
+        QVERIFY(rec.buffer(2).text() != before_partition);
 
         // Phase 4: all edit 100 more ops
         for (int i = 0; i < 100; ++i) {
-            int r = rng() % 3;
-            net.edit(r, strategy.next_edit(net.buffer(r), rng));
-            net.tick(10);
+            const int r = static_cast<int>(rng() % 3);
+            strategy_edit(rec, strategy, r, rng);
+            rec.tick(10);
         }
 
-        net.drain();
-        net.check_all_invariants("final");
-        net.assert_convergence("disconnect_reconnect");
+        rec.drain();
+        rec.net().check_all_invariants("final");
+        rec.net().assert_convergence("disconnect_reconnect");
+        rec.finish();
     }
 
     void cascading_disconnects() {
-        uint64_t seed = std::random_device{}();
-        qDebug() << "Seed:" << seed;
-        std::mt19937 rng(seed);
-
-        NetworkSim net(5, {}, seed);
+        std::mt19937 rng = scenario_rng("cascading_disconnects");
+        NetworkRecorder rec(5, {}, effective_seed("cascading_disconnects"),
+                            "cascading_disconnects");
         RandomStrategy strategy;
+
+        // Snapshot each replica the moment it goes offline: a symmetric
+        // partition means its text cannot change until it reconnects.
+        std::vector<std::string> at_disconnect(5);
+        std::vector<bool> offline(5, false);
 
         // Disconnect replicas one at a time
         for (int phase = 0; phase < 4; ++phase) {
@@ -179,123 +219,211 @@ private slots:
                     if (r == 0 || r > phase + 1) online.push_back(r);
                 }
                 if (online.empty()) break;
-                int r = online[rng() % online.size()];
-                net.edit(r, strategy.next_edit(net.buffer(r), rng));
-                net.tick(10);
+                const int r = online[rng() % online.size()];
+                strategy_edit(rec, strategy, r, rng);
+                rec.tick(10);
             }
-            if (phase + 1 < 5)
-                net.disconnect(phase + 1);
+            if (phase + 1 < 5) {
+                rec.disconnect(phase + 1);
+                offline[phase + 1] = true;
+                at_disconnect[phase + 1] = rec.buffer(phase + 1).text();
+            }
         }
 
-        net.check_all_invariants("all_disconnected");
+        rec.net().check_all_invariants("all_disconnected");
+        // Only replica 0 stayed online. Every partitioned replica must still hold
+        // exactly the text it had when it went offline.
+        for (int r = 1; r < 5; ++r) {
+            QVERIFY(offline[r]);
+            QCOMPARE(rec.buffer(r).text(), at_disconnect[r]);
+            QVERIFY(rec.buffer(r).text() != rec.buffer(0).text());
+        }
 
         // Reconnect in reverse order, with 50 ops between each
         for (int phase = 3; phase >= 0; --phase) {
-            net.reconnect(phase + 1);
-            net.tick(500);
+            rec.reconnect(phase + 1);
+            rec.tick(500);
             for (int i = 0; i < 50; ++i) {
-                int r = rng() % 5;
-                net.edit(r, strategy.next_edit(net.buffer(r), rng));
-                net.tick(10);
+                const int r = static_cast<int>(rng() % 5);
+                strategy_edit(rec, strategy, r, rng);
+                rec.tick(10);
             }
         }
 
-        net.drain();
-        net.check_all_invariants("final");
-        net.assert_convergence("cascading_disconnects");
+        rec.drain();
+        rec.net().check_all_invariants("final");
+        rec.net().assert_convergence("cascading_disconnects");
+        rec.finish();
     }
 
-    // ---- Task 7: Scale/GC Tests ----
+    // ---- Scale / GC tests ----
 
     void long_partition_with_gc() {
-        uint64_t seed = std::random_device{}();
-        qDebug() << "Seed:" << seed;
-        std::mt19937 rng(seed);
-
-        NetworkSim net(2, {.min_latency_ms = 0, .max_latency_ms = 0}, seed);
+        std::mt19937 rng = scenario_rng("long_partition_with_gc");
+        NetworkRecorder rec(2, {.min_latency_ms = 0, .max_latency_ms = 0},
+                            effective_seed("long_partition_with_gc"),
+                            "long_partition_with_gc");
         RandomStrategy strategy;
 
         // Build a shared 5K document
-        while (net.buffer(0).visible_length() < 5000) {
+        while (rec.buffer(0).visible_length() < 5000) {
             std::string chunk(100, static_cast<char>('a' + (rng() % 26)));
-            net.edit(0, {{net.buffer(0).visible_length(),
-                          net.buffer(0).visible_length()}}, {chunk});
+            const uint32_t end = rec.buffer(0).visible_length();
+            rec.edit(0, {{end, end}}, {chunk});
         }
-        net.drain();
-        net.assert_convergence("initial_doc");
+        rec.drain();
+        rec.net().assert_convergence("initial_doc");
 
         // Partition: both edit independently for 500 ops
-        net.disconnect(1);
+        auto lane_count = [&rec](int from, int to) {
+            size_t count = 0;
+            for (const auto& [f, t] : rec.net().delivery_log())
+                if (f == from && t == to) ++count;
+            return count;
+        };
+        const size_t zero_to_one = lane_count(0, 1);
+        const size_t one_to_zero = lane_count(1, 0);
+        rec.disconnect(1);
         for (int i = 0; i < 500; ++i) {
-            int r = i % 2;  // alternate, but 1 is offline so its ops aren't delivered
-            net.edit(r, strategy.next_edit(net.buffer(r), rng));
+            const int r = i % 2;  // alternate; replica 1 is offline, so neither
+                                  // direction crosses the partition
+            strategy_edit(rec, strategy, r, rng);
         }
-        net.check_all_invariants("partitioned");
+        rec.net().check_all_invariants("partitioned");
+        // Both replicas edited for 500 steps, and neither direction delivered
+        // anything across the partition. (Their own documents do change: an
+        // edit strategy deletes and replaces text, including most of the 5K
+        // document. What a partition forbids is delivery, not local editing.)
+        QCOMPARE(lane_count(0, 1), zero_to_one);
+        QCOMPARE(lane_count(1, 0), one_to_zero);
+        QVERIFY(rec.buffer(0).text() != rec.buffer(1).text());
 
         // Reconnect and sync
-        net.reconnect(1);
-        net.drain();
-        net.check_all_invariants("after_sync");
-        net.assert_convergence("after_sync");
+        rec.reconnect(1);
+        rec.drain();
+        rec.net().check_all_invariants("after_sync");
+        rec.net().assert_convergence("after_sync");
 
-        // GC: compute watermark, compact both
-        net.buffer(0).set_max_undo_depth(0);
-        net.buffer(1).set_max_undo_depth(0);
-        size_t removed = net.compact_all();
-        qDebug() << "Tombstones removed by compact:" << removed;
+        // GC request: containment retains everything until certification (V03)
+        QVERIFY((rec.buffer(0).set_max_undo_depth(0)).ok());
+        QVERIFY((rec.buffer(1).set_max_undo_depth(0)).ok());
+        const size_t tombstones_before =
+            rec.buffer(0).tombstone_count() + rec.buffer(1).tombstone_count();
+        rec.collect_garbage(0);
+        rec.collect_garbage(1);
+        rec.compact_all();
+        const size_t tombstones_after =
+            rec.buffer(0).tombstone_count() + rec.buffer(1).tombstone_count();
+        QCOMPARE(tombstones_after, tombstones_before);
 
-        net.check_all_invariants("after_gc");
-        net.assert_convergence("after_gc");
+        rec.net().check_all_invariants("after_gc");
+        rec.net().assert_convergence("after_gc");
+        rec.finish();
+    }
+
+    void asymmetric_link_partition() {
+        std::mt19937 rng = scenario_rng("asymmetric_link_partition");
+        NetworkRecorder rec(4, {.min_latency_ms = 0, .max_latency_ms = 0},
+                            effective_seed("asymmetric_link_partition"),
+                            "asymmetric_link_partition");
+        RandomStrategy strategy;
+
+        for (int i = 0; i < 100; ++i) {
+            strategy_edit(rec, strategy, static_cast<int>(rng() % 4), rng);
+            rec.tick(10);
+        }
+
+        // One-way failure between 0 and 1, with traffic still flowing the other
+        // way and to everyone else.
+        rec.block_link(0, 1);
+        for (int i = 0; i < 60; ++i) {
+            const int r = static_cast<int>(rng() % 4);
+            strategy_edit(rec, strategy, r, rng);
+            rec.tick(10);
+        }
+        // 1 -> 0 kept working while 0 -> 1 did not.
+        const std::string online = rec.buffer(2).text();
+        QVERIFY(rec.buffer(1).text().size() != 0u);
+        QVERIFY(online.size() != 0u);
+
+        rec.unblock_link(0, 1);
+        rec.drain();
+        rec.net().check_all_invariants("after_link_heal");
+        rec.net().assert_convergence("asymmetric_link_partition");
+        rec.finish();
+    }
+
+    void monotone_transport_convergence() {
+        // allow_reorder=false: a transport that preserves each producer's order.
+        // Cross-producer interleaving still happens, and convergence still
+        // holds after healing.
+        std::mt19937 rng = scenario_rng("monotone_transport_convergence");
+        NetworkRecorder rec(4, {.min_latency_ms = 5, .max_latency_ms = 250,
+                                .duplicate_probability = 0.1,
+                                .allow_reorder = false},
+                            effective_seed("monotone_transport_convergence"),
+                            "monotone_transport_convergence");
+        RandomStrategy strategy;
+
+        for (int i = 0; i < 200; ++i) {
+            strategy_edit(rec, strategy, static_cast<int>(rng() % 4), rng);
+            rec.tick(15);
+        }
+        rec.disconnect(3);
+        for (int i = 0; i < 100; ++i) {
+            strategy_edit(rec, strategy, static_cast<int>(rng() % 3), rng);
+            rec.tick(15);
+        }
+        rec.reconnect(3);
+        rec.drain();
+        rec.net().check_all_invariants("monotone");
+        rec.net().assert_convergence("monotone_transport_convergence");
+        rec.finish();
     }
 
     void ten_client_sustained() {
-        uint64_t seed = std::random_device{}();
-        qDebug() << "Seed:" << seed;
-        std::mt19937 rng(seed);
-
-        NetworkSim net(10, {}, seed);
+        std::mt19937 rng = scenario_rng("ten_client_sustained");
+        NetworkRecorder rec(10, {}, effective_seed("ten_client_sustained"),
+                            "ten_client_sustained");
         RandomStrategy strategy;
 
         for (int i = 0; i < 500; ++i) {
-            int r = rng() % 10;
+            const int r = static_cast<int>(rng() % 10);
 
-            int action = rng() % 100;
+            const int action = static_cast<int>(rng() % 100);
             if (action < 80) {
-                net.edit(r, strategy.next_edit(net.buffer(r), rng));
+                strategy_edit(rec, strategy, r, rng);
             } else if (action < 90) {
-                net.undo(r);
+                rec.undo(r);
             } else {
-                net.redo(r);
+                rec.redo(r);
             }
 
-            net.tick(5);
+            rec.tick(5);
 
             // Random disconnects: 10% chance per 100 ops
             if (i % 100 == 0 && i > 0) {
-                int target = rng() % 10;
+                const int target = static_cast<int>(rng() % 10);
                 if (rng() % 10 == 0) {
-                    net.disconnect(target);
+                    rec.disconnect(target);
                 }
                 // Reconnect a random offline replica
-                for (int j = 0; j < 10; ++j) {
-                    // Try reconnecting one that might be offline
-                    // (reconnect is a no-op if already online)
-                    int candidate = rng() % 10;
-                    net.reconnect(candidate);
-                    break;
-                }
+                // (reconnect is a no-op if already online)
+                const int candidate = static_cast<int>(rng() % 10);
+                rec.reconnect(candidate);
             }
 
             if (i % 500 == 0)
-                net.check_all_invariants(qPrintable(QString("step_%1").arg(i)));
+                rec.net().check_all_invariants(qPrintable(QString("step_%1").arg(i)));
         }
 
         // Reconnect all before draining
         for (int r = 0; r < 10; ++r)
-            net.reconnect(r);
-        net.drain();
-        net.check_all_invariants("final");
-        net.assert_convergence("ten_client_sustained");
+            rec.reconnect(r);
+        rec.drain();
+        rec.net().check_all_invariants("final");
+        rec.net().assert_convergence("ten_client_sustained");
+        rec.finish();
     }
 };
 

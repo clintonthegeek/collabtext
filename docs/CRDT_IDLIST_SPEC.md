@@ -1,5 +1,11 @@
 # CollabText IdList CRDT Specification
 
+**Historical.** This spec places list entries by `Locator`. Production
+`IdList` places by the same FugueMax links as `Buffer`
+(`docs/specs/vnext-sequence-algorithm.md` §0), with one recorded difference:
+a list insert may anchor on a tombstone. See
+`docs/roadmap/2026-10-reliability/DIRECTION.md`.
+
 An ordered-list CRDT over opaque `uint64` elements. This document
 specifies the `IdList` engine — the second primitive alongside `Buffer`
 in the CollabText CRDT engine. It is introduced at schema version 3.

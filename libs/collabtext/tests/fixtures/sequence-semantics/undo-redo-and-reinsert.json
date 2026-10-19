@@ -1,0 +1,131 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "undo-redo-and-reinsert",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "undo-redo-and-reinsert",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [],
+  "operations": [
+    {
+      "id": "A/4",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "START",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "A/1",
+          "value": "a"
+        },
+        {
+          "id": "A/2",
+          "value": "b"
+        },
+        {
+          "id": "A/3",
+          "value": "c"
+        }
+      ]
+    },
+    {
+      "id": "B/4",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "START",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "B/1",
+          "value": "X"
+        },
+        {
+          "id": "B/2",
+          "value": "Y"
+        },
+        {
+          "id": "B/3",
+          "value": "Z"
+        }
+      ]
+    },
+    {
+      "id": "A/5",
+      "kind": "undo",
+      "after": [
+        "A/4",
+        "B/4"
+      ],
+      "target": "A/4"
+    },
+    {
+      "id": "A/6",
+      "kind": "redo",
+      "after": [
+        "A/5"
+      ],
+      "target": "A/4"
+    },
+    {
+      "id": "A/8",
+      "kind": "insert",
+      "after": [
+        "A/6"
+      ],
+      "between": [
+        "A/3",
+        "B/1"
+      ],
+      "items": [
+        {
+          "id": "A/7",
+          "value": "!"
+        }
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/4",
+      "B/4",
+      "A/5",
+      "A/6",
+      "A/8"
+    ],
+    [
+      "A/8",
+      "A/6",
+      "A/5",
+      "B/4",
+      "A/4"
+    ]
+  ],
+  "tokens": [],
+  "expected": {
+    "order": [
+      "A/1",
+      "A/2",
+      "A/3",
+      "A/7",
+      "B/1",
+      "B/2",
+      "B/3"
+    ],
+    "hidden": [],
+    "positions": {},
+    "text": "abc!XYZ",
+    "comparisons": []
+  }
+}

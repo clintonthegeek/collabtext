@@ -1,0 +1,212 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp4-scalar-boundaries",
+ "probe": "WP4",
+ "title": "Non-BMP text: real end token, interior byte and off-end rejection",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp4-scalar-boundaries",
+  "stream": "text",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/2",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "a"
+    }
+   ]
+  },
+  {
+   "id": "A/4",
+   "kind": "insert",
+   "after": [
+    "A/2"
+   ],
+   "between": [
+    "A/1",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/3",
+     "value": "𝄞"
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/2",
+   "A/4"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "at-zero",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "START",
+    "A/1"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "at-one",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "at-length",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/3",
+    "END"
+   ],
+   "affinity": "right"
+  }
+ ],
+ "attachment_kinds": {
+  "at-length": "caret"
+ },
+ "invalid_requests": [
+  {
+   "kind": "mint_offset",
+   "offset": 2,
+   "error": "not_scalar_boundary"
+  },
+  {
+   "kind": "mint_offset",
+   "offset": 3,
+   "error": "not_scalar_boundary"
+  },
+  {
+   "kind": "mint_offset",
+   "offset": 4,
+   "error": "not_scalar_boundary"
+  },
+  {
+   "kind": "mint_offset",
+   "offset": 6,
+   "error": "off_end"
+  }
+ ],
+ "expectations": [
+  {
+   "id": "mint_at_offset_zero",
+   "kind": "resolved",
+   "token": "at-zero",
+   "offset": 0,
+   "collapsed": false,
+   "source": "consumer_asserted",
+   "citation": "wave ask2:26-28"
+  },
+  {
+   "id": "mint_at_length_is_a_real_token",
+   "kind": "resolved",
+   "token": "at-length",
+   "offset": 5,
+   "collapsed": false,
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:58-59"
+  },
+  {
+   "id": "interior_utf8_byte_is_rejected",
+   "kind": "typed_error",
+   "error": "not_scalar_boundary",
+   "source": "roadmap_inference",
+   "citation": "W2"
+  },
+  {
+   "id": "off_end_mint_is_rejected",
+   "kind": "typed_error",
+   "error": "off_end",
+   "source": "consumer_asserted",
+   "citation": "W2; wave ask2:142"
+  },
+  {
+   "id": "offsets_are_utf8_bytes_not_utf16",
+   "kind": "unit_declaration",
+   "unit": "utf8_bytes",
+   "source": "roadmap_inference",
+   "citation": "W2"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04a",
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S04"
+  ]
+ },
+ "third_party_observations": [
+  {
+   "library": "Loro",
+   "version": "1.16.2",
+   "claim": "An off-the-end index is silently indistinguishable from a legitimate end anchor.",
+   "citation": "wave ask2:142",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  }
+ ],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "A/3"
+  ],
+  "hidden": [],
+  "text": "a𝄞",
+  "positions": {
+   "at-zero": {
+    "offset": 0,
+    "state": "resolved"
+   },
+   "at-one": {
+    "offset": 1,
+    "state": "resolved"
+   },
+   "at-length": {
+    "offset": 5,
+    "state": "resolved"
+   }
+  },
+  "comparisons": [
+   {
+    "left": "at-zero",
+    "right": "at-one",
+    "order": "less"
+   },
+   {
+    "left": "at-one",
+    "right": "at-length",
+    "order": "less"
+   }
+  ]
+ }
+}

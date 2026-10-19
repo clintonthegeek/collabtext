@@ -1,8 +1,8 @@
 #include "CollabPane.h"
 
+#include <collabtext/CollabDocument.h>
 #include "crdt/ChatMessage.h"
 #include "crdt/Comment.h"
-#include "crdt/SeedOp.h"
 #include "ui/ChatPanelWidget.h"
 #include "ui/CollabPlainTextEdit.h"
 #include "ui/CommentsPanelWidget.h"
@@ -10,13 +10,10 @@
 #include "ui/ParticipantListWidget.h"
 
 #include <QDateTime>
-#include <QDir>
 #include <QHBoxLayout>
-#include <QPlainTextDocumentLayout>
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QSplitter>
-#include <QStandardPaths>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTimer>
@@ -42,6 +39,10 @@ constexpr qint64 kEphemeralMinIntervalMs   = 250;
 constexpr qint64 kEphemeralMaxIntervalMs   = 5000;
 constexpr qint64 kCoalesceWindowMs         = 500;
 
+QString toQString(std::string_view value) {
+    return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
+}
+
 std::string now_iso8601() {
     auto now = std::chrono::system_clock::now();
     auto t = std::chrono::system_clock::to_time_t(now);
@@ -52,83 +53,17 @@ std::string now_iso8601() {
     return buf;
 }
 
-uint16_t loadOrAssignReplicaId(const std::filesystem::path &sidecar,
-                               const std::string &doc_id) {
-    namespace fs = std::filesystem;
-
-    QString configRoot = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    QDir().mkpath(configRoot + "/replica-state");
-    auto rid_path = fs::path(configRoot.toStdString())
-                  / "replica-state"
-                  / (doc_id + ".replica_id");
-
-    if (fs::exists(rid_path)) {
-        std::ifstream f(rid_path);
-        unsigned int x = 0;
-        f >> x;
-        if (x >= 1 && x <= 65535) return static_cast<uint16_t>(x);
-    }
-
-    std::set<uint16_t> taken;
-    auto replicas_dir = sidecar / "replicas";
-    if (fs::exists(replicas_dir)) {
-        for (const auto &entry : fs::directory_iterator(replicas_dir)) {
-            if (!entry.is_directory()) continue;
-            auto pres = entry.path() / "presence.json";
-            if (!fs::exists(pres)) continue;
-            std::ifstream pf(pres);
-            std::string content((std::istreambuf_iterator<char>(pf)),
-                                std::istreambuf_iterator<char>());
-            // version_summary is sparse: {"0":8,"197":60}
-            auto vpos = content.find("\"version_summary\":{");
-            if (vpos == std::string::npos) continue;
-            auto end = content.find('}', vpos);
-            if (end == std::string::npos) continue;
-            std::string body = content.substr(vpos + 19, end - vpos - 19);
-            // body looks like: "0":8,"197":60
-            size_t p = 0;
-            while (p < body.size()) {
-                size_t qstart = body.find('"', p);
-                if (qstart == std::string::npos) break;
-                size_t qend = body.find('"', qstart + 1);
-                if (qend == std::string::npos) break;
-                try {
-                    unsigned long idx = std::stoul(body.substr(qstart + 1, qend - qstart - 1));
-                    if (idx >= 1 && idx <= 65535) taken.insert(static_cast<uint16_t>(idx));
-                } catch (...) {}
-                p = body.find(',', qend);
-                if (p == std::string::npos) break;
-                ++p;
-            }
-        }
-    }
-
-    uint16_t chosen = 0;
-    auto *rng = QRandomGenerator::global();
-    for (int attempt = 0; attempt < 500; ++attempt) {
-        uint16_t candidate = static_cast<uint16_t>(rng->bounded(250) + 1);
-        if (taken.count(candidate) == 0) { chosen = candidate; break; }
-    }
-    if (chosen == 0) chosen = 1;
-
-    std::ofstream out(rid_path);
-    out << chosen;
-    return chosen;
-}
-
 } // namespace
 
 CollabPane::CollabPane(CollabText::Identity::Identity identity,
                        std::string replica_name,
                        std::filesystem::path sidecar_dir,
-                       std::string doc_id,
-                       const std::string &seed_text,
+                       std::unique_ptr<DocumentSession> session,
                        QWidget *parent)
     : QWidget(parent)
     , m_identity(std::move(identity))
     , m_replicaName(std::move(replica_name))
-    , m_buffer(loadOrAssignReplicaId(sidecar_dir, doc_id))
-    , m_sync(m_buffer, sidecar_dir, m_replicaName)
+    , m_session(std::move(session))
     , m_presence(sidecar_dir, m_replicaName, m_identity.identity_id)
     , m_projector(sidecar_dir)
     , m_streamSync(std::make_unique<StreamSync>(sidecar_dir, m_replicaName))
@@ -151,10 +86,10 @@ CollabPane::CollabPane(CollabText::Identity::Identity identity,
     editorColLayout->setContentsMargins(0, 0, 0, 0);
 
     m_edit = new CollabPlainTextEdit(editorCol);
-    m_qtDoc = new QTextDocument(this);
-    m_qtDoc->setDocumentLayout(new QPlainTextDocumentLayout(m_qtDoc));
-    m_qtDoc->setUndoRedoEnabled(false);
+    m_collabDocument = new CollabDocument(*m_session, this);
+    m_qtDoc = m_collabDocument->qtDocument();
     m_edit->setDocument(m_qtDoc);
+    m_edit->setReadOnly(!m_session->ready());
     editorColLayout->addWidget(m_edit, 1);
 
     auto *btnRow = new QHBoxLayout;
@@ -184,24 +119,31 @@ CollabPane::CollabPane(CollabText::Identity::Identity identity,
     sidebar->setStretchFactor(2, 2);
     root->addWidget(sidebar);
 
-    // 1) Apply seed deterministically.
-    m_buffer.apply_ops({op_for_seed(seed_text)});
-
-    // 2) Start FileSync (creates dirs, loads seq counters), then poll
-    //    once to ingest any existing remote ops in the sidecar.
-    m_sync.start();
-    m_sync.poll();
+    // DocumentSession has already rebuilt the deterministic seed and replayed
+    // every durable operation before the editor becomes interactive.
     m_presence.start();
 
-    // 3) Render the resulting text into the QTextDocument as the
-    //    initial content, then connect the change signal so future
-    //    edits route to the buffer.
-    m_syncing = true;
-    m_qtDoc->setPlainText(QString::fromStdString(m_buffer.text()));
-    m_syncing = false;
-
-    connect(m_qtDoc, &QTextDocument::contentsChange,
+    // CollabDocument owns the supported Qt binding for local edits. Session
+    // polling and view-level scroll policy remain composed here.
+    connect(m_collabDocument, &CollabDocument::localEditApplied,
             this, &CollabPane::onContentsChange);
+    connect(m_collabDocument, &CollabDocument::operationError, this,
+            [this](const QString &message) {
+                if (!m_session->ready()) {
+                    m_edit->setReadOnly(true);
+                    m_modified = true;
+                    emit changed();
+                }
+                emit errorOccurred(message);
+            });
+    if (!m_session->ready()) {
+        m_recoveryErrorShown = true;
+        const auto &report = m_session->recovery_report();
+        const QString message = report.issue
+            ? toQString(report.issue->message())
+            : tr("Document recovery is incomplete; editing is disabled.");
+        QTimer::singleShot(0, this, [this, message] { emit errorOccurred(message); });
+    }
 
     // Undo/redo: CollabPlainTextEdit intercepts the platform's standard
     // shortcuts and emits these signals — route them through the CRDT
@@ -263,37 +205,35 @@ CollabPane::~CollabPane() {
     shutdown();
 }
 
-std::string CollabPane::text() const { return m_buffer.text(); }
+std::string CollabPane::text() const { return m_session->text(); }
 
-void CollabPane::shutdown() {
-    if (m_shutdown) return;
-    m_shutdown = true;
+QString CollabPane::flush() {
+    auto saved = m_session->save();
+    if (!saved.ok()) return toQString(saved.error().message());
+    return {};
+}
+
+QString CollabPane::shutdown() {
+    if (m_shutdownComplete) return {};
     if (m_syncTimer) m_syncTimer->stop();
     if (m_gremlinTimer) m_gremlinTimer->stop();
-    m_sync.poll();
-    m_sync.flush();
     if (m_streamSync) m_streamSync->flush();
+    auto closed = m_session->close();
+    if (!closed.ok()) {
+        m_edit->setReadOnly(true);
+        return toQString(closed.error().message());
+    }
     m_presence.depart();
+    m_shutdownComplete = true;
+    return {};
 }
 
 void CollabPane::onContentsChange(int position, int charsRemoved, int charsAdded) {
-    if (m_syncing) return;
-
-    std::string bufText = m_buffer.text();
-    QString qBufText = QString::fromStdString(bufText);
     QString qtNow = m_qtDoc->toPlainText();
 
-    uint32_t byteStart = qBufText.left(position).toUtf8().size();
-    uint32_t byteEnd = byteStart;
-    if (charsRemoved > 0) {
-        byteEnd = qBufText.left(position + charsRemoved).toUtf8().size();
-    }
-
     QString insertedQt;
-    std::string inserted;
     if (charsAdded > 0) {
         insertedQt = qtNow.mid(position, charsAdded);
-        inserted = insertedQt.toStdString();
     }
 
     // Coalescing decision (made BEFORE applying the edit).
@@ -310,7 +250,9 @@ void CollabPane::onContentsChange(int position, int charsRemoved, int charsAdded
     // pushed an entry onto the stack between the previous user edit
     // and this one, we MUST NOT coalesce — the previous undo entry
     // is no longer ours.
-    const bool stackContinuous = (m_buffer.undo_depth() == m_lastUndoDepth);
+    const size_t undoDepthAfterEdit = m_session->undo_depth();
+    const bool stackContinuous = undoDepthAfterEdit > 0 &&
+        undoDepthAfterEdit - 1 == m_lastUndoDepth;
 
     bool shouldCoalesce = false;
     if (inWindow && stackContinuous && m_lastEditKind == thisKind) {
@@ -324,14 +266,18 @@ void CollabPane::onContentsChange(int position, int charsRemoved, int charsAdded
         }
     }
 
-    auto op = m_buffer.apply_local_edit({{byteStart, byteEnd}}, {inserted});
-    m_sync.push_local_op(op);
-
-    if (shouldCoalesce)
-        m_buffer.coalesce_last_undo();
+    if (shouldCoalesce) {
+        auto coalesced = m_session->coalesce_last_undo();
+        if (!coalesced.ok()) {
+            m_edit->setReadOnly(true);
+            emit errorOccurred(toQString(coalesced.error().message()));
+        }
+    }
+    m_modified = true;
+    emit changed();
 
     m_lastEditTimeMs = nowMs;
-    m_lastUndoDepth = m_buffer.undo_depth();
+    m_lastUndoDepth = m_session->undo_depth();
     m_lastEditKind = thisKind;
     if (thisKind == EditKind::Insert) {
         m_lastEditEndQt = position + charsAdded;
@@ -350,8 +296,8 @@ void CollabPane::onContentsChange(int position, int charsRemoved, int charsAdded
 void CollabPane::onViewportScrolled() {
     uint32_t topByteOff = m_edit->topVisibleByteOffset();
     uint32_t bottomByteOff = m_edit->bottomVisibleByteOffset();
-    m_viewportTopAnchor = m_buffer.anchor_at(topByteOff, Bias::Left);
-    m_viewportBottomAnchor = m_buffer.anchor_at(bottomByteOff, Bias::Left);
+    m_viewportTopAnchor = m_session->anchor_at(topByteOff, Bias::Left);
+    m_viewportBottomAnchor = m_session->anchor_at(bottomByteOff, Bias::Left);
 
     // Manual scroll disables follow mode (unless this scroll was itself
     // driven by follow-mode applying a remote viewport).
@@ -360,24 +306,55 @@ void CollabPane::onViewportScrolled() {
     }
 }
 
+void CollabPane::applySessionEditsSince(const Global &version) {
+    auto edits = m_session->edits_since(version);
+    if (!edits.ok()) {
+        emit errorOccurred(toQString(edits.error().message()));
+        return;
+    }
+    applyEditsPreservingScroll(edits.value());
+}
+
 void CollabPane::undoLocal() {
-    Global before = m_buffer.version();
-    auto op = m_buffer.undo();
-    if (!op) return;
-    m_sync.push_local_op(*op);
-    applyEditsPreservingScroll(m_buffer.edits_since(before));
+    Global before = m_session->recovery_frontier();
+    auto op = m_session->undo();
+    if (!op.ok()) {
+        if (!m_session->ready()) {
+            applySessionEditsSince(before);
+            m_edit->setReadOnly(true);
+            m_modified = true;
+            emit changed();
+        }
+        if (op.error().code() != ErrorCode::not_found)
+            emit errorOccurred(toQString(op.error().message()));
+        return;
+    }
+    applySessionEditsSince(before);
+    m_modified = true;
+    emit changed();
     m_lastEditKind = EditKind::None;
-    m_lastUndoDepth = m_buffer.undo_depth();
+    m_lastUndoDepth = m_session->undo_depth();
 }
 
 void CollabPane::redoLocal() {
-    Global before = m_buffer.version();
-    auto op = m_buffer.redo();
-    if (!op) return;
-    m_sync.push_local_op(*op);
-    applyEditsPreservingScroll(m_buffer.edits_since(before));
+    Global before = m_session->recovery_frontier();
+    auto op = m_session->redo();
+    if (!op.ok()) {
+        if (!m_session->ready()) {
+            applySessionEditsSince(before);
+            m_edit->setReadOnly(true);
+            m_modified = true;
+            emit changed();
+        }
+        if (op.error().code() != ErrorCode::not_found)
+            emit errorOccurred(toQString(op.error().message()));
+        return;
+    }
+    applySessionEditsSince(before);
+    m_modified = true;
+    emit changed();
     m_lastEditKind = EditKind::None;
-    m_lastUndoDepth = m_buffer.undo_depth();
+    m_lastUndoDepth = m_session->undo_depth();
 }
 
 void CollabPane::gremlinTick() {
@@ -391,33 +368,63 @@ void CollabPane::gremlinTick() {
     static constexpr int nwords = sizeof(lorem) / sizeof(lorem[0]);
 
     auto *rng = QRandomGenerator::global();
-    uint32_t docLen = m_buffer.visible_length();
+    uint32_t docLen = m_session->visible_length();
     int roll = rng->bounded(50);
 
-    Global before = m_buffer.version();
-    Operation op;
+    Global before = m_session->recovery_frontier();
     uint32_t newCursorByte = 0;
 
     if (roll == 0 && docLen > 10) {
         uint32_t delLen = qMin(static_cast<uint32_t>(rng->bounded(3, 9)), docLen);
         uint32_t pos = rng->bounded(docLen - delLen + 1);
-        op = m_buffer.apply_local_edit({{pos, pos + delLen}}, {""});
+        auto result = m_session->apply_local({{pos, pos + delLen}}, {""});
+        if (!result.ok()) {
+            if (!m_session->ready()) {
+                applySessionEditsSince(before);
+                m_edit->setReadOnly(true);
+                m_modified = true;
+                emit changed();
+            }
+            emit errorOccurred(toQString(result.error().message()));
+            return;
+        }
         newCursorByte = pos;
     } else if (roll < 3 && docLen > 0) {
         uint32_t pos = rng->bounded(docLen + 1);
-        op = m_buffer.apply_local_edit({{pos, pos}}, {"\n"});
+        auto result = m_session->apply_local({{pos, pos}}, {"\n"});
+        if (!result.ok()) {
+            if (!m_session->ready()) {
+                applySessionEditsSince(before);
+                m_edit->setReadOnly(true);
+                m_modified = true;
+                emit changed();
+            }
+            emit errorOccurred(toQString(result.error().message()));
+            return;
+        }
         newCursorByte = pos + 1;
     } else {
         uint32_t pos = docLen;
         if (rng->bounded(5) == 0 && docLen > 0)
             pos = rng->bounded(docLen + 1);
         const char *word = lorem[rng->bounded(nwords)];
-        op = m_buffer.apply_local_edit({{pos, pos}}, {word});
+        auto result = m_session->apply_local({{pos, pos}}, {word});
+        if (!result.ok()) {
+            if (!m_session->ready()) {
+                applySessionEditsSince(before);
+                m_edit->setReadOnly(true);
+                m_modified = true;
+                emit changed();
+            }
+            emit errorOccurred(toQString(result.error().message()));
+            return;
+        }
         newCursorByte = pos + static_cast<uint32_t>(strlen(word));
     }
 
-    m_sync.push_local_op(op);
-    applyEditsPreservingScroll(m_buffer.edits_since(before));
+    m_modified = true;
+    emit changed();
+    applySessionEditsSince(before);
 
     // Move the widget's text cursor to where the gremlin just typed so
     // that the next writeEphemeral() broadcasts this position.
@@ -427,10 +434,27 @@ void CollabPane::gremlinTick() {
 }
 
 void CollabPane::syncCycle() {
-    Global before = m_buffer.version();
-    size_t applied = m_sync.poll();
-    if (applied > 0) {
-        applyEditsPreservingScroll(m_buffer.edits_since(before));
+    Global before = m_session->recovery_frontier();
+    auto polled = m_session->poll();
+    if (!polled.ok()) {
+        emit errorOccurred(toQString(polled.error().message()));
+        return;
+    }
+    m_edit->setReadOnly(!m_session->ready());
+    if (!m_session->ready() && !m_recoveryErrorShown) {
+        m_recoveryErrorShown = true;
+        const auto &report = m_session->recovery_report();
+        emit errorOccurred(report.issue
+            ? toQString(report.issue->message())
+            : tr("Document recovery is incomplete; editing is disabled."));
+    }
+    auto edits = m_session->edits_since(before);
+    if (!edits.ok()) {
+        emit errorOccurred(toQString(edits.error().message()));
+    } else if (!edits.value().empty()) {
+        m_modified = true;
+        emit changed();
+        applyEditsPreservingScroll(edits.value());
         // Remote edits break any in-progress local coalescing run.
         m_lastEditKind = EditKind::None;
     }
@@ -454,7 +478,7 @@ void CollabPane::writePresence() {
     p.active = true;
     p.last_heartbeat = now_iso8601();
     p.session_started = m_sessionStarted;
-    p.version_summary = m_buffer.version();
+    p.version_summary = m_session->recovery_frontier();
     m_presence.update_presence(p);
     m_presence.tick(std::chrono::steady_clock::now());
     m_lastPresenceMs = nowMs;
@@ -479,8 +503,8 @@ void CollabPane::writeEphemeral() {
     es.seq = ++m_ephemeralSeq;
     es.timestamp = now_iso8601();
     es.activity = "editing";
-    auto posAnchor = m_buffer.anchor_at(static_cast<uint32_t>(bytePos), Bias::Right);
-    auto selAnchor = m_buffer.anchor_at(static_cast<uint32_t>(byteAnchor), Bias::Left);
+    auto posAnchor = m_session->anchor_at(static_cast<uint32_t>(bytePos), Bias::Right);
+    auto selAnchor = m_session->anchor_at(static_cast<uint32_t>(byteAnchor), Bias::Left);
     es.cursors.push_back({selAnchor, posAnchor});
     es.viewport_top = m_viewportTopAnchor;
     es.viewport_bottom = m_viewportBottomAnchor;
@@ -539,8 +563,8 @@ void CollabPane::applyRemoteCursorsAndFollow() {
         }
         for (const auto &cp : es.cursors) {
             RemoteCursor rc;
-            rc.bytePosition = m_buffer.resolve_anchor(cp.head);
-            rc.byteAnchor   = m_buffer.resolve_anchor(cp.anchor);
+            rc.bytePosition = m_session->resolve_anchor(cp.head);
+            rc.byteAnchor   = m_session->resolve_anchor(cp.anchor);
             if (remoteIdentity) {
                 rc.color = QColor(QString::fromStdString(remoteIdentity->color));
                 rc.label = QString::fromStdString(remoteIdentity->display_name);
@@ -549,13 +573,13 @@ void CollabPane::applyRemoteCursorsAndFollow() {
                 rc.color = QColor(Qt::gray);
                 rc.label = QString::fromStdString(replicaId);
             }
-            rc.cursorVersion = (quint64(cp.head.replica_id) << 32) | cp.head.char_value;
+            rc.cursorVersion = cp.head.position.counter;
             cursors.append(rc);
         }
 
         // Follow mode: scroll to the remote user's viewport.
         if (m_following && es.viewport_top) {
-            uint32_t remoteTopByte = m_buffer.resolve_anchor(*es.viewport_top);
+            uint32_t remoteTopByte = m_session->resolve_anchor(*es.viewport_top);
             m_followScrolling = true;
             m_edit->scrollByteOffsetToTop(remoteTopByte, /*keepCursorVisible=*/false);
             m_followScrolling = false;
@@ -582,8 +606,8 @@ void CollabPane::syncStreams() {
             color = QColor(QString::fromStdString(maybeId->color));
         int anchorLine = -1;
         if (msg->anchor) {
-            uint32_t byteOff = m_buffer.resolve_anchor(*msg->anchor);
-            std::string text = m_buffer.text();
+            uint32_t byteOff = m_session->resolve_anchor(*msg->anchor);
+            std::string text = m_session->text();
             int line = 1;
             for (uint32_t j = 0; j < byteOff && j < text.size(); ++j) {
                 if (text[j] == '\n') ++line;
@@ -603,14 +627,14 @@ void CollabPane::syncStreams() {
     auto commentEntries = m_streamSync->entries("comments");
     QList<std::tuple<uint32_t, uint32_t, QColor>> highlights;
     QList<CommentDisplayInfo> commentDisplayList;
-    std::string text = m_buffer.text();
+    std::string text = m_session->text();
 
     for (const auto &entry : commentEntries) {
         auto c = comment_from_entry(entry);
         if (!c) continue;
 
-        uint32_t startByte = m_buffer.resolve_anchor(c->range_start);
-        uint32_t endByte   = m_buffer.resolve_anchor(c->range_end);
+        uint32_t startByte = m_session->resolve_anchor(c->range_start);
+        uint32_t endByte   = m_session->resolve_anchor(c->range_end);
 
         QColor color(Qt::yellow);
         auto maybeId = m_projector.read(c->author);
@@ -648,14 +672,14 @@ void CollabPane::onChatMessageSent(const QString &body) {
 
     ++m_chatSeq;
     ChatMessage msg;
-    msg.replica_id = m_buffer.replica_id();
+    msg.replica_id = 0;   // TODO(A08): chat entries still carry a 16-bit producer id
     msg.seq = m_chatSeq;
-    msg.id = std::to_string(msg.replica_id) + "-" + std::to_string(m_chatSeq);
+    msg.id = m_session->actor().to_string() + "-" + std::to_string(m_chatSeq);
     msg.timestamp = now_iso8601();
     msg.author = m_identity.identity_id;
     msg.author_name = m_identity.display_name;
     msg.body = body.toStdString();
-    msg.anchor = m_buffer.anchor_at(byteOff, Bias::Left);
+    msg.anchor = m_session->anchor_at(byteOff, Bias::Left);
 
     m_streamSync->push("chat", chat_message_to_entry(msg));
 }
@@ -671,16 +695,19 @@ void CollabPane::onAddComment(const QString &body) {
 
     ++m_commentSeq;
     Comment c;
-    c.id = "c-" + std::to_string(m_buffer.replica_id())
-         + "-" + std::to_string(m_commentSeq);
-    c.replica_id = m_buffer.replica_id();
+    c.id = "c-" + m_session->actor().to_string() + "-" +
+           std::to_string(m_commentSeq);
+    // Comment records still carry a 16-bit producer id, which is not this
+    // device's identity. Widening it is L04's stream-envelope work; until then
+    // it stays 0 rather than being given a number that means nothing.
+    c.replica_id = 0;
     c.seq = m_commentSeq;
     c.timestamp = now_iso8601();
     c.author = m_identity.identity_id;
     c.author_name = m_identity.display_name;
     c.body = body.toStdString();
-    c.range_start = m_buffer.anchor_at(byteStart, Bias::Left);
-    c.range_end   = m_buffer.anchor_at(byteEnd,   Bias::Right);
+    c.range_start = m_session->anchor_at(byteStart, Bias::Left);
+    c.range_end   = m_session->anchor_at(byteEnd,   Bias::Right);
 
     m_streamSync->push("comments", comment_to_entry(c));
 }
@@ -691,14 +718,14 @@ void CollabPane::onCommentClicked(const QString &commentId) {
         if (entry.id != commentId.toStdString()) continue;
         auto c = comment_from_entry(entry);
         if (!c) return;
-        uint32_t byteOff = m_buffer.resolve_anchor(c->range_start);
+        uint32_t byteOff = m_session->resolve_anchor(c->range_start);
         m_edit->scrollByteOffsetToTop(byteOff, /*keepCursorVisible=*/false);
         return;
     }
 }
 
 void CollabPane::onChatAnchorClicked(int line) {
-    std::string text = m_buffer.text();
+    std::string text = m_session->text();
     uint32_t byteOff = 0;
     int currentLine = 1;
     for (size_t i = 0; i < text.size() && currentLine < line; ++i) {
@@ -729,40 +756,25 @@ void CollabPane::deleteComment(const QString &id) {
     m_streamSync->push("comments", tomb);
 }
 
-void CollabPane::applyEditsPreservingScroll(const std::vector<TextEdit> &edits) {
+void CollabPane::applyEditsPreservingScroll(const std::vector<SessionTextEdit> &edits) {
     if (edits.empty()) return;
 
     uint32_t topByteOff = m_edit->topVisibleByteOffset();
-    Anchor topAnchor = m_buffer.anchor_at(topByteOff, Bias::Left);
+    Anchor topAnchor = m_session->anchor_at(topByteOff, Bias::Left);
     uint32_t bottomByteOff = m_edit->bottomVisibleByteOffset();
-    Anchor bottomAnchor = m_buffer.anchor_at(bottomByteOff, Bias::Left);
+    Anchor bottomAnchor = m_session->anchor_at(bottomByteOff, Bias::Left);
 
     applyEditsToQt(edits);
 
-    uint32_t newTopByteOff = m_buffer.resolve_anchor(topAnchor);
+    uint32_t newTopByteOff = m_session->resolve_anchor(topAnchor);
     m_edit->scrollByteOffsetToTop(newTopByteOff, /*keepCursorVisible=*/true);
 
     m_viewportTopAnchor = topAnchor;
     m_viewportBottomAnchor = bottomAnchor;
 }
 
-void CollabPane::applyEditsToQt(const std::vector<TextEdit> &edits) {
-    if (edits.empty()) return;
-    m_syncing = true;
-
-    for (auto it = edits.rbegin(); it != edits.rend(); ++it) {
-        int qtStart = byteOffsetToQtPos(it->old_start);
-        int qtEnd   = byteOffsetToQtPos(it->old_end);
-        QTextCursor cursor(m_qtDoc);
-        cursor.setPosition(qtStart);
-        if (qtEnd > qtStart)
-            cursor.setPosition(qtEnd, QTextCursor::KeepAnchor);
-        QString replacement = QString::fromUtf8(
-            it->new_text.data(), static_cast<int>(it->new_text.size()));
-        cursor.insertText(replacement);
-    }
-
-    m_syncing = false;
+void CollabPane::applyEditsToQt(const std::vector<SessionTextEdit> &edits) {
+    m_collabDocument->applySessionEdits(edits);
 }
 
 uint32_t CollabPane::qtPosToByteOffset(int qtPos) const {

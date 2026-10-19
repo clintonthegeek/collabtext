@@ -1,0 +1,42 @@
+********* Start testing of TestEvaluationRegressions *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestEvaluationRegressions::initTestCase()
+PASS   : TestEvaluationRegressions::ordinary_remote_undo_redo(buffer)
+PASS   : TestEvaluationRegressions::ordinary_remote_undo_redo(idlist)
+XFAIL  : TestEvaluationRegressions::f1_local_gc_preserves_insertion_redo(buffer) F1 / V03 then G06: GC discards an undone insertion required by local redo
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(88)]
+PASS   : TestEvaluationRegressions::f1_local_gc_preserves_insertion_redo(buffer)
+PASS   : TestEvaluationRegressions::f1_local_gc_preserves_insertion_redo(idlist)
+XFAIL  : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(buffer) F1 / V03 then G06: remote retained redo is absent from the local GC eligibility check
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(122)]
+PASS   : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(buffer)
+XFAIL  : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(idlist) F1 / V03 then G06: remote retained redo is absent from the local GC eligibility check
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(108)]
+PASS   : TestEvaluationRegressions::f1_remote_gc_preserves_insertion_redo(idlist)
+XFAIL  : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(buffer) F2 / V03 then G06: observing deletion does not retire the deleting peer's undo
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(160)]
+PASS   : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(buffer)
+XFAIL  : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(idlist) F2 / V03 then G06: observing deletion does not retire the deleting peer's undo
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(145)]
+PASS   : TestEvaluationRegressions::f2_compact_preserves_remote_delete_undo(idlist)
+XFAIL  : TestEvaluationRegressions::f3_absent_actor_constrains_common_coverage() F3 / P03: a peer with an absent actor must constrain common coverage to zero
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(170)]
+PASS   : TestEvaluationRegressions::f3_absent_actor_constrains_common_coverage()
+XFAIL  : TestEvaluationRegressions::f4_sender_restart_delivers_distinct_operation() F4 / P02,L04: restarted sender reuses an envelope ID and suppresses a fresh operation
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(211)]
+PASS   : TestEvaluationRegressions::f4_sender_restart_delivers_distinct_operation()
+XFAIL  : TestEvaluationRegressions::f5_receiver_restart_recovers_consumed_state() F5 / L03,L05: persisted read progress cannot bootstrap a fresh engine without recovered state
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(239)]
+PASS   : TestEvaluationRegressions::f5_receiver_restart_recovers_consumed_state()
+XFAIL  : TestEvaluationRegressions::f6_late_segment_is_delivered_in_order() F6 / L03: committing segment 2 prevents a late segment 1 from ever being read
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(272)]
+PASS   : TestEvaluationRegressions::f6_late_segment_is_delivered_in_order()
+XFAIL  : TestEvaluationRegressions::f7_insertion_obeys_boundary_affinity() F7 / S04: left affinity stays before insertion at that boundary
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(284)]
+PASS   : TestEvaluationRegressions::f7_insertion_obeys_boundary_affinity()
+XFAIL  : TestEvaluationRegressions::f8_concurrent_passages_remain_contiguous() F8 / S02,S03: concurrent whole passages must not interleave character by character
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_evaluation_regressions.cpp(295)]
+PASS   : TestEvaluationRegressions::f8_concurrent_passages_remain_contiguous()
+PASS   : TestEvaluationRegressions::cleanupTestCase()
+Totals: 16 passed, 0 failed, 0 skipped, 0 blacklisted, 6ms
+********* Finished testing of TestEvaluationRegressions *********

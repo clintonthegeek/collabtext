@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 /// tst_idlist_op_api.cpp — Tests for IdList::set_on_local_op / apply_remote_op
 ///
 /// Proves that:
@@ -19,6 +20,9 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -30,7 +34,7 @@ private slots:
     // ── callback fires on insert_after ────────────────────────────────────────
 
     void set_on_local_op_fires_on_insert() {
-        IdList list(1);
+        IdList list(CollabText::Test::test_counter(1));
         std::optional<IdListOperation> captured;
         list.set_on_local_op([&](const IdListOperation& op) {
             captured = op;
@@ -39,13 +43,13 @@ private slots:
         list.insert_after(Anchor::min(), 0xAA);
 
         QVERIFY(captured.has_value());
-        QVERIFY(idlist_op_lamport(*captured).counter() > 0);
+        QVERIFY(idlist_op_identity(*captured).counter > 0);
     }
 
     // ── callback fires on remove_at ───────────────────────────────────────────
 
     void set_on_local_op_fires_on_remove() {
-        IdList list(1);
+        IdList list(CollabText::Test::test_counter(1));
         auto insert_op = list.insert_after(Anchor::min(), 0xAA);
 
         std::optional<IdListOperation> captured;
@@ -63,7 +67,7 @@ private slots:
     // ── callback fires on undo ────────────────────────────────────────────────
 
     void set_on_local_op_fires_on_undo() {
-        IdList list(1);
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
 
         std::optional<IdListOperation> captured;
@@ -79,7 +83,7 @@ private slots:
     // ── callback fires on redo ────────────────────────────────────────────────
 
     void set_on_local_op_fires_on_redo() {
-        IdList list(1);
+        IdList list(CollabText::Test::test_counter(1));
         list.insert_after(Anchor::min(), 0xAA);
         list.undo();
 
@@ -96,7 +100,7 @@ private slots:
     // ── undo with nothing to undo does NOT fire ───────────────────────────────
 
     void set_on_local_op_does_not_fire_on_noop_undo() {
-        IdList list(1);
+        IdList list(CollabText::Test::test_counter(1));
         int fire_count = 0;
         list.set_on_local_op([&](const IdListOperation&) { ++fire_count; });
 
@@ -109,7 +113,7 @@ private slots:
     // ── apply_remote_op does NOT fire set_on_local_op ────────────────────────
 
     void apply_remote_op_does_not_fire_local_op_callback() {
-        IdList list1(1), list2(2);
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         // Capture ops from list1
         std::vector<IdListOperation> captured_from_1;
@@ -132,7 +136,7 @@ private slots:
     // ── apply_remote_op DOES fire set_on_change ───────────────────────────────
 
     void apply_remote_op_fires_change_callback() {
-        IdList list1(1), list2(2);
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         auto op = list1.insert_after(Anchor::min(), 0xAA);
 
@@ -147,11 +151,11 @@ private slots:
     // ── one-way convergence via apply_remote_op ───────────────────────────────
 
     void apply_remote_op_converges_insert() {
-        IdList list1(1), list2(2);
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         list1.set_on_local_op([&](const IdListOperation& op) {
-            wire_ops.push_back(encode_idlist_operation(op));
+            wire_ops.push_back(checked_codec(encode_idlist_operation(op)));
         });
 
         list1.insert_after(Anchor::min(), 0xAA);
@@ -159,8 +163,8 @@ private slots:
         QVERIFY(!wire_ops.empty());
         for (const auto& wire : wire_ops) {
             auto decoded = decode_idlist_operation(wire);
-            QVERIFY(decoded.has_value());
-            bool ok = list2.apply_remote_op(*decoded);
+            QVERIFY(decoded.ok());
+            bool ok = list2.apply_remote_op(decoded.value());
             QVERIFY(ok);
         }
 
@@ -168,10 +172,10 @@ private slots:
         QCOMPARE(list2.ids(), (std::vector<uint64_t>{0xAA}));
     }
 
-    // ── encode/decode round-trip preserves Lamport identity ──────────────────
+    // ── encode/decode round-trip preserves Identity identity ──────────────────
 
     void encode_decode_preserves_lamport() {
-        IdList list(1);
+        IdList list(CollabText::Test::test_counter(1));
         std::optional<IdListOperation> captured;
         list.set_on_local_op([&](const IdListOperation& op) {
             if (!captured) captured = op;
@@ -180,23 +184,23 @@ private slots:
         list.insert_after(Anchor::min(), 0xAA);
         QVERIFY(captured.has_value());
 
-        std::string wire = encode_idlist_operation(*captured);
+        std::string wire = checked_codec(encode_idlist_operation(*captured));
         auto decoded = decode_idlist_operation(wire);
-        QVERIFY(decoded.has_value());
+        QVERIFY(decoded.ok());
 
-        QCOMPARE(idlist_op_lamport(*decoded).counter(), idlist_op_lamport(*captured).counter());
-        QCOMPARE(idlist_op_lamport(*decoded).replica_id, idlist_op_lamport(*captured).replica_id);
+        QCOMPARE(idlist_op_identity(decoded.value()).counter, idlist_op_identity(*captured).counter);
+        QCOMPARE(idlist_op_identity(decoded.value()).actor, idlist_op_identity(*captured).actor);
     }
 
     // ── undo round-trip: undo on list 1 propagated to list 2 ─────────────────
 
     void apply_remote_op_undo_roundtrip() {
-        IdList list1(1), list2(2);
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         // Collect all ops list1 emits (insert + undo)
         std::vector<std::string> wire_ops;
         list1.set_on_local_op([&](const IdListOperation& op) {
-            wire_ops.push_back(encode_idlist_operation(op));
+            wire_ops.push_back(checked_codec(encode_idlist_operation(op)));
         });
 
         list1.insert_after(Anchor::min(), 0xAA);
@@ -207,8 +211,8 @@ private slots:
         // Apply all ops to list2 in order
         for (const auto& wire : wire_ops) {
             auto decoded = decode_idlist_operation(wire);
-            QVERIFY(decoded.has_value());
-            bool ok = list2.apply_remote_op(*decoded);
+            QVERIFY(decoded.ok());
+            bool ok = list2.apply_remote_op(decoded.value());
             QVERIFY(ok);
         }
 
@@ -223,16 +227,16 @@ private slots:
     // Both should converge to [0xAA, 0xBB].
 
     void two_way_convergence_sequential() {
-        IdList list1(1), list2(2);
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> ops_from_1;
         std::vector<std::string> ops_from_2;
 
         list1.set_on_local_op([&](const IdListOperation& op) {
-            ops_from_1.push_back(encode_idlist_operation(op));
+            ops_from_1.push_back(checked_codec(encode_idlist_operation(op)));
         });
         list2.set_on_local_op([&](const IdListOperation& op) {
-            ops_from_2.push_back(encode_idlist_operation(op));
+            ops_from_2.push_back(checked_codec(encode_idlist_operation(op)));
         });
 
         // list1 inserts 0xAA
@@ -241,8 +245,8 @@ private slots:
         // list2 receives list1's op
         for (const auto& wire : ops_from_1) {
             auto decoded = decode_idlist_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(list2.apply_remote_op(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(list2.apply_remote_op(decoded.value()));
         }
         ops_from_1.clear();
 
@@ -253,8 +257,8 @@ private slots:
         // list1 receives list2's op
         for (const auto& wire : ops_from_2) {
             auto decoded = decode_idlist_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(list1.apply_remote_op(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(list1.apply_remote_op(decoded.value()));
         }
 
         // Both should converge to [0xAA, 0xBB]
@@ -268,16 +272,16 @@ private slots:
     // both see the same ids() after exchanging ops.
 
     void two_way_convergence_concurrent() {
-        IdList list1(1), list2(2);
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> ops_from_1;
         std::vector<std::string> ops_from_2;
 
         list1.set_on_local_op([&](const IdListOperation& op) {
-            ops_from_1.push_back(encode_idlist_operation(op));
+            ops_from_1.push_back(checked_codec(encode_idlist_operation(op)));
         });
         list2.set_on_local_op([&](const IdListOperation& op) {
-            ops_from_2.push_back(encode_idlist_operation(op));
+            ops_from_2.push_back(checked_codec(encode_idlist_operation(op)));
         });
 
         // Both insert concurrently at the beginning
@@ -287,13 +291,13 @@ private slots:
         // Exchange ops
         for (const auto& wire : ops_from_1) {
             auto decoded = decode_idlist_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(list2.apply_remote_op(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(list2.apply_remote_op(decoded.value()));
         }
         for (const auto& wire : ops_from_2) {
             auto decoded = decode_idlist_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(list1.apply_remote_op(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(list1.apply_remote_op(decoded.value()));
         }
 
         // Both should converge to the same ids (order determined by CRDT tiebreaking)
@@ -304,7 +308,7 @@ private slots:
     // ── apply_remote_op returns true for valid ops ────────────────────────────
 
     void apply_remote_op_returns_true_for_valid_op() {
-        IdList list1(1), list2(2);
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::optional<IdListOperation> captured;
         list1.set_on_local_op([&](const IdListOperation& op) {
@@ -321,11 +325,11 @@ private slots:
     // ── multi-op sequence convergence ────────────────────────────────────────
 
     void sequential_multi_op_convergence() {
-        IdList list1(1), list2(2);
+        IdList list1(CollabText::Test::test_counter(1)), list2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         list1.set_on_local_op([&](const IdListOperation& op) {
-            wire_ops.push_back(encode_idlist_operation(op));
+            wire_ops.push_back(checked_codec(encode_idlist_operation(op)));
         });
 
         // Insert 0xAA, 0xBB after it, then remove 0xAA
@@ -339,8 +343,8 @@ private slots:
 
         for (const auto& wire : wire_ops) {
             auto decoded = decode_idlist_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(list2.apply_remote_op(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(list2.apply_remote_op(decoded.value()));
         }
 
         QCOMPARE(list1.ids(), list2.ids());

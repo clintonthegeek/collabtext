@@ -1,3 +1,4 @@
+#include "CodecTest.h"
 /// tst_opstream_idempotent.cpp — Idempotent op re-delivery
 ///
 /// Proves that applying the same CRDT operation to a CrdtEngine twice leaves
@@ -18,17 +19,21 @@
 ///       engine1 (undo wins).
 
 #include <QTest>
+
 #include <QTemporaryDir>
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/Operations.h>
 #include <collabtext/Serialization.h>
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 #include <collabtext/OpStream.h>
 
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText;
 using namespace CollabText::Crdt;
@@ -45,12 +50,12 @@ private slots:
     // remains "hello".
 
     void apply_remote_op_twice_is_idempotent() {
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation& op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -60,16 +65,16 @@ private slots:
         // Apply once
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         }
         QCOMPARE(engine2.text(), std::string("hello"));
 
         // Apply the same ops a second time — must be a no-op
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         }
         QCOMPARE(engine2.text(), std::string("hello"));
     }
@@ -80,12 +85,12 @@ private slots:
     // engine2. Applying the undo op a second time leaves engine2 with empty text.
 
     void undo_op_idempotent() {
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation& op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -97,8 +102,8 @@ private slots:
         // Apply all ops in order to engine2
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         }
         QCOMPARE(engine2.text(), std::string(""));
 
@@ -106,8 +111,8 @@ private slots:
         // The undo op is the last op in wire_ops
         const auto& undo_wire = wire_ops.back();
         auto decoded_undo = decode_operation(undo_wire);
-        QVERIFY(decoded_undo.has_value());
-        engine2.applyRemoteOp(*decoded_undo);
+        QVERIFY(decoded_undo.ok());
+        QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded_undo.value())));
         QCOMPARE(engine2.text(), std::string(""));
     }
 
@@ -119,12 +124,12 @@ private slots:
     // engine1.
 
     void apply_out_of_order_then_reapply_in_order() {
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation& op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -137,8 +142,8 @@ private slots:
         std::vector<Operation> decoded_ops;
         for (const auto& wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            decoded_ops.push_back(*decoded);
+            QVERIFY(decoded.ok());
+            decoded_ops.push_back(decoded.value());
         }
 
         // The insert op is at index 0, the undo op is the last one
@@ -148,14 +153,14 @@ private slots:
         // Step 1: apply undo op first (out of order — causal dependency on insert
         // unmet).  Buffer defers it internally.  engine2 text may be empty (no
         // insert applied yet) or may differ from "hello" — it must NOT be "hello".
-        engine2.applyRemoteOp(undo_op);
+        QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(undo_op)));
         // We cannot assert exact state here because Buffer defers internally,
         // but we know "hello" has not been inserted yet.
         QVERIFY(engine2.text() != std::string("hello"));
 
         // Step 2: apply insert op. Buffer now has its causal dependency satisfied,
         // applies insert then the deferred undo — converging to empty.
-        engine2.applyRemoteOp(insert_op);
+        QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(insert_op)));
 
         // Both engines must converge to the same state (empty after undo)
         QCOMPARE(engine2.text(), engine1.text());

@@ -1,0 +1,108 @@
+{
+  "schema": "boundary-supplied-order/1",
+  "note": "Independent input snapshots, including invisible retained items. S02 must later generate these orders; S04a does not implement CRDT integration.",
+  "orders": {
+    "sequence-semantics/boundary-affinity.json": [
+      "S/1",
+      "A/4",
+      "S/2"
+    ],
+    "sequence-semantics/deleted-both-neighbors.json": [
+      "S/1",
+      "A/4",
+      "S/2"
+    ],
+    "sequence-semantics/deleted-left-neighbor.json": [
+      "S/1",
+      "A/4",
+      "S/2"
+    ],
+    "sequence-semantics/empty-start-end.json": [
+      "A/1"
+    ],
+    "sequence-semantics/end-affinity.json": [
+      "S/1",
+      "S/2",
+      "A/4"
+    ],
+    "sequence-semantics/shared-token-concurrent-inserts.json": [
+      "S/1",
+      "A/4",
+      "A/5",
+      "B/4",
+      "B/5",
+      "S/2"
+    ],
+    "sequence-semantics/start-affinity.json": [
+      "A/4",
+      "S/1",
+      "S/2"
+    ],
+    "sequence-semantics/unicode-all-boundaries.json": [
+      "S/1",
+      "S/2",
+      "A/5",
+      "S/3"
+    ],
+    "external-position/wp1-affinity-ab-insert-x.json": [
+      "A/1",
+      "A/5",
+      "A/3"
+    ],
+    "external-position/wp1-affinity-boundary-sweep.json": [
+      "A/1",
+      "A/3",
+      "A/5"
+    ],
+    "external-position/wp1-shared-token-concurrent-boundary.json": [
+      "A/1",
+      "B/5",
+      "A/3",
+      "B/7"
+    ],
+    "external-position/wp2-caret-neighbour-delete.json": [
+      "A/1",
+      "A/3",
+      "A/5"
+    ],
+    "external-position/wp2-strict-referent-delete.json": [
+      "A/1",
+      "A/3",
+      "A/5"
+    ],
+    "external-position/wp3-containing-block-gone.json": [
+      "A/1",
+      "A/2",
+      "A/3",
+      "A/4",
+      "A/5"
+    ],
+    "external-position/wp4-empty-document-token.json": [],
+    "external-position/wp4-list-indices.json": [
+      "A/1",
+      "A/3"
+    ],
+    "external-position/wp4-scalar-boundaries.json": [
+      "A/1",
+      "A/3"
+    ],
+    "external-position/wp5-token-codec.json": [
+      "A/1",
+      "A/3"
+    ],
+    "external-position/wp7-missing-list-id.json": [
+      "A/1"
+    ],
+    "external-position/wp7-wrong-context.json": [
+      "A/1",
+      "A/2",
+      "A/3",
+      "A/4",
+      "A/5"
+    ],
+    "external-position/wp8-no-gc-retention.json": [
+      "A/1",
+      "A/3"
+    ]
+  }
+}

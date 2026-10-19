@@ -1,0 +1,148 @@
+#collabtext-trace 1
+#model idlist
+#label two_replica_fuzz_with_undo
+#seed 15680833559220046058
+#replicas 2
+#net 50 200 500 1
+insert 0 0 100 l
+insert 1 0 101 l
+insert 0 1 102 l
+remove 1 0 0 l
+remove 0 0 0 l
+insert 1 0 105 l
+insert 0 0 106 l
+insert 1 1 107 l
+remove 0 0 0 l
+insert 1 0 109 l
+insert 0 1 110 l
+insert 1 0 111 l
+remove 0 1 0 l
+insert 1 0 113 l
+insert 0 1 114 l
+insert 1 0 115 l
+insert 0 2 116 l
+insert 1 0 117 l
+remove 0 0 0 l
+insert 1 0 119 l
+insert 0 2 120 l
+remove 1 0 0 l
+remove 0 2 0 l
+remove 1 1 0 l
+remove 0 0 0 l
+remove 1 5 0 l
+remove 0 0 0 l
+insert 1 1 127 l
+insert 0 0 128 l
+insert 1 1 129 l
+remove 1 0 0 l
+insert 0 0 132 l
+insert 1 6 133 l
+undo 0
+insert 1 2 135 l
+insert 1 2 137 l
+insert 0 0 138 l
+insert 1 1 139 l
+insert 0 2 140 l
+remove 1 2 0 l
+insert 0 1 142 l
+undo 1
+insert 0 3 144 l
+remove 1 5 0 l
+insert 0 1 146 l
+remove 1 2 0 l
+remove 0 0 0 l
+deliver 0 28
+deliver 0 16
+deliver 0 46
+deliver 0 25
+deliver 0 37
+deliver 0 21
+deliver 0 0
+deliver 0 27
+deliver 0 9
+deliver 0 3
+deliver 0 2
+deliver 0 39
+deliver 0 34
+deliver 0 20
+deliver 0 15
+deliver 0 23
+deliver 0 1
+deliver 0 13
+deliver 0 11
+deliver 0 4
+deliver 0 10
+deliver 0 31
+deliver 0 14
+deliver 0 41
+deliver 0 24
+deliver 0 7
+deliver 0 30
+deliver 0 36
+deliver 0 35
+deliver 0 32
+deliver 0 45
+deliver 0 43
+deliver 0 33
+deliver 0 22
+deliver 0 17
+deliver 0 6
+deliver 0 40
+deliver 0 29
+deliver 0 12
+deliver 0 44
+deliver 0 19
+deliver 0 26
+deliver 0 5
+deliver 0 8
+deliver 0 18
+deliver 0 42
+deliver 0 38
+deliver 1 28
+deliver 1 16
+deliver 1 46
+deliver 1 25
+deliver 1 37
+deliver 1 21
+deliver 1 0
+deliver 1 27
+deliver 1 9
+deliver 1 3
+deliver 1 2
+deliver 1 39
+deliver 1 34
+deliver 1 20
+deliver 1 15
+deliver 1 23
+deliver 1 1
+deliver 1 13
+deliver 1 11
+deliver 1 4
+deliver 1 10
+deliver 1 31
+deliver 1 14
+deliver 1 41
+deliver 1 24
+deliver 1 7
+deliver 1 30
+deliver 1 36
+deliver 1 35
+deliver 1 32
+deliver 1 45
+deliver 1 43
+deliver 1 33
+deliver 1 22
+deliver 1 17
+deliver 1 6
+deliver 1 40
+deliver 1 29
+deliver 1 12
+deliver 1 44
+deliver 1 19
+deliver 1 26
+deliver 1 5
+deliver 1 8
+deliver 1 18
+deliver 1 42
+deliver 1 38
+settle

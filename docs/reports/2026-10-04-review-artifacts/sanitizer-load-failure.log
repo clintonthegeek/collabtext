@@ -1,0 +1,191 @@
+Root: /home/clinton/dev/collabtext/.worktrees/reliability-v2
+Mode: asan
+Regex: ^(tst_clock|tst_locator|tst_buffer|tst_convergence|tst_sumtree|tst_anchor|tst_opqueue|tst_utf8|tst_rope|tst_fuzz|tst_trace_reduction|tst_network_sim|tst_store_fault_harness|tst_behavior_fixtures|tst_actor_identity|tst_summary_laws|tst_decode_validation|tst_operation_validation|tst_identity_ordering_model|tst_durable_file|tst_rope_integration|tst_undomap|tst_gc|tst_evaluation_regressions|tst_serialization|tst_edits_since|tst_filesync|tst_multicursor|tst_identity_json|tst_identity_store|tst_identity_projector|tst_presence_manager|tst_identity_widgets|tst_collab_plain_text_edit|tst_scroll_stability|tst_stream_sync|tst_opstream_streamsync|tst_opstream_acks|tst_opstream_convergence_buffer|tst_opstream_convergence_idlist|tst_opstream_convergence_mixed|tst_opstream_replay|tst_opstream_idempotent|tst_idlist|tst_idlist_anchor|tst_idlist_convergence|tst_idlist_undo|tst_idlist_gc|tst_idlist_fuzz|tst_idlist_serialization|tst_idlist_op_api|tst_chat_message|tst_comment|tst_seed_op|tst_sidecar_manifest|tst_zstd_util|tst_segment_format|tst_segment_writer|tst_segment_reader|tst_serialization_public|tst_crdtengine_op_api|tst_opstream_interface)$
+Workers: 1
+
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan
+      Start  1: tst_clock
+ 1/62 Test  #1: tst_clock .........................   Passed    2.82 sec
+      Start  2: tst_locator
+ 2/62 Test  #2: tst_locator .......................   Passed    0.51 sec
+      Start  3: tst_buffer
+ 3/62 Test  #3: tst_buffer ........................   Passed    0.43 sec
+      Start  4: tst_convergence
+ 4/62 Test  #4: tst_convergence ...................   Passed   34.75 sec
+      Start  5: tst_sumtree
+ 5/62 Test  #5: tst_sumtree .......................   Passed    0.50 sec
+      Start  6: tst_anchor
+ 6/62 Test  #6: tst_anchor ........................   Passed    0.41 sec
+      Start  7: tst_opqueue
+ 7/62 Test  #7: tst_opqueue .......................   Passed    1.95 sec
+      Start  8: tst_utf8
+ 8/62 Test  #8: tst_utf8 ..........................   Passed    0.50 sec
+      Start  9: tst_rope
+ 9/62 Test  #9: tst_rope ..........................   Passed    0.55 sec
+      Start 10: tst_fuzz
+10/62 Test #10: tst_fuzz ..........................***Failed   38.23 sec
+********* Start testing of TestFuzz *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestFuzz::initTestCase()
+[seed] suite=tst_fuzz scenario=invariants_after_random_edits campaign_seed=20261003 effective_seed=8443730236639756686 source=fixed kind=buffer
+PASS   : TestFuzz::invariants_after_random_edits()
+[seed] suite=tst_fuzz scenario=invariants_after_undo_redo_cycles campaign_seed=20261003 effective_seed=8482030072662781132 source=fixed kind=buffer
+PASS   : TestFuzz::invariants_after_undo_redo_cycles()
+[seed] suite=tst_fuzz scenario=convergence_utf8_stress campaign_seed=20261003 effective_seed=11509049639327567344 source=fixed kind=buffer
+PASS   : TestFuzz::convergence_utf8_stress()
+[seed] suite=tst_fuzz scenario=adversarial_all_insert_at_zero campaign_seed=20261003 effective_seed=7803705950390399921 source=fixed kind=buffer
+PASS   : TestFuzz::adversarial_all_insert_at_zero()
+[seed] suite=tst_fuzz scenario=adversarial_fight_over_one_char campaign_seed=20261003 effective_seed=4195393400890760384 source=fixed kind=buffer
+PASS   : TestFuzz::adversarial_fight_over_one_char()
+[seed] suite=tst_fuzz scenario=deep_undo_redo_with_remote campaign_seed=20261003 effective_seed=8966798208733297442 source=fixed kind=buffer
+PASS   : TestFuzz::deep_undo_redo_with_remote()
+[seed] suite=tst_fuzz scenario=rapid_multi_range_edits campaign_seed=20261003 effective_seed=4168365244972904590 source=fixed kind=buffer
+PASS   : TestFuzz::rapid_multi_range_edits()
+[seed] suite=tst_fuzz scenario=anchor_stability_under_chaos campaign_seed=20261003 effective_seed=17791035339127678915 source=fixed kind=buffer
+PASS   : TestFuzz::anchor_stability_under_chaos()
+[seed] suite=tst_fuzz scenario=large_document_pinpoint_edits campaign_seed=20261003 effective_seed=18269903212901172497 source=fixed kind=buffer
+QDEBUG : TestFuzz::large_document_pinpoint_edits() 200 pinpoint edits on 10KB doc: 10244 ms
+FAIL!  : TestFuzz::large_document_pinpoint_edits() 'ms < 10000' returned FALSE. (Pinpoint edits on large doc too slow)
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_fuzz.cpp(685)]
+[seed] suite=tst_fuzz scenario=duplicate_ops_stress campaign_seed=20261003 effective_seed=12707508813140373967 source=fixed kind=buffer
+PASS   : TestFuzz::duplicate_ops_stress()
+[seed] suite=tst_fuzz scenario=partition_then_merge campaign_seed=20261003 effective_seed=678397646376554959 source=fixed kind=buffer
+PASS   : TestFuzz::partition_then_merge()
+PASS   : TestFuzz::utf8_split_at_every_boundary()
+[seed] suite=tst_fuzz scenario=ten_replica_chaos campaign_seed=20261003 effective_seed=15024050507524397469 source=fixed kind=buffer
+PASS   : TestFuzz::ten_replica_chaos()
+[seed] suite=tst_fuzz scenario=undo_redo_storm campaign_seed=20261003 effective_seed=6389953039892856615 source=fixed kind=buffer
+PASS   : TestFuzz::undo_redo_storm()
+PASS   : TestFuzz::cleanupTestCase()
+Totals: 15 passed, 1 failed, 0 skipped, 0 blacklisted, 37440ms
+********* Finished testing of TestFuzz *********
+
+      Start 11: tst_trace_reduction
+11/62 Test #11: tst_trace_reduction ...............   Passed    3.09 sec
+      Start 12: tst_network_sim
+12/62 Test #12: tst_network_sim ...................   Passed    2.51 sec
+      Start 13: tst_store_fault_harness
+13/62 Test #13: tst_store_fault_harness ...........   Passed    2.06 sec
+      Start 14: tst_behavior_fixtures
+14/62 Test #14: tst_behavior_fixtures .............   Passed    0.27 sec
+      Start 15: tst_actor_identity
+15/62 Test #15: tst_actor_identity ................   Passed    0.21 sec
+      Start 16: tst_summary_laws
+16/62 Test #16: tst_summary_laws ..................   Passed   13.27 sec
+      Start 17: tst_decode_validation
+17/62 Test #17: tst_decode_validation .............   Passed    0.28 sec
+      Start 18: tst_operation_validation
+18/62 Test #18: tst_operation_validation ..........   Passed    1.37 sec
+      Start 19: tst_identity_ordering_model
+19/62 Test #19: tst_identity_ordering_model .......   Passed    0.27 sec
+      Start 20: tst_durable_file
+20/62 Test #20: tst_durable_file ..................   Passed    0.68 sec
+      Start 21: tst_rope_integration
+21/62 Test #21: tst_rope_integration ..............   Passed    0.75 sec
+      Start 22: tst_undomap
+22/62 Test #22: tst_undomap .......................***Failed    2.02 sec
+********* Start testing of TestUndoMap *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestUndoMap::initTestCase()
+PASS   : TestUndoMap::undo_count_parity()
+PASS   : TestUndoMap::was_undone_version_filter()
+PASS   : TestUndoMap::concurrent_undo_both_survive()
+PASS   : TestUndoMap::concurrent_undo_then_redo()
+PASS   : TestUndoMap::insert_and_query()
+PASS   : TestUndoMap::multiple_edits_independent()
+FAIL!  : TestUndoMap::undo_map_cursor_seek() 'elapsed.count() < 1000' returned FALSE. (10000 lookups took 1009ms)
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_undomap.cpp(130)]
+PASS   : TestUndoMap::cleanupTestCase()
+Totals: 8 passed, 1 failed, 0 skipped, 0 blacklisted, 1353ms
+********* Finished testing of TestUndoMap *********
+
+      Start 24: tst_gc
+23/62 Test #24: tst_gc ............................   Passed    4.62 sec
+      Start 25: tst_evaluation_regressions
+24/62 Test #25: tst_evaluation_regressions ........   Passed    0.67 sec
+      Start 26: tst_serialization
+25/62 Test #26: tst_serialization .................   Passed    0.71 sec
+      Start 27: tst_edits_since
+26/62 Test #27: tst_edits_since ...................   Passed    0.33 sec
+      Start 28: tst_filesync
+27/62 Test #28: tst_filesync ......................   Passed    0.64 sec
+      Start 29: tst_multicursor
+28/62 Test #29: tst_multicursor ...................   Passed    0.67 sec
+      Start 31: tst_identity_json
+29/62 Test #31: tst_identity_json .................   Passed    0.39 sec
+      Start 32: tst_identity_store
+30/62 Test #32: tst_identity_store ................   Passed    0.35 sec
+      Start 33: tst_identity_projector
+31/62 Test #33: tst_identity_projector ............   Passed    0.28 sec
+      Start 34: tst_presence_manager
+32/62 Test #34: tst_presence_manager ..............   Passed    0.29 sec
+      Start 35: tst_identity_widgets
+33/62 Test #35: tst_identity_widgets ..............   Passed    1.52 sec
+      Start 36: tst_collab_plain_text_edit
+34/62 Test #36: tst_collab_plain_text_edit ........   Passed    0.65 sec
+      Start 37: tst_scroll_stability
+35/62 Test #37: tst_scroll_stability ..............   Passed    1.05 sec
+      Start 38: tst_stream_sync
+36/62 Test #38: tst_stream_sync ...................   Passed    0.75 sec
+      Start 39: tst_opstream_streamsync
+37/62 Test #39: tst_opstream_streamsync ...........   Passed    1.01 sec
+      Start 40: tst_opstream_acks
+38/62 Test #40: tst_opstream_acks .................   Passed    0.82 sec
+      Start 41: tst_opstream_convergence_buffer
+39/62 Test #41: tst_opstream_convergence_buffer ...   Passed    0.50 sec
+      Start 42: tst_opstream_convergence_idlist
+40/62 Test #42: tst_opstream_convergence_idlist ...   Passed    0.41 sec
+      Start 43: tst_opstream_convergence_mixed
+41/62 Test #43: tst_opstream_convergence_mixed ....   Passed    0.65 sec
+      Start 44: tst_opstream_replay
+42/62 Test #44: tst_opstream_replay ...............   Passed    0.82 sec
+      Start 45: tst_opstream_idempotent
+43/62 Test #45: tst_opstream_idempotent ...........   Passed    0.60 sec
+      Start 46: tst_idlist
+44/62 Test #46: tst_idlist ........................   Passed    0.34 sec
+      Start 47: tst_idlist_anchor
+45/62 Test #47: tst_idlist_anchor .................   Passed    0.18 sec
+      Start 48: tst_idlist_convergence
+46/62 Test #48: tst_idlist_convergence ............   Passed    0.19 sec
+      Start 49: tst_idlist_undo
+47/62 Test #49: tst_idlist_undo ...................   Passed    0.40 sec
+      Start 50: tst_idlist_gc
+48/62 Test #50: tst_idlist_gc .....................   Passed    0.15 sec
+      Start 51: tst_idlist_fuzz
+49/62 Test #51: tst_idlist_fuzz ...................   Passed    1.72 sec
+      Start 52: tst_idlist_serialization
+50/62 Test #52: tst_idlist_serialization ..........   Passed    0.22 sec
+      Start 53: tst_idlist_op_api
+51/62 Test #53: tst_idlist_op_api .................   Passed    0.61 sec
+      Start 54: tst_chat_message
+52/62 Test #54: tst_chat_message ..................   Passed    0.13 sec
+      Start 55: tst_comment
+53/62 Test #55: tst_comment .......................   Passed    0.31 sec
+      Start 56: tst_seed_op
+54/62 Test #56: tst_seed_op .......................   Passed    0.56 sec
+      Start 57: tst_sidecar_manifest
+55/62 Test #57: tst_sidecar_manifest ..............   Passed    0.27 sec
+      Start 58: tst_zstd_util
+56/62 Test #58: tst_zstd_util .....................   Passed    0.21 sec
+      Start 59: tst_segment_format
+57/62 Test #59: tst_segment_format ................   Passed    0.19 sec
+      Start 60: tst_segment_writer
+58/62 Test #60: tst_segment_writer ................   Passed    0.31 sec
+      Start 61: tst_segment_reader
+59/62 Test #61: tst_segment_reader ................   Passed    0.32 sec
+      Start 62: tst_serialization_public
+60/62 Test #62: tst_serialization_public ..........   Passed    0.20 sec
+      Start 63: tst_crdtengine_op_api
+61/62 Test #63: tst_crdtengine_op_api .............   Passed    0.58 sec
+      Start 64: tst_opstream_interface
+62/62 Test #64: tst_opstream_interface ............   Passed    0.10 sec
+
+97% tests passed, 2 tests failed out of 62
+
+Total Test time (real) = 136.39 sec
+
+The following tests FAILED:
+	 10 - tst_fuzz (Failed)
+	 22 - tst_undomap (Failed)
+Errors while running CTest
+Verification exit: 8; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T223408Z-2710985

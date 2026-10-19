@@ -1,0 +1,192 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp1-shared-token-concurrent-boundary",
+ "probe": "WP1",
+ "title": "One minted token, delivered across replicas: identical resolution",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001",
+  "B": "00000000000000000000000000000002"
+ },
+ "context": {
+  "document": "wp1-shared-token-concurrent-boundary",
+  "stream": "text",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/2",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "a"
+    }
+   ]
+  },
+  {
+   "id": "A/4",
+   "kind": "insert",
+   "after": [
+    "A/2"
+   ],
+   "between": [
+    "A/1",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/3",
+     "value": "b"
+    }
+   ]
+  },
+  {
+   "id": "B/6",
+   "kind": "insert",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "items": [
+    {
+     "id": "B/5",
+     "value": "X"
+    }
+   ]
+  },
+  {
+   "id": "B/8",
+   "kind": "insert",
+   "after": [
+    "B/6"
+   ],
+   "between": [
+    "A/3",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "B/7",
+     "value": "!"
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/2",
+   "A/4",
+   "B/6",
+   "B/8"
+  ],
+  [
+   "A/2",
+   "A/4",
+   "B/6",
+   "B/8"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "shared-left",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "shared-right",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "right"
+  }
+ ],
+ "invalid_requests": [],
+ "expectations": [
+  {
+   "id": "shared_token_concurrent_boundary_inserts.left",
+   "kind": "resolved",
+   "token": "shared-left",
+   "offset": 1,
+   "collapsed": false,
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:61-63; W2"
+  },
+  {
+   "id": "shared_token_concurrent_boundary_inserts.right",
+   "kind": "resolved",
+   "token": "shared-right",
+   "offset": 2,
+   "collapsed": false,
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:61-63; W2"
+  },
+  {
+   "id": "same_token_resolves_identically_on_every_replica",
+   "kind": "replica_agreement",
+   "token": "shared-left",
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:61-63; W2"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S02",
+   "S04",
+   "S06"
+  ],
+  "strict": [
+   "S04",
+   "S06"
+  ]
+ },
+ "third_party_observations": [],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "B/5",
+   "A/3",
+   "B/7"
+  ],
+  "hidden": [],
+  "text": "aXb!",
+  "positions": {
+   "shared-left": {
+    "offset": 1,
+    "state": "resolved"
+   },
+   "shared-right": {
+    "offset": 2,
+    "state": "resolved"
+   }
+  },
+  "comparisons": [
+   {
+    "left": "shared-left",
+    "right": "shared-right",
+    "order": "less"
+   }
+  ]
+ }
+}

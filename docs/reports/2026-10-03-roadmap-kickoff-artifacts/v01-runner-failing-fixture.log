@@ -1,0 +1,22 @@
+Root: /tmp/collabtext-v01-runner-probe
+Mode: debug
+Regex: ^tst_deliberate_failure$
+Workers: 2
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/collabtext-v01-runner-probe/build-roadmap-debug
+Selected 1 tests; compiler: c++ (GCC) 16.2.1 20260810
+[100%] Built target tst_deliberate_failure
+Test project /tmp/collabtext-v01-runner-probe/build-roadmap-debug
+    Start 1: tst_deliberate_failure
+1/1 Test #1: tst_deliberate_failure ...........***Failed    0.01 sec
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   0.01 sec
+
+The following tests FAILED:
+	  1 - tst_deliberate_failure (Failed)
+Errors while running CTest
+Verification exit: 8; evidence: /tmp/collabtext-v01-runner-probe/build-roadmap-debug/verification/20261003T212002Z-21

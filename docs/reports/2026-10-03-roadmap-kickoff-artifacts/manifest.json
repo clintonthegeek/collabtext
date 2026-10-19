@@ -1,0 +1,364 @@
+{
+  "v01-debug-fast": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v01-debug-fast.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T211646Z-13"
+  },
+  "v01-release-fast": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v01-release-fast.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T212001Z-12"
+  },
+  "v01-asan-unrestricted": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v01-asan-unrestricted.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T212158Z-999621"
+  },
+  "v01-asan-sandbox-restriction": {
+    "exit_code": 8,
+    "source_log": "/tmp/collabtext-v01-asan.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T211807Z-2"
+  },
+  "v02-debug": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v02-debug.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T212833Z-2"
+  },
+  "v02-release": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v02-release.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T212931Z-2"
+  },
+  "v02-asan": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v02-asan.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T212933Z-1007768"
+  },
+  "v03-restoration-before-fix": {
+    "exit_code": 8,
+    "source_log": "/tmp/collabtext-v03-before-fix.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213126Z-2"
+  },
+  "v03-retention-before-fix": {
+    "exit_code": 8,
+    "source_log": "/tmp/collabtext-v03-retention-before-fix.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213308Z-2"
+  },
+  "v03-debug-targeted": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-debug.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213722Z-2"
+  },
+  "v03-asan": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-asan.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T213804Z-1012502"
+  },
+  "v02-default": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v02-expected-failures.log"
+  },
+  "v02-strict": {
+    "exit_code": 11,
+    "source_log": "/tmp/collabtext-v02-strict.log"
+  },
+  "v03-default": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-regressions-default.log"
+  },
+  "v03-strict": {
+    "exit_code": 6,
+    "source_log": "/tmp/collabtext-v03-regressions-strict.log"
+  },
+  "v03-restoration-strict": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-regressions-restoration.log"
+  },
+  "v01-runner-zero-selection": {
+    "exit_code": 3,
+    "source_log": "/tmp/collabtext-v01-runner-probe/zero.log"
+  },
+  "v01-runner-failing-fixture": {
+    "exit_code": 8,
+    "source_log": "/tmp/collabtext-v01-runner-probe/failure.log"
+  },
+  "v03-debug-fast": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-debug-fast.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213854Z-13"
+  },
+  "v03-release-fast": {
+    "exit_code": 0,
+    "source_log": "/tmp/collabtext-v03-release-fast.log",
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T213805Z-13"
+  },
+  "v04-debug-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T223349Z-1057935",
+    "selection": "tst_trace_reduction|tst_fuzz|tst_idlist_fuzz"
+  },
+  "v04-release-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T223425Z-1058779",
+    "selection": "tst_trace_reduction|tst_fuzz|tst_idlist_fuzz"
+  },
+  "v04-asan-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T223506Z-1059680",
+    "selection": "tst_trace_reduction|tst_fuzz|tst_idlist_fuzz"
+  },
+  "v04-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T223644Z-1061197",
+    "selection": "53-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v04-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T223715Z-1063615",
+    "selection": "53-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v04-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T223738Z-1065970",
+    "selection": "53-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v04-strict-evaluation": {
+    "exit_code": 6,
+    "command": "COLLABTEXT_STRICT_EVALUATION=1 build-roadmap-debug/libs/collabtext/tst_evaluation_regressions",
+    "log": "v04-strict-evaluation.log"
+  },
+  "v04-seed42-determinism": {
+    "exit_code": 0,
+    "command": "COLLABTEXT_TEST_SEED=42 COLLABTEXT_TRACE_OUTPUT=<dir> build-roadmap-debug/libs/collabtext/tst_fuzz (twice)",
+    "result": "traces byte-identical; evidence in v04-seed42-run-a/, v04-seed42-run-b/, v04-seed42-identical.txt, v04-seed42-differs.txt"
+  },
+  "v04-injected-failure": {
+    "exit_code": 0,
+    "command": "tst_trace_reduction injected-failure rows plus tools/reduce-trace",
+    "result": "42-event trace with one injected lost delivery; reduced to 16 events, replay still diverges; logs and both traces in v04-injected-failure/"
+  },
+  "v04-realistic-compact-red": {
+    "exit_code": 1,
+    "command": "pre-migration tst_realistic networksim_compact_all",
+    "result": "asserted removed > 0; false since V03 containment, hidden by the fast-suite exclusion; now asserts retention"
+  },
+  "v05-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T232453Z-1095781",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v05-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261003T232553Z-1098230",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v05-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T232747Z-1101638",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v05-network-sim": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_network_sim at the default seed and seed 42",
+    "log": "v05-network-sim-default.log, v05-network-sim-seed42.log"
+  },
+  "v05-realistic-fixed-seeds": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_realistic with COLLABTEXT_TEST_SEED=42 and =20261003",
+    "result": "13/13 pass; traces byte-identical across two runs at each seed"
+  },
+  "v05-replay-check": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/reduce-trace --replay over both trace sets",
+    "log": "v05-replay-check.txt"
+  },
+  "v06-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T002119Z-1132753",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v06-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T002200Z-1134865",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v06-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T002218Z-1136750",
+    "selection": "54-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v06-benchmark-release": {
+    "exit_code": 0,
+    "command": "QT_QPA_PLATFORM=offscreen build-roadmap-release/libs/collabtext/tst_benchmark",
+    "log": "v06-benchmark-release.log",
+    "table": "v06-report-table.md",
+    "result": "21/21 cases; 53 reported rows"
+  },
+  "v06-benchmark-debug": {
+    "exit_code": 0,
+    "command": "QT_QPA_PLATFORM=offscreen build-roadmap-debug/libs/collabtext/tst_benchmark",
+    "result": "21/21 cases; about 8 minutes in Debug"
+  },
+  "v07-debug-harness": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T003947Z-1154158",
+    "selection": "^tst_store_fault_harness$"
+  },
+  "v07-release-harness": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T003954Z-1154327",
+    "selection": "^tst_store_fault_harness$"
+  },
+  "v07-asan-harness": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T004010Z-1155766",
+    "selection": "^tst_store_fault_harness$",
+    "result": "no sanitizer findings; deliberate worker termination is not a library defect"
+  },
+  "v07-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T004048Z-1156633",
+    "selection": "55-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v07-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T004142Z-1158937",
+    "selection": "55-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v07-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T004227Z-1161167",
+    "selection": "55-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v08-debug-fixtures": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T005320Z-1169882",
+    "selection": "^tst_behavior_fixtures$"
+  },
+  "v08-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T005321Z-1169934",
+    "selection": "56-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v08-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T005526Z-1174001",
+    "selection": "56-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v08-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T005619Z-1176363",
+    "selection": "56-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "v08-baseline-fixtures": {
+    "exit_code": 0,
+    "result": "9 fixtures replayed against revision 046d375; 8 meet their declared expectation, buffer_concurrent_passages_stay_contiguous does not (hweolrllod, finding F8)",
+    "log": "v08-baseline-fixtures.txt"
+  },
+  "p02-identity-suite": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_actor_identity",
+    "log": "v-p02/actor-identity.log",
+    "result": "26/26"
+  },
+  "p02-debug-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T013038Z-1212467",
+    "selection": "tst_actor_identity|tst_clock|tst_buffer|tst_idlist"
+  },
+  "p02-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T013047Z-1212940",
+    "selection": "57-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p02-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T013146Z-1216461",
+    "selection": "57-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p02-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T013243Z-1220239",
+    "selection": "57-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p03-summary-laws": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_summary_laws",
+    "log": "v-p03/summary-laws.log",
+    "result": "13/13"
+  },
+  "p03-clock": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_clock",
+    "log": "v-p03/clock.log",
+    "result": "23/23"
+  },
+  "p03-strict-evaluation": {
+    "exit_code": 5,
+    "command": "COLLABTEXT_STRICT_EVALUATION=1 build-roadmap-debug/libs/collabtext/tst_evaluation_regressions",
+    "log": "v-p03/strict-evaluation-after-f3.log",
+    "note": "F3 marker removed; F4-F8 remain"
+  },
+  "p03-debug-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T014646Z-1255768",
+    "selection": "tst_clock|tst_summary_laws|tst_sumtree|tst_evaluation_regressions"
+  },
+  "p03-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T014824Z-1257604",
+    "selection": "58-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p03-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T015952Z-1278761",
+    "selection": "58-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p03-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T020996Z-1290791",
+    "selection": "58-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p04-decode-validation": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_decode_validation",
+    "log": "v-p04/decode-validation.log",
+    "result": "29/29"
+  },
+  "p04-utf8": {
+    "exit_code": 0,
+    "command": "build-roadmap-debug/libs/collabtext/tst_utf8",
+    "log": "v-p04/utf8.log",
+    "result": "30/30"
+  },
+  "p04-debug-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T024358Z-1346422",
+    "selection": "tst_decode_validation|tst_utf8"
+  },
+  "p04-release-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T024429Z-1350467",
+    "selection": "tst_decode_validation|tst_utf8"
+  },
+  "p04-asan-targeted": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T024404Z-1346616",
+    "selection": "tst_decode_validation|tst_utf8"
+  },
+  "p04-debug-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T024516Z-1350874",
+    "selection": "59-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p04-release-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-release/verification/20261004T024654Z-1355358",
+    "selection": "59-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  },
+  "p04-asan-fast": {
+    "exit_code": 0,
+    "build_evidence": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T024801Z-1360738",
+    "selection": "59-name anchored fast selection excluding tst_benchmark and tst_realistic"
+  }
+}

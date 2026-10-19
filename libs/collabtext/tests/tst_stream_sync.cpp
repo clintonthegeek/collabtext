@@ -1,6 +1,6 @@
 #include <QTest>
 #include <QTemporaryDir>
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 #include "crdt/StreamSerialization.h"
 
 using namespace CollabText::Crdt;
@@ -8,6 +8,32 @@ using namespace CollabText::Crdt;
 class TestStreamSync : public QObject {
     Q_OBJECT
 private slots:
+    void newer_operation_payload_blocks_without_callbacks_or_cursor_commit() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        std::filesystem::path shared = tmp.path().toStdString();
+        StreamSync sender(shared, "sender", 1), receiver(shared, "receiver", 2);
+        sender.register_stream("ops", StreamSync::StreamType::AppendOnly);
+        receiver.register_stream("ops", StreamSync::StreamType::AppendOnly);
+        sender.start(); receiver.start();
+        int delivered = 0;
+        receiver.set_on_inbound([&](const auto&, auto, const auto&) { ++delivered; });
+        sender.push("ops", std::string("CTBO000f:{}"));
+        sender.flush();
+        QCOMPARE(receiver.poll(), size_t(0));
+        QCOMPARE(delivered, 0);
+        QVERIFY(receiver.entries("ops").empty());
+        QVERIFY(receiver.last_error().has_value());
+        QCOMPARE(receiver.last_error()->code(), CollabText::ErrorCode::unsupported_version);
+        QCOMPARE(receiver.blocked_records("ops", "sender").size(), size_t(1));
+        QVERIFY(receiver.blocked_records("ops", "sender")[0].find("CTBO000f:") != std::string::npos);
+        sender.push("ops", std::string("opaque application payload"));
+        sender.flush();
+        QCOMPARE(receiver.poll(), size_t(0));
+        QCOMPARE(delivered, 0);
+        const auto cursor = shared / "local" / "receiver" / "read-cursors" / "streams" / "ops" / "sender.bin";
+        QVERIFY(!std::filesystem::exists(cursor));
+    }
     void stream_entry_serialization_round_trip() {
         StreamEntry e;
         e.id = "1-42";

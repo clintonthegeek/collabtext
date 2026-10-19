@@ -48,6 +48,39 @@ def visit(tid):
 for tid in by_id:
     visit(tid)
 
+# Check the sequencing amendment as a transitive contract. A seemingly small
+# edge added later must not silently put consumer integration behind recovery.
+def ancestors(tid, visited=None):
+    visited = set() if visited is None else visited
+    for dep in by_id.get(tid, {}).get('depends_on', []):
+        if dep in by_id and dep not in visited:
+            visited.add(dep)
+            ancestors(dep, visited)
+    return visited
+
+for tid, contract in data.get('early_consumer_gates', {}).items():
+    if tid not in by_id:
+        errors.append(f'Early consumer gate names missing task {tid}')
+        continue
+    inherited = ancestors(tid)
+    for dep in contract.get('required_ancestors', []):
+        if dep not in inherited:
+            errors.append(f'{tid}: missing required consumer prerequisite {dep}')
+    for dep in contract.get('forbidden_ancestors', []):
+        if dep in inherited:
+            errors.append(f'{tid}: consumer sequencing regressed behind {dep}')
+
+probe_owners = data.get('consumer_probe_owners', {})
+if probe_owners:
+    if set(probe_owners) != {f'WP{i}' for i in range(1, 9)}:
+        errors.append('Consumer probe ownership must cover exactly WP1-WP8')
+    for probe, owners in probe_owners.items():
+        if not owners or 'W01' not in owners or 'E05' not in owners:
+            errors.append(f'{probe}: missing fixture or final acceptance owner')
+        for owner in owners:
+            if owner not in by_id:
+                errors.append(f'{probe}: missing owning task {owner}')
+
 headings = []
 task_blocks = {}
 for doc in sorted(root.glob('[0-9][0-9]-*.md')):
@@ -105,6 +138,8 @@ if errors:
 print(f'Valid: {len(tasks)} tasks; acyclic graph; serial order; all F1–F10/R1–R14 covered.')
 if consumer_requirements:
     print(f'Consumer coverage: {", ".join(sorted(consumer_requirements))}; normative contract exists.')
+if data.get('early_consumer_gates'):
+    print('Early consumer sequencing: transitive prerequisites and exclusions checked; WP1-WP8 owners exist.')
 if args.ready:
     ready = [t for t in tasks if t['status'] == 'not_started'
              and all(by_id[d]['status'] == 'complete' for d in t['depends_on'])]

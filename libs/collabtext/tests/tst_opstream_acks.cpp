@@ -1,14 +1,25 @@
+#include "CodecTest.h"
 #include <QTest>
+
 #include <QTemporaryDir>
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/Serialization.h>
 #include <collabtext/Operations.h>
 #include <fstream>
 #include <filesystem>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 using namespace CollabText;
+
+namespace {
+void install_legacy_accept_handler(StreamSync& sync) {
+    sync.set_on_inbound([](const std::string&, uint16_t, const std::string&) {});
+}
+}
 
 class TestOpStreamAcks : public QObject {
     Q_OBJECT
@@ -37,14 +48,15 @@ void TestOpStreamAcks::acks_json_written_after_poll() {
     sync2.register_stream("ops", StreamSync::StreamType::AppendOnly);
     sync1.start();
     sync2.start();
+    install_legacy_accept_handler(sync2);
 
-    // Collect encoded op payloads from engine1 and track max Lamport
-    CrdtEngine engine1(1);
+    // Collect encoded op payloads from engine1 and track max Identity
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport) max_lamport = lc;
     });
 
@@ -97,12 +109,13 @@ void TestOpStreamAcks::acks_json_monotone_across_restarts() {
         sync2.register_stream("ops", StreamSync::StreamType::AppendOnly);
         sync1.start();
         sync2.start();
+        install_legacy_accept_handler(sync2);
 
-        CrdtEngine engine1(1);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
         std::vector<std::string> payloads;
         engine1.setOnLocalOp([&](const Operation& op) {
-            payloads.push_back(encode_operation(op));
-            uint64_t lc = op_lamport(op).counter();
+            payloads.push_back(checked_codec(encode_operation(op)));
+            uint64_t lc = op_identity(op).counter;
             if (lc > max_lamport_session1) max_lamport_session1 = lc;
         });
 
@@ -130,7 +143,7 @@ void TestOpStreamAcks::acks_json_monotone_across_restarts() {
     }
 
     // Second session: fresh sync1 + sync2 (simulates restart), push 2 inserts from a
-    // fresh engine. The fresh engine starts at Lamport 1, so its max_lamport will be
+    // fresh engine. The fresh engine starts at Identity 1, so its max_lamport will be
     // less than max_lamport_session1 (which came from 3 inserts with internal ops).
     // The file must preserve max_lamport_session1 via the monotonicity read.
     {
@@ -141,14 +154,15 @@ void TestOpStreamAcks::acks_json_monotone_across_restarts() {
         sync2.register_stream("ops", StreamSync::StreamType::AppendOnly);
         sync1.start();
         sync2.start();
+        install_legacy_accept_handler(sync2);
 
-        // Fresh engine — Lamport resets to 1; 2 inserts will produce max < max_lamport_session1
-        CrdtEngine engine_new(1);
+        // Fresh engine — Identity resets to 1; 2 inserts will produce max < max_lamport_session1
+        CrdtEngine engine_new(CollabText::Test::test_counter(1));
         uint64_t max_lamport_session2 = 0;
         std::vector<std::string> payloads;
         engine_new.setOnLocalOp([&](const Operation& op) {
-            payloads.push_back(encode_operation(op));
-            uint64_t lc = op_lamport(op).counter();
+            payloads.push_back(checked_codec(encode_operation(op)));
+            uint64_t lc = op_identity(op).counter;
             if (lc > max_lamport_session2) max_lamport_session2 = lc;
         });
 
@@ -157,7 +171,7 @@ void TestOpStreamAcks::acks_json_monotone_across_restarts() {
         }
         QVERIFY(payloads.size() >= 1);
         // Verify the new session's max is less than the first session's max
-        // (1 insert always produces fewer/lower Lamport ops than 3 inserts)
+        // (1 insert always produces fewer/lower Identity ops than 3 inserts)
         QVERIFY(max_lamport_session2 < max_lamport_session1);
 
         for (const auto& payload : payloads) {
@@ -195,14 +209,16 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_returns_min_across_peers() {
     R1.start();
     R2.start();
     R3.start();
+    install_legacy_accept_handler(R2);
+    install_legacy_accept_handler(R3);
 
-    // Collect encoded op payloads from engine1 and track max Lamport
-    CrdtEngine engine1(1);
+    // Collect encoded op payloads from engine1 and track max Identity
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport) max_lamport = lc;
     });
 
@@ -243,16 +259,17 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_callback_fires_on_advance() {
     R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
     R1.start();
     R2.start();
+    install_legacy_accept_handler(R2);
 
     std::vector<uint64_t> cb_values;
     R1.set_on_ack_update([&](uint64_t v) { cb_values.push_back(v); });
 
-    CrdtEngine engine1(1);
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport_1 = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport_1) max_lamport_1 = lc;
     });
 
@@ -278,8 +295,8 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_callback_fires_on_advance() {
     payloads.clear();
     uint64_t max_lamport_2 = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport_2) max_lamport_2 = lc;
     });
 
@@ -317,14 +334,16 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_bounded_by_lagging_peer() {
     R1.start();
     R2.start();
     R3.start();
+    install_legacy_accept_handler(R2);
+    install_legacy_accept_handler(R3);
 
-    CrdtEngine engine1(1);
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> batch1_payloads;
     uint64_t batch1_max = 0;
 
     engine1.setOnLocalOp([&](const Operation& op) {
-        batch1_payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        batch1_payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > batch1_max) batch1_max = lc;
     });
 
@@ -348,8 +367,8 @@ void TestOpStreamAcks::lowest_peer_acked_lamport_bounded_by_lagging_peer() {
     uint64_t batch2_max = 0;
 
     engine1.setOnLocalOp([&](const Operation& op) {
-        batch2_payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        batch2_payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > batch2_max) batch2_max = lc;
     });
 
@@ -408,10 +427,10 @@ void TestOpStreamAcks::silent_peer_never_writes_acks_fence_stays_zero() {
     R1.start();
     R2.start();  // creates replicas/replica-2/ directory but R2 never polls
 
-    CrdtEngine engine1(1);
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
+        payloads.push_back(checked_codec(encode_operation(op)));
     });
 
     for (int i = 0; i < 5; ++i) {
@@ -456,13 +475,14 @@ void TestOpStreamAcks::peer_acks_file_deleted_fence_persists() {
     R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
     R1.start();
     R2.start();
+    install_legacy_accept_handler(R2);
 
-    CrdtEngine engine1(1);
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport) max_lamport = lc;
     });
 
@@ -501,7 +521,7 @@ void TestOpStreamAcks::peer_acks_file_deleted_fence_persists() {
 
 // R1 pushes two batches.  R2 is "offline" for batch 1 (doesn't poll).
 // After batch 2 is pushed, R2 reconnects and polls — it reads all of R1's ops
-// (both batches) and writes a single acks.json covering the combined max Lamport.
+// (both batches) and writes a single acks.json covering the combined max Identity.
 // R1's next poll advances the fence to cover both batches at once.
 void TestOpStreamAcks::peer_reconnects_fence_advances() {
     QTemporaryDir tmp;
@@ -515,20 +535,21 @@ void TestOpStreamAcks::peer_reconnects_fence_advances() {
     R2.register_stream("ops", StreamSync::StreamType::AppendOnly);
     R1.start();
     R2.start();
+    install_legacy_accept_handler(R2);
 
-    CrdtEngine engine1(1);
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     uint64_t batch1_max = 0;
 
     engine1.setOnLocalOp([&](const Operation& op) {
-        uint64_t lc = op_lamport(op).counter();
+        uint64_t lc = op_identity(op).counter;
         if (lc > batch1_max) batch1_max = lc;
     });
 
     // Batch 1: 3 inserts — R2 does not poll.
     std::vector<std::string> batch1_payloads;
     engine1.setOnLocalOp([&](const Operation& op) {
-        batch1_payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        batch1_payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > batch1_max) batch1_max = lc;
     });
 
@@ -551,8 +572,8 @@ void TestOpStreamAcks::peer_reconnects_fence_advances() {
     std::vector<std::string> batch2_payloads;
     uint64_t batch2_max = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        batch2_payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        batch2_payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > batch2_max) batch2_max = lc;
     });
 
@@ -606,13 +627,14 @@ void TestOpStreamAcks::three_peer_partition_totally_silent_peer_excluded() {
     R1.start();
     R2.start();
     R3.start();  // creates replicas/replica-3/ but R3 never polls
+    install_legacy_accept_handler(R2);
 
-    CrdtEngine engine1(1);
+    CrdtEngine engine1(CollabText::Test::test_counter(1));
     std::vector<std::string> payloads;
     uint64_t max_lamport = 0;
     engine1.setOnLocalOp([&](const Operation& op) {
-        payloads.push_back(encode_operation(op));
-        uint64_t lc = op_lamport(op).counter();
+        payloads.push_back(checked_codec(encode_operation(op)));
+        uint64_t lc = op_identity(op).counter;
         if (lc > max_lamport) max_lamport = lc;
     });
 

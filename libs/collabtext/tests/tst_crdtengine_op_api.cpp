@@ -1,4 +1,5 @@
-/// tst_crdtengine_op_api.cpp — Tests for CrdtEngine::setOnLocalOp / applyRemoteOp
+#include "CodecTest.h"
+/// tst_crdtengine_op_api.cpp — Tests for CrdtEngine::setOnLocalOp / typed apply_remote
 ///
 /// Proves that:
 ///   - setOnLocalOp fires on every local edit (insert, remove)
@@ -9,6 +10,7 @@
 ///   - two-way convergence: both engines insert, both apply each other's ops
 
 #include <collabtext/CrdtEngine.h>
+
 #include <collabtext/Operations.h>
 #include <collabtext/Serialization.h>
 
@@ -16,6 +18,9 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText;
 using namespace CollabText::Crdt;
@@ -25,10 +30,98 @@ class TestCrdtEngineOpApi : public QObject {
 
 private slots:
 
+    void apply_outcomes_and_undo_limits_are_typed() {
+        CrdtEngine source(CollabText::Test::test_counter(21));
+        CrdtEngine target(CollabText::Test::test_counter(22));
+        std::vector<Operation> emitted;
+        source.setOnLocalOp([&](const Operation &op) { emitted.push_back(op); });
+        int changes = 0;
+        target.setOnChange([&] { ++changes; });
+        source.insert(0, "a");
+        source.insert(1, "b");
+        QCOMPARE(emitted.size(), size_t(2));
+
+        const auto applied = target.apply_remote(emitted[0]);
+        QCOMPARE(applied.kind(), ApplyOutcomeKind::applied);
+        QCOMPARE(target.text(), std::string("a"));
+        QCOMPARE(changes, 1);
+        QCOMPARE(target.apply_remote(emitted[0]).kind(), ApplyOutcomeKind::duplicate);
+        QCOMPARE(changes, 1); // a duplicate is not a visible change
+
+        CrdtEngine delayed(CollabText::Test::test_counter(24));
+        const auto deferred = delayed.apply_remote(emitted[1]);
+        QCOMPARE(deferred.kind(), ApplyOutcomeKind::deferred);
+        QVERIFY(deferred.awaiting().has_value());
+        QCOMPARE(delayed.text(), std::string());
+        QCOMPARE(changes, 1);
+
+        CrdtEngine bounded_deferred(CollabText::Test::test_counter(26));
+        QVERIFY(bounded_deferred.set_deferred_operation_budget({1, 0}).ok());
+        const auto byte_limited = bounded_deferred.apply_remote(emitted[1]);
+        QCOMPARE(byte_limited.kind(), ApplyOutcomeKind::rejected);
+        QVERIFY(byte_limited.error().has_value());
+        QCOMPARE(byte_limited.error()->code(), ErrorCode::deferred_queue_full);
+        QVERIFY(bounded_deferred.set_deferred_operation_budget({0, 1u << 20}).ok());
+        const auto count_limited = bounded_deferred.apply_remote(emitted[1]);
+        QCOMPARE(count_limited.kind(), ApplyOutcomeKind::rejected);
+        QVERIFY(count_limited.error().has_value());
+        QCOMPARE(count_limited.error()->code(), ErrorCode::deferred_queue_full);
+        QCOMPARE(bounded_deferred.deferred_operation_count(), size_t(0));
+        QCOMPARE(bounded_deferred.deferred_operation_bytes(), size_t(0));
+
+        QVERIFY(bounded_deferred.set_deferred_operation_budget({1, 1u << 20}).ok());
+        QCOMPARE(bounded_deferred.apply_remote(emitted[1]).kind(), ApplyOutcomeKind::deferred);
+        QCOMPARE(bounded_deferred.deferred_operation_count(), size_t(1));
+        QVERIFY(bounded_deferred.deferred_operation_bytes() > 0);
+        auto would_evict = bounded_deferred.set_deferred_operation_budget({0, 0});
+        QVERIFY(!would_evict.ok());
+        QCOMPARE(would_evict.error().code(), ErrorCode::limit_exceeded);
+        QCOMPARE(bounded_deferred.deferred_operation_budget().max_operations, size_t(1));
+        QCOMPARE(bounded_deferred.apply_remote(emitted[0]).kind(), ApplyOutcomeKind::applied);
+        QCOMPARE(bounded_deferred.text(), std::string("ab"));
+        QCOMPARE(bounded_deferred.deferred_operation_count(), size_t(0));
+        QCOMPARE(bounded_deferred.deferred_operation_bytes(), size_t(0));
+
+        const auto rejected = target.apply_remote(Operation{});
+        QCOMPARE(rejected.kind(), ApplyOutcomeKind::rejected);
+        QVERIFY(rejected.error().has_value());
+        QCOMPARE(changes, 1);
+
+        const auto batch = target.apply_ops({emitted[0], Operation{}});
+        QCOMPARE(batch.size(), size_t(2));
+        QCOMPARE(batch[0].kind(), ApplyOutcomeKind::duplicate);
+        QCOMPARE(batch[1].kind(), ApplyOutcomeKind::rejected);
+        QCOMPARE(changes, 1);
+
+        CrdtEngine bounded(CollabText::Test::test_counter(23));
+        QVERIFY(bounded.set_max_undo_depth(0).ok());
+        QCOMPARE(bounded.max_undo_depth(), size_t(0));
+        bounded.insert(0, "x");
+        auto unavailable = bounded.try_undo();
+        QVERIFY(unavailable.ok());
+        QVERIFY(!unavailable.value().has_value());
+
+        CrdtEngine history(CollabText::Test::test_counter(25));
+        history.insert(0, "x");
+        QCOMPARE(history.undo_depth(), size_t(1));
+        QVERIFY(history.undo_history_bytes() > 0);
+        auto undo = history.try_undo();
+        QVERIFY(undo.ok());
+        QVERIFY(undo.value().has_value());
+        QVERIFY(history.text().empty());
+        auto redo = history.try_redo();
+        QVERIFY(redo.ok());
+        QVERIFY(redo.value().has_value());
+        QCOMPARE(history.text(), std::string("x"));
+        QVERIFY(history.set_max_undo_bytes(0).ok());
+        QCOMPARE(history.max_undo_bytes(), size_t(0));
+        QCOMPARE(history.undo_depth(), size_t(0));
+    }
+
     // ── callback fires on insert ──────────────────────────────────────────────
 
     void setOnLocalOp_fires_on_insert() {
-        CrdtEngine engine(1);
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         std::optional<Operation> captured;
         engine.setOnLocalOp([&](const Operation &op) {
             captured = op;
@@ -37,14 +130,14 @@ private slots:
         engine.insert(0, "hello");
 
         QVERIFY(captured.has_value());
-        // The captured op should have a non-zero Lamport counter.
-        QVERIFY(op_lamport(*captured).counter() > 0);
+        // The captured op should have a non-zero Identity counter.
+        QVERIFY(op_identity(*captured).counter > 0);
     }
 
     // ── callback fires on remove ──────────────────────────────────────────────
 
     void setOnLocalOp_fires_on_remove() {
-        CrdtEngine engine(1);
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         std::optional<Operation> captured;
         engine.setOnLocalOp([&](const Operation &op) {
             captured = op;
@@ -61,7 +154,7 @@ private slots:
     // ── callback fires on undo ────────────────────────────────────────────────
 
     void setOnLocalOp_fires_on_undo() {
-        CrdtEngine engine(1);
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         engine.insert(0, "hello");
 
         std::optional<Operation> captured;
@@ -77,7 +170,7 @@ private slots:
     // ── callback fires on redo ────────────────────────────────────────────────
 
     void setOnLocalOp_fires_on_redo() {
-        CrdtEngine engine(1);
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         engine.insert(0, "hello");
         engine.undo();
 
@@ -93,13 +186,13 @@ private slots:
 
     // ── one-way convergence: engine 1 inserts, engine 2 applies ──────────────
 
-    void applyRemoteOp_converges_insert() {
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+    void apply_remote_converges_insert() {
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation &op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -107,8 +200,8 @@ private slots:
         QVERIFY(!wire_ops.empty());
         for (const auto &wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            bool ok = engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            bool ok = CollabText::Test::apply_succeeded(engine2.apply_remote(decoded.value()));
             QVERIFY(ok);
         }
 
@@ -116,10 +209,10 @@ private slots:
         QCOMPARE(engine2.text(), std::string("hello"));
     }
 
-    // ── encode/decode round-trip preserves Lamport identity ──────────────────
+    // ── encode/decode round-trip preserves Identity identity ──────────────────
 
     void encode_decode_preserves_lamport() {
-        CrdtEngine engine(1);
+        CrdtEngine engine(CollabText::Test::test_counter(1));
         std::optional<Operation> captured;
         engine.setOnLocalOp([&](const Operation &op) {
             if (!captured) captured = op;
@@ -128,24 +221,24 @@ private slots:
         engine.insert(0, "abc");
         QVERIFY(captured.has_value());
 
-        std::string wire = encode_operation(*captured);
+        std::string wire = checked_codec(encode_operation(*captured));
         auto decoded = decode_operation(wire);
-        QVERIFY(decoded.has_value());
+        QVERIFY(decoded.ok());
 
-        QCOMPARE(op_lamport(*decoded).counter(), op_lamport(*captured).counter());
-        QCOMPARE(op_lamport(*decoded).replica_id, op_lamport(*captured).replica_id);
+        QCOMPARE(op_identity(decoded.value()).counter, op_identity(*captured).counter);
+        QCOMPARE(op_identity(decoded.value()).actor, op_identity(*captured).actor);
     }
 
     // ── undo round-trip: undo on engine 1 propagated to engine 2 ─────────────
 
-    void applyRemoteOp_undo_roundtrip() {
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+    void apply_remote_undo_roundtrip() {
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         // Collect all ops engine1 emits (insert + undo)
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation &op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -154,8 +247,8 @@ private slots:
         // Apply all ops to engine2 in order
         for (const auto &wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            bool ok = engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            bool ok = CollabText::Test::apply_succeeded(engine2.apply_remote(decoded.value()));
             QVERIFY(ok);
         }
 
@@ -171,17 +264,17 @@ private slots:
     // interleaving that concurrent same-position inserts produce.
 
     void two_way_convergence() {
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> ops_from_1;
         std::vector<std::string> ops_from_2;
 
         engine1.setOnLocalOp([&](const Operation &op) {
-            ops_from_1.push_back(encode_operation(op));
+            ops_from_1.push_back(checked_codec(encode_operation(op)));
         });
         engine2.setOnLocalOp([&](const Operation &op) {
-            ops_from_2.push_back(encode_operation(op));
+            ops_from_2.push_back(checked_codec(encode_operation(op)));
         });
 
         // Engine 1 inserts "hello"
@@ -190,8 +283,8 @@ private slots:
         // Engine 2 receives engine 1's ops first (no concurrent conflict)
         for (const auto &wire : ops_from_1) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine2.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_succeeded(engine2.apply_remote(decoded.value())));
         }
         ops_from_1.clear();
 
@@ -201,8 +294,8 @@ private slots:
         // Engine 1 receives engine 2's ops
         for (const auto &wire : ops_from_2) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine1.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_succeeded(engine1.apply_remote(decoded.value())));
         }
 
         // Both should converge to the same text with both words as substrings
@@ -218,17 +311,17 @@ private slots:
     // only assert convergence and total length, not substring order.
 
     void concurrent_insert_convergence() {
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> ops_from_1;
         std::vector<std::string> ops_from_2;
 
         engine1.setOnLocalOp([&](const Operation &op) {
-            ops_from_1.push_back(encode_operation(op));
+            ops_from_1.push_back(checked_codec(encode_operation(op)));
         });
         engine2.setOnLocalOp([&](const Operation &op) {
-            ops_from_2.push_back(encode_operation(op));
+            ops_from_2.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -236,13 +329,13 @@ private slots:
 
         for (const auto &wire : ops_from_1) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine2.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_succeeded(engine2.apply_remote(decoded.value())));
         }
         for (const auto &wire : ops_from_2) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine1.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_succeeded(engine1.apply_remote(decoded.value())));
         }
 
         QCOMPARE(engine1.text(), engine2.text());
@@ -252,12 +345,12 @@ private slots:
     // ── sequential multi-op convergence ──────────────────────────────────────
 
     void sequential_multi_op_convergence() {
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::vector<std::string> wire_ops;
         engine1.setOnLocalOp([&](const Operation &op) {
-            wire_ops.push_back(encode_operation(op));
+            wire_ops.push_back(checked_codec(encode_operation(op)));
         });
 
         engine1.insert(0, "hello");
@@ -266,19 +359,19 @@ private slots:
 
         for (const auto &wire : wire_ops) {
             auto decoded = decode_operation(wire);
-            QVERIFY(decoded.has_value());
-            QVERIFY(engine2.applyRemoteOp(*decoded));
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_succeeded(engine2.apply_remote(decoded.value())));
         }
 
         QCOMPARE(engine1.text(), engine2.text());
         QCOMPARE(engine2.text(), std::string("helloworld"));
     }
 
-    // ── applyRemoteOp returns true for well-formed in-domain ops ─────────────
+    // ── apply_remote returns an applied outcome for a fresh valid op ─────────────
 
-    void applyRemoteOp_returns_true_for_valid_op() {
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+    void apply_remote_returns_applied_for_valid_op() {
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         std::optional<Operation> captured;
         engine1.setOnLocalOp([&](const Operation &op) {
@@ -288,8 +381,47 @@ private slots:
         engine1.insert(0, "test");
         QVERIFY(captured.has_value());
 
-        bool result = engine2.applyRemoteOp(*captured);
+        bool result = CollabText::Test::apply_succeeded(engine2.apply_remote(*captured));
         QVERIFY(result);
+    }
+
+    void selective_group_undo_preserves_newer_group_and_survives_restore() {
+        CrdtEngine owner(CollabText::Test::test_counter(31));
+        std::vector<Operation> history;
+        owner.setOnLocalOp([&](const Operation &op) { history.push_back(op); });
+        QVERIFY(owner.try_replace(0, 0, "A").ok());
+        const auto group_a = owner.next_undo_group();
+        QVERIFY(group_a.has_value());
+        QVERIFY(owner.try_replace(1, 0, "B").ok());
+        const auto group_b = owner.next_undo_group();
+        QVERIFY(group_b.has_value());
+
+        auto undo_a = owner.try_undo_group(group_a->group_id);
+        QVERIFY(undo_a.ok() && undo_a.value().has_value());
+        QCOMPARE(owner.text(), std::string("B"));
+        QCOMPARE(owner.undo_depth(), size_t(1));
+        QCOMPARE(owner.next_undo_group()->group_id, group_b->group_id);
+        QVERIFY(!owner.try_undo_group(group_a->group_id).ok());
+
+        auto undo_b = owner.try_undo();
+        QVERIFY(undo_b.ok() && undo_b.value().has_value());
+        QVERIFY(owner.text().empty());
+        const auto saved = owner.local_history_snapshot();
+        QCOMPARE(saved.cursor, size_t(0));
+        QCOMPARE(saved.entries.size(), size_t(2));
+        QCOMPARE(saved.entries[0].group_id, group_b->group_id);
+        QCOMPARE(saved.entries[1].group_id, group_a->group_id);
+
+        CrdtEngine reopened(CollabText::Test::test_counter(31, 100));
+        for (const auto &op : history)
+            QVERIFY(CollabText::Test::apply_succeeded(reopened.apply_remote(op)));
+        QVERIFY(reopened.restore_local_history(saved).ok());
+        auto redo_a = reopened.try_redo_group(group_a->group_id);
+        QVERIFY(redo_a.ok() && redo_a.value().has_value());
+        QCOMPARE(reopened.text(), std::string("A"));
+        auto redo_b = reopened.try_redo_group(group_b->group_id);
+        QVERIFY(redo_b.ok() && redo_b.value().has_value());
+        QCOMPARE(reopened.text(), std::string("AB"));
     }
 };
 

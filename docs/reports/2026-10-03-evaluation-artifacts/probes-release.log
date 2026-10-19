@@ -1,0 +1,14 @@
+anchor exact insertion text='aXb' left=2 right=2 expected=1,2
+watermark meet {1:10} with empty: component1=10 expected=0
+remote insertion undo GC removed=1 text A='abc' B=''
+concurrent paste A='aXbYcZ' B='aXbYcZ'
+buffer undo/redo clocks=5,6 text A='abc' B='abc'
+idlist undo/redo clocks=2,3 sizes=1,1
+compact before remote undo removed=1 text A='' B='abc'
+local GC after insertion undo removed=1 redo text=''
+high replica serialized second op bytes=131205
+decoder accepts missing fields=1 trailing garbage=1
+stream sender restart text A='ab' B='a'
+receiver session 0 received=1 text='abc'
+receiver session 1 received=0 text=''
+out-of-order segments first poll=1 late segment records=0

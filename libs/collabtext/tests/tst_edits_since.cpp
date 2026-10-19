@@ -1,5 +1,8 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -8,7 +11,7 @@ class TestEditsSince : public QObject {
 
 private slots:
     void no_edits_returns_empty() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         Global v = buf.version();
         // No changes since current version
@@ -17,7 +20,7 @@ private slots:
     }
 
     void simple_remote_insert() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -35,7 +38,7 @@ private slots:
     }
 
     void simple_remote_delete() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op1});
 
@@ -53,7 +56,7 @@ private slots:
     }
 
     void remote_replace() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op1});
 
@@ -79,7 +82,7 @@ private slots:
     }
 
     void insert_at_beginning() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"world"});
         bufB.apply_ops({op1});
 
@@ -96,7 +99,7 @@ private slots:
     }
 
     void multiple_remote_edits() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"aaa bbb ccc"});
         bufB.apply_ops({op1});
 
@@ -121,7 +124,7 @@ private slots:
     }
 
     void concurrent_edits_produce_correct_edits() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op0 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op0});
 
@@ -161,7 +164,7 @@ private slots:
     }
 
     void undo_produces_edits() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -187,7 +190,7 @@ private slots:
     }
 
     void empty_document_insert() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         Global before = bufB.version();
 
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
@@ -198,6 +201,30 @@ private slots:
         QCOMPARE(edits[0].old_start, uint32_t(0));
         QCOMPARE(edits[0].old_end, uint32_t(0));
         QCOMPARE(edits[0].new_text, std::string("hello"));
+    }
+
+    void split_unicode_undo_delta_reconstructs_exact_current_text() {
+        Buffer author(CollabText::Test::test_counter(1));
+        Buffer receiver(CollabText::Test::test_counter(2));
+        const auto seed = author.apply_local_edit({{0, 0}}, {"a🙂bc"});
+        receiver.apply_ops({seed});
+        const auto before = receiver.version();
+        const auto old_text = receiver.text();
+
+        // Split the seed fragment at scalar boundaries, introduce multi-byte
+        // UTF-8, delete a neighbour, then restore it through the undo map.
+        const auto insert = author.apply_local_edit({{5, 5}}, {"λ"});
+        const auto remove = author.apply_local_edit({{7, 8}}, {""});
+        const auto undo = author.undo();
+        QVERIFY(undo.has_value());
+        receiver.apply_ops({insert, remove, *undo});
+
+        auto edits = receiver.edits_since(before);
+        std::string reconstructed = old_text;
+        for (auto it = edits.rbegin(); it != edits.rend(); ++it)
+            reconstructed.replace(it->old_start, it->old_end - it->old_start, it->new_text);
+        QCOMPARE(reconstructed, receiver.text());
+        QCOMPARE(receiver.text(), std::string("a🙂λbc"));
     }
 };
 

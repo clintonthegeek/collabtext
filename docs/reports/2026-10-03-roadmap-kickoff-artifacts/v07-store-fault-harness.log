@@ -1,0 +1,28 @@
+********* Start testing of TestStoreFaultHarness *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestStoreFaultHarness::initTestCase()
+PASS   : TestStoreFaultHarness::default_plan_injects_nothing()
+PASS   : TestStoreFaultHarness::every_fault_point_is_reachable_and_reproducible()
+PASS   : TestStoreFaultHarness::fault_skip_count_delays_the_fault()
+PASS   : TestStoreFaultHarness::hook_log_names_the_operation_and_path()
+PASS   : TestStoreFaultHarness::each_fixture_gets_an_independent_directory()
+PASS   : TestStoreFaultHarness::write_fault_leaves_no_visible_content()
+PASS   : TestStoreFaultHarness::truncated_write_is_visible_as_a_short_record_not_a_full_one()
+PASS   : TestStoreFaultHarness::rename_fault_during_seal_loses_nothing()
+PASS   : TestStoreFaultHarness::directory_sync_fault_is_reported_not_swallowed()
+PASS   : TestStoreFaultHarness::seal_fault_leaves_the_open_tail_reachable()
+PASS   : TestStoreFaultHarness::cursor_fault_leaves_the_previous_cursor()
+PASS   : TestStoreFaultHarness::checkpoint_fault_leaves_the_previous_checkpoint()
+PASS   : TestStoreFaultHarness::simulated_disk_full_is_explicit_and_bounded()
+PASS   : TestStoreFaultHarness::writer_lock_is_exclusive()
+PASS   : TestStoreFaultHarness::missing_segment_is_recovered_from()
+PASS   : TestStoreFaultHarness::out_of_order_arrival_is_observable()
+PASS   : TestStoreFaultHarness::partial_tail_is_read_up_to_the_last_complete_record()
+PASS   : TestStoreFaultHarness::corrupt_segment_does_not_crash_the_reader()
+PASS   : TestStoreFaultHarness::repaired_segment_is_readable_again()
+PASS   : TestStoreFaultHarness::crash_worker_path_exists()
+PASS   : TestStoreFaultHarness::terminated_worker_leaves_no_torn_record()
+PASS   : TestStoreFaultHarness::worker_completes_normally_without_a_fault()
+PASS   : TestStoreFaultHarness::cleanupTestCase()
+Totals: 24 passed, 0 failed, 0 skipped, 0 blacklisted, 189ms
+********* Finished testing of TestStoreFaultHarness *********

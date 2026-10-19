@@ -1,5 +1,8 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
 
@@ -12,20 +15,109 @@ private slots:
     // -----------------------------------------------------------------------
 
     void insert_at_beginning() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         QCOMPARE(buf.text(), std::string("hello"));
     }
 
+    void checkpoint_state_rebuilds_and_rejects_atomically() {
+        Buffer source(CollabText::Test::test_counter(1));
+        QVERIFY(source.try_apply_local_edit({{0, 0}}, {"A\xf0\x9f\x99\x82" "B"}));
+        QVERIFY(source.try_apply_local_edit({{1, 5}}, {""}));
+        QCOMPARE(source.text(), std::string("AB"));
+        QVERIFY(source.tombstone_count() > 0);
+
+        const auto checkpoint = source.checkpoint_state();
+        Buffer owner_restore(CollabText::Test::test_counter(1, 1000));
+        QVERIFY(owner_restore.restore_checkpoint_state(checkpoint));
+        QVERIFY(owner_restore.restore_local_history(source.local_history_snapshot()));
+        QCOMPARE(owner_restore.undo_depth(), source.undo_depth());
+        QVERIFY(owner_restore.undo().has_value());
+        QCOMPARE(owner_restore.text(), std::string("A\xf0\x9f\x99\x82" "B"));
+
+        Buffer restored(CollabText::Test::test_counter(2));
+        QVERIFY(restored.restore_checkpoint_state(checkpoint));
+        QCOMPARE(restored.text(), source.text());
+        QCOMPARE(restored.fragments().size(), source.fragments().size());
+        QCOMPARE(restored.version(), source.version());
+        QCOMPARE(restored.actor_id(), actor(2));
+        QVERIFY(!restored.undo().has_value()); // shared state excludes actor 1 history
+        for (uint32_t offset : {0u, 1u, 2u}) {
+            const auto anchor = source.anchor_at(offset);
+            QCOMPARE(restored.resolve_anchor(anchor), source.resolve_anchor(anchor));
+        }
+
+        const auto before_bad_restore = restored.checkpoint_state();
+        auto malformed = checkpoint;
+        malformed.fragments.front().byte_length++;
+        const auto failed = restored.restore_checkpoint_state(malformed);
+        QVERIFY(!failed);
+        QCOMPARE(restored.text(), std::string("AB"));
+        QCOMPARE(restored.version(), before_bad_restore.version);
+        QCOMPARE(restored.fragments().size(), before_bad_restore.fragments.size());
+
+        Buffer owner_with_history(CollabText::Test::test_counter(4));
+        QVERIFY(owner_with_history.try_apply_local_edit({{0, 0}}, {"private"}));
+        const auto owner_text = owner_with_history.text();
+        const auto owner_depth = owner_with_history.undo_depth();
+        QVERIFY(!owner_with_history.restore_checkpoint_state(checkpoint));
+        QCOMPARE(owner_with_history.text(), owner_text);
+        QCOMPARE(owner_with_history.undo_depth(), owner_depth);
+
+        Buffer stale_owner(CollabText::Test::test_counter(1));
+        const auto stale_text = stale_owner.text();
+        const auto stale_restore = stale_owner.restore_checkpoint_state(checkpoint);
+        QVERIFY(!stale_restore);
+        QCOMPARE(stale_restore.error().code(), CollabText::ErrorCode::counter_regression);
+        QCOMPARE(stale_owner.text(), stale_text);
+
+        auto new_local = restored.try_apply_local_edit({{2, 2}}, {"!"});
+        QVERIFY(new_local);
+        QCOMPARE(get_op_timestamp(new_local.value()).actor, actor(2));
+        source.apply_ops({new_local.value()});
+        QCOMPARE(source.text(), restored.text());
+    }
+
+    void checkpoint_restores_deferred_operation_for_retry() {
+        Buffer producer(CollabText::Test::test_counter(1));
+        auto first = producer.try_apply_local_edit({{0, 0}}, {"A"});
+        QVERIFY(first);
+        auto second = producer.try_apply_local_edit({{1, 1}}, {"B"});
+        QVERIFY(second);
+
+        Buffer receiver(CollabText::Test::test_counter(2));
+        const auto delayed = receiver.apply_ops({second.value()});
+        QCOMPARE(delayed.front().kind(), CollabText::ApplyOutcomeKind::deferred);
+        QCOMPARE(receiver.deferred_count(), size_t{1});
+
+        for (const DeferredBudget budget : {DeferredBudget{0, 8u << 20},
+                                            DeferredBudget{1, 0}}) {
+            Buffer constrained(CollabText::Test::test_counter(4));
+            constrained.set_deferred_budget(budget);
+            const auto refused = constrained.restore_checkpoint_state(
+                receiver.checkpoint_state());
+            QVERIFY(!refused);
+            QCOMPARE(refused.error().code(), CollabText::ErrorCode::limit_exceeded);
+            QVERIFY(constrained.text().empty());
+        }
+
+        Buffer restored(CollabText::Test::test_counter(3));
+        QVERIFY(restored.restore_checkpoint_state(receiver.checkpoint_state()));
+        QCOMPARE(restored.deferred_count(), size_t{1});
+        restored.apply_ops({first.value()});
+        QCOMPARE(restored.text(), std::string("AB"));
+        QCOMPARE(restored.deferred_count(), size_t{0});
+    }
+
     void insert_at_end() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{5, 5}}, {" world"});
         QCOMPARE(buf.text(), std::string("hello world"));
     }
 
     void insert_in_middle() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hllo"});
         buf.apply_local_edit({{1, 1}}, {"e"});
         QCOMPARE(buf.text(), std::string("hello"));
@@ -36,21 +128,21 @@ private slots:
     // -----------------------------------------------------------------------
 
     void delete_from_beginning() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{0, 1}}, {""});
         QCOMPARE(buf.text(), std::string("ello"));
     }
 
     void delete_from_end() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{4, 5}}, {""});
         QCOMPARE(buf.text(), std::string("hell"));
     }
 
     void delete_from_middle() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{1, 4}}, {""});
         QCOMPARE(buf.text(), std::string("ho"));
@@ -61,7 +153,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void replace() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{0, 5}}, {"world"});
         QCOMPARE(buf.text(), std::string("world"));
@@ -72,7 +164,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void undo_reverses_last_edit() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{5, 5}}, {" world"});
         QCOMPARE(buf.text(), std::string("hello world"));
@@ -83,7 +175,7 @@ private slots:
     }
 
     void redo_restores() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{5, 5}}, {" world"});
 
@@ -96,7 +188,7 @@ private slots:
     }
 
     void undo_insert_then_redo() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abc"});
         QCOMPARE(buf.text(), std::string("abc"));
 
@@ -108,7 +200,7 @@ private slots:
     }
 
     void undo_delete_restores_text() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{0, 5}}, {""});
         QCOMPARE(buf.text(), std::string(""));
@@ -118,13 +210,13 @@ private slots:
     }
 
     void undo_nothing_returns_nullopt() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         auto op = buf.undo();
         QVERIFY(!op.has_value());
     }
 
     void redo_nothing_returns_nullopt() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         auto op = buf.redo();
         QVERIFY(!op.has_value());
     }
@@ -134,14 +226,14 @@ private slots:
     // -----------------------------------------------------------------------
 
     void coalesce_undo_returns_false_below_two_entries() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         QVERIFY(!buf.coalesce_last_undo());
         buf.apply_local_edit({{0, 0}}, {"a"});
         QVERIFY(!buf.coalesce_last_undo());
     }
 
     void coalesce_undo_merges_two_inserts() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{5, 5}}, {" world"});
         QCOMPARE(buf.undo_depth(), size_t(2));
@@ -156,7 +248,7 @@ private slots:
     }
 
     void coalesce_undo_redo_restores_both() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{5, 5}}, {" world"});
         QVERIFY(buf.coalesce_last_undo());
@@ -168,7 +260,7 @@ private slots:
     }
 
     void coalesce_undo_merges_insert_then_delete() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{0, 5}}, {""});  // delete "hello"
         QCOMPARE(buf.text(), std::string(""));
@@ -183,7 +275,7 @@ private slots:
     }
 
     void coalesce_undo_merges_two_deletes() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{4, 6}}, {""});  // delete "ef" -> "abcd"
         buf.apply_local_edit({{2, 4}}, {""});  // delete "cd" -> "ab"
@@ -200,7 +292,7 @@ private slots:
     void coalesce_undo_then_new_edit_replaces_redoable() {
         // Standard undo-stack invariant: editing after an undo throws away
         // the redoable tail. Coalescing should not break this.
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"a"});
         buf.apply_local_edit({{1, 1}}, {"b"});
         QVERIFY(buf.coalesce_last_undo());
@@ -220,8 +312,8 @@ private slots:
 
     void coalesce_undo_remote_sees_single_op() {
         // A coalesced undo broadcasts as ONE op carrying multiple counts.
-        Buffer alice(1);
-        Buffer bob(2);
+        Buffer alice(CollabText::Test::test_counter(1));
+        Buffer bob(CollabText::Test::test_counter(2));
 
         auto op1 = alice.apply_local_edit({{0, 0}}, {"hello"});
         auto op2 = alice.apply_local_edit({{5, 5}}, {" world"});
@@ -243,11 +335,11 @@ private slots:
 
     void remote_edit_inserts() {
         // Buffer A inserts "hello"
-        Buffer bufA(1);
+        Buffer bufA(CollabText::Test::test_counter(1));
         auto op = bufA.apply_local_edit({{0, 0}}, {"hello"});
 
         // Buffer B applies the remote operation
-        Buffer bufB(2);
+        Buffer bufB(CollabText::Test::test_counter(2));
         bufB.apply_ops({op});
 
         QCOMPARE(bufB.text(), std::string("hello"));
@@ -255,12 +347,12 @@ private slots:
 
     void remote_edit_delete() {
         // Buffer A inserts "hello" then deletes "ell"
-        Buffer bufA(1);
+        Buffer bufA(CollabText::Test::test_counter(1));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         auto op2 = bufA.apply_local_edit({{1, 4}}, {""});
 
         // Buffer B applies both
-        Buffer bufB(2);
+        Buffer bufB(CollabText::Test::test_counter(2));
         bufB.apply_ops({op1, op2});
 
         QCOMPARE(bufB.text(), std::string("ho"));
@@ -272,8 +364,8 @@ private slots:
 
     void concurrent_inserts_both_survive() {
         // Both buffers start empty. A inserts "a", B inserts "b".
-        Buffer bufA(1);
-        Buffer bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1));
+        Buffer bufB(CollabText::Test::test_counter(2));
 
         auto opA = bufA.apply_local_edit({{0, 0}}, {"a"});
         auto opB = bufB.apply_local_edit({{0, 0}}, {"b"});
@@ -292,8 +384,8 @@ private slots:
 
     void concurrent_inserts_deterministic() {
         // Both buffers must agree on the order
-        Buffer bufA(1);
-        Buffer bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1));
+        Buffer bufB(CollabText::Test::test_counter(2));
 
         auto opA = bufA.apply_local_edit({{0, 0}}, {"a"});
         auto opB = bufB.apply_local_edit({{0, 0}}, {"b"});
@@ -312,11 +404,11 @@ private slots:
         // A inserts "hello", then A deletes "ell".
         // B receives the delete BEFORE the insert.
         // The delete should be deferred until the insert arrives.
-        Buffer bufA(1);
+        Buffer bufA(CollabText::Test::test_counter(1));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         auto op2 = bufA.apply_local_edit({{1, 4}}, {""});
 
-        Buffer bufB(2);
+        Buffer bufB(CollabText::Test::test_counter(2));
         // Apply op2 first (out of order)
         bufB.apply_ops({op2});
         // op2 should be deferred — text should still be empty
@@ -333,10 +425,10 @@ private slots:
     // -----------------------------------------------------------------------
 
     void duplicate_ops_idempotent() {
-        Buffer bufA(1);
+        Buffer bufA(CollabText::Test::test_counter(1));
         auto op = bufA.apply_local_edit({{0, 0}}, {"hello"});
 
-        Buffer bufB(2);
+        Buffer bufB(CollabText::Test::test_counter(2));
         bufB.apply_ops({op});
         bufB.apply_ops({op});  // duplicate
 
@@ -348,7 +440,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void visible_length_tracks_correctly() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         QCOMPARE(buf.visible_length(), 0u);
 
         buf.apply_local_edit({{0, 0}}, {"hello"});
@@ -359,22 +451,22 @@ private slots:
     }
 
     void version_advances() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         auto v0 = buf.version();
         buf.apply_local_edit({{0, 0}}, {"hi"});
         auto v1 = buf.version();
 
-        // Version should have advanced for replica 1
-        QVERIFY(v1.get(1) > v0.get(1));
+        // Version should have advanced for actor 1
+        QVERIFY(v1.get(actor(1)) > v0.get(actor(1)));
     }
 
-    void replica_id_returned() {
-        Buffer buf(42);
-        QCOMPARE(buf.replica_id(), uint16_t(42));
+    void actor_id_returned() {
+        Buffer buf(CollabText::Test::test_counter(42));
+        QCOMPARE(buf.actor_id(), actor(42));
     }
 
     void multiple_ranges_in_single_edit() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         // Delete 'b' and 'd' in a single multi-range edit (ranges from right to left
         // to test proper ordering)
@@ -388,7 +480,7 @@ private slots:
 
     void local_edit_replace_mid_fragment() {
         // REGRESSION: was producing "heoXX" due to locator ordering bug
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{2, 4}}, {"XX"});
         QCOMPARE(buf.text(), std::string("heXXo"));
@@ -396,14 +488,14 @@ private slots:
     }
 
     void local_edit_insert_at_start_of_fragment() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{0, 0}}, {"XX"});
         QCOMPARE(buf.text(), std::string("XXabcdef"));
     }
 
     void local_edit_insert_mid_fragment() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{3, 3}}, {"XX"});
         QCOMPARE(buf.text(), std::string("abcXXdef"));
@@ -417,7 +509,7 @@ private slots:
     }
 
     void local_edit_delete_spanning_fragments() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"ab"});
         buf.apply_local_edit({{2, 2}}, {"cd"});
         buf.apply_local_edit({{4, 4}}, {"ef"});
@@ -429,7 +521,7 @@ private slots:
     }
 
     void local_edit_delete_partial_fragment() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{0, 3}}, {""});
         QCOMPARE(buf.text(), std::string("def"));
@@ -437,14 +529,14 @@ private slots:
     }
 
     void local_edit_multi_range_left_to_right() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdefghij"});
         buf.apply_local_edit({{1, 2}, {4, 5}}, {"X", "Y"});
         QCOMPARE(buf.text(), std::string("aXcdYfghij"));
     }
 
     void local_edit_replace_entire_document() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{0, 5}}, {"world"});
         QCOMPARE(buf.text(), std::string("world"));
@@ -460,8 +552,8 @@ private slots:
         // bufB syncs opA1 before inserting, so clock values don't overlap.
         // After convergence, bufA deletes its own "aaa"; bufB must apply
         // that delete correctly via versioned seek (not by position).
-        Buffer bufA(1);
-        Buffer bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1));
+        Buffer bufB(CollabText::Test::test_counter(2));
 
         auto opA1 = bufA.apply_local_edit({{0, 0}}, {"aaa"});
         // bufB syncs opA1 first so its clock advances past replica 1's values
@@ -485,7 +577,7 @@ private slots:
     }
 
     void remote_edit_version_filtered_offset() {
-        Buffer buf1(1), buf2(2), buf3(3);
+        Buffer buf1(CollabText::Test::test_counter(1)), buf2(CollabText::Test::test_counter(2)), buf3(CollabText::Test::test_counter(3));
 
         auto op1 = buf1.apply_local_edit({{0, 0}}, {"111"});
         auto op2 = buf2.apply_local_edit({{0, 0}}, {"222"});
@@ -498,7 +590,7 @@ private slots:
 
         auto opDel = buf1.apply_local_edit({{0, 3}}, {""});
 
-        Buffer bufFinal(4);
+        Buffer bufFinal(CollabText::Test::test_counter(4));
         bufFinal.apply_ops({op1, op2, op3, opDel});
         for (int i = 0; i < 5; ++i) bufFinal.apply_ops({});
 
@@ -507,7 +599,7 @@ private slots:
     }
 
     void remote_edit_convergence_with_concurrent_deletes() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
 
         auto opIns = bufA.apply_local_edit({{0, 0}}, {"abcdefghij"});
         bufB.apply_ops({opIns});
@@ -529,7 +621,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void undo_after_remote_edit() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto opA = bufA.apply_local_edit({{0, 0}}, {"hello"});
         auto opB = bufB.apply_local_edit({{0, 0}}, {"world"});
 
@@ -543,7 +635,7 @@ private slots:
     }
 
     void redo_after_remote_edit() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto opA = bufA.apply_local_edit({{0, 0}}, {"hello"});
         auto opB = bufB.apply_local_edit({{0, 0}}, {"world"});
 
@@ -562,7 +654,7 @@ private slots:
     }
 
     void remote_undo_broadcast() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto opIns = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({opIns});
         QCOMPARE(bufB.text(), std::string("hello"));
@@ -574,7 +666,7 @@ private slots:
     }
 
     void undo_delete_with_remote_interleaving() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"abcdef"});
         bufB.apply_ops({op1});
 
@@ -600,7 +692,7 @@ private slots:
     }
 
     void new_edit_clears_redo_stack() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abc"});
         buf.apply_local_edit({{3, 3}}, {"def"});
         buf.undo();
@@ -617,7 +709,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void split_relocation_remote_convergence() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"abcdef"});
         bufB.apply_ops({op1});
 
@@ -629,7 +721,7 @@ private slots:
     }
 
     void split_relocation_with_concurrent_insert() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"abcdef"});
         bufB.apply_ops({op1});
 
@@ -647,7 +739,7 @@ private slots:
     }
 
     void replace_mid_fragment_remote_convergence() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -663,21 +755,21 @@ private slots:
     // -----------------------------------------------------------------------
 
     void empty_range_insert_only() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{2, 2}}, {"X"});
         QCOMPARE(buf.text(), std::string("heXllo"));
     }
 
     void adjacent_ranges() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{1, 3}, {3, 5}}, {"X", "Y"});
         QCOMPARE(buf.text(), std::string("aXYf"));
     }
 
     void delete_everything_then_insert() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{0, 5}}, {"world"});
         QCOMPARE(buf.text(), std::string("world"));
@@ -685,7 +777,7 @@ private slots:
     }
 
     void visible_length_always_matches_text() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello world"});
         QCOMPARE(buf.visible_length(), static_cast<uint32_t>(buf.text().size()));
 
@@ -709,7 +801,7 @@ private slots:
     void concurrent_undo_both_hide() {
         // Alice and Bob each insert their own text, then each undo their own edit.
         // A third buffer receives all ops and both undos — text should be hidden.
-        Buffer bufA(1), bufB(2), bufC(3);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2)), bufC(CollabText::Test::test_counter(3));
         auto insA = bufA.apply_local_edit({{0, 0}}, {"hello"});
         auto insB = bufB.apply_local_edit({{0, 0}}, {"world"});
 
@@ -738,7 +830,7 @@ private slots:
     void concurrent_undo_then_redo_wins() {
         // A and B each insert text. Both undo. Then A redoes — redo should win
         // for A's text (higher undo count on A's characters means visible).
-        Buffer bufA(1), bufB(2), bufC(3);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2)), bufC(CollabText::Test::test_counter(3));
         auto insA = bufA.apply_local_edit({{0, 0}}, {"hello"});
         auto insB = bufB.apply_local_edit({{0, 0}}, {"world"});
 
@@ -769,7 +861,7 @@ private slots:
 
     void remote_undo_with_counts() {
         // Verify the new counts-based UndoOperation wire format works
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto ins = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({ins});
 
@@ -795,7 +887,7 @@ private slots:
     void fragment_with_multiple_deletions() {
         // Two replicas delete the same character. Undo one — still invisible.
         // Undo both — visible.
-        Buffer bufA(1), bufB(2), bufC(3);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2)), bufC(CollabText::Test::test_counter(3));
         auto ins = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({ins});
         bufC.apply_ops({ins});
@@ -823,7 +915,7 @@ private slots:
 
     void deletion_undo_roundtrip() {
         // Delete, undo, redo — verify the parity model works end-to-end
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto ins = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({ins});
 
@@ -848,7 +940,7 @@ private slots:
     void concurrent_delete_and_insertion_undo() {
         // B inserts "hello", A receives. A deletes "ell". B undoes insertion.
         // After merge: everything invisible. B redoes → "ho". A undoes delete → "hello".
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto ins = bufB.apply_local_edit({{0, 0}}, {"hello"});
         bufA.apply_ops({ins});
 
@@ -885,10 +977,10 @@ private slots:
 
     void sequential_insert_at_adjacent_positions() {
         // Single-op variant: Alice creates text in one shot
-        Buffer alice(1);
+        Buffer alice(CollabText::Test::test_counter(1));
         auto op = alice.apply_local_edit({{0, 0}}, {"A quick brown fox"});
 
-        Buffer bob(2);
+        Buffer bob(CollabText::Test::test_counter(2));
         bob.apply_ops({op});
         QCOMPARE(bob.text(), std::string("A quick brown fox"));
 
@@ -903,8 +995,8 @@ private slots:
         // Reproduce the REAL app scenario: Alice types one char at a time
         // (each char is a separate op), synced to Bob, then Bob types
         // in the middle.
-        Buffer alice(1);
-        Buffer bob(2);
+        Buffer alice(CollabText::Test::test_counter(1));
+        Buffer bob(CollabText::Test::test_counter(2));
 
         // Alice types "A quick brown fox" one character at a time
         std::string text = "A quick brown fox";
@@ -927,10 +1019,10 @@ private slots:
 
     void sequential_insert_single_chars_at_boundary() {
         // Simpler variant: insert multiple single chars sequentially
-        Buffer alice(1);
+        Buffer alice(CollabText::Test::test_counter(1));
         auto op = alice.apply_local_edit({{0, 0}}, {"hello"});
 
-        Buffer bob(2);
+        Buffer bob(CollabText::Test::test_counter(2));
         bob.apply_ops({op});
         QCOMPARE(bob.text(), std::string("hello"));
 

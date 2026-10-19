@@ -1,7 +1,6 @@
 #include "crdt/SegmentFormat.h"
 #include "crdt/ZstdUtil.h"
-
-#include <QCryptographicHash>
+#include "core/Sha256.h"
 
 #include <cstring>
 
@@ -36,11 +35,21 @@ uint64_t read_u64_le(const char* p) {
 } // namespace
 
 std::array<uint8_t, 32> sha256_bytes(std::string_view input) {
-    QByteArray hash = QCryptographicHash::hash(
-        QByteArray::fromRawData(input.data(), int(input.size())),
-        QCryptographicHash::Sha256);
+    // The portable Core hash rather than QCryptographicHash, so the segment
+    // format builds without Qt (roadmap task A01). Byte-identical output: the
+    // digest is part of the stored segment header, so a change here would
+    // invalidate every existing segment file. tst_sha256 checks the
+    // implementation against Qt's.
+    const std::string hex = CollabText::sha256_hex(input);
     std::array<uint8_t, 32> out{};
-    std::memcpy(out.data(), hash.constData(), 32);
+    const auto nibble = [](char c) -> uint8_t {
+        if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
+        if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(c - 'a' + 10);
+        return 0;
+    };
+    for (size_t i = 0; i < out.size(); ++i)
+        out[i] = static_cast<uint8_t>(
+            static_cast<uint8_t>(nibble(hex[2 * i]) << 4) | nibble(hex[2 * i + 1]));
     return out;
 }
 
@@ -64,11 +73,16 @@ std::optional<SegmentHeader> decode_segment_header(std::string_view bytes) {
     SegmentHeader h;
     h.format_version = uint8_t(bytes[4]);
     if (h.format_version != 1) return std::nullopt;
-    h.kind = SegmentKind(uint8_t(bytes[5]));
+    const uint8_t kind = uint8_t(bytes[5]);
+    if (kind != uint8_t(SegmentKind::Ops) && kind != uint8_t(SegmentKind::Stream))
+        return std::nullopt;
+    h.kind = SegmentKind(kind);
     h.flags = read_u16_le(bytes.data() + 6);
+    if (h.flags != 0) return std::nullopt;
     h.first_lamport = read_u64_le(bytes.data() + 8);
     h.last_lamport = read_u64_le(bytes.data() + 16);
     h.record_count = read_u32_le(bytes.data() + 24);
+    if (h.record_count > kMaxSegmentRecords) return std::nullopt;
     std::memcpy(h.sha256.data(), bytes.data() + 28, 32);
     return h;
 }
@@ -76,9 +90,13 @@ std::optional<SegmentHeader> decode_segment_header(std::string_view bytes) {
 std::string encode_sealed_segment(const SegmentHeader& header_skeleton,
                                   const std::vector<std::string>& records,
                                   int zstd_level) {
+    if (records.size() > kMaxSegmentRecords) return {};
     std::string payload;
     for (const auto& r : records) {
-        payload += base64_encode(r);
+        if (r.size() > kMaxEncodedBytes) return {};
+        const auto encoded = base64_encode(r);
+        if (encoded.size() > kMaxEncodedBytes - payload.size() - 1) return {};
+        payload += encoded;
         payload += '\n';
     }
     SegmentHeader h = header_skeleton;
@@ -90,11 +108,12 @@ std::string encode_sealed_segment(const SegmentHeader& header_skeleton,
 }
 
 std::optional<SealedSegment> decode_sealed_segment(std::string_view sealed_bytes) {
-    auto blob = zstd_decompress(sealed_bytes);
+    auto blob = zstd_decompress(sealed_bytes, kMaxDecompressedBytes);
     if (!blob) return std::nullopt;
     if (blob->size() < kSegmentHeaderBytes) return std::nullopt;
     auto h = decode_segment_header(*blob);
     if (!h) return std::nullopt;
+    if (h->record_count > kMaxSegmentRecords) return std::nullopt;
     std::string_view payload(blob->data() + kSegmentHeaderBytes,
                              blob->size() - kSegmentHeaderBytes);
     if (sha256_bytes(payload) != h->sha256) return std::nullopt;

@@ -1,0 +1,1249 @@
+#include "storage/CheckpointCodec.h"
+#include "storage/CheckpointStore.h"
+#include "crdt/Buffer.h"
+#include "crdt/IdList.h"
+#include <collabtext/CrdtEngine.h>
+#include "TestActor.h"
+#include <collabtext/Serialization.h>
+
+#include "core/Sha256.h"
+
+#include <QtTest>
+#include <fstream>
+
+using namespace CollabText;
+using namespace CollabText::Storage;
+
+namespace {
+
+std::string raw_digest(std::string_view input);
+
+std::vector<CheckpointSection> shared_sections() {
+  std::string empty_manifest(12, '\0');
+  empty_manifest[3] = 1;
+  empty_manifest[7] = 1;
+  empty_manifest.append(raw_digest(empty_manifest));
+  return {{1, 1, "ctx"}, {2, 2, "engine"}, {3, 1, "causal"},
+          {4, 1, "deferred"}, {5, 1, "coverage"}, {6, 1, "pins"},
+          {7, 1, std::move(empty_manifest)}};
+}
+
+std::vector<CheckpointSection> local_sections() {
+  return {{1, 1, "owner"}, {2, 1, "history"}, {3, 1, "writer"}};
+}
+
+std::string raw_digest(std::string_view input) {
+  const auto hex = sha256_hex(input);
+  std::string out;
+  out.reserve(32);
+  auto digit = [](char c) -> unsigned char {
+    return static_cast<unsigned char>(c <= '9' ? c - '0' : c - 'a' + 10);
+  };
+  for (size_t i = 0; i < hex.size(); i += 2)
+    out.push_back(static_cast<char>((digit(hex[i]) << 4) | digit(hex[i + 1])));
+  return out;
+}
+
+void resign(std::string &frame) {
+  frame.replace(frame.size() - 32, 32,
+                raw_digest(std::string_view(frame).substr(0, frame.size() - 32)));
+}
+
+}  // namespace
+
+class CheckpointCodecTest final : public QObject {
+  Q_OBJECT
+
+private slots:
+  void terminalGapBoundsAndPendingConflicts() {
+    using namespace CollabText::Test;
+    Crdt::Buffer buffer(test_counter(2)); Crdt::Global prior;
+    for (uint64_t counter=1; counter<=Crdt::CounterGapLedger::max_records; ++counter) {
+      Crdt::CounterGap gap{actor(1),counter,1,prior};
+      QCOMPARE(buffer.apply_counter_gap(gap).kind(),ApplyOutcomeKind::applied);
+      prior.observe({actor(1),counter});
+    }
+    auto before=buffer.version(); auto blocked=buffer.apply_counter_gap({actor(1),4097,1,prior});
+    QCOMPARE(blocked.kind(),ApplyOutcomeKind::rejected); QCOMPARE(blocked.error()->code(),ErrorCode::limit_exceeded); QCOMPARE(buffer.version(),before);
+    Crdt::Buffer author(test_counter(1)), missing(test_counter(3)), dependency(test_counter(2));
+    auto base=dependency.try_apply_local_edit({{0,0}},{"x"}); QVERIFY(base); QVERIFY(apply_succeeded(author.apply_ops({base.value()})[0]));
+    auto queued=author.try_apply_local_edit({{1,1}},{"xy"}); QVERIFY(queued); QCOMPARE(missing.apply_ops({queued.value()})[0].kind(),ApplyOutcomeKind::deferred);
+    auto ts=Crdt::op_identity(queued.value()); before=missing.version();
+    QCOMPARE(missing.apply_counter_gap({actor(1),ts.counter-2,3,{}}).kind(),ApplyOutcomeKind::rejected); QCOMPARE(missing.version(),before);
+    Crdt::IdList list_author(test_counter(1)), list_missing(test_counter(3)), list_dependency(test_counter(2));
+    auto list_base=list_dependency.try_insert_after(Crdt::Anchor::min(),7); QVERIFY(list_base); QVERIFY(apply_succeeded(list_author.apply_ops({list_base.value()})[0]));
+    auto list_queued=list_author.try_insert_after(Crdt::Anchor::min(),7); QVERIFY(list_queued); QCOMPARE(list_missing.apply_ops({list_queued.value()})[0].kind(),ApplyOutcomeKind::deferred);
+    auto list_ts=Crdt::idlist_op_identity(list_queued.value()); before=list_missing.version();
+    QCOMPARE(list_missing.apply_counter_gap({actor(1),list_ts.counter,1,{}}).kind(),ApplyOutcomeKind::rejected); QCOMPARE(list_missing.version(),before);
+  }
+  void terminalGapsSurviveEngineCheckpoint() {
+    using namespace CollabText::Test;
+    Crdt::CounterGap gap{actor(1),1,4,{}};
+    for (bool text : {false,true}) {
+      Crdt::Buffer buffer(test_counter(1,5)); Crdt::IdList list(test_counter(1,5));
+      QCOMPARE((text ? buffer.apply_counter_gap(gap) : list.apply_counter_gap(gap)).kind(), ApplyOutcomeKind::applied);
+      Storage::CheckpointEngineState engine;
+      engine.kind = text ? CheckpointEngineKind::Text : CheckpointEngineKind::IdList;
+      engine.counter_gaps = {gap};
+      if (text) { auto inserted = buffer.try_insert_marker(0); QVERIFY(inserted); engine.fragments = buffer.fragments(); }
+      else { auto inserted = list.try_insert_after(Crdt::Anchor::min(),7); QVERIFY(inserted); engine.entries = list.entries(); }
+      auto encoded = encode_checkpoint_engine(engine); QVERIFY(encoded); QCOMPARE(encoded.value().version,uint16_t(4));
+      auto decoded = decode_checkpoint_engine(encoded.value()); QVERIFY(decoded); QCOMPARE(decoded.value().counter_gaps.size(),size_t(1));
+      for (size_t n=0; n<encoded.value().bytes.size(); ++n) {
+        auto truncated=encoded.value(); truncated.bytes.resize(n); QVERIFY(!decode_checkpoint_engine(truncated));
+      }
+      auto trailing=encoded.value(); trailing.bytes+='x'; QVERIFY(!decode_checkpoint_engine(trailing));
+      if (text) {
+        auto snapshot=buffer.checkpoint_state(); snapshot.fragments=decoded.value().fragments; snapshot.counter_gaps=decoded.value().counter_gaps;
+        Crdt::Buffer restored(test_counter(2,100)); QVERIFY(restored.restore_checkpoint_state(snapshot));
+        QCOMPARE(restored.apply_counter_gap(gap).kind(),ApplyOutcomeKind::duplicate);
+        Crdt::Buffer conflicting(test_counter(1)); auto reused=conflicting.try_apply_local_edit({{0,0}},{"x"}); QVERIFY(reused);
+        QCOMPARE(restored.apply_ops({reused.value()})[0].kind(),ApplyOutcomeKind::rejected);
+        snapshot.counter_gaps[0].count=100; QVERIFY(!restored.restore_checkpoint_state(snapshot));
+      } else {
+        auto snapshot=list.checkpoint_state(); snapshot.entries=decoded.value().entries; snapshot.counter_gaps=decoded.value().counter_gaps;
+        Crdt::IdList restored(test_counter(2,100)); QVERIFY(restored.restore_checkpoint_state(snapshot));
+        QCOMPARE(restored.apply_counter_gap(gap).kind(),ApplyOutcomeKind::duplicate);
+        Crdt::IdList conflicting(test_counter(1)); auto reused=conflicting.try_insert_after(Crdt::Anchor::min(),7); QVERIFY(reused);
+        QCOMPARE(restored.apply_ops({reused.value()})[0].kind(),ApplyOutcomeKind::rejected);
+        snapshot.counter_gaps[0].count=100; QVERIFY(!restored.restore_checkpoint_state(snapshot));
+      }
+    }
+  }
+
+  void roundTripsBothKinds() {
+    for (const auto kind : {CheckpointKind::Shareable, CheckpointKind::Local}) {
+      auto input = kind == CheckpointKind::Shareable ? shared_sections() : local_sections();
+      auto encoded = encode_checkpoint(kind, input);
+      QVERIFY(encoded);
+      auto decoded = decode_checkpoint(encoded.value(), kind);
+      QVERIFY(decoded);
+      QCOMPARE(decoded.value().kind, kind);
+      QCOMPARE(decoded.value().sections, input);
+    }
+  }
+
+  void contextSectionRoundTripsAndValidates() {
+    CheckpointContext context{"doc-雪", "comments", 12,
+                              std::string(64, 'a'),
+                              CheckpointEngineKind::IdList};
+    auto encoded = encode_checkpoint_context(context);
+    QVERIFY(encoded);
+    QCOMPARE(encoded.value().id, uint16_t{1});
+    QCOMPARE(encoded.value().version, uint16_t{1});
+    auto decoded = decode_checkpoint_context(encoded.value());
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value(), context);
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_context(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    auto invalid = context;
+    invalid.document.clear();
+    QVERIFY(!encode_checkpoint_context(invalid));
+    invalid = context;
+    invalid.stream = std::string("bad\0stream", 10);
+    QVERIFY(!encode_checkpoint_context(invalid));
+    invalid = context;
+    invalid.epoch = 0;
+    QVERIFY(!encode_checkpoint_context(invalid));
+    invalid = context;
+    invalid.engine = static_cast<CheckpointEngineKind>(7);
+    QVERIFY(!encode_checkpoint_context(invalid));
+    invalid = context;
+    invalid.parent_descriptor_hash = std::string(64, 'A');
+    QVERIFY(!encode_checkpoint_context(invalid));
+
+    auto bad_utf8 = encoded.value();
+    bad_utf8.bytes[4] = static_cast<char>(0xff);
+    auto failed = decode_checkpoint_context(bad_utf8);
+    QVERIFY(!failed);
+
+    auto bad_parent_flag = encoded.value();
+    const size_t flag_at = 14 + context.document.size() + context.stream.size();
+    bad_parent_flag.bytes[flag_at] = 2;
+    QVERIFY(!decode_checkpoint_context(bad_parent_flag));
+
+    auto trailing = encoded.value();
+    trailing.bytes.push_back('x');
+    QVERIFY(!decode_checkpoint_context(trailing));
+  }
+
+  void causalSectionRoundTripsAndRejectsMalformedState() {
+    const auto actor_a = ActorId::parse("01000000000000000000000000000001").value();
+    const auto actor_b = ActorId::parse("02000000000000000000000000000001").value();
+    CheckpointCausalState state;
+    state.version.observe(Crdt::Identity(actor_a, 9));
+    state.version.observe(Crdt::Identity(actor_b, 4));
+    state.undo_entries = {
+        {Crdt::UndoTreeKey{Crdt::Identity(actor_a, 2), Crdt::Identity(actor_b, 7)}, 1},
+        {Crdt::UndoTreeKey{Crdt::Identity(actor_a, 3), Crdt::Identity(actor_b, 8)}, 2}};
+    auto encoded = encode_checkpoint_causal(state);
+    QVERIFY(encoded);
+    QCOMPARE(encoded.value().id, uint16_t{3});
+    auto decoded = decode_checkpoint_causal(encoded.value());
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value().version, state.version);
+    QCOMPARE(decoded.value().undo_entries.size(), state.undo_entries.size());
+    for (size_t i = 0; i < state.undo_entries.size(); ++i) {
+      QCOMPARE(decoded.value().undo_entries[i].key.edit_id,
+               state.undo_entries[i].key.edit_id);
+      QCOMPARE(decoded.value().undo_entries[i].key.undo_id,
+               state.undo_entries[i].key.undo_id);
+      QCOMPARE(decoded.value().undo_entries[i].undo_count,
+               state.undo_entries[i].undo_count);
+    }
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_causal(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    auto unordered = state;
+    std::reverse(unordered.undo_entries.begin(), unordered.undo_entries.end());
+    QVERIFY(!encode_checkpoint_causal(unordered));
+    auto zero_count = state;
+    zero_count.undo_entries[0].undo_count = 0;
+    QVERIFY(!encode_checkpoint_causal(zero_count));
+    auto trailing = encoded.value();
+    trailing.bytes.push_back('\0');
+    QVERIFY(!decode_checkpoint_causal(trailing));
+    auto bad_identity = encoded.value();
+    std::fill(bad_identity.bytes.begin() + 4, bad_identity.bytes.begin() + 20, '\0');
+    QVERIFY(!decode_checkpoint_causal(bad_identity));
+  }
+
+  void typedSectionsRoundTripInsideCompleteArtifact() {
+    CheckpointContext context{"project", "main", 7, "",
+                              CheckpointEngineKind::Text};
+    CheckpointCausalState causal;
+    CheckpointShareableCore::Pins empty_pins;
+    empty_pins.canonical_projection_hash = sha256_hex("");
+    CheckpointShareableCore shareable;
+    shareable.context = context;
+    shareable.engine = CheckpointEngineState{};
+    shareable.causal = causal;
+    const auto covered_actor = Test::actor(99);
+    shareable.causal.version.observe(Crdt::Identity(covered_actor, 4));
+    shareable.engine.reclamation = {
+        "main", sha256_hex("membership descriptor"),
+        sha256_hex("certificate source checkpoint"), {{covered_actor, 4}}};
+    shareable.pins = empty_pins;
+    shareable.translations.supported_token_versions = {1};
+    const auto framed = encode_checkpoint_core(shareable);
+    QVERIFY(framed);
+    const auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
+    QVERIFY(artifact);
+    const auto decoded_context = decode_checkpoint_context(artifact.value().sections[0]);
+    const auto decoded_causal = decode_checkpoint_causal(artifact.value().sections[2]);
+    const auto core = decode_checkpoint_core(artifact.value());
+    QVERIFY(decoded_context);
+    QVERIFY(decoded_causal);
+    QVERIFY(core);
+    QCOMPARE(decoded_context.value(), context);
+    QCOMPARE(decoded_causal.value().version, shareable.causal.version);
+    QVERIFY(decoded_causal.value().undo_entries.empty());
+    QCOMPARE(core.value().context, context);
+    QCOMPARE(core.value().engine.kind, CheckpointEngineKind::Text);
+    QCOMPARE(core.value().engine.reclamation, shareable.engine.reclamation);
+
+    auto beyond_causal = shareable;
+    beyond_causal.engine.reclamation.operation_frontier[covered_actor] = 5;
+    QVERIFY(!encode_checkpoint_core(beyond_causal));
+    auto wrong_stream = shareable;
+    wrong_stream.engine.reclamation.stream = "comments";
+    QVERIFY(!encode_checkpoint_core(wrong_stream));
+    QCOMPARE(core.value().coverage.operation.size(), size_t(0));
+
+    auto uncovered = shareable;
+    const auto actor = Test::actor(77);
+    uncovered.coverage.operation.emplace(actor, 1);
+    QVERIFY(!encode_checkpoint_core(uncovered));
+    auto mismatched_engine = shareable;
+    mismatched_engine.engine.kind = CheckpointEngineKind::IdList;
+    QVERIFY(!encode_checkpoint_core(mismatched_engine));
+
+    auto wrong_context = encode_checkpoint_context(
+        CheckpointContext{"project", "main", 7, "",
+                          CheckpointEngineKind::IdList});
+    QVERIFY(wrong_context);
+    auto sections = artifact.value().sections;
+    sections[0] = wrong_context.value();
+    const auto mismatched_frame = encode_checkpoint(CheckpointKind::Shareable, sections);
+    QVERIFY(mismatched_frame);
+    const auto mismatched_artifact = decode_checkpoint(
+        mismatched_frame.value(), CheckpointKind::Shareable);
+    QVERIFY(mismatched_artifact);
+    QVERIFY(!decode_checkpoint_core(mismatched_artifact.value()));
+  }
+
+  void checkpointCoreBindsToMembershipDescriptor() {
+    const auto actor = ActorId::parse("23000000000000000000000000000001").value();
+    CheckpointContext context{"membership-doc", "main", 1, "",
+                              CheckpointEngineKind::Text};
+    CheckpointCausalState causal;
+    CheckpointShareableCore::Pins pins;
+    pins.canonical_projection_hash = sha256_hex("");
+    auto context_section = encode_checkpoint_context(context);
+    auto engine_section = encode_checkpoint_engine(CheckpointEngineState{});
+    auto causal_section = encode_checkpoint_causal(causal);
+    auto deferred_section = encode_checkpoint_deferred({}, context, causal.version);
+    CheckpointShareableCore::Coverage coverage;
+    coverage.operation.emplace(actor, 0);
+    coverage.delivery.emplace(actor, 0);
+    auto coverage_section = encode_checkpoint_coverage(coverage);
+    auto pins_section = encode_checkpoint_pins(pins, context);
+    QVERIFY(context_section && engine_section && causal_section && deferred_section &&
+            coverage_section && pins_section);
+    CheckpointShareableCore::TokenTranslations translations;
+    translations.supported_token_versions = {1};
+    auto translations_section = encode_checkpoint_translations(translations,
+                                                               context, pins);
+    QVERIFY(translations_section);
+    auto sections = shared_sections();
+    sections[0] = context_section.value();
+    sections[1] = engine_section.value();
+    sections[2] = causal_section.value();
+    sections[3] = deferred_section.value();
+    sections[4] = coverage_section.value();
+    sections[5] = pins_section.value();
+    sections[6] = translations_section.value();
+    auto frame = encode_checkpoint(CheckpointKind::Shareable, sections);
+    QVERIFY(frame);
+    auto artifact = decode_checkpoint(frame.value(), CheckpointKind::Shareable);
+    QVERIFY(artifact);
+    auto core = decode_checkpoint_core(artifact.value());
+    QVERIFY(core);
+
+    MembershipDescriptor descriptor;
+    descriptor.epoch = 1;
+    descriptor.members = {actor};
+    descriptor.base_checkpoint_hash = sha256_hex(frame.value());
+    descriptor.base_frontiers.push_back({"main", {{actor, 0}}, {{actor, 0}}});
+    descriptor.supported_token_versions = {1};
+    descriptor.translation_manifest_hash = core.value().translations.manifest_hash;
+    auto sealed = seal_membership_descriptor(descriptor);
+    QVERIFY(sealed);
+    QVERIFY(validate_checkpoint_artifact_membership(frame.value(), sealed.value()));
+    QVERIFY(!validate_checkpoint_artifact_membership("another checkpoint", sealed.value()));
+
+    auto wrong_frontier = descriptor;
+    wrong_frontier.base_frontiers[0].delivery[actor] = 1;
+    auto sealed_wrong_frontier =
+        seal_membership_descriptor(std::move(wrong_frontier));
+    QVERIFY(sealed_wrong_frontier);
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        frame.value(), sealed_wrong_frontier.value()));
+
+    auto wrong_manifest = descriptor;
+    wrong_manifest.translation_manifest_hash = sha256_hex("another manifest");
+    auto sealed_wrong_manifest =
+        seal_membership_descriptor(std::move(wrong_manifest));
+    QVERIFY(sealed_wrong_manifest);
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        frame.value(), sealed_wrong_manifest.value()));
+
+    auto wrong_versions = descriptor;
+    wrong_versions.supported_token_versions = {1, 2};
+    auto sealed_wrong_versions = seal_membership_descriptor(wrong_versions);
+    QVERIFY(sealed_wrong_versions);
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        frame.value(), sealed_wrong_versions.value()));
+
+    auto wrong_epoch = descriptor;
+    wrong_epoch.epoch = 2;
+    wrong_epoch.parent_hash = sha256_hex("parent descriptor");
+    wrong_epoch.transition_event_hash = sha256_hex("transition event");
+    auto sealed_wrong_epoch = seal_membership_descriptor(wrong_epoch);
+    QVERIFY(sealed_wrong_epoch);
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        frame.value(), sealed_wrong_epoch.value()));
+
+    auto corrupted_frame = frame.value();
+    corrupted_frame[0] ^= 1;
+    auto corrupted_descriptor = descriptor;
+    corrupted_descriptor.base_checkpoint_hash = sha256_hex(corrupted_frame);
+    auto sealed_corrupted = seal_membership_descriptor(corrupted_descriptor);
+    QVERIFY(sealed_corrupted);
+    QVERIFY(!validate_checkpoint_artifact_membership(
+        corrupted_frame, sealed_corrupted.value()));
+  }
+
+  void membershipCheckpointBundleValidatesEveryStreamAndResolvesByDigest() {
+    const auto actor_a = Test::actor(231);
+    const auto actor_b = Test::actor(232);
+    MembershipDescriptor parent;
+    parent.epoch = 1;
+    parent.base_checkpoint_hash =
+        sha256_hex("membership bundle parent checkpoint");
+    parent.members = {actor_a};
+    parent.base_frontiers = {{"text", {{actor_a, 0}}, {{actor_a, 0}}}};
+    parent.supported_token_versions = {1};
+    parent.translation_manifest_hash =
+        sha256_hex("parent translation manifest");
+    auto sealed_parent = seal_membership_descriptor(parent);
+    QVERIFY(sealed_parent);
+    const auto parent_hash = sealed_parent.value().hash;
+    const auto transition_hash = sha256_hex("membership bundle transition");
+    std::vector<MembershipCheckpointBundleEntry> entries;
+    std::string manifest_hash;
+    for (const std::string stream : {"comments", "text"}) {
+      CheckpointShareableCore core;
+      core.context = CheckpointContext{"bundle-doc", stream, 2, parent_hash,
+                                       CheckpointEngineKind::Text};
+      core.pins.canonical_projection_hash = sha256_hex("");
+      core.translations.supported_token_versions = {1};
+      core.coverage.operation = {{actor_a, 0}, {actor_b, 0}};
+      core.coverage.delivery = {{actor_a, 0}, {actor_b, 0}};
+      auto encoded = encode_checkpoint_core(core);
+      QVERIFY(encoded);
+      auto artifact =
+          decode_checkpoint(encoded.value(), CheckpointKind::Shareable);
+      QVERIFY(artifact);
+      auto decoded = decode_checkpoint_core(artifact.value());
+      QVERIFY(decoded);
+      if (manifest_hash.empty())
+        manifest_hash = decoded.value().translations.manifest_hash;
+      QCOMPARE(decoded.value().translations.manifest_hash, manifest_hash);
+      entries.push_back({stream, encoded.value()});
+    }
+
+    auto bundle = encode_membership_checkpoint_bundle(entries);
+    QVERIFY(bundle);
+    auto decoded_bundle = decode_membership_checkpoint_bundle(bundle.value());
+    QVERIFY(decoded_bundle);
+    QCOMPARE(decoded_bundle.value().size(), size_t(2));
+    QCOMPARE(decoded_bundle.value()[0].stream, std::string("comments"));
+    QCOMPARE(decoded_bundle.value()[1].stream, std::string("text"));
+
+    MembershipDescriptor descriptor;
+    descriptor.epoch = 2;
+    descriptor.parent_hash = parent_hash;
+    descriptor.transition_event_hash = transition_hash;
+    descriptor.base_checkpoint_hash = sha256_hex(bundle.value());
+    descriptor.members = {actor_a, actor_b};
+    descriptor.base_frontiers = {
+        {"comments",
+         {{actor_a, 0}, {actor_b, 0}},
+         {{actor_a, 0}, {actor_b, 0}}},
+        {"text", {{actor_a, 0}, {actor_b, 0}}, {{actor_a, 0}, {actor_b, 0}}}};
+    descriptor.supported_token_versions = {1};
+    descriptor.translation_manifest_hash = manifest_hash;
+    auto sealed = seal_membership_descriptor(descriptor);
+    QVERIFY(sealed);
+    QVERIFY(
+        validate_membership_checkpoint_bundle(bundle.value(), sealed.value()));
+
+    QTemporaryDir checkpoint_dir;
+    QVERIFY(checkpoint_dir.isValid());
+    {
+      bool fail_directory_sync_once = true;
+      StepHook hook;
+      hook.fail = [&](Step step, const std::filesystem::path &)
+          -> std::optional<Error> {
+        if (step == Step::DirSync && fail_directory_sync_once) {
+          fail_directory_sync_once = false;
+          return Error(ErrorCode::io_error,
+                       "injected membership bundle directory sync failure");
+        }
+        return std::nullopt;
+      };
+      auto durable_store = CheckpointStore::open(
+          checkpoint_dir.path().toStdString(), &hook);
+      QVERIFY(durable_store);
+      auto missing = durable_store.value().resolve_membership_bundle(
+          sealed.value().base_checkpoint_hash);
+      QVERIFY(!missing);
+      QCOMPARE(missing.error().code(), ErrorCode::awaiting_state);
+      auto uncertain = durable_store.value().publish_membership_bundle(
+          sealed.value(), bundle.value());
+      QVERIFY(!uncertain);
+      QCOMPARE(uncertain.error().code(), ErrorCode::commit_uncertain);
+      QVERIFY(durable_store.value().publish_membership_bundle(
+          sealed.value(), bundle.value()));
+    }
+    auto reopened_store = CheckpointStore::open(
+        checkpoint_dir.path().toStdString());
+    QVERIFY(reopened_store);
+    auto resolved = reopened_store.value().resolve_membership_bundle(
+        sealed.value().base_checkpoint_hash);
+    QVERIFY(resolved);
+    QCOMPARE(resolved.value(), bundle.value());
+    auto durable_resolver = make_membership_checkpoint_verifier(
+        [&](std::string_view hash) {
+          return reopened_store.value().resolve_membership_bundle(hash);
+        });
+    QVERIFY(durable_resolver(sealed_parent.value(), sealed.value()));
+    const auto artifact_path = std::filesystem::path(
+        checkpoint_dir.path().toStdString()) /
+        ("membership-" + sealed.value().base_checkpoint_hash);
+    {
+      std::ofstream damaged(artifact_path, std::ios::binary | std::ios::trunc);
+      QVERIFY(damaged.good());
+      damaged << "damaged";
+      QVERIFY(damaged.good());
+    }
+    auto corrupt = reopened_store.value().resolve_membership_bundle(
+        sealed.value().base_checkpoint_hash);
+    QVERIFY(!corrupt);
+    QCOMPARE(corrupt.error().code(), ErrorCode::corrupt_record);
+    auto malformed_hash = reopened_store.value().resolve_membership_bundle(
+        "../../manifest-1");
+    QVERIFY(!malformed_hash);
+    QCOMPARE(malformed_hash.error().code(), ErrorCode::malformed);
+
+    for (size_t length = 0; length < bundle.value().size(); ++length) {
+      const auto truncated = std::string_view(bundle.value()).substr(0, length);
+      QVERIFY2(!decode_membership_checkpoint_bundle(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    auto resolver = make_membership_checkpoint_verifier(
+        [&](std::string_view hash) -> Result<std::string> {
+          if (hash != sealed.value().base_checkpoint_hash)
+            return Error(ErrorCode::corrupt_record,
+                         "unexpected checkpoint hash");
+          return bundle.value();
+        });
+    QVERIFY(resolver);
+    QVERIFY(resolver(sealed_parent.value(), sealed.value()));
+    auto forked_parent = parent;
+    forked_parent.base_checkpoint_hash = sha256_hex("forked parent checkpoint");
+    auto sealed_forked_parent = seal_membership_descriptor(forked_parent);
+    QVERIFY(sealed_forked_parent);
+    QVERIFY(!resolver(sealed_forked_parent.value(), sealed.value()));
+
+    auto wrong_frontier = descriptor;
+    ++wrong_frontier.base_frontiers[1].delivery[actor_a];
+    auto wrong_frontier_sealed = seal_membership_descriptor(wrong_frontier);
+    QVERIFY(wrong_frontier_sealed);
+    QVERIFY(!validate_membership_checkpoint_bundle(
+        bundle.value(), wrong_frontier_sealed.value()));
+
+    auto partial = encode_membership_checkpoint_bundle({entries.front()});
+    QVERIFY(partial);
+    auto partial_descriptor = descriptor;
+    partial_descriptor.base_checkpoint_hash = sha256_hex(partial.value());
+    auto partial_sealed = seal_membership_descriptor(partial_descriptor);
+    QVERIFY(partial_sealed);
+    QVERIFY(!validate_membership_checkpoint_bundle(partial.value(),
+                                                   partial_sealed.value()));
+
+    auto corrupted = bundle.value();
+    corrupted[10] ^= 1;
+    QVERIFY(!decode_membership_checkpoint_bundle(corrupted));
+    QVERIFY(!encode_membership_checkpoint_bundle({entries[0], entries[0]}));
+    QVERIFY(!encode_membership_checkpoint_bundle(
+        {{"comments", "not a checkpoint"}}));
+    std::string unsorted("CTMB\0\1\0\2", 8);
+    const auto append_u32 = [&](uint32_t value) {
+      for (int shift = 24; shift >= 0; shift -= 8)
+        unsorted.push_back(static_cast<char>(value >> shift));
+    };
+    const auto append_u64 = [&](uint64_t value) {
+      for (int shift = 56; shift >= 0; shift -= 8)
+        unsorted.push_back(static_cast<char>(value >> shift));
+    };
+    for (auto it = decoded_bundle.value().rbegin();
+         it != decoded_bundle.value().rend(); ++it) {
+      append_u32(static_cast<uint32_t>(it->stream.size()));
+      append_u64(static_cast<uint64_t>(it->artifact_bytes.size()));
+      unsorted.append(it->stream);
+      unsorted.append(it->artifact_bytes);
+    }
+    unsorted.append(sha256_hex(unsorted));
+    QVERIFY(!decode_membership_checkpoint_bundle(unsorted));
+
+    const std::string high_byte_stream("\xC3\xA9", 2);
+    const auto make_stream_artifact = [&](const std::string &stream) {
+      CheckpointShareableCore core;
+      core.context = CheckpointContext{"bundle-doc", stream, 2, parent_hash,
+                                       CheckpointEngineKind::Text};
+      core.pins.canonical_projection_hash = sha256_hex("");
+      core.translations.supported_token_versions = {1};
+      return encode_checkpoint_core(core);
+    };
+    auto high_byte_artifact = make_stream_artifact(high_byte_stream);
+    auto ascii_artifact = make_stream_artifact("z");
+    QVERIFY(high_byte_artifact);
+    QVERIFY(ascii_artifact);
+    auto byte_sorted = encode_membership_checkpoint_bundle(
+        {{high_byte_stream, high_byte_artifact.value()},
+         {"z", ascii_artifact.value()}});
+    QVERIFY(byte_sorted);
+    auto byte_sorted_entries =
+        decode_membership_checkpoint_bundle(byte_sorted.value());
+    QVERIFY(byte_sorted_entries);
+    QCOMPARE(byte_sorted_entries.value()[0].stream, std::string("z"));
+    QCOMPARE(byte_sorted_entries.value()[1].stream, high_byte_stream);
+  }
+
+  void engineSectionRoundTripsTextAndIdList() {
+    const auto actor =
+        ActorId::parse("11000000000000000000000000000001").value();
+    CheckpointEngineState text;
+    Crdt::Fragment fragment{Crdt::Identity(actor, 1), {}, 3, 1, "雪"};
+    text.fragments.push_back(fragment);
+    auto text_section = encode_checkpoint_engine(text);
+    QVERIFY(text_section);
+    auto text_decoded = decode_checkpoint_engine(text_section.value());
+    QVERIFY(text_decoded);
+    QCOMPARE(text_decoded.value().kind, CheckpointEngineKind::Text);
+    QCOMPARE(text_decoded.value().fragments.size(), size_t{1});
+    QCOMPARE(text_decoded.value().fragments[0].origin, fragment.origin);
+    QCOMPARE(text_decoded.value().fragments[0].link, fragment.link);
+    QCOMPARE(text_decoded.value().fragments[0].text, fragment.text);
+    QCOMPARE(text_decoded.value().fragments[0].length, uint32_t{1});
+    auto obsolete = text_section.value();
+    obsolete.version = 1;
+    auto refused = decode_checkpoint_engine(obsolete);
+    QVERIFY(!refused);
+    QCOMPARE(refused.error().code(), ErrorCode::unsupported_version);
+    for (size_t length = 0; length < text_section.value().bytes.size(); ++length) {
+      auto truncated = text_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_engine(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    CheckpointEngineState list;
+    list.kind = CheckpointEngineKind::IdList;
+    list.entries.emplace_back(Crdt::Identity(actor, 3), Crdt::Link{}, 0xfeedu);
+    auto list_section = encode_checkpoint_engine(list);
+    QVERIFY(list_section);
+    auto list_decoded = decode_checkpoint_engine(list_section.value());
+    QVERIFY(list_decoded);
+    QCOMPARE(list_decoded.value().kind, CheckpointEngineKind::IdList);
+    QCOMPARE(list_decoded.value().entries.size(), size_t{1});
+    QCOMPARE(list_decoded.value().entries[0].origin, list.entries[0].origin);
+    QCOMPARE(list_decoded.value().entries[0].id, uint64_t{0xfeedu});
+    for (size_t length = 0; length < list_section.value().bytes.size(); ++length) {
+      auto truncated = list_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_engine(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    auto invalid_utf8 = text_section.value();
+    invalid_utf8.bytes.back() = static_cast<char>(0xff);
+    QVERIFY(!decode_checkpoint_engine(invalid_utf8));
+    auto trailing = list_section.value();
+    trailing.bytes.push_back('\0');
+    QVERIFY(!decode_checkpoint_engine(trailing));
+    CheckpointSection huge_count{2, 2, std::string("\0\1\0\x0f\x42\x40", 6)};
+    QVERIFY(!decode_checkpoint_engine(huge_count));
+    text.entries.push_back(list.entries[0]);
+    QVERIFY(!encode_checkpoint_engine(text));
+  }
+
+  void enginePayloadsRestoreIntoBothPrimitives() {
+    Crdt::Buffer source_text(CollabText::Test::test_counter(1));
+    QVERIFY(source_text.try_apply_local_edit({{0, 0}}, {"A\xf0\x9f\x99\x82" "B"}));
+    QVERIFY(source_text.try_apply_local_edit({{1, 5}}, {""}));
+    auto text_snapshot = source_text.checkpoint_state();
+    CheckpointContext text_context{"doc", "main", 1, "",
+                                   CheckpointEngineKind::Text};
+    CheckpointShareableCore::Pins empty_pins;
+    empty_pins.canonical_projection_hash = sha256_hex("");
+    CheckpointShareableCore text_core;
+    text_core.context = text_context;
+    text_core.engine.fragments = text_snapshot.fragments;
+    text_core.causal = {text_snapshot.version, text_snapshot.undo_entries};
+    text_core.pins = empty_pins;
+    text_core.translations.supported_token_versions = {1};
+    auto framed = encode_checkpoint_core(text_core);
+    QVERIFY(framed);
+    auto artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
+    QVERIFY(artifact);
+    auto decoded_core = decode_checkpoint_core(artifact.value());
+    QVERIFY(decoded_core);
+    text_snapshot.version = decoded_core.value().causal.version;
+    text_snapshot.undo_entries = decoded_core.value().causal.undo_entries;
+    text_snapshot.fragments = std::move(decoded_core.value().engine.fragments);
+    Crdt::Buffer restored_text(CollabText::Test::test_counter(2));
+    QVERIFY(restored_text.restore_checkpoint_state(text_snapshot));
+    QCOMPARE(restored_text.text(), source_text.text());
+    QCOMPARE(restored_text.fragments().size(), source_text.fragments().size());
+    for (uint32_t offset : {0u, 1u, 2u})
+      QCOMPARE(restored_text.resolve_anchor(source_text.anchor_at(offset)),
+               source_text.resolve_anchor(source_text.anchor_at(offset)));
+
+    const auto text_history = source_text.local_history_snapshot();
+    Crdt::Buffer continued_text(CollabText::Test::test_counter(
+        1, source_text.allocator()->peek()));
+    QVERIFY(continued_text.restore_checkpoint_state(text_snapshot));
+    QVERIFY(continued_text.restore_local_history(text_history));
+    Crdt::Buffer peer_text(CollabText::Test::test_counter(9));
+    QVERIFY(peer_text.restore_checkpoint_state(text_snapshot));
+    const auto append_at = source_text.visible_length();
+    auto source_future = source_text.try_apply_local_edit({{append_at, append_at}}, {"!"});
+    auto continued_future = continued_text.try_apply_local_edit(
+        {{append_at, append_at}}, {"!"});
+    QVERIFY(source_future && continued_future);
+    QCOMPARE(Crdt::encode_operation(source_future.value()).value(),
+             Crdt::encode_operation(continued_future.value()).value());
+    auto peer_outcome = peer_text.apply_ops({source_future.value()});
+    QCOMPARE(peer_outcome.front().kind(), ApplyOutcomeKind::applied);
+    auto source_undo = source_text.try_undo();
+    auto continued_undo = continued_text.try_undo();
+    QVERIFY(source_undo && continued_undo && source_undo.value() &&
+            continued_undo.value());
+    QCOMPARE(Crdt::encode_operation(*source_undo.value()).value(),
+             Crdt::encode_operation(*continued_undo.value()).value());
+    peer_outcome = peer_text.apply_ops({*source_undo.value()});
+    QCOMPARE(peer_outcome.front().kind(), ApplyOutcomeKind::applied);
+    auto source_redo = source_text.try_redo();
+    auto continued_redo = continued_text.try_redo();
+    QVERIFY(source_redo && continued_redo && source_redo.value() &&
+            continued_redo.value());
+    QCOMPARE(Crdt::encode_operation(*source_redo.value()).value(),
+             Crdt::encode_operation(*continued_redo.value()).value());
+    peer_outcome = peer_text.apply_ops({*source_redo.value()});
+    QCOMPARE(peer_outcome.front().kind(), ApplyOutcomeKind::applied);
+    QCOMPARE(continued_text.text(), source_text.text());
+    QCOMPARE(peer_text.text(), source_text.text());
+    for (uint32_t offset = 0; offset <= source_text.visible_length(); ++offset)
+      QCOMPARE(peer_text.resolve_anchor(source_text.anchor_at(offset)), offset);
+
+    Crdt::IdList source_list(CollabText::Test::test_counter(3));
+    source_list.insert_after(Crdt::Anchor::min(), 10);
+    source_list.insert_after(source_list.anchor_of(10), 20);
+    QVERIFY(source_list.try_remove_at(source_list.anchor_of(10)));
+    auto list_snapshot = source_list.checkpoint_state();
+    CheckpointContext list_context{"doc", "main", 1, "",
+                                   CheckpointEngineKind::IdList};
+    CheckpointShareableCore list_core;
+    list_core.context = list_context;
+    list_core.engine.kind = CheckpointEngineKind::IdList;
+    list_core.engine.entries = list_snapshot.entries;
+    list_core.causal = {list_snapshot.version, list_snapshot.undo_entries};
+    list_core.pins = empty_pins;
+    list_core.translations.supported_token_versions = {1};
+    framed = encode_checkpoint_core(list_core);
+    QVERIFY(framed);
+    artifact = decode_checkpoint(framed.value(), CheckpointKind::Shareable);
+    QVERIFY(artifact);
+    decoded_core = decode_checkpoint_core(artifact.value());
+    QVERIFY(decoded_core);
+    list_snapshot.version = decoded_core.value().causal.version;
+    list_snapshot.undo_entries = decoded_core.value().causal.undo_entries;
+    list_snapshot.entries = std::move(decoded_core.value().engine.entries);
+    Crdt::IdList restored_list(CollabText::Test::test_counter(4));
+    QVERIFY(restored_list.restore_checkpoint_state(list_snapshot));
+    QCOMPARE(restored_list.ids(), source_list.ids());
+    QCOMPARE(restored_list.entries().size(), source_list.entries().size());
+    QCOMPARE(restored_list.resolve_anchor(source_list.anchor_of(20)),
+             source_list.resolve_anchor(source_list.anchor_of(20)));
+
+    const auto list_history = source_list.local_history_snapshot();
+    Crdt::IdList continued_list(CollabText::Test::test_counter(
+        3, source_list.allocator()->peek()));
+    QVERIFY(continued_list.restore_checkpoint_state(list_snapshot));
+    QVERIFY(continued_list.restore_local_history(list_history));
+    Crdt::IdList peer_list(CollabText::Test::test_counter(10));
+    QVERIFY(peer_list.restore_checkpoint_state(list_snapshot));
+    auto source_insert = source_list.try_insert_after(source_list.anchor_of(20), 30);
+    auto continued_insert = continued_list.try_insert_after(
+        continued_list.anchor_of(20), 30);
+    QVERIFY(source_insert && continued_insert);
+    QCOMPARE(Crdt::encode_idlist_operation(source_insert.value()).value(),
+             Crdt::encode_idlist_operation(continued_insert.value()).value());
+    auto list_outcome = peer_list.apply_ops({source_insert.value()});
+    QCOMPARE(list_outcome.front().kind(), ApplyOutcomeKind::applied);
+    auto source_list_undo = source_list.try_undo();
+    auto continued_list_undo = continued_list.try_undo();
+    QVERIFY(source_list_undo && continued_list_undo && source_list_undo.value() &&
+            continued_list_undo.value());
+    QCOMPARE(Crdt::encode_idlist_operation(*source_list_undo.value()).value(),
+             Crdt::encode_idlist_operation(*continued_list_undo.value()).value());
+    list_outcome = peer_list.apply_ops({*source_list_undo.value()});
+    QCOMPARE(list_outcome.front().kind(), ApplyOutcomeKind::applied);
+    auto source_list_redo = source_list.try_redo();
+    auto continued_list_redo = continued_list.try_redo();
+    QVERIFY(source_list_redo && continued_list_redo && source_list_redo.value() &&
+            continued_list_redo.value());
+    QCOMPARE(Crdt::encode_idlist_operation(*source_list_redo.value()).value(),
+             Crdt::encode_idlist_operation(*continued_list_redo.value()).value());
+    list_outcome = peer_list.apply_ops({*source_list_redo.value()});
+    QCOMPARE(list_outcome.front().kind(), ApplyOutcomeKind::applied);
+    QCOMPARE(continued_list.ids(), source_list.ids());
+    QCOMPARE(peer_list.ids(), source_list.ids());
+    QCOMPARE(continued_list.entries().size(), source_list.entries().size());
+    QCOMPARE(peer_list.entries().size(), source_list.entries().size());
+  }
+
+  void deferredSectionPreservesDeliveryAndOpaqueQuarantine() {
+    Crdt::Buffer producer(CollabText::Test::test_counter(1));
+    auto first = producer.try_apply_local_edit({{0, 0}}, {"A"});
+    QVERIFY(first);
+    auto second = producer.try_apply_local_edit({{1, 1}}, {"B"});
+    QVERIFY(second);
+    const auto first_bytes_result = Crdt::encode_operation(first.value());
+    const auto second_bytes_result = Crdt::encode_operation(second.value());
+    QVERIFY(first_bytes_result);
+    QVERIFY(second_bytes_result);
+    const auto first_bytes = first_bytes_result.value();
+    const auto second_bytes = second_bytes_result.value();
+    CheckpointContext context{"doc", "main", 9, "",
+                              CheckpointEngineKind::Text};
+    CheckpointShareableCore::DeferredRecord waiting{
+        DeliveryToken{"main", 9, CollabText::Test::actor(1), 2},
+        second_bytes, false, {}};
+    CheckpointShareableCore::DeferredRecord rejected{
+        DeliveryToken{"main", 9, CollabText::Test::actor(2), 4},
+        "opaque rejected envelope", true, "invalid payload"};
+    const std::vector<CheckpointShareableCore::DeferredRecord> records{
+        waiting, rejected};
+    Crdt::Global applied;
+    auto encoded = encode_checkpoint_deferred(records, context, applied);
+    QVERIFY(encoded);
+    auto decoded = decode_checkpoint_deferred(encoded.value(), context, applied);
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value().size(), size_t{2});
+    QCOMPARE(decoded.value()[0], waiting);
+    QCOMPARE(decoded.value()[1], rejected);
+    QVERIFY(decoded.value()[0].operation_bytes == second_bytes);
+    QVERIFY(decoded.value()[0].operation_bytes != first_bytes);
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_deferred(truncated, context, applied),
+               qPrintable(QString::number(length)));
+    }
+
+    auto wrong_producer = waiting;
+    wrong_producer.token.producer = CollabText::Test::actor(3);
+    QVERIFY(!encode_checkpoint_deferred({wrong_producer}, context, applied));
+    auto duplicate_token = std::vector<CheckpointShareableCore::DeferredRecord>{waiting,
+                                                                                waiting};
+    QVERIFY(!encode_checkpoint_deferred(duplicate_token, context, applied));
+    auto missing_reason = rejected;
+    missing_reason.reason.clear();
+    QVERIFY(!encode_checkpoint_deferred({missing_reason}, context, applied));
+    auto malformed = encoded.value();
+    malformed.bytes.push_back('\0');
+    QVERIFY(!decode_checkpoint_deferred(malformed, context, applied));
+    auto already_applied = applied;
+    already_applied.observe(Crdt::get_op_timestamp(second.value()));
+    QVERIFY(!decode_checkpoint_deferred(encoded.value(), context, already_applied));
+
+    Crdt::IdList list_producer(CollabText::Test::test_counter(5));
+    auto list_first = list_producer.try_insert_after(Crdt::Anchor::min(), 10);
+    QVERIFY(list_first);
+    auto list_second = list_producer.try_insert_after(
+        list_producer.anchor_of(10), 20);
+    QVERIFY(list_second);
+    auto list_bytes = Crdt::encode_idlist_operation(list_second.value());
+    QVERIFY(list_bytes);
+    CheckpointContext list_context{"doc", "main", 9, "",
+                                  CheckpointEngineKind::IdList};
+    CheckpointShareableCore::DeferredRecord list_waiting{
+        DeliveryToken{"main", 9, CollabText::Test::actor(5), 8},
+        list_bytes.value(), false, {}};
+    auto list_encoded = encode_checkpoint_deferred({list_waiting}, list_context,
+                                                   Crdt::Global{});
+    QVERIFY(list_encoded);
+    auto list_decoded = decode_checkpoint_deferred(
+        list_encoded.value(), list_context, Crdt::Global{});
+    QVERIFY(list_decoded);
+    QCOMPARE(list_decoded.value(),
+             (std::vector<CheckpointShareableCore::DeferredRecord>{list_waiting}));
+  }
+
+  void coverageSectionBindsExactMembershipFrontiers() {
+    const auto actor_a = CollabText::Test::actor(1);
+    const auto actor_b = CollabText::Test::actor(2);
+    CheckpointShareableCore::Coverage coverage{
+        {{actor_a, 7}, {actor_b, 0}}, {{actor_a, 11}, {actor_b, 0}}};
+    auto encoded = encode_checkpoint_coverage(coverage);
+    QVERIFY(encoded);
+    auto decoded = decode_checkpoint_coverage(encoded.value());
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value(), coverage);
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_coverage(truncated),
+               qPrintable(QString::number(length)));
+    }
+
+    auto duplicate_actor = encoded.value();
+    std::copy(duplicate_actor.bytes.begin() + 4,
+              duplicate_actor.bytes.begin() + 20,
+              duplicate_actor.bytes.begin() + 28);
+    QVERIFY(!decode_checkpoint_coverage(duplicate_actor));
+
+    MembershipDescriptor descriptor;
+    descriptor.epoch = 1;
+    descriptor.members = {actor_a, actor_b};
+    descriptor.base_checkpoint_hash = std::string(64, 'a');
+    descriptor.translation_manifest_hash = std::string(64, 'b');
+    descriptor.base_frontiers = {{"main", coverage.operation, coverage.delivery}};
+    descriptor.supported_token_versions = {1};
+    auto sealed = seal_membership_descriptor(descriptor);
+    QVERIFY(sealed);
+    CheckpointContext context{"doc", "main", 1, "",
+                              CheckpointEngineKind::Text};
+    QVERIFY(validate_checkpoint_coverage(context, coverage, sealed.value()));
+
+    auto mismatch = coverage;
+    mismatch.delivery[actor_a]++;
+    QVERIFY(!validate_checkpoint_coverage(context, mismatch, sealed.value()));
+    context.epoch = 2;
+    const auto wrong_epoch = validate_checkpoint_coverage(
+        context, coverage, sealed.value());
+    QVERIFY(!wrong_epoch);
+    QCOMPARE(wrong_epoch.error().code(), ErrorCode::wrong_epoch);
+  }
+
+  void pinsSectionPreservesCompleteAndIncompleteProjection() {
+    const PositionScope scope{"doc-pin", "stream-pin", Primitive::text, 7};
+    auto engine = CrdtEngine::create(CollabText::Test::test_counter(1), scope);
+    QVERIFY(engine);
+    auto boundary = engine.value()->boundary_at(0, Affinity::left);
+    QVERIFY(boundary);
+    auto token = encode_position(PositionToken{boundary.value()});
+    QVERIFY(token);
+
+    CheckpointContext context{"doc-pin", "stream-pin", 7, "",
+                              CheckpointEngineKind::Text};
+    CheckpointShareableCore::Pins pins;
+    pins.projected_frontier = 2;
+    pins.canonical_frontier = 2;
+    pins.canonical_projection_hash = std::string(64, 'c');
+    pins.live_pins.push_back({"reply-1", scope, token.value()});
+    auto encoded = encode_checkpoint_pins(pins, context);
+    QVERIFY(encoded);
+    auto decoded = decode_checkpoint_pins(encoded.value(), context);
+    QVERIFY(decoded);
+    QCOMPARE(decoded.value().projected_frontier, uint64_t{2});
+    QCOMPARE(decoded.value().canonical_frontier, uint64_t{2});
+    QVERIFY(decoded.value().complete);
+    QCOMPARE(decoded.value().canonical_projection_hash,
+             pins.canonical_projection_hash);
+    QCOMPARE(decoded.value().live_pins.size(), size_t{1});
+    QCOMPARE(decoded.value().live_pins[0].reference_id, std::string("reply-1"));
+    QCOMPARE(decoded.value().live_pins[0].token_bytes, token.value());
+    for (size_t length = 0; length < encoded.value().bytes.size(); ++length) {
+      auto truncated = encoded.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_pins(truncated, context),
+               qPrintable(QString::number(length)));
+    }
+
+    auto incomplete = pins;
+    incomplete.projected_frontier = 1;
+    incomplete.complete = false;
+    auto partial = encode_checkpoint_pins(incomplete, context);
+    QVERIFY(partial);
+    auto decoded_partial = decode_checkpoint_pins(partial.value(), context);
+    QVERIFY(decoded_partial);
+    QVERIFY(!decoded_partial.value().complete);
+    QCOMPARE(decoded_partial.value().projected_frontier, uint64_t{1});
+
+    const PositionScope old_scope{"doc-pin", "stream-pin", Primitive::text, 6};
+    auto old_engine = CrdtEngine::create(CollabText::Test::test_counter(2), old_scope);
+    QVERIFY(old_engine);
+    auto old_boundary = old_engine.value()->boundary_at(0, Affinity::right);
+    QVERIFY(old_boundary);
+    auto old_token = encode_position(PositionToken{old_boundary.value()});
+    QVERIFY(old_token);
+    auto current_boundary = engine.value()->boundary_at(0, Affinity::right);
+    QVERIFY(current_boundary);
+    auto current_token = encode_position(PositionToken{current_boundary.value()});
+    QVERIFY(current_token);
+    auto old_epoch_pins = pins;
+    old_epoch_pins.live_pins[0].scope = old_scope;
+    old_epoch_pins.live_pins[0].token_bytes = old_token.value();
+    auto old_epoch_encoded = encode_checkpoint_pins(old_epoch_pins, context);
+    QVERIFY(old_epoch_encoded);
+    auto old_epoch_decoded = decode_checkpoint_pins(old_epoch_encoded.value(), context);
+    QVERIFY(old_epoch_decoded);
+    QCOMPARE(old_epoch_decoded.value().live_pins[0].scope, old_scope);
+    QCOMPARE(old_epoch_decoded.value().live_pins[0].token_bytes, old_token.value());
+
+    CheckpointShareableCore::TokenTranslations translations;
+    translations.supported_token_versions = {1};
+    translations.entries.push_back(
+        {"reply-1", 6, old_token.value(), current_token.value()});
+    auto translations_section = encode_checkpoint_translations(
+        translations, context, old_epoch_decoded.value());
+    QVERIFY(translations_section);
+    auto decoded_translations = decode_checkpoint_translations(
+        translations_section.value(), context, old_epoch_decoded.value());
+    QVERIFY(decoded_translations);
+    QCOMPARE(decoded_translations.value().entries, translations.entries);
+    QVERIFY(!decoded_translations.value().manifest_hash.empty());
+    for (size_t length = 0; length < translations_section.value().bytes.size(); ++length) {
+      auto truncated = translations_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_translations(
+                   truncated, context, old_epoch_decoded.value()),
+               qPrintable(QString::number(length)));
+    }
+    auto tampered_translation = translations_section.value();
+    tampered_translation.bytes[tampered_translation.bytes.size() - 1] ^= 1;
+    QVERIFY(!decode_checkpoint_translations(
+        tampered_translation, context, old_epoch_decoded.value()));
+    MembershipDescriptor descriptor;
+    descriptor.supported_token_versions = {1};
+    descriptor.translation_manifest_hash =
+        decoded_translations.value().manifest_hash;
+    QVERIFY(validate_checkpoint_translations(decoded_translations.value(), descriptor));
+    descriptor.translation_manifest_hash[0] =
+        descriptor.translation_manifest_hash[0] == '0' ? '1' : '0';
+    QVERIFY(!validate_checkpoint_translations(decoded_translations.value(), descriptor));
+    auto unsupported_versions = translations;
+    unsupported_versions.supported_token_versions = {1, 2};
+    QVERIFY(!encode_checkpoint_translations(
+        unsupported_versions, context, old_epoch_decoded.value()));
+    auto missing_translation = translations;
+    missing_translation.entries.clear();
+    QVERIFY(!encode_checkpoint_translations(
+        missing_translation, context, old_epoch_decoded.value()));
+    auto mismatched_source = translations;
+    mismatched_source.entries[0].source_token_bytes = current_token.value();
+    QVERIFY(!encode_checkpoint_translations(
+        mismatched_source, context, old_epoch_decoded.value()));
+    auto wrong_destination_scope = translations;
+    wrong_destination_scope.entries[0].current_token_bytes = old_token.value();
+    QVERIFY(!encode_checkpoint_translations(
+        wrong_destination_scope, context, old_epoch_decoded.value()));
+
+    CheckpointCausalState empty_causal;
+    auto ctx_section = encode_checkpoint_context(context);
+    auto engine_section = encode_checkpoint_engine(CheckpointEngineState{});
+    auto causal_section = encode_checkpoint_causal(empty_causal);
+    auto deferred_section = encode_checkpoint_deferred({}, context, empty_causal.version);
+    auto coverage_section = encode_checkpoint_coverage({});
+    QVERIFY(ctx_section && engine_section && causal_section && deferred_section &&
+            coverage_section);
+    auto core_sections = shared_sections();
+    core_sections[0] = ctx_section.value();
+    core_sections[1] = engine_section.value();
+    core_sections[2] = causal_section.value();
+    core_sections[3] = deferred_section.value();
+    core_sections[4] = coverage_section.value();
+    core_sections[5] = old_epoch_encoded.value();
+    core_sections[6] = translations_section.value();
+    auto core_frame = encode_checkpoint(CheckpointKind::Shareable,
+                                       std::move(core_sections));
+    QVERIFY(core_frame);
+    auto core_artifact = decode_checkpoint(core_frame.value(),
+                                           CheckpointKind::Shareable);
+    QVERIFY(core_artifact);
+    auto translated_core = decode_checkpoint_core(core_artifact.value());
+    QVERIFY(translated_core);
+    QCOMPARE(translated_core.value().translations.entries,
+             translations.entries);
+
+    auto bad_scope = pins;
+    bad_scope.live_pins[0].scope.epoch++;
+    QVERIFY(!encode_checkpoint_pins(bad_scope, context));
+    auto bad_token = pins;
+    bad_token.live_pins[0].token_bytes[0] ^= 1;
+    QVERIFY(!encode_checkpoint_pins(bad_token, context));
+    auto inconsistent = pins;
+    inconsistent.complete = false;
+    QVERIFY(!encode_checkpoint_pins(inconsistent, context));
+  }
+
+  void rejectsEveryTruncation() {
+    auto encoded = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
+    QVERIFY(encoded);
+    for (size_t length = 0; length < encoded.value().size(); ++length) {
+      auto decoded = decode_checkpoint(std::string_view(encoded.value()).substr(0, length),
+                                       CheckpointKind::Shareable);
+      QVERIFY2(!decoded, qPrintable(QString::number(length)));
+    }
+  }
+
+  void rejectsWrongKindAndDigestTampering() {
+    auto encoded = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
+    QVERIFY(encoded);
+    QVERIFY(!decode_checkpoint(encoded.value(), CheckpointKind::Local));
+    auto changed = encoded.value();
+    changed[25] ^= 1;
+    const auto result = decode_checkpoint(changed, CheckpointKind::Shareable);
+    QVERIFY(!result);
+    QCOMPARE(result.error().code(), ErrorCode::corrupt_record);
+  }
+
+  void rejectsMissingReorderedAndUnknownSections() {
+    auto sections = shared_sections();
+    sections.pop_back();
+    QVERIFY(!encode_checkpoint(CheckpointKind::Shareable, sections));
+    sections = shared_sections();
+    std::swap(sections[1], sections[2]);
+    QVERIFY(!encode_checkpoint(CheckpointKind::Shareable, sections));
+    sections = shared_sections();
+    sections[3].id = 99;
+    QVERIFY(!encode_checkpoint(CheckpointKind::Shareable, sections));
+
+    auto frame = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
+    QVERIFY(frame);
+    auto unknown = frame.value();
+    unknown[20] = 99;  // first section ID is at byte 19..20
+    resign(unknown);
+    const auto unknown_result = decode_checkpoint(unknown, CheckpointKind::Shareable);
+    QVERIFY(!unknown_result);
+    QCOMPARE(unknown_result.error().code(), ErrorCode::unsupported_version);
+
+    auto reordered = frame.value();
+    reordered[20] = 2;
+    reordered[34] = 1;  // second section ID follows the first payload
+    resign(reordered);
+    const auto reordered_result = decode_checkpoint(reordered, CheckpointKind::Shareable);
+    QVERIFY(!reordered_result);
+    QCOMPARE(reordered_result.error().code(), ErrorCode::unsupported_version);
+  }
+
+  void rejectsUnsupportedVersionAfterIntegrityCheck() {
+    auto encoded = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
+    QVERIFY(encoded);
+    auto changed = encoded.value();
+    // Frame (17), count (2), then section id. The following two bytes are v1.
+    changed[21] = 0;
+    changed[22] = 2;
+    resign(changed);
+    const auto result = decode_checkpoint(changed, CheckpointKind::Shareable);
+    QVERIFY(!result);
+    QCOMPARE(result.error().code(), ErrorCode::unsupported_version);
+  }
+
+  void localCompanionSectionsRoundTripAndBindOwner() {
+    const auto actor = ActorId::parse("21000000000000000000000000000001").value();
+    const auto other = ActorId::parse("22000000000000000000000000000001").value();
+    const CheckpointContext context{"local-doc", "main", 4,
+                                    sha256_hex("parent"),
+                                    CheckpointEngineKind::Text};
+    CheckpointShareableCore shareable;
+    shareable.context = context;
+    shareable.pins.canonical_projection_hash = sha256_hex("");
+    shareable.translations.supported_token_versions = {1};
+    const auto shareable_bytes = encode_checkpoint_core(shareable);
+    QVERIFY(shareable_bytes);
+    const auto checkpoint_hash = sha256_hex(shareable_bytes.value());
+    CheckpointLocalOwner owner{actor, checkpoint_hash};
+    auto owner_section = encode_checkpoint_local_owner(owner);
+    QVERIFY(owner_section);
+    auto owner_decoded = decode_checkpoint_local_owner(owner_section.value());
+    QVERIFY(owner_decoded);
+    QCOMPARE(owner_decoded.value().actor, actor);
+    QCOMPARE(owner_decoded.value().shareable_checkpoint_hash, checkpoint_hash);
+    for (size_t length = 0; length < owner_section.value().bytes.size(); ++length) {
+      auto truncated = owner_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY(!decode_checkpoint_local_owner(truncated));
+    }
+    auto extra_owner_byte = owner_section.value();
+    extra_owner_byte.bytes.push_back('\0');
+    QVERIFY(!decode_checkpoint_local_owner(extra_owner_byte));
+
+    Crdt::LocalHistorySnapshot history;
+    history.cursor = 1;
+    history.entries.push_back({Crdt::Identity(actor, 2),
+                               {Crdt::Identity(actor, 1)},
+                               {Crdt::Identity(actor, 3)}, {}, 128});
+    history.retired_entries.push_back({Crdt::Identity(actor, 4),
+                                       {Crdt::Identity(actor, 5)}, {},
+                                       {Crdt::Identity(actor, 6)}, 64});
+    auto history_section = encode_checkpoint_local_history(history, actor);
+    QVERIFY(history_section);
+    auto history_decoded = decode_checkpoint_local_history(
+        history_section.value(), actor);
+    QVERIFY(history_decoded);
+    QCOMPARE(history_decoded.value().cursor, history.cursor);
+    QCOMPARE(history_decoded.value().entries.size(), history.entries.size());
+    QCOMPARE(history_decoded.value().retired_entries.size(),
+             history.retired_entries.size());
+    QCOMPARE(history_decoded.value().entries[0].operation_ids,
+             history.entries[0].operation_ids);
+    QCOMPARE(history_decoded.value().retired_entries[0].deletion_operations,
+             history.retired_entries[0].deletion_operations);
+    for (size_t length = 0; length < history_section.value().bytes.size(); ++length) {
+      auto truncated = history_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY2(!decode_checkpoint_local_history(truncated, actor),
+               qPrintable(QString::number(length)));
+    }
+    auto huge_count = history_section.value();
+    std::fill(huge_count.bytes.begin() + 24, huge_count.bytes.begin() + 28,
+              static_cast<char>(0xff));
+    QVERIFY(!decode_checkpoint_local_history(huge_count, actor));
+    auto foreign_history = history;
+    foreign_history.entries[0].operation_ids[0].actor = other;
+    QVERIFY(!encode_checkpoint_local_history(foreign_history, actor));
+
+    CheckpointLocalWriter writer{actor, "local-doc", "main", 4, 17, 9};
+    auto writer_section = encode_checkpoint_local_writer(writer, context);
+    QVERIFY(writer_section);
+    auto writer_decoded = decode_checkpoint_local_writer(writer_section.value(), context);
+    QVERIFY(writer_decoded);
+    QCOMPARE(writer_decoded.value().next_identity_counter, uint64_t{17});
+    QCOMPARE(writer_decoded.value().durable_delivery_frontier, uint64_t{9});
+    for (size_t length = 0; length < writer_section.value().bytes.size(); ++length) {
+      auto truncated = writer_section.value();
+      truncated.bytes.resize(length);
+      QVERIFY(!decode_checkpoint_local_writer(truncated, context));
+    }
+    auto mismatched_writer = writer;
+    mismatched_writer.epoch++;
+    QVERIFY(!encode_checkpoint_local_writer(mismatched_writer, context));
+
+    CheckpointLocalCore local_core{owner, history, writer};
+    auto local_frame = encode_checkpoint_local_core(
+        local_core, context, shareable_bytes.value());
+    QVERIFY(local_frame);
+    auto decoded_local_artifact = decode_checkpoint(
+        local_frame.value(), CheckpointKind::Local);
+    QVERIFY(decoded_local_artifact);
+    auto local = decode_checkpoint_local_core(decoded_local_artifact.value(), actor,
+                                              checkpoint_hash, context);
+    QVERIFY(local);
+    QCOMPARE(local.value().owner, owner);
+    QCOMPARE(local.value().writer, writer);
+    QVERIFY(!decode_checkpoint_local_core(decoded_local_artifact.value(), other,
+                                          checkpoint_hash, context));
+    QVERIFY(!decode_checkpoint_local_core(decoded_local_artifact.value(), actor,
+                                          sha256_hex("other"), context));
+    QVERIFY(!encode_checkpoint_local_core(local_core, context, "other"));
+    auto foreign_writer = local_core;
+    foreign_writer.writer.actor = other;
+    QVERIFY(!encode_checkpoint_local_core(foreign_writer, context,
+                                         shareable_bytes.value()));
+    auto wrong_scope = local_core;
+    wrong_scope.writer.epoch++;
+    QVERIFY(!encode_checkpoint_local_core(wrong_scope, context,
+                                         shareable_bytes.value()));
+  }
+
+  void rejectsImpossibleAndTrailingLengths() {
+    auto encoded = encode_checkpoint(CheckpointKind::Shareable, shared_sections());
+    QVERIFY(encoded);
+    auto trailing = encoded.value() + "x";
+    QVERIFY(!decode_checkpoint(trailing, CheckpointKind::Shareable));
+
+    auto huge = encoded.value();
+    for (size_t i = 9; i < 17; ++i) huge[i] = static_cast<char>(0xff);
+    const auto result = decode_checkpoint(huge, CheckpointKind::Shareable);
+    QVERIFY(!result);
+    QCOMPARE(result.error().code(), ErrorCode::limit_exceeded);
+
+    auto bad_section_length = encoded.value();
+    for (size_t i = 23; i < 31; ++i)
+      bad_section_length[i] = static_cast<char>(0xff);
+    resign(bad_section_length);
+    const auto section_result = decode_checkpoint(
+        bad_section_length, CheckpointKind::Shareable);
+    QVERIFY(!section_result);
+    QCOMPARE(section_result.error().code(), ErrorCode::malformed);
+  }
+};
+
+QTEST_GUILESS_MAIN(CheckpointCodecTest)
+#include "tst_checkpoint_codec.moc"

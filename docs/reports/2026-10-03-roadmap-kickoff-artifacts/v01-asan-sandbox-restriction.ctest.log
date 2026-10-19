@@ -1,0 +1,138 @@
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan
+    Start  1: tst_clock
+    Start  3: tst_buffer
+1/3 Test  #3: tst_buffer .......................***Failed    0.28 sec
+********* Start testing of TestBuffer *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestBuffer::initTestCase()
+PASS   : TestBuffer::insert_at_beginning()
+PASS   : TestBuffer::insert_at_end()
+PASS   : TestBuffer::insert_in_middle()
+PASS   : TestBuffer::delete_from_beginning()
+PASS   : TestBuffer::delete_from_end()
+PASS   : TestBuffer::delete_from_middle()
+PASS   : TestBuffer::replace()
+PASS   : TestBuffer::undo_reverses_last_edit()
+PASS   : TestBuffer::redo_restores()
+PASS   : TestBuffer::undo_insert_then_redo()
+PASS   : TestBuffer::undo_delete_restores_text()
+PASS   : TestBuffer::undo_nothing_returns_nullopt()
+PASS   : TestBuffer::redo_nothing_returns_nullopt()
+PASS   : TestBuffer::coalesce_undo_returns_false_below_two_entries()
+PASS   : TestBuffer::coalesce_undo_merges_two_inserts()
+PASS   : TestBuffer::coalesce_undo_redo_restores_both()
+PASS   : TestBuffer::coalesce_undo_merges_insert_then_delete()
+PASS   : TestBuffer::coalesce_undo_merges_two_deletes()
+PASS   : TestBuffer::coalesce_undo_then_new_edit_replaces_redoable()
+PASS   : TestBuffer::coalesce_undo_remote_sees_single_op()
+PASS   : TestBuffer::remote_edit_inserts()
+PASS   : TestBuffer::remote_edit_delete()
+PASS   : TestBuffer::concurrent_inserts_both_survive()
+PASS   : TestBuffer::concurrent_inserts_deterministic()
+PASS   : TestBuffer::causal_ordering_defers()
+PASS   : TestBuffer::duplicate_ops_idempotent()
+PASS   : TestBuffer::visible_length_tracks_correctly()
+PASS   : TestBuffer::version_advances()
+PASS   : TestBuffer::replica_id_returned()
+PASS   : TestBuffer::multiple_ranges_in_single_edit()
+PASS   : TestBuffer::local_edit_replace_mid_fragment()
+PASS   : TestBuffer::local_edit_insert_at_start_of_fragment()
+PASS   : TestBuffer::local_edit_insert_mid_fragment()
+PASS   : TestBuffer::local_edit_delete_spanning_fragments()
+PASS   : TestBuffer::local_edit_delete_partial_fragment()
+PASS   : TestBuffer::local_edit_multi_range_left_to_right()
+PASS   : TestBuffer::local_edit_replace_entire_document()
+PASS   : TestBuffer::remote_edit_skips_unseen_fragments()
+PASS   : TestBuffer::remote_edit_version_filtered_offset()
+PASS   : TestBuffer::remote_edit_convergence_with_concurrent_deletes()
+PASS   : TestBuffer::undo_after_remote_edit()
+PASS   : TestBuffer::redo_after_remote_edit()
+PASS   : TestBuffer::remote_undo_broadcast()
+PASS   : TestBuffer::undo_delete_with_remote_interleaving()
+PASS   : TestBuffer::new_edit_clears_redo_stack()
+PASS   : TestBuffer::split_relocation_remote_convergence()
+PASS   : TestBuffer::split_relocation_with_concurrent_insert()
+PASS   : TestBuffer::replace_mid_fragment_remote_convergence()
+PASS   : TestBuffer::empty_range_insert_only()
+PASS   : TestBuffer::adjacent_ranges()
+PASS   : TestBuffer::delete_everything_then_insert()
+PASS   : TestBuffer::visible_length_always_matches_text()
+PASS   : TestBuffer::concurrent_undo_both_hide()
+PASS   : TestBuffer::concurrent_undo_then_redo_wins()
+PASS   : TestBuffer::remote_undo_with_counts()
+PASS   : TestBuffer::fragment_with_multiple_deletions()
+PASS   : TestBuffer::deletion_undo_roundtrip()
+PASS   : TestBuffer::concurrent_delete_and_insertion_undo()
+PASS   : TestBuffer::sequential_insert_at_adjacent_positions()
+PASS   : TestBuffer::sequential_insert_char_by_char_text()
+PASS   : TestBuffer::sequential_insert_single_chars_at_boundary()
+PASS   : TestBuffer::cleanupTestCase()
+Totals: 63 passed, 0 failed, 0 skipped, 0 blacklisted, 139ms
+********* Finished testing of TestBuffer *********
+==426==LeakSanitizer has encountered a fatal error.
+==426==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==426==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+    Start 35: tst_idlist
+2/3 Test #35: tst_idlist .......................***Failed    0.07 sec
+********* Start testing of TestIdList *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestIdList::initTestCase()
+PASS   : TestIdList::empty_list_has_no_ids()
+PASS   : TestIdList::replica_id_round_trips()
+PASS   : TestIdList::initial_version_is_empty()
+PASS   : TestIdList::insert_into_empty_list()
+PASS   : TestIdList::insert_at_start_pushes_existing_back()
+PASS   : TestIdList::multiple_inserts_at_start_reverse_order()
+PASS   : TestIdList::same_id_value_can_appear_twice()
+PASS   : TestIdList::remove_only_element()
+PASS   : TestIdList::remove_middle_keeps_neighbours()
+PASS   : TestIdList::local_clear_empties_the_list()
+PASS   : TestIdList::local_clear_preserves_clock_monotonicity()
+PASS   : TestIdList::local_clear_does_not_fire_callbacks()
+PASS   : TestIdList::local_clear_then_insert_chain_works()
+PASS   : TestIdList::cleanupTestCase()
+Totals: 15 passed, 0 failed, 0 skipped, 0 blacklisted, 8ms
+********* Finished testing of TestIdList *********
+==431==LeakSanitizer has encountered a fatal error.
+==431==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==431==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+3/3 Test  #1: tst_clock ........................***Failed    2.92 sec
+********* Start testing of TestClock *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestClock::initTestCase()
+PASS   : TestClock::lamport_tick_increments()
+PASS   : TestClock::lamport_observe_jumps_ahead()
+PASS   : TestClock::lamport_observe_does_not_go_backwards()
+PASS   : TestClock::lamport_ordering_value_first()
+PASS   : TestClock::lamport_ordering_replica_tiebreak()
+PASS   : TestClock::global_observe_and_get()
+PASS   : TestClock::global_observed()
+PASS   : TestClock::global_observed_all()
+PASS   : TestClock::global_observed_all_shorter_vector_fails()
+PASS   : TestClock::global_join()
+PASS   : TestClock::global_meet()
+PASS   : TestClock::global_observe_large_replica_id_does_not_corrupt()
+PASS   : TestClock::global_observe_replica_id_at_uint16_max()
+PASS   : TestClock::global_copy_after_large_replica_id()
+PASS   : TestClock::global_sparse_layout_keeps_dense_view()
+PASS   : TestClock::buffer_apply_local_edit_cost_independent_of_replica_id()
+PASS   : TestClock::cleanupTestCase()
+Totals: 18 passed, 0 failed, 0 skipped, 0 blacklisted, 2699ms
+********* Finished testing of TestClock *********
+==425==LeakSanitizer has encountered a fatal error.
+==425==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==425==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+
+0% tests passed, 3 tests failed out of 3
+
+Total Test time (real) =   2.92 sec
+
+The following tests FAILED:
+	  1 - tst_clock (Failed)
+	  3 - tst_buffer (Failed)
+	 35 - tst_idlist (Failed)
+Errors while running CTest
+Verification exit: 8; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261003T211807Z-2

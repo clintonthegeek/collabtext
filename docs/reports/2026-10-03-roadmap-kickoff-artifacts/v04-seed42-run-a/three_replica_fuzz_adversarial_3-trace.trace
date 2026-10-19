@@ -1,0 +1,169 @@
+#collabtext-trace 1
+#model idlist
+#label three_replica_fuzz_adversarial_3
+#seed 15108716371298222359
+#replicas 3
+#net 50 200 500 1
+insert 0 0 1 l
+remove 0 0 0 l
+deliver 2 0
+deliver 2 1
+insert 1 0 11 l
+deliver 0 2
+insert 1 0 17 l
+deliver 0 3
+remove 0 1 0 l
+deliver 2 2
+deliver 2 4
+deliver 2 3
+deliver 1 0
+deliver 1 4
+deliver 1 1
+insert 2 0 48 l
+insert 1 0 50 l
+insert 2 0 57 l
+insert 2 3 60 l
+insert 0 0 61 l
+deliver 0 8
+deliver 0 5
+insert 0 0 67 l
+insert 1 1 71 l
+insert 0 2 73 l
+insert 0 3 76 l
+undo 2
+remove 2 1 0 l
+undo 1
+remove 2 1 0 l
+undo 0
+undo 0
+deliver 2 13
+deliver 2 6
+deliver 2 9
+deliver 2 11
+undo 1
+deliver 0 6
+deliver 0 7
+deliver 0 17
+deliver 0 11
+deliver 0 15
+remove 2 3 0 l
+deliver 2 12
+deliver 2 10
+deliver 2 16
+deliver 2 18
+deliver 2 19
+insert 1 1 119 l
+undo 0
+deliver 1 12
+deliver 1 10
+deliver 2 20
+remove 2 2 0 l
+deliver 2 22
+deliver 0 24
+remove 2 0 0 l
+deliver 2 23
+remove 0 5 0 l
+deliver 2 26
+deliver 0 14
+deliver 0 16
+insert 1 0 155 l
+deliver 0 27
+deliver 0 21
+deliver 0 22
+deliver 0 25
+remove 1 1 0 l
+deliver 2 28
+undo 2
+insert 0 0 169 l
+undo 2
+deliver 2 30
+deliver 2 27
+undo 2
+insert 2 4 183 l
+insert 1 2 185 l
+deliver 1 5
+deliver 1 25
+deliver 1 7
+deliver 1 8
+deliver 1 13
+deliver 1 17
+deliver 1 30
+deliver 1 15
+deliver 1 9
+insert 2 2 195 l
+deliver 1 21
+deliver 1 14
+deliver 1 33
+deliver 1 24
+deliver 1 18
+deliver 1 26
+deliver 1 19
+deliver 1 23
+deliver 1 29
+deliver 1 31
+remove 2 2 0 l
+remove 2 1 0 l
+remove 1 5 0 l
+deliver 1 37
+deliver 1 35
+deliver 1 36
+undo 0
+insert 1 2 221 l
+undo 0
+deliver 1 32
+deliver 2 38
+deliver 2 40
+deliver 2 34
+deliver 2 39
+deliver 1 39
+insert 0 3 235 l
+remove 2 3 0 l
+undo 0
+deliver 1 42
+deliver 1 43
+insert 0 0 247 l
+undo 2
+insert 0 1 253 l
+remove 1 1 0 l
+deliver 0 33
+deliver 0 35
+deliver 0 28
+deliver 0 48
+deliver 0 20
+insert 0 3 262 l
+deliver 1 45
+deliver 1 41
+deliver 1 47
+deliver 1 44
+deliver 1 46
+remove 2 1 0 l
+deliver 0 34
+deliver 0 37
+deliver 0 29
+insert 0 3 274 l
+deliver 1 49
+deliver 1 50
+remove 2 0 0 l
+deliver 1 51
+deliver 1 52
+insert 1 4 293 l
+deliver 0 31
+deliver 0 43
+deliver 0 53
+deliver 0 36
+deliver 0 50
+deliver 0 40
+deliver 0 52
+deliver 0 32
+deliver 0 38
+deliver 0 46
+deliver 2 53
+deliver 2 48
+deliver 2 42
+deliver 2 47
+deliver 2 41
+deliver 2 51
+deliver 2 44
+deliver 2 45
+deliver 2 49
+settle

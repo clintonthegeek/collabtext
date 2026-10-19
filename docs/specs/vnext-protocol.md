@@ -1,0 +1,479 @@
+> Current 2026-10-11 extension: [Wave Core adoption](wave-core-adoption.md)
+> specifies typed zero-width text markers, CTBO/0002–0003 archival reading,
+> CTPT/1–2, public local-history composition and projection identities. It takes
+> precedence where this earlier specification describes historical capability
+> limits. Installed signatures are in the public headers; roadmap task completion
+> and the capability manifest distinguish implementation from target examples.
+
+# vNext protocol contract
+
+**Status:** binding design-gate artifact (P01). Paired with
+[vnext-public-api.md](vnext-public-api.md), which carries the signatures this
+document refers to.
+**Authority:** [vnext-design-constraints.md](vnext-design-constraints.md) (D01)
+sets the direction; this document fixes the protocol. Amendments update both,
+and the API guide's compile-oriented examples are updated with them.
+
+This document specifies the wire and lifecycle protocol. It does not specify the
+merge algorithm (S02) or reclamation (G01); where those appear here, only the
+protocol's obligations on them are stated.
+
+Review evidence: F4 (sender restart drops a distinct operation), F5 (persisted
+cursors outlive the state they cover), F10 (decoder success does not establish a
+valid operation), plus the multi-stream independent-counter cases. Each is walked
+at the end.
+
+---
+
+## 1. Identity and counters
+
+### 1.1 Actor identity
+
+```
+ActorId = 128 bits, opaque to consumers
+```
+
+- Generated from OS cryptographic randomness through a narrow platform adapter.
+  Never derived from presence, a display name, a document name, or a 16-bit
+  random draw.
+- Persisted **atomically before any operation is created**. A crash between
+  "allocated" and "persisted" must not be able to reuse the id: allocation is
+  either durable before use, or the id is discarded with its operations.
+- Two actors with equal ids are a hard conflict. It is never resolved by
+  "last writer wins" (R4).
+- The same id appearing with different content in two stores is an *observable*
+  conflict and is reported as such.
+
+### 1.2 Counters are per (actor, stream)
+
+```
+OperationId { ActorId actor; uint64_t counter; }
+```
+
+- Counters are checked `uint64_t`. There is no wrapping and no reuse.
+- **Each stream has its own counter space.** A `text` stream at counter 41 says
+  nothing about a `comments` stream's coverage.
+- Coverage is therefore a vector, keyed by (stream, actor) — never a scalar
+  maximum. A single `lowest_peer_acked_lamport()`-style number cannot answer
+  "have all peers seen everything on every stream", and this protocol does not
+  define one (C5).
+- Counter exhaustion (`counter == UINT64_MAX`) returns an error and mutates
+  nothing. It is not a wrap and not a silent reset.
+
+### 1.3 Operation context
+
+Every operation carries its context. Nothing in the engine may act on an
+operation whose context it does not know.
+
+```
+OperationContext {
+    DocumentId document;   // stable per document, persisted
+    StreamId   stream;     // "text", "comments", "chat", ...
+    uint64_t   epoch;      // incremented on explicit retirement/rejoin
+    ActorId    actor;
+    uint64_t   counter;
+}
+```
+
+An operation whose `epoch` is not the receiver's current epoch for that
+(document, stream) is **rejected**, not applied and not deferred: it belongs to
+an earlier or later membership era and the receiving engine has no obligation to
+order it against current state. Retirement is the only thing that changes an
+epoch (C2).
+
+## 2. Formats and versions
+
+Each artifact family has its own explicit version field. A reader refuses an
+unsupported version rather than misreading it (C6, C7). Pre-vNext experimental
+formats have no conversion obligation. Published supported vNext token versions
+carry the external persisted-data contract in W1/W3; versioning does not cancel it.
+
+| Artifact | Identifier | Baseline version | Notes |
+|---|---|---|---|
+| Operation payload (Buffer) | `CTBO` (`collabtext.buffer-op`) | 0002/0003 | Text/undo archives and typed zero-width marker edits; retained supported readers |
+| Operation payload (IdList) | `CTLO` (`collabtext.idlist-op`) | 0002 | Implemented structural ops |
+| Sparse causal vector | `CTGV` (`collabtext.global`) | 1 | Implemented exact sparse actor/head codec |
+| Terminal unused interval | `CTGP` (`collabtext.counter-gap`) | 1 | Core scoped terminal application available; host owns publication (markoff-core-adoption.md) |
+| Stream envelope | `"collabtext.envelope"` | 1 | Wraps context + payload + codec version |
+| Store manifest | `"collabtext.manifest"` | 1 | Document/stream inventory + membership |
+| Segment file | `"collabtext.segment"` | 1 | Sealed segment and open tail |
+| Checkpoint | `"collabtext.checkpoint"` | 1 | Covered prefix + snapshot reference |
+| Ack record | `"collabtext.ack"` | 1 | Per-stream receipt watermark |
+
+Operation/global/gap frames use the fixed nine-byte ASCII header `MAGC0001:`
+and bounded JSON. All unsigned integer payload fields are sixteen lowercase hex
+digits in strings; actors are 32 lowercase hex digits. No numeric conversion via
+double is permitted. [The operation codec contract](vnext-operation-codec.md)
+defines the exact supported fields, intervals and error classification. A codec
+success does not certify a stream envelope, state applicability or durable coverage.
+
+Rules:
+
+- A record carries its identifier and version in a form that can be read without
+  parsing the rest (a fixed magic prefix plus a version word).
+- An **unknown identifier or version is rejected and the record is retained or
+  quarantined**. It is never skipped, and skipping it may never advance durable
+  coverage (F10, R8).
+- Retention means the bytes stay available for a retry or an upgrade;
+  quarantine means they are moved aside with a reason and are not counted as
+  read. Both are observable through `PollOutcome`.
+
+## 3. The envelope
+
+```
+Envelope {
+    magic:    fixed prefix
+    version:  envelope version (1)
+    context:  OperationContext
+    payload_format: "collabtext.buffer-op" | "collabtext.idlist-op"
+    payload_version: 1
+    payload:  bytes
+    checksum: covers context + payload (integrity, not authenticity)
+}
+```
+
+Decoding is three separate steps, and conflating them is exactly finding F10:
+
+1. **Syntactic parse.** Complete input consumption is required. `{"t":"u"}garbage`
+   is a syntax error. Bounded lengths and counts; no unbounded array indexing.
+2. **Schema and version resolution.** Identifier known, version supported, and
+   the payload routed to the right decoder. Failure here is *retained*, because a
+   newer writer may still be understood after an upgrade.
+3. **Semantic validation.** Identity present and well-formed, counter in range,
+   ranges well-ordered and inside the payload, replacement text valid UTF-8 and
+   paired one-to-one with ranges, insertion metadata self-consistent, locator
+   valid, all arithmetic checked. Failure here is *quarantined*: the bytes are
+   retained, but the operation will never be applied.
+
+A decoder that returns successfully has established **only** that these three
+steps passed. It has not established that the operation is applicable to the
+current document, which is what `apply` reports separately.
+
+Unicode: `\u` escapes are decoded as surrogate *pairs*; a lone surrogate is a
+validation error. Raw input is validated as UTF-8, and truncated sequences are
+errors rather than shorter strings.
+
+## 4. Applying an operation
+
+```
+ApplyOutcome apply(BufferOperation, OperationContext) noexcept
+```
+
+| Outcome | Meaning | Engine state |
+|---|---|---|
+| `applied` | integrated | advanced |
+| `duplicate` | already seen; identity matches | unchanged (idempotent) |
+| `deferred` | causal dependencies missing; queued | unchanged |
+| `rejected(Error)` | cannot ever be applied as addressed | unchanged |
+
+Rules:
+
+- `deferred` requires an explicit reason (which dependency is missing) and a
+  bounded queue. When the bound is reached, the oldest or newest entry is
+  **quarantined with a reason** — never silently dropped, because a dropped
+  operation is lost work (R1).
+- `rejected` is terminal and distinguishable from `deferred` by type: wrong
+  epoch, unknown stream, counter regression, malformed (should not reach here),
+  unsupported version, actor conflict.
+- Failure atomicity: a rejected or deferred operation mutates nothing — not the
+  document, not the version vector, not the undo stack, not the coverage
+  watermark.
+- Applying is single-owner. A04 detects and refuses mutation reentry before
+  state changes; read-only inspection and callback removal are defined. Final
+  callback batching/reentry checks remain planned after P05.
+
+### 4.1 The order of the checks, and why it is load-bearing
+
+Three checks run in a fixed order, and each position is forced by a property of
+the one before it.
+
+**Identity, then `duplicate`, then validity, then causality.**
+
+Identity comes first because of a trap in the coverage test. "Have I already
+applied this?" is answered by comparing the operation's counter against the
+version vector, and a counter of **zero** is satisfied by *every* version vector
+— `get(replica) >= 0` holds unconditionally. An operation stamped 0 would
+therefore be reported as an idempotent duplicate forever: never applied, never
+refused, never surfaced. That is precisely the "accept whatever arrives" failure
+this section exists to prevent, so identity is established before "have I seen
+this?" is even a meaningful question. Counter 0 is `invalid_identity`.
+
+Validity precedes causality because a malformed operation must not be queued. If
+malformed records were deferred first and validated on retry, a record that can
+never become valid would sit in the queue indefinitely, consuming budget and
+appearing to be merely "pending". Deferred therefore means exactly one thing:
+*well formed, waiting for a dependency*.
+
+### 4.2 The deferral budget
+
+The queue is bounded in both operations and bytes, because a peer can otherwise
+drive unbounded memory growth by sending operations whose dependencies never
+arrive. `DeferredBudget` defaults to 4096 operations and 8 MiB.
+
+Exceeding it is **backpressure, not amnesia**: the caller receives
+`rejected(deferred_queue_full)` without advancing clocks or coverage. The offered
+operation remains caller-owned. The transport/store must retain the source record
+and stop/retry explicitly rather than acknowledge it as applied.
+
+The engine's diagnostic quarantine has its own bounded count/byte budget (default
+4096 / 8 MiB). It retains a copy only while that budget allows; it is not a durable
+source log. `set_quarantine_budget` cannot reduce below held state, and
+`take_quarantined` drains it. Refusal is always returned even when no diagnostic
+copy fits. An unbounded overflow vector would defeat the deferral budget itself.
+
+`duplicate` and `deferred` are not visible changes and fire no change callback,
+so an observer may treat every notification as a real reconciliation point.
+
+## 5. Coverage and durable progress
+
+Coverage answers "what has been received and applied", per (stream, actor).
+
+- **Receipt is not application.** A transport ack says bytes were received. It
+  never authorizes reclamation (V03's rule, now protocol-level).
+- **Durable coverage advances only over a validated, contiguous prefix.** A
+  gap, a quarantine, or a retained-unknown-version record **blocks** advancement
+  across it. This is the direct answer to F6: a late earlier segment is not
+  skipped; the frontier does not move past the gap until the gap is filled or
+  explicitly retired.
+- A read cursor may only be committed for state the application can durably
+  recover. Committing a cursor over state that exists only in memory is exactly
+  finding F5, and the transport is required to refuse that pairing: the
+  application hands the transport a *recovery point* (checkpoint id or "replay
+  from the beginning"), and the cursor is meaningless without one.
+- A contiguous frontier, not a high-water mark. Segment 2 arriving before
+  segment 1 leaves the frontier at 0.
+
+## 6. Ordering
+
+- Causal order: an operation is never applied before the operations it depends
+  on; it is deferred instead (R3).
+- Per-actor order on a stream is expected to be preserved by the transport, and
+  the engine still tolerates reordering by deferral.
+- Cross-actor and cross-stream order is unspecified and must not be relied upon.
+
+## 7. Lifecycle sequences
+
+### 7.1 Sender restart (F4)
+
+1. On start, the sender loads its persisted identity and its next counter per
+   stream from its own durable log or checkpoint.
+2. It **never** reuses a durable `OperationId`. The counter resumes at or above
+   the highest value durably recorded for that (actor, stream).
+3. A peer's dedupe index is keyed by (actor, counter), so a restart cannot make
+   a distinct operation look like a duplicate.
+4. Test obligation: A pushes an operation, the peer polls and applies it, A
+   restarts from its persisted state, A produces a *different* new operation,
+   the peer polls and applies it. Before the fix this second operation was
+   suppressed by a reused transport entry id.
+
+### 7.2 Receiver restart (F5)
+
+1. The receiver rebuilds state *before* accepting new writes: own-log replay or
+   a checkpoint, plus remote replay from its durable coverage frontier.
+2. Durable coverage is restored from the checkpoint, not from a bare cursor.
+3. If the recovery point cannot cover the persisted cursor, the store is
+   quarantined and reported rather than silently resuming.
+
+### 7.3 Partition, gap, and heal
+
+- A disconnected peer's operations are queued by the transport and released on
+  reconnect; they are not lost and not applied early.
+- Missing segments hold the frontier (§5).
+- A proven-unused reservation can be closed by a durably committed scoped terminal
+  CTGP record through Core (see markoff-core-adoption.md). Missing document
+  operations with uncertain publication cannot be declared unused; explicit
+  retirement remains a separate membership/epoch protocol.
+
+## 8. Membership
+
+- Enrollment is explicit and durable. An enrolled peer stays enrolled
+  indefinitely, however silent (C2).
+- Coverage includes silent members: a missing member's operations keep the
+  frontier from advancing past them.
+- Retirement is an explicit transition that bumps the stream epoch. Retired
+  members' retained undo, redo, anchor, and checkpoint obligations are released
+  only at that point (R7).
+- Advisory staleness reminders (proposed default 90 days, configurable) are a
+  *display* concern. Keep, snooze, and dismiss never change membership, and
+  clock passage never calls retirement (R9).
+- A retired device preserves its local branch and enters
+  export/reconciliation/rejoin before new-epoch editing. No claim is made about
+  lossless merging of arbitrary old-epoch edits after reclamation.
+
+## 9. Writer ownership
+
+- A writer lease is held per (document, stream) across processes.
+- Private actor state lives outside shared document stores, so an ordinary copy
+  of a shared folder produces a *new* actor rather than a duplicate one. Copying
+  private device state requires an explicit fork-identity operation that mints a
+  fresh actor.
+- Two identical disconnected clones cannot always be detected before they
+  exchange operations. This limit is documented rather than papered over; when
+  they do meet, the conflict is detected and reported as an identity conflict
+  (§1.1).
+
+## 10. Review against the findings and the multi-stream cases
+
+**F4 — sender restart drops a distinct operation.** §1.2 makes the counter
+per-(actor, stream) and durable; §7.1 requires resuming above the highest durable
+value and keys dedupe on `(actor, counter)`. The failure mode needs a transport
+that mints entry ids from a counter it fails to persist; the protocol removes
+that counter's authority.
+
+**F5 — persisted cursors outlive the state they cover.** §5 makes coverage a
+frontier over validated, contiguous state, ties cursors to a recovery point, and
+requires §7.2's rebuild-before-write. A cursor alone is not a recovery point.
+
+**F10 — decoder success is not validity.** §3 separates syntax, schema/version,
+and semantics, requires complete input consumption and bounded/checked
+arithmetic, and refuses to advance coverage past retained or quarantined records.
+§4 keeps "well-formed" and "applicable" as different answers.
+
+**Multi-stream independent counters.** A `text` stream at counter 41 and a
+`comments` stream at counter 3 are unrelated. Coverage is keyed by (stream,
+actor) throughout; there is no scalar in this protocol that could be mistaken for
+cross-stream coverage — which is precisely the failure mode of
+`lowest_peer_acked_lamport()`.
+
+### The review, cited against the code it replaces
+
+Each rule above was checked against the line that violates it, so the contract is
+anchored to the code rather than to a memory of it.
+
+| Rule | Current code that violates it |
+|---|---|
+| §1.2 durable per-(actor, stream) counter | `StreamSync.h:70` `uint64_t next_seq = 1;` and `StreamSync.cpp:205` `uint64_t seq = s.next_seq++;` — not recovered across restart, with the code's own comment at `StreamSync.cpp:209` acknowledging it |
+| §5 contiguous frontier | `SegmentReader.cpp:98` `if (id <= m_last_sealed) continue;` and `SegmentReader.cpp:108` `m_last_sealed = id;` — a high-water mark, so a late earlier segment is skipped forever (F6) |
+| §5 cursor needs a recovery point | `SegmentReader.cpp:60` persists `m_last_sealed` as raw consumption progress, with no reference to any recoverable state (F5) |
+| §3 complete input consumption | `Serialization.cpp:572` `parse_operation()` reads the `t` key and returns a value; nothing requires the remaining input to be empty, so trailing bytes are accepted (F10) |
+| §3 semantic validation | `Serialization.cpp:660` parses the undo variant with the same shape, so an object missing required fields decodes successfully (F10) |
+| §4 no `void apply` | `Buffer::apply_ops(const std::vector<Operation>&)` returns `void`, so duplicate, deferred, and rejected are indistinguishable to a caller |
+| §4 anchor resolution is an outcome | `Buffer::resolve_anchor` returns `uint32_t` and clamps, so an unresolvable anchor is silent (R6) |
+
+**Two of these are also frozen as executable evidence:** the F8 fixture
+(`buffer_concurrent_passages_stay_contiguous`) and the store fixtures in
+`tst_store_fault_harness` that pin the F6 skip behaviour. Their red tests exist;
+this protocol says what must change to make them green.
+
+The multi-stream case is the one with no current violation and no red test,
+because today there is only ever one stream: `StreamSync` mints one sequence per
+replica name. The violation appears the moment a second stream exists, which is
+why §1.2 forbids the scalar by construction rather than by warning.
+
+## 11. Decoder bounds and strictness
+
+P04. This section is normative for every decoder that reads a frame or a store
+file, and it is where F10's first clause becomes checkable.
+
+### 11.1 Bounds are configuration, checked before allocation
+
+A decoder that reads first and complains afterwards has already lost: the bound
+that matters is the one that stops the allocation, not the one that notices it
+afterwards. Every bound is therefore checked *before* the allocation it governs,
+and the bounds are configuration rather than constants so an operation format
+can tighten them without touching the reader.
+
+| Bound | Default | Governs |
+|---|---|---|
+| `max_input_bytes` | 8 MiB | the whole document |
+| `max_nesting_depth` | 32 | nested containers |
+| `max_elements` | 100000 | total values anywhere in the document |
+| `max_container_elements` | 100000 | members of one array or object |
+| `max_text_bytes` | 4 MiB | one string value, **after** unescaping |
+| `max_key_bytes` | 1 KiB | one object key |
+| `max_number_digits` | 20 | significant digits in one number |
+| `max_number_exponent` | 308 | absolute decimal exponent |
+
+Two of these are stated in the unescaped domain on purpose. `max_text_bytes` is
+checked against the decoded value, so a short frame of `A` repeats cannot
+ask for a large allocation; and `max_number_exponent` is separate from
+`max_number_digits` so that `1e999999999` is rejected by an exponent rule rather
+than by a digit count it never reaches.
+
+The defaults are generous for real documents — 8 MiB of operation payload, 4 MiB
+of text, 32 levels of nesting that no real envelope reaches — and small enough
+that a hostile 4 KiB frame cannot ask for a gigabyte. `tst_decode_validation`
+holds a 200000-deep array to prove the depth bound is a bound and not a promise.
+
+### 11.1a Semantic validation bounds
+
+Decoding bounds (above) limit what an *envelope* may contain. Semantic validation
+bounds limit what one decoded *operation* may declare, checked before the
+validator walks the structure for the same reason: a record claiming a million
+deletion runs must be refused before anything iterates them.
+
+| Bound | Default | Governs |
+|---|---|---|
+| `max_ranges` | 65536 | one edit's replacement ranges |
+| `max_inserted_fragments` | 65536 | one edit's inserted fragments |
+| `max_deletion_runs` | 65536 | one edit's deletion runs |
+| `max_split_relocations` | 65536 | one edit's split relocations |
+| `max_undo_targets` | 65536 | one undo's target set |
+
+No real edit comes near these; a single Ctrl-Z undo coalesces keystrokes, not
+tens of thousands of them. They live in `ValidationLimits`
+(`src/crdt/OperationValidation.h`) rather than in the decoder because they
+constrain the *semantic* pass, which happens later and for a different reason.
+
+### 11.2 Strictness
+
+Every item here is deliberate, and relaxing one is a protocol change:
+
+- **Complete consumption.** The reader requires the whole input to be one value.
+  `{"t":"u"}garbage` is a syntax error. Trailing *whitespace* is insignificant
+  and is the only thing permitted after the root value.
+- **Duplicate object keys are rejected**, not resolved last-wins. A duplicate
+  means two writers disagreed about a field, and silently preferring one of them
+  is how that disagreement becomes invisible.
+- **Key order is arbitrary** and carries no meaning. Two documents that differ
+  only in key order decode to equal values; this is an acceptance criterion, not
+  an accident of a hash-ordered map.
+- **No trailing commas, no comments, no unquoted or single-quoted keys, no
+  `NaN`/`Infinity`, no leading zeros.**
+- **`\u` escapes must form surrogate pairs.** A lone surrogate is an error
+  reported at the high surrogate's own escape. Encoded surrogates in raw text
+  (CESU-8/WTF-8) are errors too, since a "valid" decoder that accepts them is how
+  unpaired surrogates reach a document.
+- **Raw text is validated as UTF-8**, and a truncated sequence is an error rather
+  than a shorter string.
+- **Numbers keep their literal text.** `1.0` and `1` are distinguishable on the
+  wire; a decoder that collapses them has discarded information it will be asked
+  to reproduce on encode.
+- **Raw control characters below 0x20 are rejected in strings**, and every error
+  offset points at the start of the offending scalar, escape, or pair — never at
+  a byte inside one.
+
+### 11.3 Error reporting
+
+Every rejection carries a kind, an absolute byte offset, and a bounded,
+single-line context string, because a decoder that says "no" without saying where
+is barely better than one that says "yes" when it should not. A UTF-8 failure
+keeps the underlying reason whole rather than flattening it to a string: an
+overlong encoding and an encoded surrogate are different bugs for whoever has to
+fix the writer.
+
+### 11.4 Retained versus rejected
+
+A parse failure is one thing; an unknown `t` identifier or an unsupported `v` is
+another. §3 step 2 makes the second *retained* rather than rejected, because the
+bytes are valid and a later build may understand them. The reader therefore
+reports `unsupported_version()` separately from `parse()` failing, and
+`parse_object_envelope()` returns that as a `retained` flag for the transport to
+act on. Throwing away a newer writer's operation as corruption would lose work
+(R1).
+
+
+## External position and durable-publication amendments (2026-10-04)
+
+[W1–W6](vnext-external-position-contract.md) add an independently versioned
+position token, checked affinity/context, explicit resolution positions/errors,
+and durable external pins. No pre-vNext conversion is required; future supported
+published token bytes are a persisted contract. Device retirement does not release
+a live reply's pin. Pin projections must recover to their declared consumer
+frontier before GC; current pins do not supply unlimited historical playback.
+
+The storage sequence includes checked temporary close before rename, unique owned
+temporaries, and parent-directory sync for the first append barrier after open.
+A directory-sync failure after publication returns `commit_uncertain`. L02–L08
+must reconcile publication/tail state rather than assert rollback. Local private
+counter state uses a single kernel lease owner and nonzero fresh reservations.

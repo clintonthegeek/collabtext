@@ -1,0 +1,150 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "reverse-typing",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "reverse-typing",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [],
+  "operations": [
+    {
+      "id": "A/2",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "START",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "A/1",
+          "value": "c"
+        }
+      ]
+    },
+    {
+      "id": "A/4",
+      "kind": "insert",
+      "after": [
+        "A/2"
+      ],
+      "between": [
+        "START",
+        "A/1"
+      ],
+      "items": [
+        {
+          "id": "A/3",
+          "value": "b"
+        }
+      ]
+    },
+    {
+      "id": "A/6",
+      "kind": "insert",
+      "after": [
+        "A/4"
+      ],
+      "between": [
+        "START",
+        "A/3"
+      ],
+      "items": [
+        {
+          "id": "A/5",
+          "value": "a"
+        }
+      ]
+    },
+    {
+      "id": "B/2",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "START",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "B/1",
+          "value": "Z"
+        }
+      ]
+    },
+    {
+      "id": "B/4",
+      "kind": "insert",
+      "after": [
+        "B/2"
+      ],
+      "between": [
+        "START",
+        "B/1"
+      ],
+      "items": [
+        {
+          "id": "B/3",
+          "value": "Y"
+        }
+      ]
+    },
+    {
+      "id": "B/6",
+      "kind": "insert",
+      "after": [
+        "B/4"
+      ],
+      "between": [
+        "START",
+        "B/3"
+      ],
+      "items": [
+        {
+          "id": "B/5",
+          "value": "X"
+        }
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/2",
+      "A/4",
+      "A/6",
+      "B/2",
+      "B/4",
+      "B/6"
+    ],
+    [
+      "B/6",
+      "B/4",
+      "B/2",
+      "A/6",
+      "A/4",
+      "A/2"
+    ]
+  ],
+  "tokens": [],
+  "expected": {
+    "order": [
+      "A/5",
+      "A/3",
+      "A/1",
+      "B/5",
+      "B/3",
+      "B/1"
+    ],
+    "hidden": [],
+    "positions": {},
+    "text": "abcXYZ",
+    "comparisons": []
+  }
+}

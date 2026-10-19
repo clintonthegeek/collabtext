@@ -1,0 +1,96 @@
+#collabtext-trace 1
+#model buffer
+#label invariants_after_undo_redo_cycles
+#seed 8482030072662781132
+#replicas 1
+#net 50 200 500 1
+edit 0 0 0 -
+edit 0 0 0 -
+edit 0 0 0 -
+edit 0 0 0 79c3a8
+edit 0 1 1 63e4b8816b6170
+edit 0 0 7 796bf09f9d8a77
+edit 0 7 7 71e4bbba7879e4b9bd
+edit 0 11 17 77e4b998
+edit 0 0 1 f09f9e806e
+edit 0 16 19 c3b46670
+edit 0 11 16 -
+edit 0 10 13 -
+edit 0 5 5 6ac3a375
+edit 0 6 16 c3ab73636b62
+edit 0 0 11 e4b9b2f09f998a72
+edit 0 9 11 -
+edit 0 0 7 e4ba86f09f998f
+edit 0 0 7 6768
+edit 0 4 4 76e4b980636768
+edit 0 2 11 -
+edit 0 2 2 61
+edit 0 2 3 727570
+edit 0 0 0 -
+edit 0 0 5 -
+edit 0 0 0 -
+edit 0 0 0 -
+edit 0 0 0 -
+edit 0 0 0 6871686f
+edit 0 1 2 7972c3ba7975
+edit 0 6 8 73677a6c
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+undo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0
+redo 0

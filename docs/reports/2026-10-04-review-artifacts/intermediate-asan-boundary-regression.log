@@ -1,0 +1,375 @@
+Root: /home/clinton/dev/collabtext/.worktrees/reliability-v2
+Mode: asan
+Regex: ^(tst_clock|tst_locator|tst_buffer|tst_convergence|tst_sumtree|tst_anchor|tst_opqueue|tst_utf8|tst_rope|tst_fuzz|tst_trace_reduction|tst_network_sim|tst_store_fault_harness|tst_behavior_fixtures|tst_actor_identity|tst_summary_laws|tst_decode_validation|tst_operation_validation|tst_identity_ordering_model|tst_durable_file|tst_rope_integration|tst_undomap|tst_gc|tst_evaluation_regressions|tst_serialization|tst_edits_since|tst_filesync|tst_multicursor|tst_identity_json|tst_identity_store|tst_identity_projector|tst_presence_manager|tst_identity_widgets|tst_collab_plain_text_edit|tst_scroll_stability|tst_stream_sync|tst_opstream_streamsync|tst_opstream_acks|tst_opstream_convergence_buffer|tst_opstream_convergence_idlist|tst_opstream_convergence_mixed|tst_opstream_replay|tst_opstream_idempotent|tst_idlist|tst_idlist_anchor|tst_idlist_convergence|tst_idlist_undo|tst_idlist_gc|tst_idlist_fuzz|tst_idlist_serialization|tst_idlist_op_api|tst_chat_message|tst_comment|tst_seed_op|tst_sidecar_manifest|tst_zstd_util|tst_segment_format|tst_segment_writer|tst_segment_reader|tst_serialization_public|tst_crdtengine_op_api|tst_opstream_interface)$
+Workers: 2
+
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan
+      Start  4: tst_convergence
+      Start 10: tst_fuzz
+ 1/62 Test  #4: tst_convergence ...................   Passed    3.05 sec
+      Start 16: tst_summary_laws
+ 2/62 Test #16: tst_summary_laws ..................***Failed    0.47 sec
+********* Start testing of TestSummaryLaws *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+[seed] suite=tst_summary_laws scenario=laws campaign_seed=20261003 effective_seed=8084434288122499645 source=fixed kind=summary-laws
+PASS   : TestSummaryLaws::initTestCase()
+PASS   : TestSummaryLaws::absent_actor_constrains_coverage_to_zero()
+PASS   : TestSummaryLaws::disjoint_vectors_intersect_to_nothing()
+PASS   : TestSummaryLaws::overlapping_vectors_take_the_minimum()
+PASS   : TestSummaryLaws::meet_and_coverage_intersection_are_different_operations()
+PASS   : TestSummaryLaws::join_is_a_commutative_associative_idempotent_lattice_join()
+PASS   : TestSummaryLaws::coverage_intersection_is_commutative_associative_and_idempotent()
+PASS   : TestSummaryLaws::intersection_has_no_identity_and_empty_absorbs()
+PASS   : TestSummaryLaws::coverage_never_exceeds_any_participant()
+PASS   : TestSummaryLaws::fragment_summary_is_a_monoid()
+PASS   : TestSummaryLaws::idlist_summary_is_a_monoid()
+FAIL!  : TestSummaryLaws::visible_text_is_unchanged_across_randomized_splice_patterns() edit did not produce the expected text
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_summary_laws.cpp(280)]
+PASS   : TestSummaryLaws::cleanupTestCase()
+Totals: 12 passed, 1 failed, 0 skipped, 0 blacklisted, 13ms
+********* Finished testing of TestSummaryLaws *********
+
+      Start 20: tst_durable_file
+ 3/62 Test #20: tst_durable_file ..................   Passed    0.60 sec
+      Start  1: tst_clock
+ 4/62 Test  #1: tst_clock .........................   Passed    2.70 sec
+      Start 24: tst_gc
+ 5/62 Test #24: tst_gc ............................***Failed    0.63 sec
+********* Start testing of TestGC *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestGC::initTestCase()
+PASS   : TestGC::fragment_count_empty()
+PASS   : TestGC::fragment_count_after_insert()
+PASS   : TestGC::tombstone_count_after_delete()
+PASS   : TestGC::max_undo_depth_default()
+PASS   : TestGC::set_max_undo_depth()
+PASS   : TestGC::gc_removes_tombstones()
+PASS   : TestGC::gc_retains_after_local_history_trim()
+FAIL!  : TestGC::gc_preserves_visible_text() Compared values are not the same
+   Actual   (text_before)      : "adef"
+   Expected (std::string("af")): "af"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_gc.cpp(124)]
+PASS   : TestGC::gc_protects_undoable_deletions()
+PASS   : TestGC::gc_after_undo_redo_cycle()
+PASS   : TestGC::gc_partial_protection()
+PASS   : TestGC::gc_with_multiple_deletions_on_same_fragment()
+PASS   : TestGC::gc_preserves_fragment_layout()
+PASS   : TestGC::gc_preserves_deleted_anchor_context()
+PASS   : TestGC::gc_preserves_distinct_insertions()
+QDEBUG : TestGC::gc_preserves_invariants_stress() Seed: 1043703118
+PASS   : TestGC::gc_preserves_invariants_stress()
+PASS   : TestGC::gc_preserves_convergence()
+QDEBUG : TestGC::gc_convergence_fuzz() Seed: 721054820
+PASS   : TestGC::gc_convergence_fuzz()
+PASS   : TestGC::compact_retains_remote_tombstones()
+PASS   : TestGC::compact_respects_undo_protection()
+PASS   : TestGC::compact_ignores_deletions_beyond_watermark()
+PASS   : TestGC::compact_convergence_both_replicas()
+QDEBUG : TestGC::compact_convergence_fuzz() Seed: 1194552842
+PASS   : TestGC::compact_convergence_fuzz()
+PASS   : TestGC::cleanupTestCase()
+Totals: 24 passed, 1 failed, 0 skipped, 0 blacklisted, 234ms
+********* Finished testing of TestGC *********
+
+      Start 19: tst_identity_ordering_model
+ 6/62 Test #19: tst_identity_ordering_model .......   Passed    0.21 sec
+      Start 11: tst_trace_reduction
+ 7/62 Test #11: tst_trace_reduction ...............***Failed    0.67 sec
+********* Start testing of TestTraceReduction *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestTraceReduction::initTestCase()
+PASS   : TestTraceReduction::seed_parsing_is_checked()
+PASS   : TestTraceReduction::default_seed_is_documented_and_stable()
+PASS   : TestTraceReduction::effective_seed_is_derived_from_the_campaign_seed()
+PASS   : TestTraceReduction::same_seed_produces_identical_traces()
+PASS   : TestTraceReduction::different_seeds_produce_different_traces()
+PASS   : TestTraceReduction::replay_reproduces_the_recorded_run()
+PASS   : TestTraceReduction::trace_round_trips_through_a_file()
+PASS   : TestTraceReduction::idlist_traces_round_trip_and_replay()
+FAIL!  : TestTraceReduction::injected_lost_delivery_breaks_convergence_and_replays() '!recorded.converged' returned FALSE. (the injected loss must actually diverge)
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_trace_reduction.cpp(227)]
+PASS   : TestTraceReduction::disconnect_blocks_delivery_until_reconnect()
+FAIL!  : TestTraceReduction::injected_failure_reduces_to_a_smaller_valid_reproduction() '!before.converged' returned FALSE. ()
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_trace_reduction.cpp(271)]
+PASS   : TestTraceReduction::reduction_removes_irrelevant_traffic()
+PASS   : TestTraceReduction::reduction_rejects_removals_that_break_causality()
+PASS   : TestTraceReduction::reduction_rejects_removals_that_break_edit_ranges()
+PASS   : TestTraceReduction::reduction_rejects_removals_that_break_idlist_indices()
+PASS   : TestTraceReduction::reduction_refuses_a_passing_trace()
+PASS   : TestTraceReduction::predicate_selection_is_independent()
+PASS   : TestTraceReduction::restart_preserves_document_and_history()
+PASS   : TestTraceReduction::trace_rejects_unknown_versions_and_verbs()
+PASS   : TestTraceReduction::cleanupTestCase()
+Totals: 19 passed, 2 failed, 0 skipped, 0 blacklisted, 395ms
+********* Finished testing of TestTraceReduction *********
+
+      Start 12: tst_network_sim
+ 8/62 Test #12: tst_network_sim ...................   Passed    1.50 sec
+      Start 13: tst_store_fault_harness
+ 9/62 Test #13: tst_store_fault_harness ...........   Passed    0.71 sec
+      Start 18: tst_operation_validation
+10/62 Test #18: tst_operation_validation ..........   Passed    0.83 sec
+      Start  7: tst_opqueue
+11/62 Test  #7: tst_opqueue .......................   Passed    0.80 sec
+      Start 51: tst_idlist_fuzz
+12/62 Test #10: tst_fuzz ..........................   Passed   12.08 sec
+      Start 21: tst_rope_integration
+13/62 Test #21: tst_rope_integration ..............   Passed    0.35 sec
+      Start 22: tst_undomap
+14/62 Test #22: tst_undomap .......................   Passed    0.65 sec
+      Start 35: tst_identity_widgets
+15/62 Test #51: tst_idlist_fuzz ...................   Passed    1.20 sec
+      Start  2: tst_locator
+16/62 Test  #2: tst_locator .......................   Passed    0.48 sec
+      Start 17: tst_decode_validation
+17/62 Test #17: tst_decode_validation .............   Passed    0.20 sec
+      Start 40: tst_opstream_acks
+18/62 Test #40: tst_opstream_acks .................   Passed    0.31 sec
+      Start 36: tst_collab_plain_text_edit
+19/62 Test #36: tst_collab_plain_text_edit ........   Passed    0.42 sec
+      Start 37: tst_scroll_stability
+20/62 Test #35: tst_identity_widgets ..............   Passed    1.88 sec
+      Start 38: tst_stream_sync
+21/62 Test #37: tst_scroll_stability ..............   Passed    0.36 sec
+      Start  3: tst_buffer
+22/62 Test #38: tst_stream_sync ...................   Passed    0.17 sec
+      Start 44: tst_opstream_replay
+23/62 Test  #3: tst_buffer ........................***Failed    0.43 sec
+********* Start testing of TestBuffer *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestBuffer::initTestCase()
+PASS   : TestBuffer::insert_at_beginning()
+PASS   : TestBuffer::insert_at_end()
+PASS   : TestBuffer::insert_in_middle()
+PASS   : TestBuffer::delete_from_beginning()
+PASS   : TestBuffer::delete_from_end()
+PASS   : TestBuffer::delete_from_middle()
+PASS   : TestBuffer::replace()
+PASS   : TestBuffer::undo_reverses_last_edit()
+PASS   : TestBuffer::redo_restores()
+PASS   : TestBuffer::undo_insert_then_redo()
+PASS   : TestBuffer::undo_delete_restores_text()
+PASS   : TestBuffer::undo_nothing_returns_nullopt()
+PASS   : TestBuffer::redo_nothing_returns_nullopt()
+PASS   : TestBuffer::coalesce_undo_returns_false_below_two_entries()
+PASS   : TestBuffer::coalesce_undo_merges_two_inserts()
+PASS   : TestBuffer::coalesce_undo_redo_restores_both()
+PASS   : TestBuffer::coalesce_undo_merges_insert_then_delete()
+PASS   : TestBuffer::coalesce_undo_merges_two_deletes()
+PASS   : TestBuffer::coalesce_undo_then_new_edit_replaces_redoable()
+PASS   : TestBuffer::coalesce_undo_remote_sees_single_op()
+PASS   : TestBuffer::remote_edit_inserts()
+PASS   : TestBuffer::remote_edit_delete()
+PASS   : TestBuffer::concurrent_inserts_both_survive()
+PASS   : TestBuffer::concurrent_inserts_deterministic()
+PASS   : TestBuffer::causal_ordering_defers()
+PASS   : TestBuffer::duplicate_ops_idempotent()
+PASS   : TestBuffer::visible_length_tracks_correctly()
+PASS   : TestBuffer::version_advances()
+PASS   : TestBuffer::replica_id_returned()
+PASS   : TestBuffer::multiple_ranges_in_single_edit()
+PASS   : TestBuffer::local_edit_replace_mid_fragment()
+PASS   : TestBuffer::local_edit_insert_at_start_of_fragment()
+PASS   : TestBuffer::local_edit_insert_mid_fragment()
+PASS   : TestBuffer::local_edit_delete_spanning_fragments()
+PASS   : TestBuffer::local_edit_delete_partial_fragment()
+PASS   : TestBuffer::local_edit_multi_range_left_to_right()
+PASS   : TestBuffer::local_edit_replace_entire_document()
+FAIL!  : TestBuffer::remote_edit_skips_unseen_fragments() Compared values are not the same
+   Actual   (bufA.text().size()): 6
+   Expected (size_t(3))         : 3
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_buffer.cpp(483)]
+PASS   : TestBuffer::remote_edit_version_filtered_offset()
+PASS   : TestBuffer::remote_edit_convergence_with_concurrent_deletes()
+PASS   : TestBuffer::undo_after_remote_edit()
+PASS   : TestBuffer::redo_after_remote_edit()
+PASS   : TestBuffer::remote_undo_broadcast()
+PASS   : TestBuffer::undo_delete_with_remote_interleaving()
+PASS   : TestBuffer::new_edit_clears_redo_stack()
+PASS   : TestBuffer::split_relocation_remote_convergence()
+PASS   : TestBuffer::split_relocation_with_concurrent_insert()
+PASS   : TestBuffer::replace_mid_fragment_remote_convergence()
+PASS   : TestBuffer::empty_range_insert_only()
+PASS   : TestBuffer::adjacent_ranges()
+PASS   : TestBuffer::delete_everything_then_insert()
+PASS   : TestBuffer::visible_length_always_matches_text()
+PASS   : TestBuffer::concurrent_undo_both_hide()
+PASS   : TestBuffer::concurrent_undo_then_redo_wins()
+PASS   : TestBuffer::remote_undo_with_counts()
+PASS   : TestBuffer::fragment_with_multiple_deletions()
+PASS   : TestBuffer::deletion_undo_roundtrip()
+PASS   : TestBuffer::concurrent_delete_and_insertion_undo()
+FAIL!  : TestBuffer::sequential_insert_at_adjacent_positions() Compared values are not the same
+   Actual   (bob.text())                        : "A quick jbrown fox"
+   Expected (std::string("A quick jfbrown fox")): "A quick jfbrown fox"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_buffer.cpp(899)]
+FAIL!  : TestBuffer::sequential_insert_char_by_char_text() Compared values are not the same
+   Actual   (bob.text())                       : "A quick brown fox"
+   Expected (std::string("A quick jbrown fox")): "A quick jbrown fox"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_buffer.cpp(921)]
+FAIL!  : TestBuffer::sequential_insert_single_chars_at_boundary() Compared values are not the same
+   Actual   (bob.text())            : "heXllo"
+   Expected (std::string("heXYllo")): "heXYllo"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_buffer.cpp(943)]
+PASS   : TestBuffer::cleanupTestCase()
+Totals: 59 passed, 4 failed, 0 skipped, 0 blacklisted, 117ms
+********* Finished testing of TestBuffer *********
+
+24/62 Test #44: tst_opstream_replay ...............   Passed    0.33 sec
+      Start 41: tst_opstream_convergence_buffer
+      Start 14: tst_behavior_fixtures
+25/62 Test #14: tst_behavior_fixtures .............   Passed    0.22 sec
+      Start 29: tst_multicursor
+26/62 Test #41: tst_opstream_convergence_buffer ...***Failed    0.32 sec
+********* Start testing of TestOpStreamConvergenceBuffer *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestOpStreamConvergenceBuffer::initTestCase()
+PASS   : TestOpStreamConvergenceBuffer::two_replica_buffer_convergence_over_opstream()
+PASS   : TestOpStreamConvergenceBuffer::divergent_edits_converge_over_opstream()
+FAIL!  : TestOpStreamConvergenceBuffer::multi_op_sequential_convergence() Compared values are not the same
+   Actual   (engine1.text())           : "hello world"
+   Expected (std::string("helloworld")): "helloworld"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_opstream_convergence_buffer.cpp(214)]
+PASS   : TestOpStreamConvergenceBuffer::cleanupTestCase()
+Totals: 4 passed, 1 failed, 0 skipped, 0 blacklisted, 24ms
+********* Finished testing of TestOpStreamConvergenceBuffer *********
+
+      Start 26: tst_serialization
+27/62 Test #26: tst_serialization .................   Passed    0.26 sec
+      Start  8: tst_utf8
+28/62 Test #29: tst_multicursor ...................   Passed    0.42 sec
+      Start 39: tst_opstream_streamsync
+29/62 Test #39: tst_opstream_streamsync ...........   Passed    0.22 sec
+      Start 15: tst_actor_identity
+30/62 Test  #8: tst_utf8 ..........................   Passed    0.33 sec
+      Start 28: tst_filesync
+31/62 Test #15: tst_actor_identity ................   Passed    0.10 sec
+      Start 27: tst_edits_since
+32/62 Test #28: tst_filesync ......................   Passed    0.28 sec
+      Start  6: tst_anchor
+33/62 Test #27: tst_edits_since ...................   Passed    0.23 sec
+      Start  5: tst_sumtree
+34/62 Test  #6: tst_anchor ........................***Failed    0.17 sec
+********* Start testing of TestAnchor *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestAnchor::initTestCase()
+PASS   : TestAnchor::anchor_at_beginning()
+PASS   : TestAnchor::anchor_at_end()
+PASS   : TestAnchor::anchor_in_middle()
+PASS   : TestAnchor::anchor_survives_insert_before()
+PASS   : TestAnchor::anchor_survives_insert_after()
+PASS   : TestAnchor::anchor_survives_delete_before()
+PASS   : TestAnchor::anchor_min_always_zero()
+PASS   : TestAnchor::anchor_max_always_end()
+PASS   : TestAnchor::compare_anchors_ordering()
+PASS   : TestAnchor::anchor_on_deleted_text()
+FAIL!  : TestAnchor::anchor_with_multiple_edits() Compared values are not the same
+   Actual   (buf.resolve_anchor(anchor)): 5
+   Expected (4u)                        : 4
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_anchor.cpp(142)]
+PASS   : TestAnchor::anchor_through_undo_redo()
+PASS   : TestAnchor::anchor_with_remote_insert()
+PASS   : TestAnchor::anchor_with_concurrent_inserts_at_same_position()
+PASS   : TestAnchor::anchor_min_max_always_stable()
+FAIL!  : TestAnchor::anchor_through_many_edits() Compared values are not the same
+   Actual   (buf.resolve_anchor(anchor)): 15
+   Expected (5u)                        : 5
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_anchor.cpp(232)]
+PASS   : TestAnchor::compare_anchors_with_edits()
+PASS   : TestAnchor::anchor_on_empty_document()
+PASS   : TestAnchor::anchor_on_fully_deleted_text()
+PASS   : TestAnchor::cleanupTestCase()
+Totals: 19 passed, 2 failed, 0 skipped, 0 blacklisted, 22ms
+********* Finished testing of TestAnchor *********
+
+      Start 31: tst_identity_json
+35/62 Test  #5: tst_sumtree .......................   Passed    0.20 sec
+      Start 43: tst_opstream_convergence_mixed
+36/62 Test #31: tst_identity_json .................   Passed    0.13 sec
+      Start 33: tst_identity_projector
+37/62 Test #33: tst_identity_projector ............   Passed    0.14 sec
+      Start  9: tst_rope
+38/62 Test #43: tst_opstream_convergence_mixed ....   Passed    0.25 sec
+      Start 32: tst_identity_store
+39/62 Test  #9: tst_rope ..........................   Passed    0.15 sec
+      Start 42: tst_opstream_convergence_idlist
+40/62 Test #32: tst_identity_store ................   Passed    0.15 sec
+      Start 25: tst_evaluation_regressions
+41/62 Test #42: tst_opstream_convergence_idlist ...   Passed    0.16 sec
+      Start 45: tst_opstream_idempotent
+42/62 Test #25: tst_evaluation_regressions ........   Passed    0.33 sec
+      Start 34: tst_presence_manager
+43/62 Test #45: tst_opstream_idempotent ...........   Passed    0.23 sec
+      Start 48: tst_idlist_convergence
+44/62 Test #34: tst_presence_manager ..............   Passed    0.10 sec
+      Start 47: tst_idlist_anchor
+45/62 Test #48: tst_idlist_convergence ............   Passed    0.13 sec
+      Start 49: tst_idlist_undo
+46/62 Test #47: tst_idlist_anchor .................   Passed    0.11 sec
+      Start 46: tst_idlist
+47/62 Test #49: tst_idlist_undo ...................   Passed    0.16 sec
+      Start 56: tst_seed_op
+48/62 Test #46: tst_idlist ........................   Passed    0.14 sec
+      Start 50: tst_idlist_gc
+49/62 Test #56: tst_seed_op .......................   Passed    0.07 sec
+      Start 63: tst_crdtengine_op_api
+50/62 Test #50: tst_idlist_gc .....................   Passed    0.09 sec
+      Start 59: tst_segment_format
+51/62 Test #63: tst_crdtengine_op_api .............***Failed    0.08 sec
+********* Start testing of TestCrdtEngineOpApi *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestCrdtEngineOpApi::initTestCase()
+PASS   : TestCrdtEngineOpApi::setOnLocalOp_fires_on_insert()
+PASS   : TestCrdtEngineOpApi::setOnLocalOp_fires_on_remove()
+PASS   : TestCrdtEngineOpApi::setOnLocalOp_fires_on_undo()
+PASS   : TestCrdtEngineOpApi::setOnLocalOp_fires_on_redo()
+PASS   : TestCrdtEngineOpApi::applyRemoteOp_converges_insert()
+PASS   : TestCrdtEngineOpApi::encode_decode_preserves_lamport()
+PASS   : TestCrdtEngineOpApi::applyRemoteOp_undo_roundtrip()
+PASS   : TestCrdtEngineOpApi::two_way_convergence()
+PASS   : TestCrdtEngineOpApi::concurrent_insert_convergence()
+FAIL!  : TestCrdtEngineOpApi::sequential_multi_op_convergence() Compared values are not the same
+   Actual   (engine2.text())           : "hello world"
+   Expected (std::string("helloworld")): "helloworld"
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_crdtengine_op_api.cpp(274)]
+PASS   : TestCrdtEngineOpApi::applyRemoteOp_returns_true_for_valid_op()
+PASS   : TestCrdtEngineOpApi::cleanupTestCase()
+Totals: 12 passed, 1 failed, 0 skipped, 0 blacklisted, 23ms
+********* Finished testing of TestCrdtEngineOpApi *********
+
+      Start 57: tst_sidecar_manifest
+52/62 Test #59: tst_segment_format ................   Passed    0.06 sec
+      Start 60: tst_segment_writer
+53/62 Test #57: tst_sidecar_manifest ..............   Passed    0.05 sec
+      Start 61: tst_segment_reader
+54/62 Test #60: tst_segment_writer ................   Passed    0.08 sec
+      Start 62: tst_serialization_public
+55/62 Test #61: tst_segment_reader ................   Passed    0.07 sec
+      Start 64: tst_opstream_interface
+56/62 Test #62: tst_serialization_public ..........   Passed    0.04 sec
+      Start 52: tst_idlist_serialization
+57/62 Test #64: tst_opstream_interface ............   Passed    0.05 sec
+      Start 58: tst_zstd_util
+58/62 Test #58: tst_zstd_util .....................   Passed    0.05 sec
+      Start 53: tst_idlist_op_api
+59/62 Test #53: tst_idlist_op_api .................   Passed    0.06 sec
+      Start 54: tst_chat_message
+60/62 Test #52: tst_idlist_serialization ..........   Passed    0.12 sec
+      Start 55: tst_comment
+61/62 Test #55: tst_comment .......................   Passed    0.05 sec
+62/62 Test #54: tst_chat_message ..................   Passed    0.06 sec
+
+89% tests passed, 7 tests failed out of 62
+
+Total Test time (real) =  18.56 sec
+
+The following tests FAILED:
+	  3 - tst_buffer (Failed)
+	  6 - tst_anchor (Failed)
+	 11 - tst_trace_reduction (Failed)
+	 16 - tst_summary_laws (Failed)
+	 24 - tst_gc (Failed)
+	 41 - tst_opstream_convergence_buffer (Failed)
+	 63 - tst_crdtengine_op_api (Failed)
+Errors while running CTest
+Verification exit: 8; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-asan/verification/20261004T215432Z-2682055

@@ -1,5 +1,6 @@
 #include <QTest>
 #include "crdt/SegmentFormat.h"
+#include "crdt/ZstdUtil.h"
 
 using namespace CollabText::Crdt;
 
@@ -58,6 +59,44 @@ private slots:
         h.format_version = 99;
         std::string bytes = encode_segment_header(h);
         QVERIFY(!decode_segment_header(bytes).has_value());
+    }
+
+    void decode_rejects_unsupported_kind_flags_and_record_budget() {
+        SegmentHeader h{};
+        auto bytes = encode_segment_header(h);
+        bytes[5] = char(0x7f);
+        QVERIFY(!decode_segment_header(bytes));
+        bytes = encode_segment_header(h);
+        bytes[6] = 1;
+        QVERIFY(!decode_segment_header(bytes));
+        bytes = encode_segment_header(h);
+        bytes[24] = char(0xff); bytes[25] = char(0xff);
+        bytes[26] = char(0xff); bytes[27] = char(0xff);
+        QVERIFY(!decode_segment_header(bytes));
+    }
+
+    void base64_padding_is_canonical_and_terminal() {
+        QVERIFY(!base64_decode("A==="));
+        QVERIFY(!base64_decode("AA=A"));
+        QVERIFY(!base64_decode("AB==")); // non-zero unused low bits
+        QVERIFY(!base64_decode("AAB=")); // non-zero unused low bits
+        QVERIFY(!base64_decode("AA==AAAA"));
+        const auto one = base64_decode("AA==");
+        const auto two = base64_decode("AAA=");
+        QVERIFY(one && two);
+        QCOMPARE(*one, std::string(1, '\0'));
+        QCOMPARE(*two, std::string(2, '\0'));
+    }
+
+    void zstd_requires_complete_frame_and_obeys_output_budget() {
+        const std::string plain(8192, 'x');
+        const auto packed = zstd_compress(plain);
+        QVERIFY(!packed.empty());
+        QVERIFY(!zstd_decompress(std::string_view(packed).substr(0, packed.size() - 1)));
+        QVERIFY(!zstd_decompress(packed, plain.size() - 1));
+        const auto decoded = zstd_decompress(packed, plain.size());
+        QVERIFY(decoded.has_value());
+        QCOMPARE(*decoded, plain);
     }
 
     void seal_round_trip_recovers_payload() {

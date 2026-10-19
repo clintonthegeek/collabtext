@@ -26,6 +26,10 @@ MainWindow::MainWindow(CollabText::Identity::Identity identity,
         replaceCentralWidget();
         updateTitleAndStatus();
     });
+    connect(m_doc.get(), &Document::errorOccurred, this,
+            [this](const QString &message) {
+                QMessageBox::warning(this, tr("Document error"), message);
+            });
 
     buildMenus();
     buildStatusBar();
@@ -141,7 +145,8 @@ void MainWindow::onFileSaveAs() {
 }
 
 void MainWindow::onFileClose() {
-    m_doc->closeDoc();
+    const QString err = m_doc->closeDoc();
+    if (!err.isEmpty()) QMessageBox::warning(this, tr("Close failed"), err);
 }
 
 void MainWindow::onEnableCollab() {
@@ -170,7 +175,12 @@ void MainWindow::onAbout() {
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    m_doc->closeDoc();
+    const QString err = m_doc->closeDoc();
+    if (!err.isEmpty()) {
+        QMessageBox::warning(this, tr("Close failed"), err);
+        event->ignore();
+        return;
+    }
     event->accept();
 }
 

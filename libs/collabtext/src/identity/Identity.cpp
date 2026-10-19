@@ -1,5 +1,7 @@
 #include "collabtext/Identity.h"
 
+#include <collabtext/ActorId.h>
+
 #include <charconv>
 #include <string_view>
 
@@ -36,27 +38,40 @@ static std::string escape_json_string(std::string_view s) {
     return out;
 }
 
+/// A cursor anchor as `{"actor":"<hex>","counter":N,"bias":"left"|"right"}`.
+///
+/// The old shape spelled the actor as a 16-bit `replica` and the position as a
+/// 32-bit `seq`. That pair is not a position: it names no author, so two peers
+/// could mint the same one, and it is why a persisted cursor could not be
+/// resolved against a document authored by somebody else.
 static std::string encode_anchor(const Crdt::Anchor &a) {
-    std::string out = "{\"replica\":";
-    out += std::to_string(a.replica_id);
-    out += ",\"seq\":";
-    out += std::to_string(a.char_value);
-    out += ",\"offset\":0,\"bias\":";
+    std::string out = "{\"actor\":\"";
+    out += a.position.actor.to_string();
+    out += "\",\"counter\":";
+    out += std::to_string(a.position.counter);
+    out += ",\"bias\":";
     out += (a.bias == Crdt::Bias::Right) ? "\"right\"" : "\"left\"";
     out += '}';
     return out;
 }
 
+/// A version summary as `{"<actor hex>": counter, ...}`.
+///
+/// Previously keyed by decimal replica index, which could only be read against a
+/// process that happened to have been constructed with the same small integers.
+/// The key is now the actor itself, so a summary received from a peer names its
+/// author and can be intersected without knowing anything about the reader.
 static std::string encode_version_summary(const Crdt::Global &g) {
     std::string out = "{";
     bool first = true;
-    for (size_t i = 0; i < g.size(); ++i) {
-        if (g[i] == 0) continue;
+    for (size_t i = 0; i < g.pair_count(); ++i) {
+        const auto &[who, counter] = g.pair(i);
+        if (counter == 0) continue;
         if (!first) out += ',';
         out += '"';
-        out += std::to_string(i);
+        out += who.to_string();
         out += "\":";
-        out += std::to_string(g[i]);
+        out += std::to_string(counter);
         first = false;
     }
     out += '}';
@@ -325,20 +340,22 @@ struct JsonReader {
         return key;
     }
 
-    // Read anchor object: {"replica":N,"seq":N,"offset":0,"bias":"left"|"right"}
+    // Read anchor object: {"actor":"<hex>","counter":N,"bias":"left"|"right"}
     std::optional<Crdt::Anchor> read_anchor() {
         skip_ws();
         if (!expect('{')) return std::nullopt;
         Crdt::Anchor a;
         while (auto key = next_key()) {
-            if (*key == "replica") {
-                auto v = read_uint16();
+            if (*key == "actor") {
+                auto v = read_string();
                 if (!v) return std::nullopt;
-                a.replica_id = *v;
-            } else if (*key == "seq") {
-                auto v = read_uint32();
+                auto actor = ActorId::parse(*v);
+                if (!actor) return std::nullopt;
+                a.position.actor = std::move(actor).value();
+            } else if (*key == "counter") {
+                auto v = read_uint64();
                 if (!v) return std::nullopt;
-                a.char_value = *v;
+                a.position.counter = *v;
             } else if (*key == "bias") {
                 auto v = read_string();
                 if (!v) return std::nullopt;
@@ -352,21 +369,17 @@ struct JsonReader {
         return a;
     }
 
-    // Read version_summary object: {"0": val, "1": val, ...}
+    // Read version_summary object: {"<actor hex>": counter, ...}
     std::optional<Crdt::Global> read_version_summary() {
         skip_ws();
         if (!expect('{')) return std::nullopt;
         Crdt::Global g;
         while (auto key = next_key()) {
-            // Key is the replica index as a decimal string
-            uint16_t idx = 0;
-            for (char ch : *key) {
-                if (ch < '0' || ch > '9') return std::nullopt;
-                idx = static_cast<uint16_t>(idx * 10 + (ch - '0'));
-            }
-            auto v = read_uint32();
+            auto actor = ActorId::parse(*key);
+            if (!actor) return std::nullopt;
+            auto v = read_uint64();
             if (!v) return std::nullopt;
-            if (*v > 0) g.observe(Crdt::Lamport(idx, *v));
+            if (*v > 0) g.observe(Crdt::Identity(std::move(actor).value(), *v));
         }
         if (!expect('}')) return std::nullopt;
         return g;

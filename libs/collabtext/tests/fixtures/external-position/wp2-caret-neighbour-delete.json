@@ -1,0 +1,166 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp2-caret-neighbour-delete",
+ "probe": "WP2",
+ "title": "A caret boundary survives deletion of a neighbouring character",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp2-caret-neighbour-delete",
+  "stream": "text",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/2",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "a"
+    }
+   ]
+  },
+  {
+   "id": "A/4",
+   "kind": "insert",
+   "after": [
+    "A/2"
+   ],
+   "between": [
+    "A/1",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/3",
+     "value": "b"
+    }
+   ]
+  },
+  {
+   "id": "A/6",
+   "kind": "insert",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/3",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/5",
+     "value": "c"
+    }
+   ]
+  },
+  {
+   "id": "A/8",
+   "kind": "delete",
+   "after": [
+    "A/6"
+   ],
+   "targets": [
+    "A/1"
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/2",
+   "A/4",
+   "A/6",
+   "A/8"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "caret-2",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/3",
+    "A/5"
+   ],
+   "affinity": "left"
+  }
+ ],
+ "attachment_kinds": {
+  "caret-2": "caret"
+ },
+ "invalid_requests": [],
+ "expectations": [
+  {
+   "id": "caret_survives_neighbour_deletion",
+   "kind": "resolved",
+   "token": "caret-2",
+   "offset": 1,
+   "collapsed": false,
+   "source": "roadmap_inference",
+   "citation": "W2"
+  },
+  {
+   "id": "deletion_is_not_silently_relocated",
+   "kind": "no_silent_relocation",
+   "token": "caret-2",
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:32"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04a",
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S04",
+   "S06"
+  ]
+ },
+ "third_party_observations": [
+  {
+   "library": "yrs",
+   "version": "0.28",
+   "claim": "400/400 deleted-referent trials relocated silently.",
+   "citation": "wave ask2:140; alternatives:35",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  },
+  {
+   "library": "Loro",
+   "version": "1.16.2",
+   "claim": "1000/1000 deleted-referent trials relocated silently.",
+   "citation": "wave ask2:140; alternatives:34",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  }
+ ],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/3",
+   "A/5"
+  ],
+  "hidden": [
+   "A/1"
+  ],
+  "text": "bc",
+  "positions": {
+   "caret-2": {
+    "offset": 1,
+    "state": "resolved"
+   }
+  },
+  "comparisons": []
+ }
+}

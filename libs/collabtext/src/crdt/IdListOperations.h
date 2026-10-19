@@ -1,13 +1,6 @@
-/// src/crdt/IdListOperations.h — internal shim after Task 1.1 promotion
-///
-/// Public op types (IdListInsertOp, IdListRemoveOp, IdListUndoOpVariant,
-/// IdListOperation, idlist_op_lamport, get_idlist_op_timestamp,
-/// get_idlist_op_version) now live in <collabtext/IdListOperations.h>.
-/// This file re-exports them and adds the SumTree-backed deferred queue
-/// types that are internal to IdList.
 #pragma once
 
-#include <collabtext/IdListOperations.h>
+#include "crdt/OperationPayload.h"
 
 #include "crdt/SumTree.h"
 
@@ -18,7 +11,7 @@ namespace CollabText::Crdt {
 // ============================================================================
 
 struct IdListOpSummary {
-    Lamport max_timestamp = Lamport::min();
+    Identity max_timestamp = Identity::min();
 
     static IdListOpSummary zero() { return {}; }
     void add_summary(const IdListOpSummary& other) {
@@ -30,7 +23,7 @@ struct IdListOpSummary {
 struct IdListOpEntry {
     using Summary = IdListOpSummary;
 
-    Lamport timestamp;
+    Identity timestamp;
     IdListOperation op;
 
     IdListOpSummary summary() const { return {timestamp}; }

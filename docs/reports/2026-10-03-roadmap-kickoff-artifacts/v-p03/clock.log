@@ -1,0 +1,27 @@
+********* Start testing of TestClock *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestClock::initTestCase()
+PASS   : TestClock::lamport_tick_increments()
+PASS   : TestClock::lamport_observe_jumps_ahead()
+PASS   : TestClock::lamport_observe_does_not_go_backwards()
+PASS   : TestClock::lamport_ordering_value_first()
+PASS   : TestClock::lamport_ordering_replica_tiebreak()
+PASS   : TestClock::global_observe_and_get()
+PASS   : TestClock::global_observed()
+PASS   : TestClock::global_observed_all()
+PASS   : TestClock::global_observed_all_shorter_vector_fails()
+PASS   : TestClock::global_join()
+PASS   : TestClock::global_meet()
+PASS   : TestClock::global_meet_leaves_absent_components_alone()
+PASS   : TestClock::global_coverage_intersection_treats_absence_as_zero()
+PASS   : TestClock::global_coverage_intersection_is_a_union_fold()
+PASS   : TestClock::global_coverage_intersection_is_commutative_and_idempotent()
+PASS   : TestClock::global_coverage_intersection_survives_heap_promotion()
+PASS   : TestClock::global_observe_large_replica_id_does_not_corrupt()
+PASS   : TestClock::global_observe_replica_id_at_uint16_max()
+PASS   : TestClock::global_copy_after_large_replica_id()
+PASS   : TestClock::global_sparse_layout_keeps_dense_view()
+PASS   : TestClock::buffer_apply_local_edit_cost_independent_of_replica_id()
+PASS   : TestClock::cleanupTestCase()
+Totals: 23 passed, 0 failed, 0 skipped, 0 blacklisted, 188ms
+********* Finished testing of TestClock *********

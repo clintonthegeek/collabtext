@@ -1,3 +1,4 @@
+#include "crdt/OperationPayload.h"
 #include "crdt/FileSync.h"
 #include "crdt/Serialization.h"
 
@@ -29,24 +30,41 @@ void FileSync::ensure_directory_structure_() {
     }
 }
 
-void FileSync::start() {
+Result<void> FileSync::start() {
+    if (m_started) return Result<void>::success();
     ensure_directory_structure_();
     auto stream_dir = m_shared_folder / "replicas" / m_replica_name / "log" / "ops";
     m_writer = std::make_unique<SegmentWriter>(stream_dir, SegmentKind::Ops, m_writer_cfg);
-    m_writer->start();
+    auto started = m_writer->start();
+    if (!started.ok()) { m_last_error = started.error(); return started.error(); }
     m_started = true;
+    return Result<void>::success();
 }
 
-void FileSync::push_local_op(const Operation& op) {
-    if (!m_writer) return;
-    Lamport ts;
-    if (auto* e = std::get_if<EditOperation>(&op))      ts = e->timestamp;
-    else if (auto* u = std::get_if<UndoOperation>(&op)) ts = u->timestamp;
-    m_writer->append(encode_operation(op), ts.value);
+Result<void> FileSync::push_local_op(const Operation& op) {
+    if (!m_writer) return Error(ErrorCode::io_error, "FileSync is not started");
+    Identity ts;
+    if (auto* e = operation_get_if<EditOperation>(&op))      ts = e->timestamp;
+    else if (auto* u = operation_get_if<UndoOperation>(&op)) ts = u->timestamp;
+    auto wire = encode_operation(op);
+    if (!wire.ok()) { m_last_error = wire.error(); return wire.error(); }
+    auto appended = m_writer->append(wire.value(), ts.counter);
+    if (!appended.ok()) { m_last_error = appended.error(); return appended.error(); }
+    return Result<void>::success();
 }
 
-void FileSync::flush() {
-    if (m_writer) m_writer->flush();
+Result<void> FileSync::flush() {
+    if (!m_writer) return Error(ErrorCode::io_error, "FileSync is not started");
+    auto flushed = m_writer->flush();
+    if (!flushed.ok()) m_last_error = flushed.error();
+    return flushed;
+}
+
+Result<void> FileSync::close() {
+    if (!m_writer) return Result<void>::success();
+    auto closed = m_writer->close();
+    if (!closed.ok()) m_last_error = closed.error();
+    return closed;
 }
 
 SegmentReader& FileSync::reader_for_(const std::string& peer_name) {
@@ -65,7 +83,10 @@ SegmentReader& FileSync::reader_for_(const std::string& peer_name) {
 size_t FileSync::poll() {
     if (!m_started) return 0;
 
-    if (m_writer) m_writer->tick(std::chrono::steady_clock::now());
+    if (m_writer) {
+        auto ticked = m_writer->tick(std::chrono::steady_clock::now());
+        if (!ticked.ok()) { m_last_error = ticked.error(); return 0; }
+    }
 
     auto replicas_dir = m_shared_folder / "replicas";
     if (!fs::exists(replicas_dir)) return 0;
@@ -76,22 +97,43 @@ size_t FileSync::poll() {
         if (!entry.is_directory()) continue;
         std::string peer = entry.path().filename().string();
         if (peer == m_replica_name) continue;
+        if (m_blocked_records.contains(peer)) continue;
 
         auto& reader = reader_for_(peer);
-        auto records = reader.read_new();
-        if (records.empty()) continue;
+        auto batch = reader.read_new();
+        auto& records = batch.records;
+        if (records.empty() && batch.gap) {
+            m_last_error = batch.gap->with_context("FileSync peer " + peer);
+            continue;
+        }
+        if (records.empty()) {
+            auto committed = reader.commit(batch.token);
+            if (!committed.ok()) m_last_error = committed.error().with_context("FileSync peer " + peer);
+            continue;
+        }
 
         std::vector<Operation> ops;
         ops.reserve(records.size());
         for (auto& r : records) {
             auto op = decode_operation(r);
-            if (op) ops.push_back(std::move(*op));
+            if (!op.ok()) {
+                m_last_error = op.error().with_context("FileSync peer " + peer);
+                m_blocked_records.emplace(peer, std::move(batch.records));
+                break;
+            }
+            ops.push_back(std::move(op).value());
         }
+        if (m_blocked_records.contains(peer)) continue;
         if (!ops.empty()) {
             m_buffer.apply_ops(ops);
             total_applied += ops.size();
         }
-        reader.commit();
+        auto committed = reader.commit(batch.token);
+        if (!committed.ok()) {
+            m_last_error = committed.error().with_context("FileSync peer " + peer);
+            continue;
+        }
+        if (batch.gap) m_last_error = batch.gap->with_context("FileSync peer " + peer);
     }
 
     if (total_applied > 0 && m_on_remote_ops)

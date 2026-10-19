@@ -1,5 +1,8 @@
 #include <QTest>
 #include "collabtext/Identity.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Identity;
 namespace Crdt = CollabText::Crdt;
@@ -61,8 +64,8 @@ private slots:
         p.active = true;
         p.last_heartbeat = "2026-04-06T14:30:00.337Z";
         p.session_started = "2026-04-06T12:00:00Z";
-        p.version_summary.observe(Crdt::Lamport(1, 421));
-        p.version_summary.observe(Crdt::Lamport(2, 300));
+        p.version_summary.observe(Crdt::Identity(actor(1), 421));
+        p.version_summary.observe(Crdt::Identity(actor(2), 300));
 
         auto json = to_json(p);
         auto parsed = presence_from_json(json);
@@ -73,8 +76,8 @@ private slots:
         QCOMPARE(parsed->active, true);
         QCOMPARE(parsed->last_heartbeat, p.last_heartbeat);
         QCOMPARE(parsed->session_started, p.session_started);
-        QCOMPARE(parsed->version_summary.get(1), uint32_t(421));
-        QCOMPARE(parsed->version_summary.get(2), uint32_t(300));
+        QCOMPARE(parsed->version_summary.get(actor(1)), quint64(421));
+        QCOMPARE(parsed->version_summary.get(actor(2)), quint64(300));
     }
 
     void presence_departed() {
@@ -97,15 +100,15 @@ private slots:
         es.seq = 14207;
         es.timestamp = "2026-04-06T14:32:01.337Z";
         es.cursors.push_back({
-            Crdt::Anchor(1, 400, Crdt::Bias::Right),
-            Crdt::Anchor(1, 400, Crdt::Bias::Right)
+            Crdt::Anchor(Crdt::Identity(actor(1), 400), Crdt::Bias::Right),
+            Crdt::Anchor(Crdt::Identity(actor(1), 400), Crdt::Bias::Right)
         });
         es.selections.push_back({
-            Crdt::Anchor(2, 50, Crdt::Bias::Left),
-            Crdt::Anchor(2, 77, Crdt::Bias::Right)
+            Crdt::Anchor(Crdt::Identity(actor(2), 50), Crdt::Bias::Left),
+            Crdt::Anchor(Crdt::Identity(actor(2), 77), Crdt::Bias::Right)
         });
-        es.viewport_top = Crdt::Anchor(1, 380, Crdt::Bias::Left);
-        es.viewport_bottom = Crdt::Anchor(1, 412, Crdt::Bias::Left);
+        es.viewport_top = Crdt::Anchor(Crdt::Identity(actor(1), 380), Crdt::Bias::Left);
+        es.viewport_bottom = Crdt::Anchor(Crdt::Identity(actor(1), 412), Crdt::Bias::Left);
         es.activity = "typing";
 
         auto json = to_json(es);
@@ -114,12 +117,12 @@ private slots:
         QCOMPARE(parsed->seq, es.seq);
         QCOMPARE(parsed->timestamp, es.timestamp);
         QCOMPARE(parsed->cursors.size(), size_t(1));
-        QCOMPARE(parsed->cursors[0].anchor.replica_id, uint16_t(1));
-        QCOMPARE(parsed->cursors[0].anchor.char_value, uint32_t(400));
+        QCOMPARE(parsed->cursors[0].anchor.position.actor, actor(1));
+        QCOMPARE(parsed->cursors[0].anchor.position.counter, quint64(400));
         QCOMPARE(parsed->cursors[0].anchor.bias, Crdt::Bias::Right);
         QCOMPARE(parsed->selections.size(), size_t(1));
         QVERIFY(parsed->viewport_top.has_value());
-        QCOMPARE(parsed->viewport_top->char_value, uint32_t(380));
+        QCOMPARE(parsed->viewport_top->position.counter, quint64(380));
         QVERIFY(parsed->viewport_bottom.has_value());
         QCOMPARE(parsed->activity, std::string("typing"));
     }

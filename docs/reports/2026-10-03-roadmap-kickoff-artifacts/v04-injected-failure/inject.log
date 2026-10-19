@@ -1,0 +1,4 @@
+unreduced trace saved: /home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-injected-failure/injected-full.trace (42 events)
+unreduced replay: completed=1 converged=0 lost=1
+reduced trace saved: /home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-injected-failure/injected-reduced.trace (16 events, removed 26)
+reduced replay: completed=1 converged=0 (replicas 0 and 1 differ)

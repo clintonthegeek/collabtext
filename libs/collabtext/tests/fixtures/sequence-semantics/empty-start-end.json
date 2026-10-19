@@ -1,0 +1,99 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "empty-start-end",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "empty-start-end",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [],
+  "operations": [
+    {
+      "id": "A/2",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "START",
+        "END"
+      ],
+      "items": [
+        {
+          "id": "A/1",
+          "value": "X"
+        }
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/2"
+    ]
+  ],
+  "tokens": [
+    {
+      "id": "left",
+      "between": [
+        "START",
+        "END"
+      ],
+      "affinity": "left",
+      "after": [],
+      "context": {
+        "document": "empty-start-end",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "right",
+      "between": [
+        "START",
+        "END"
+      ],
+      "affinity": "right",
+      "after": [],
+      "context": {
+        "document": "empty-start-end",
+        "stream": "text",
+        "epoch": 1
+      }
+    }
+  ],
+  "expected": {
+    "order": [
+      "A/1"
+    ],
+    "hidden": [],
+    "positions": {
+      "left": {
+        "offset": 0,
+        "state": "resolved"
+      },
+      "right": {
+        "offset": 1,
+        "state": "resolved"
+      }
+    },
+    "text": "X",
+    "comparisons": [
+      {
+        "left": "left",
+        "right": "right",
+        "order": "less"
+      }
+    ]
+  },
+  "invalid_mint_offsets": [
+    1
+  ],
+  "contract_cases": [
+    "scoped_empty_start_end_tokens"
+  ]
+}

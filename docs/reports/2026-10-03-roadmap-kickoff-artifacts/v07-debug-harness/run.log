@@ -1,0 +1,25 @@
+Root: /home/clinton/dev/collabtext/.worktrees/reliability-v2
+Mode: debug
+Regex: ^tst_store_fault_harness$
+Workers: 2
+-- Configuring done (0.3s)
+-- Generating done (0.6s)
+-- Build files have been written to: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+Selected 1 tests; compiler: c++ (GCC) 16.2.1 20260810
+[  0%] Built target collabtext_autogen_timestamp_deps
+[  0%] Built target collabtext_autogen
+[ 87%] Built target collabtext
+[ 87%] Built target store_crash_worker_autogen_timestamp_deps
+[ 87%] Built target store_crash_worker_autogen
+[ 93%] Built target store_crash_worker
+[ 93%] Built target tst_store_fault_harness_autogen_timestamp_deps
+[ 93%] Built target tst_store_fault_harness_autogen
+[100%] Built target tst_store_fault_harness
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+    Start 13: tst_store_fault_harness
+1/1 Test #13: tst_store_fault_harness ..........   Passed    0.31 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =   0.32 sec
+Verification exit: 0; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261004T003947Z-1154158

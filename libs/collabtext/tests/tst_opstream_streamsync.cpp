@@ -1,7 +1,6 @@
 #include <QTest>
 #include <QTemporaryDir>
-#include <collabtext/StreamSync.h>
-#include <collabtext/OpStream.h>
+#include "transport/StreamSync.h"
 
 using namespace CollabText::Crdt;
 
@@ -16,8 +15,8 @@ private slots:
         StreamSync rawA(shared, "replica-A", /*replica_id=*/1);
         StreamSync rawB(shared, "replica-B", /*replica_id=*/2);
 
-        CollabText::OpStream* a = &rawA;
-        CollabText::OpStream* b = &rawB;
+        StreamSync* a = &rawA;
+        StreamSync* b = &rawB;
 
         rawA.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
         rawB.register_stream("buf:doc", StreamSync::StreamType::AppendOnly);
@@ -57,7 +56,7 @@ private slots:
         std::filesystem::path shared = tmp.path().toStdString();
 
         StreamSync raw(shared, "replica-A", /*replica_id=*/1);
-        CollabText::OpStream* stream = &raw;
+        StreamSync* stream = &raw;
 
         QCOMPARE(stream->lowest_peer_acked_lamport(), uint64_t(0));
     }
@@ -68,7 +67,7 @@ private slots:
         std::filesystem::path shared = tmp.path().toStdString();
         StreamSync sync(shared, "replica-X", /*replica_id=*/1);
         bool called = false;
-        CollabText::OpStream* op = &sync;
+        StreamSync* op = &sync;
         op->set_on_ack_update([&](uint64_t) { called = true; });
         QVERIFY(!called);  // Phase 4 stub: never fires
     }

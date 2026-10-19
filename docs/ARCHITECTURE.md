@@ -1,5 +1,9 @@
 # CollabText Architecture
 
+**Historical (last updated 2026-04-05).** The engine status below predates the
+reliability roadmap. Current placement, formats, and task order are in
+`docs/roadmap/2026-10-reliability/DIRECTION.md`.
+
 How a plain text document becomes a conflict-free, offline-first
 collaborative artifact — and what remains to be built.
 

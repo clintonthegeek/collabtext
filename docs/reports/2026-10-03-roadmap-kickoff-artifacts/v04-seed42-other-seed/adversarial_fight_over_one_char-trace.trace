@@ -1,0 +1,370 @@
+#collabtext-trace 1
+#model buffer
+#label adversarial_fight_over_one_char
+#seed 4195393400890760384
+#replicas 3
+#net 50 200 500 1
+edit 0 0 0 58
+deliver 1 0
+deliver 2 0
+edit 0 0 1 67
+edit 1 0 1 73
+edit 2 0 1 6a
+edit 0 0 1 e4b898
+edit 1 0 1 c3a5
+edit 2 0 1 76
+edit 0 0 3 61
+edit 1 0 2 c3b7
+edit 2 0 1 6d
+edit 0 0 1 6b
+edit 1 0 2 e4ba81
+edit 2 0 1 64
+edit 0 0 1 7a
+edit 1 0 3 68
+edit 2 0 1 6e
+edit 0 0 1 f09f9fb9
+edit 1 0 1 6e
+edit 2 0 1 65
+edit 0 0 4 6a
+edit 1 0 1 72
+edit 2 0 1 76
+edit 0 0 1 e4baa8
+edit 1 0 1 76
+edit 2 0 1 69
+edit 0 0 3 f09f9eaf
+edit 1 0 1 e4b98b
+edit 2 0 1 e4b984
+edit 0 0 4 72
+edit 1 0 3 62
+edit 2 0 3 76
+edit 0 0 1 71
+edit 1 0 1 e4b8b0
+edit 2 0 1 c3ad
+edit 0 0 1 6d
+edit 1 0 3 62
+edit 2 0 2 66
+edit 0 0 1 64
+edit 1 0 1 f09f9c9a
+edit 2 0 1 74
+edit 0 0 1 6e
+edit 1 0 4 e4b8ab
+edit 2 0 1 77
+edit 0 0 1 74
+edit 1 0 3 c3a9
+edit 2 0 1 e4bb85
+edit 0 0 1 6c
+edit 1 0 2 c3a6
+edit 2 0 3 6a
+edit 0 0 1 75
+edit 1 0 2 67
+edit 2 0 1 e4b884
+edit 0 0 1 e4b8be
+edit 1 0 1 e4b8bb
+edit 2 0 3 74
+edit 0 0 3 66
+edit 1 0 3 74
+edit 2 0 1 e4b9aa
+edit 0 0 1 6b
+edit 1 0 1 6d
+edit 2 0 3 6c
+edit 0 0 1 f09f9c95
+edit 1 0 1 e4b8a2
+edit 2 0 1 65
+edit 0 0 4 71
+edit 1 0 3 e4bb90
+edit 2 0 1 79
+edit 0 0 1 e4bbbc
+edit 1 0 3 c3a6
+edit 2 0 1 e4bb8e
+edit 0 0 3 6c
+edit 1 0 2 6a
+edit 2 0 3 76
+edit 0 0 1 c3a5
+edit 1 0 1 6a
+edit 2 0 1 67
+edit 0 0 2 6c
+edit 1 0 1 e4bb90
+edit 2 0 1 6f
+edit 0 0 1 63
+edit 1 0 3 77
+edit 2 0 1 68
+edit 0 0 1 78
+edit 1 0 1 6a
+edit 2 0 1 65
+edit 0 0 1 e4bbb4
+edit 1 0 1 6d
+edit 2 0 1 c3b7
+edit 0 0 3 e4ba9a
+edit 1 0 1 75
+edit 2 0 2 77
+deliver 0 86
+deliver 0 53
+deliver 0 62
+deliver 0 76
+deliver 0 77
+deliver 0 63
+deliver 0 15
+deliver 0 29
+deliver 0 68
+deliver 0 84
+deliver 0 88
+deliver 0 37
+deliver 0 55
+deliver 0 58
+deliver 0 7
+deliver 0 14
+deliver 0 66
+deliver 0 19
+deliver 0 75
+deliver 0 83
+deliver 0 20
+deliver 0 38
+deliver 0 9
+deliver 0 82
+deliver 0 78
+deliver 0 33
+deliver 0 46
+deliver 0 60
+deliver 0 17
+deliver 0 65
+deliver 0 43
+deliver 0 31
+deliver 0 85
+deliver 0 81
+deliver 0 4
+deliver 0 41
+deliver 0 25
+deliver 0 49
+deliver 0 48
+deliver 0 54
+deliver 0 35
+deliver 0 56
+deliver 0 8
+deliver 0 30
+deliver 0 67
+deliver 0 39
+deliver 0 27
+deliver 0 6
+deliver 0 28
+deliver 0 90
+deliver 0 74
+deliver 0 59
+deliver 0 70
+deliver 0 44
+deliver 0 89
+deliver 0 12
+deliver 0 21
+deliver 0 61
+deliver 0 69
+deliver 0 18
+deliver 0 22
+deliver 0 42
+deliver 0 52
+deliver 0 16
+deliver 0 26
+deliver 0 1
+deliver 0 45
+deliver 0 40
+deliver 0 10
+deliver 0 79
+deliver 0 72
+deliver 0 5
+deliver 0 23
+deliver 0 73
+deliver 0 51
+deliver 0 3
+deliver 0 71
+deliver 0 11
+deliver 0 64
+deliver 0 47
+deliver 0 34
+deliver 0 87
+deliver 0 24
+deliver 0 2
+deliver 0 80
+deliver 0 36
+deliver 0 50
+deliver 0 57
+deliver 0 13
+deliver 0 32
+deliver 1 90
+deliver 1 5
+deliver 1 48
+deliver 1 19
+deliver 1 81
+deliver 1 55
+deliver 1 28
+deliver 1 14
+deliver 1 65
+deliver 1 53
+deliver 1 27
+deliver 1 87
+deliver 1 73
+deliver 1 25
+deliver 1 17
+deliver 1 82
+deliver 1 20
+deliver 1 2
+deliver 1 16
+deliver 1 80
+deliver 1 86
+deliver 1 51
+deliver 1 46
+deliver 1 3
+deliver 1 40
+deliver 1 22
+deliver 1 24
+deliver 1 45
+deliver 1 11
+deliver 1 85
+deliver 1 58
+deliver 1 84
+deliver 1 26
+deliver 1 63
+deliver 1 30
+deliver 1 68
+deliver 1 31
+deliver 1 18
+deliver 1 13
+deliver 1 57
+deliver 1 89
+deliver 1 56
+deliver 1 32
+deliver 1 21
+deliver 1 47
+deliver 1 4
+deliver 1 35
+deliver 1 77
+deliver 1 50
+deliver 1 44
+deliver 1 54
+deliver 1 78
+deliver 1 67
+deliver 1 83
+deliver 1 79
+deliver 1 76
+deliver 1 72
+deliver 1 29
+deliver 1 7
+deliver 1 34
+deliver 1 9
+deliver 1 6
+deliver 1 12
+deliver 1 70
+deliver 1 74
+deliver 1 42
+deliver 1 88
+deliver 1 41
+deliver 1 43
+deliver 1 15
+deliver 1 66
+deliver 1 71
+deliver 1 49
+deliver 1 36
+deliver 1 69
+deliver 1 60
+deliver 1 38
+deliver 1 52
+deliver 1 8
+deliver 1 23
+deliver 1 64
+deliver 1 61
+deliver 1 10
+deliver 1 1
+deliver 1 37
+deliver 1 39
+deliver 1 59
+deliver 1 75
+deliver 1 33
+deliver 1 62
+deliver 2 19
+deliver 2 72
+deliver 2 56
+deliver 2 24
+deliver 2 58
+deliver 2 32
+deliver 2 47
+deliver 2 2
+deliver 2 4
+deliver 2 38
+deliver 2 9
+deliver 2 55
+deliver 2 60
+deliver 2 57
+deliver 2 53
+deliver 2 62
+deliver 2 22
+deliver 2 16
+deliver 2 3
+deliver 2 71
+deliver 2 43
+deliver 2 7
+deliver 2 88
+deliver 2 87
+deliver 2 85
+deliver 2 54
+deliver 2 11
+deliver 2 89
+deliver 2 90
+deliver 2 64
+deliver 2 63
+deliver 2 40
+deliver 2 66
+deliver 2 10
+deliver 2 29
+deliver 2 51
+deliver 2 77
+deliver 2 30
+deliver 2 34
+deliver 2 31
+deliver 2 82
+deliver 2 27
+deliver 2 6
+deliver 2 20
+deliver 2 45
+deliver 2 37
+deliver 2 36
+deliver 2 76
+deliver 2 86
+deliver 2 14
+deliver 2 35
+deliver 2 79
+deliver 2 69
+deliver 2 12
+deliver 2 75
+deliver 2 59
+deliver 2 83
+deliver 2 26
+deliver 2 23
+deliver 2 67
+deliver 2 25
+deliver 2 49
+deliver 2 78
+deliver 2 61
+deliver 2 42
+deliver 2 41
+deliver 2 81
+deliver 2 28
+deliver 2 15
+deliver 2 80
+deliver 2 52
+deliver 2 46
+deliver 2 17
+deliver 2 48
+deliver 2 74
+deliver 2 21
+deliver 2 44
+deliver 2 50
+deliver 2 84
+deliver 2 73
+deliver 2 18
+deliver 2 1
+deliver 2 70
+deliver 2 8
+deliver 2 65
+deliver 2 68
+deliver 2 5
+deliver 2 13
+deliver 2 39
+deliver 2 33
+settle

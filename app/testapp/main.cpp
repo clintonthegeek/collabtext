@@ -22,13 +22,18 @@
 #include "crdt/ChatMessage.h"
 #include "crdt/Comment.h"
 #include "crdt/FileSync.h"
-#include <collabtext/StreamSync.h>
+#include "transport/StreamSync.h"
 #include "ui/ChatPanelWidget.h"
 #include "ui/CollabPlainTextEdit.h"
 #include "ui/CommentsPanelWidget.h"
 #include "ui/MultiCursorController.h"
 #include "ui/ParticipantListWidget.h"
 
+#include "collabtext/ActorId.h"
+#include <crdt/IdentityAllocator.h>
+
+#include <array>
+#include <cstdint>
 #include "collabtext/Identity.h"
 #include "collabtext/IdentityStore.h"
 #include "collabtext/PresenceManager.h"
@@ -37,6 +42,47 @@
 using namespace CollabText::Crdt;
 using namespace CollabText::Ui;
 using namespace CollabText::Identity;
+// Unqualified `Identity` is the presence/profile struct above. The engine's
+// operation identity is Crdt::Identity, which the 128-bit actor widening
+// introduced (P06a); it has to be named in full anywhere both namespaces are in
+// scope. Qualifying it here rather than renaming one of them keeps both APIs
+// honest: an "identity" that means "who this person is" and one that means
+// "which operation this is" are genuinely different things that unfortunately
+// share a word.
+using ProfileIdentity = CollabText::Identity::Identity;
+using CollabText::ActorId;
+namespace Crdt = CollabText::Crdt;
+
+/// The two simulated peers in this harness get fixed synthetic actors and
+/// volatile counters. This is a test app that stands up two engines in one
+/// process, so their identities only have to be distinct and stable — a real
+/// device takes both its actor and its counters from ReplicaState, as collabedit
+/// does. `HarnessCounter` is the app-local equivalent of tests/VolatileCounter.h
+/// and is named for what it is: not durable, and never a production path.
+class HarnessCounter final : public CollabText::Crdt::IdentityAllocator {
+public:
+    explicit HarnessCounter(uint8_t n) {
+        std::array<uint8_t, CollabText::ActorId::kBytes> bytes{};
+        bytes[CollabText::ActorId::kBytes - 1] = n;
+        m_actor = CollabText::ActorId::from_bytes(bytes);
+    }
+    CollabText::Result<uint64_t> reserve_run(uint64_t count) override {
+        return m_counter.reserve_run(count, "harness counter");
+    }
+    void observe(uint64_t counter) override {
+        (void)m_counter.observe(counter, "harness counter");
+    }
+    uint64_t peek() const noexcept override { return m_counter.peek(); }
+    const CollabText::ActorId &actor() const noexcept override { return m_actor; }
+
+private:
+    CollabText::ActorId m_actor;
+    CollabText::CheckedCounter m_counter;
+};
+
+Crdt::SharedIdentityAllocator harness_counter(uint8_t n) {
+    return std::make_shared<HarnessCounter>(n);
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,14 +107,14 @@ static std::string now_iso8601() {
 class EditorPane : public QWidget {
     Q_OBJECT
 public:
-    EditorPane(const Identity &identity, uint16_t replicaId,
+    EditorPane(const ProfileIdentity &identity, Crdt::SharedIdentityAllocator allocator,
                const std::string &replicaName,
                const std::filesystem::path &sharedFolder,
                QWidget *parent = nullptr)
         : QWidget(parent)
         , m_identity(identity)
         , m_replicaName(replicaName)
-        , m_buffer(replicaId)
+        , m_buffer(std::move(allocator))
         , m_sync(m_buffer, sharedFolder, replicaName)
         , m_presence(sharedFolder, replicaName, identity.identity_id)
         , m_edit(new CollabPlainTextEdit(this))
@@ -153,7 +199,7 @@ public:
 
     CollabPlainTextEdit *editor() const { return m_edit; }
     Buffer &buffer() { return m_buffer; }
-    const Identity &identity() const { return m_identity; }
+    const ProfileIdentity &identity() const { return m_identity; }
     PresenceManager &presenceManager() { return m_presence; }
     const std::string &replicaName() const { return m_replicaName; }
 
@@ -221,7 +267,7 @@ public:
 
     /// Apply a remote EphemeralState, resolving anchors and setting remote cursors.
     /// If follow-mode is active, also scroll to the remote user's viewport.
-    void applyRemoteEphemeral(const EphemeralState &es, const Identity &remoteIdentity) {
+    void applyRemoteEphemeral(const EphemeralState &es, const ProfileIdentity &remoteIdentity) {
         QList<RemoteCursor> cursors;
         for (const auto &cp : es.cursors) {
             RemoteCursor rc;
@@ -230,7 +276,7 @@ public:
             rc.color = QColor(QString::fromStdString(remoteIdentity.color));
             rc.label = QString::fromStdString(remoteIdentity.display_name);
             rc.identityId = QString::fromStdString(remoteIdentity.identity_id);
-            rc.cursorVersion = (quint64(cp.head.replica_id) << 32) | cp.head.char_value;
+            rc.cursorVersion = cp.head.position.counter;
             cursors.append(rc);
         }
         m_edit->multiCursorController()->setRemoteCursors(cursors);
@@ -531,7 +577,7 @@ private:
     }
 
     bool m_syncing = false;
-    Identity m_identity;
+    ProfileIdentity m_identity;
     std::string m_replicaName;
     std::string m_sessionStarted = now_iso8601();
     Buffer m_buffer;
@@ -577,8 +623,8 @@ public:
     ~MainWindow() override { delete m_streamSync; }
 
     explicit MainWindow(const std::filesystem::path &sharedFolder,
-                        const Identity &aliceId,
-                        const Identity &bobId)
+                        const ProfileIdentity &aliceId,
+                        const ProfileIdentity &bobId)
         : m_projector(sharedFolder)
     {
         setWindowTitle(QStringLiteral("CollabText \u2014 Full-Stack Demo"));
@@ -592,8 +638,8 @@ public:
         auto *central = new QWidget(this);
         auto *layout = new QHBoxLayout(central);
 
-        m_paneA = new EditorPane(aliceId, 1, "alice", sharedFolder, central);
-        m_paneB = new EditorPane(bobId, 2, "bob", sharedFolder, central);
+        m_paneA = new EditorPane(aliceId, harness_counter(1), "alice", sharedFolder, central);
+        m_paneB = new EditorPane(bobId, harness_counter(2), "bob", sharedFolder, central);
         m_paneA->setFollowTargetName(QString::fromStdString(bobId.display_name));
         m_paneB->setFollowTargetName(QString::fromStdString(aliceId.display_name));
         layout->addWidget(m_paneA, 1);
@@ -918,14 +964,14 @@ int main(int argc, char *argv[])
     QTemporaryDir aliceConfigDir;
     aliceConfigDir.setAutoRemove(true);
     IdentityStore aliceStore(aliceConfigDir.path().toStdString());
-    Identity aliceId = aliceStore.generate("Alice");
+    ProfileIdentity aliceId = aliceStore.generate("Alice");
     aliceId.color = "#4165E1"; // Royal Blue
     aliceStore.save(aliceId);
 
     QTemporaryDir bobConfigDir;
     bobConfigDir.setAutoRemove(true);
     IdentityStore bobStore(bobConfigDir.path().toStdString());
-    Identity bobId = bobStore.generate("Bob");
+    ProfileIdentity bobId = bobStore.generate("Bob");
     bobId.color = "#DC143C"; // Crimson
     bobStore.save(bobId);
 

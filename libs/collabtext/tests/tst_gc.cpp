@@ -1,8 +1,20 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include "crdt/ReclamationPolicy.h"
+#include "crdt/SequenceOrder.h"
 #include <random>
+#include <type_traits>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
+
+template <typename T>
+concept HasRawWatermarkCompact = requires(T &value, const Global &watermark) {
+    value.compact(watermark);
+};
+static_assert(!HasRawWatermarkCompact<Buffer>);
 
 static void check_invariants(const Buffer& buf, const char* context) {
     auto frags = buf.fragments();
@@ -16,12 +28,8 @@ static void check_invariants(const Buffer& buf, const char* context) {
     }
     if (vis_sum != buf.visible_length())
         QFAIL(qPrintable(QString("INV-2 at %1").arg(context)));
-    for (size_t i = 1; i < frags.size(); ++i) {
-        auto cmp = frags[i].locator <=> frags[i-1].locator;
-        if (cmp < 0) QFAIL(qPrintable(QString("INV-4 at %1").arg(context)));
-        if (cmp == 0 && frags[i].origin <= frags[i-1].origin)
-            QFAIL(qPrintable(QString("INV-4 at %1").arg(context)));
-    }
+    if (const auto bad = CollabText::Crdt::SequenceOrder::check_consistency(frags))
+        QFAIL(qPrintable(QString("INV-4 at %1: %2").arg(context).arg(QString::fromStdString(*bad))));
     for (size_t i = 0; i < frags.size(); ++i) {
         if (frags[i].byte_length == 0 || frags[i].length == 0)
             QFAIL(qPrintable(QString("INV-5 at %1").arg(context)));
@@ -38,21 +46,75 @@ class TestGC : public QObject {
     Q_OBJECT
 private slots:
 
+    void reclamation_policy_requires_complete_item_and_delete_coverage() {
+        const auto owner = actor(1);
+        const auto deleter = actor(2);
+        const Identity first(owner, 4);
+        const std::vector<Identity> deletions{Identity(deleter, 7)};
+
+        ReclamationFrontier frontier{{owner, 5}, {deleter, 7}};
+        QVERIFY(tombstone_is_covered(frontier, first, 2, deletions));
+
+        frontier[owner] = 4;
+        QVERIFY(!tombstone_is_covered(frontier, first, 2, deletions));
+        frontier[owner] = 5;
+        frontier[deleter] = 6;
+        QVERIFY(!tombstone_is_covered(frontier, first, 2, deletions));
+    }
+
+    void reclamation_policy_fails_closed_for_missing_or_invalid_evidence() {
+        const auto owner = actor(1);
+        const auto deleter = actor(2);
+        const Identity first(owner, 4);
+        const std::vector<Identity> deletions{Identity(deleter, 7)};
+
+        ReclamationFrontier frontier_with_missing_deleter{{owner, 9}};
+        QVERIFY(!tombstone_is_covered(frontier_with_missing_deleter, first, 1,
+                                      deletions));
+        frontier_with_missing_deleter[deleter] = 9;
+        QVERIFY(!tombstone_is_covered(frontier_with_missing_deleter, first, 0,
+                                      deletions));
+        QVERIFY(!tombstone_is_covered(frontier_with_missing_deleter,
+                                      Identity(owner, 0), 1, deletions));
+        QVERIFY(!tombstone_is_covered(frontier_with_missing_deleter, first, 1,
+                                      {}));
+
+        const auto max_counter = std::numeric_limits<uint64_t>::max();
+        frontier_with_missing_deleter[owner] = max_counter;
+        QVERIFY(!item_interval_is_covered(
+            frontier_with_missing_deleter, Identity(owner, max_counter - 1), 3));
+    }
+
+    void reclamation_policy_checks_every_delete_operation() {
+        const auto owner = actor(1);
+        const auto deleter_a = actor(2);
+        const auto deleter_b = actor(3);
+        ReclamationFrontier frontier{{owner, 2}, {deleter_a, 4}};
+        const std::vector<Identity> deletions{
+            Identity(deleter_a, 4), Identity(deleter_b, 1)};
+
+        QVERIFY(!tombstone_is_covered(frontier, Identity(owner, 2), 1,
+                                      deletions));
+        frontier[deleter_b] = 1;
+        QVERIFY(tombstone_is_covered(frontier, Identity(owner, 2), 1,
+                                     deletions));
+    }
+
     void fragment_count_empty() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         QCOMPARE(buf.fragment_count(), size_t(0));
         QCOMPARE(buf.tombstone_count(), size_t(0));
     }
 
     void fragment_count_after_insert() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         QVERIFY(buf.fragment_count() > 0);
         QCOMPARE(buf.tombstone_count(), size_t(0));
     }
 
     void tombstone_count_after_delete() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         buf.apply_local_edit({{0, 5}}, {""});  // delete all
         QCOMPARE(buf.text(), std::string(""));
@@ -60,13 +122,13 @@ private slots:
     }
 
     void max_undo_depth_default() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         QCOMPARE(buf.max_undo_depth(), size_t(1000));
     }
 
     void set_max_undo_depth() {
-        Buffer buf(1);
-        buf.set_max_undo_depth(50);
+        Buffer buf(CollabText::Test::test_counter(1));
+        QVERIFY((buf.set_max_undo_depth(50)).ok());
         QCOMPARE(buf.max_undo_depth(), size_t(50));
     }
 
@@ -75,7 +137,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void gc_removes_tombstones() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello world"});
         buf.apply_local_edit({{0, 5}}, {""});  // delete "hello"
         QCOMPARE(buf.text(), std::string(" world"));
@@ -90,9 +152,9 @@ private slots:
         QCOMPARE(buf.text(), std::string(" world"));
     }
 
-    void gc_removes_after_undo_stack_clear() {
-        Buffer buf(1);
-        buf.set_max_undo_depth(1);
+    void gc_retains_after_local_history_trim() {
+        Buffer buf(CollabText::Test::test_counter(1));
+        QVERIFY((buf.set_max_undo_depth(1)).ok());
         buf.apply_local_edit({{0, 0}}, {"hello world"});  // undo entry 1
         buf.apply_local_edit({{0, 5}}, {""});              // undo entry 2, pushes entry 1 out
 
@@ -105,28 +167,29 @@ private slots:
         buf.apply_local_edit({{6, 6}}, {"!"});  // undo entry 3, pushes entry 2 out
         QCOMPARE(buf.text(), std::string(" world!"));
 
-        // Now the delete's deletion_id is no longer in the undo stack
+        // Local trimming alone cannot retire a remote actor's restoration obligations.
         size_t tombstones_before = buf.tombstone_count();
         QVERIFY(tombstones_before > 0);
         removed = buf.collect_garbage();
-        QCOMPARE(removed, tombstones_before);
-        QCOMPARE(buf.tombstone_count(), size_t(0));
+        QCOMPARE(removed, size_t(0));
+        QCOMPARE(buf.tombstone_count(), tombstones_before);
         QCOMPARE(buf.text(), std::string(" world!"));
     }
 
     void gc_preserves_visible_text() {
-        Buffer buf(1);
-        buf.set_max_undo_depth(0);  // no undo protection at all
+        Buffer buf(CollabText::Test::test_counter(1));
+        QVERIFY((buf.set_max_undo_depth(0)).ok());  // local undo is disabled; global eligibility is still unknown
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{1, 3}}, {""});  // delete "bc"
         buf.apply_local_edit({{1, 3}}, {""});  // delete "ef" (now "ad" visible)
         std::string text_before = buf.text();
         QCOMPARE(text_before, std::string("af"));
 
+        const auto tombstones_before = buf.tombstone_count();
         size_t removed = buf.collect_garbage();
-        QVERIFY(removed > 0);
+        QCOMPARE(removed, size_t(0));
         QCOMPARE(buf.text(), text_before);
-        QCOMPARE(buf.tombstone_count(), size_t(0));
+        QCOMPARE(buf.tombstone_count(), tombstones_before);
     }
 
     // -----------------------------------------------------------------------
@@ -134,7 +197,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void gc_protects_undoable_deletions() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abc"});
         buf.apply_local_edit({{0, 3}}, {""});  // delete all
         QCOMPARE(buf.text(), std::string(""));
@@ -149,38 +212,38 @@ private slots:
     }
 
     void gc_after_undo_redo_cycle() {
-        Buffer buf(1);
-        buf.set_max_undo_depth(0);  // nothing protected
+        Buffer buf(CollabText::Test::test_counter(1));
+        QVERIFY((buf.set_max_undo_depth(0)).ok());  // nothing protected
         buf.apply_local_edit({{0, 0}}, {"abc"});
         buf.apply_local_edit({{0, 3}}, {""});  // delete
         buf.undo();  // restore
         buf.redo();  // re-delete
         QCOMPARE(buf.text(), std::string(""));
 
-        // All undo entries were trimmed (max_undo_depth=0), so GC is safe
+        // Trimming this local stack is not a distributed reclamation certificate.
+        const auto tombstones_before = buf.tombstone_count();
         size_t removed = buf.collect_garbage();
-        QVERIFY(removed > 0);
-        QCOMPARE(buf.tombstone_count(), size_t(0));
+        QCOMPARE(removed, size_t(0));
+        QCOMPARE(buf.tombstone_count(), tombstones_before);
         QCOMPARE(buf.text(), std::string(""));
     }
 
     void gc_partial_protection() {
         // Two separate deletions: one protected, one not
-        Buffer buf(1);
-        buf.set_max_undo_depth(1);
+        Buffer buf(CollabText::Test::test_counter(1));
+        QVERIFY((buf.set_max_undo_depth(1)).ok());
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         buf.apply_local_edit({{0, 3}}, {""});  // delete "abc" — undo entry 1
         buf.apply_local_edit({{0, 3}}, {""});  // delete "def" — undo entry 2, pushes 1 out
 
         QCOMPARE(buf.text(), std::string(""));
 
-        // "abc" tombstones: deletion_id from entry 1, which aged out → GC-eligible
-        // "def" tombstones: deletion_id from entry 2, still in stack → protected
+        // Both trimmed and retained histories keep their stored context until
+        // a complete distributed certificate can authorize deletion.
         size_t before = buf.tombstone_count();
         size_t removed = buf.collect_garbage();
-        QVERIFY(removed > 0);
-        QVERIFY(removed < before);  // some but not all removed
-        QVERIFY(buf.tombstone_count() > 0);  // "def" tombstones remain
+        QCOMPARE(removed, size_t(0));
+        QCOMPARE(buf.tombstone_count(), before);
         QCOMPARE(buf.text(), std::string(""));
 
         // Undo the "def" deletion — "def" comes back
@@ -193,8 +256,8 @@ private slots:
     }
 
     void gc_with_multiple_deletions_on_same_fragment() {
-        Buffer buf(1);
-        buf.set_max_undo_depth(2);
+        Buffer buf(CollabText::Test::test_counter(1));
+        QVERIFY((buf.set_max_undo_depth(2)).ok());
         buf.apply_local_edit({{0, 0}}, {"hello"});   // entry 0
         buf.apply_local_edit({{0, 5}}, {""});         // entry 1: delete "hello"
         buf.undo();                                    // undo delete
@@ -206,14 +269,13 @@ private slots:
     }
 
     // -----------------------------------------------------------------------
-    // Fragment coalescing
+    // GC requests preserve layout and anchor context during containment.
     // -----------------------------------------------------------------------
 
-    void coalesce_reduces_fragment_count() {
+    void gc_preserves_fragment_layout() {
         // Two replicas insert at the same position → normalization atomizes
-        // into single-char fragments. After convergence, those single-char
-        // fragments from the same replica can be coalesced.
-        Buffer bufA(1), bufB(2);
+        // into single-char fragments. GC must retain their identity/layout.
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"aaa"});
         auto op2 = bufB.apply_local_edit({{0, 0}}, {"bbb"});
 
@@ -221,37 +283,42 @@ private slots:
         bufB.apply_ops({op1});
         QCOMPARE(bufA.text(), bufB.text());
 
-        // After normalization, fragments are atomized at shared locators
+        // Two concurrent runs at the same position: each stays whole
         size_t before = bufA.fragment_count();
 
-        // GC + coalesce — no tombstones to remove, but coalescing should help
-        bufA.collect_garbage();
+        // No certificate exists; the request must leave the layout untouched.
+        QCOMPARE(bufA.collect_garbage(), size_t(0));
         size_t after = bufA.fragment_count();
-        QVERIFY(after <= before);  // coalescing may reduce count
+        QCOMPARE(after, before);
         QCOMPARE(bufA.text(), bufB.text());  // text unchanged
     }
 
-    void coalesce_preserves_text() {
-        Buffer buf(1);
-        buf.set_max_undo_depth(0);
+    void gc_preserves_deleted_anchor_context() {
+        Buffer buf(CollabText::Test::test_counter(1));
+        QVERIFY((buf.set_max_undo_depth(0)).ok());
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
+        const auto anchor = buf.anchor_at(2, Bias::Left);
         buf.apply_local_edit({{2, 4}}, {""});  // delete "cd"
         std::string text_before = buf.text();
         QCOMPARE(text_before, std::string("abef"));
 
-        buf.collect_garbage();  // removes "cd" tombstone, then tries to coalesce
+        const auto resolved_before = buf.resolve_anchor(anchor);
+        const auto tombstones_before = buf.tombstone_count();
+        QCOMPARE(buf.collect_garbage(), size_t(0));
+        QCOMPARE(buf.tombstone_count(), tombstones_before);
+        QCOMPARE(buf.resolve_anchor(anchor), resolved_before);
         QCOMPARE(buf.text(), text_before);
     }
 
-    void coalesce_does_not_merge_different_locators() {
-        // Fragments with different locators must not be coalesced
-        Buffer buf(1);
-        buf.set_max_undo_depth(0);
+    void gc_preserves_distinct_insertions() {
+        // Distinct insertion contexts remain untouched by an uncertified request.
+        Buffer buf(CollabText::Test::test_counter(1));
+        QVERIFY((buf.set_max_undo_depth(0)).ok());
         buf.apply_local_edit({{0, 0}}, {"abc"});
-        buf.apply_local_edit({{3, 3}}, {"def"});  // separate insertion → different locator
+        buf.apply_local_edit({{3, 3}}, {"def"});  // separate insertion
         size_t before_gc = buf.fragment_count();
         buf.collect_garbage();
-        // These are separate insertions with different locators — no coalescing
+        // These are separate insertions — no coalescing
         QCOMPARE(buf.fragment_count(), before_gc);
         QCOMPARE(buf.text(), std::string("abcdef"));
     }
@@ -265,8 +332,8 @@ private slots:
         qDebug() << "Seed:" << seed;
         std::mt19937 rng(seed);
 
-        Buffer buf(1);
-        buf.set_max_undo_depth(20);
+        Buffer buf(CollabText::Test::test_counter(1));
+        QVERIFY((buf.set_max_undo_depth(20)).ok());
 
         for (int i = 0; i < 200; ++i) {
             std::string text = buf.text();
@@ -316,7 +383,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void gc_preserves_convergence() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
 
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op1});
@@ -329,7 +396,7 @@ private slots:
         bufB.apply_ops({op2});
         QCOMPARE(bufA.text(), bufB.text());
 
-        bufA.set_max_undo_depth(0);
+        QVERIFY((bufA.set_max_undo_depth(0)).ok());
         bufA.collect_garbage();
 
         QCOMPARE(bufA.text(), bufB.text());
@@ -346,9 +413,9 @@ private slots:
         qDebug() << "Seed:" << seed;
         std::mt19937 rng(seed);
 
-        Buffer bufA(1), bufB(2);
-        bufA.set_max_undo_depth(10);
-        bufB.set_max_undo_depth(10);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
+        QVERIFY((bufA.set_max_undo_depth(10)).ok());
+        QVERIFY((bufB.set_max_undo_depth(10)).ok());
         std::vector<Operation> queueA, queueB;
 
         auto random_boundary_edit = [&](Buffer& buf) -> Operation {
@@ -424,13 +491,12 @@ private slots:
     }
 
     // -----------------------------------------------------------------------
-    // Watermark-based compact()
+    // Raw watermark compaction is absent; uncertified GC remains inert.
     // -----------------------------------------------------------------------
 
-    void compact_removes_remote_tombstones() {
-        // collect_garbage() can't remove remote-deletion tombstones,
-        // but compact() can when the watermark covers the deletion.
-        Buffer bufA(1), bufB(2);
+    void compact_retains_remote_tombstones() {
+        // Neither local history nor observed coverage retires remote undo.
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -440,24 +506,26 @@ private slots:
         QCOMPARE(bufA.text(), std::string(""));
         QCOMPARE(bufB.text(), std::string(""));
 
-        // A's collect_garbage won't remove this — deletion is from B
-        bufA.set_max_undo_depth(0);
+        // A's local trimming is insufficient to authorize removal.
+        QVERIFY((bufA.set_max_undo_depth(0)).ok());
         QCOMPARE(bufA.collect_garbage(), size_t(0));
         QVERIFY(bufA.tombstone_count() > 0);
 
-        // But compact() with a watermark covering B's deletion WILL remove it
-        Global watermark;
-        watermark.join(bufA.version());
-        watermark.meet(bufB.version());
-        size_t removed = bufA.compact(watermark);
-        QVERIFY(removed > 0);
-        QCOMPARE(bufA.tombstone_count(), size_t(0));
+        const auto tombstones_before = bufA.tombstone_count();
+        size_t removed = bufA.collect_garbage();
+        QCOMPARE(removed, size_t(0));
+        QCOMPARE(bufA.tombstone_count(), tombstones_before);
         QCOMPARE(bufA.text(), std::string(""));
         check_invariants(bufA, "after_compact");
+        auto undo = bufB.undo();
+        QVERIFY(undo.has_value());
+        bufA.apply_ops({*undo});
+        QCOMPARE(bufA.text(), std::string("hello"));
+        QCOMPARE(bufA.text(), bufB.text());
     }
 
     void compact_respects_undo_protection() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
@@ -469,7 +537,7 @@ private slots:
         watermark.meet(bufB.version());
 
         // A's deletion IS in A's undo stack — compact should NOT remove
-        QCOMPARE(bufA.compact(watermark), size_t(0));
+        QCOMPARE(bufA.collect_garbage(), size_t(0));
         QVERIFY(bufA.tombstone_count() > 0);
 
         // Undo the deletion — text comes back
@@ -478,28 +546,24 @@ private slots:
     }
 
     void compact_ignores_deletions_beyond_watermark() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello"});
         bufB.apply_ops({op1});
 
         // Snapshot watermark BEFORE B deletes
-        Global watermark;
-        watermark.join(bufA.version());
-        watermark.meet(bufB.version());
-
         // B deletes — this deletion is NOT covered by the watermark
         auto op2 = bufB.apply_local_edit({{0, 5}}, {""});
         bufA.apply_ops({op2});
-        bufA.set_max_undo_depth(0);
+        QVERIFY((bufA.set_max_undo_depth(0)).ok());
 
-        // compact with old watermark should NOT remove (deletion > watermark)
-        QCOMPARE(bufA.compact(watermark), size_t(0));
+        // Without a certificate it must remain, regardless of observed versions.
+        QCOMPARE(bufA.collect_garbage(), size_t(0));
         QVERIFY(bufA.tombstone_count() > 0);
     }
 
     void compact_convergence_both_replicas() {
         // Both replicas compact at the same watermark — convergence preserved
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op1 = bufA.apply_local_edit({{0, 0}}, {"hello world"});
         bufB.apply_ops({op1});
 
@@ -509,20 +573,17 @@ private slots:
         bufB.apply_ops({op2});
         QCOMPARE(bufA.text(), bufB.text());
 
-        // Compute watermark = meet of both versions
-        Global watermark;
-        watermark.join(bufA.version());
-        watermark.meet(bufB.version());
-
-        // Both compact at the same watermark
-        bufA.set_max_undo_depth(0);
-        bufB.set_max_undo_depth(0);
-        bufA.compact(watermark);
-        bufB.compact(watermark);
+        // Neither replica has a certified reclamation frontier.
+        QVERIFY((bufA.set_max_undo_depth(0)).ok());
+        QVERIFY((bufB.set_max_undo_depth(0)).ok());
+        const auto tombstones_a = bufA.tombstone_count();
+        const auto tombstones_b = bufB.tombstone_count();
+        QCOMPARE(bufA.collect_garbage(), size_t(0));
+        QCOMPARE(bufB.collect_garbage(), size_t(0));
 
         QCOMPARE(bufA.text(), bufB.text());
-        QCOMPARE(bufA.tombstone_count(), size_t(0));
-        QCOMPARE(bufB.tombstone_count(), size_t(0));
+        QCOMPARE(bufA.tombstone_count(), tombstones_a);
+        QCOMPARE(bufB.tombstone_count(), tombstones_b);
         check_invariants(bufA, "A_after_compact");
         check_invariants(bufB, "B_after_compact");
 
@@ -539,9 +600,9 @@ private slots:
         qDebug() << "Seed:" << seed;
         std::mt19937 rng(seed);
 
-        Buffer bufA(1), bufB(2);
-        bufA.set_max_undo_depth(10);
-        bufB.set_max_undo_depth(10);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
+        QVERIFY((bufA.set_max_undo_depth(10)).ok());
+        QVERIFY((bufB.set_max_undo_depth(10)).ok());
         std::vector<Operation> queueA, queueB;
 
         auto random_boundary_edit = [&](Buffer& buf) -> Operation {
@@ -590,11 +651,8 @@ private slots:
                     bufA.apply_ops({});
                     bufB.apply_ops({});
                 }
-                Global watermark;
-                watermark.join(bufA.version());
-                watermark.meet(bufB.version());
-                bufA.compact(watermark);
-                bufB.compact(watermark);
+                bufA.collect_garbage();
+                bufB.collect_garbage();
                 check_invariants(bufA, qPrintable(QString("A_compact_%1").arg(i)));
                 check_invariants(bufB, qPrintable(QString("B_compact_%1").arg(i)));
             }
@@ -607,11 +665,8 @@ private slots:
             bufA.apply_ops({});
             bufB.apply_ops({});
         }
-        Global watermark;
-        watermark.join(bufA.version());
-        watermark.meet(bufB.version());
-        bufA.compact(watermark);
-        bufB.compact(watermark);
+        bufA.collect_garbage();
+        bufB.collect_garbage();
 
         check_invariants(bufA, "final_A");
         check_invariants(bufB, "final_B");

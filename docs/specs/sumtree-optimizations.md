@@ -1,3 +1,9 @@
+> **S03 NOTE (historical).** This document describes optimizations built on fractional
+> `Locator` positions, split relocations, the origin index and (locator, origin) summaries.
+> S03 replaced position-by-locator with FugueMax tree links and removed all of them (see
+> `vnext-sequence-algorithm.md` §0.4). The sections on locators, relocation and
+> `normalize_fragments` no longer describe the code; the SumTree/cursor material does.
+
 # SumTree Optimization Spec
 
 Five optimizations that exploit the SumTree infrastructure added in commit

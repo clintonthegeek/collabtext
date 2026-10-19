@@ -1,9 +1,10 @@
 #pragma once
 
 #include "crdt/Clock.h"
-#include "crdt/Locator.h"
+#include "crdt/Placement.h"
 #include "crdt/UndoMap.h"
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -13,29 +14,28 @@ namespace CollabText::Crdt {
 // Fragment Summary — aggregate data cached in SumTree nodes
 // ============================================================================
 
+/// The aggregate SumTree nodes cache, and nothing else.
+///
+/// It holds only the two quantities a seek actually reads: the visible and
+/// deleted byte counts. P03 removed three version-vector fields that were written
+/// here and read by nobody, and their removal is not only cheaper -- one of them
+/// aggregated with Global::meet(), which is a nonzero-minimum fold and *not*
+/// coverage intersection (finding F3). S03 removed the (locator, origin) maximum
+/// too: with placement by tree relation the fragment tree is a plain sequence in
+/// document order, and nothing seeks by a position key any more.
+///
+/// The laws this aggregate must satisfy: identity is `zero()`, composition is
+/// associative, and the byte counts are commutative. See tst_summary_laws.cpp,
+/// which checks them against randomized splice patterns.
 struct FragmentSummary {
     uint32_t visible_bytes = 0;    ///< Total visible bytes in subtree
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
-    Locator max_locator;           ///< Maximum fragment Locator in subtree
-    Lamport max_origin = Lamport::min(); ///< Origin of fragment with max (locator, origin)
-    Global max_version;            ///< Latest timestamp in subtree
-    Global min_insertion_version;  ///< Earliest insertion version in subtree
-    Global max_insertion_version;  ///< Latest insertion version in subtree
 
     static FragmentSummary zero() { return {}; }
 
     void add_summary(const FragmentSummary& other) {
         visible_bytes += other.visible_bytes;
         deleted_bytes += other.deleted_bytes;
-        // Track the max (locator, origin) pair for ordering
-        if (other.max_locator > max_locator ||
-            (other.max_locator == max_locator && other.max_origin > max_origin)) {
-            max_locator = other.max_locator;
-            max_origin = other.max_origin;
-        }
-        max_version.join(other.max_version);
-        min_insertion_version.meet(other.min_insertion_version);
-        max_insertion_version.join(other.max_insertion_version);
     }
 };
 
@@ -67,72 +67,81 @@ struct FullOffset {
     bool operator==(const FullOffset&) const = default;
 };
 
-/// Seek by Locator (fragment position identifier).
-struct LocatorDim {
-    Locator value;
-
-    static LocatorDim zero() { return {Locator::min()}; }
-    void add_summary(const FragmentSummary& s) {
-        if (s.max_locator > value)
-            value = s.max_locator;
-    }
-
-    auto operator<=>(const LocatorDim& other) const { return value <=> other.value; }
-    bool operator==(const LocatorDim& other) const { return value == other.value; }
-};
-
-/// Seek by (locator, origin) for sorted insertion point finding.
-struct FragmentOrderDim {
-    Locator locator;
-    Lamport origin = Lamport::min();
-
-    static FragmentOrderDim zero() { return {Locator::min(), Lamport::min()}; }
-    void add_summary(const FragmentSummary& s) {
-        locator = s.max_locator;
-        origin = s.max_origin;
-    }
-
-    auto operator<=>(const FragmentOrderDim& other) const {
-        if (auto cmp = locator <=> other.locator; cmp != 0) return cmp;
-        return origin <=> other.origin;
-    }
-    bool operator==(const FragmentOrderDim&) const = default;
-};
-
 // ============================================================================
 // Fragment
 // ============================================================================
 
 /// A Fragment represents a contiguous run of characters inserted by the
-/// same replica in a single burst. Each character in the fragment has:
-///   - Lamport timestamp: (replica_id, origin_lamport + offset)
-///   - Position: locator (same for all chars in the fragment since they
-///     were inserted contiguously)
+/// same actor in a single burst. Each character in the fragment has:
+///   - Identity: (actor, origin.counter + offset)
+///   - Placement: the first character carries `link`; every later character is
+///     a right child of the one before it with the same right origin, so a run
+///     is a chain in the tree and `link_at()` derives any item's link.
 ///
 /// Fragments can be split when characters are deleted or when another
-/// replica inserts between them.
+/// replica inserts between them. The fragment tree is a sequence in document
+/// order; its order IS the document order, so there is no position key.
 struct Fragment {
     using Summary = FragmentSummary;
 
-    Lamport origin;          ///< Timestamp of the first character
-    Locator locator;         ///< Fractional position in the document
+    Identity origin;         ///< Identity of the first character
+    Link link;               ///< Placement of the FIRST item (see Placement.h)
     uint32_t byte_length = 0; ///< Byte length of text content
     uint32_t length = 0;     ///< Number of characters (may differ from byte_length for multi-byte)
-    std::vector<Lamport> deletions;  ///< Lamport timestamps of deletion operations
+    std::vector<Identity> deletions;  ///< Identities of the deletion operations
     bool visible = true;     ///< Cached visibility (set during tree construction)
     std::string text;        ///< Inline text content owned by this fragment
 
+    bool marker = false;    ///< One zero-width ordered item; text remains empty.
+
     Fragment() = default;
-    Fragment(Lamport orig, Locator loc, uint32_t byte_len, uint32_t char_len)
-        : origin(orig), locator(loc), byte_length(byte_len), length(char_len) {}
-    Fragment(Lamport orig, Locator loc, uint32_t byte_len, uint32_t char_len,
+    Fragment(Identity orig, Link l, uint32_t byte_len, uint32_t char_len)
+        : origin(std::move(orig)), link(std::move(l)), byte_length(byte_len), length(char_len) {}
+    Fragment(Identity orig, Link l, uint32_t byte_len, uint32_t char_len,
              std::string txt)
-        : origin(orig), locator(loc), byte_length(byte_len), length(char_len),
+        : origin(orig), link(std::move(l)), byte_length(byte_len), length(char_len),
           text(std::move(txt)) {}
 
-    /// Lamport timestamp of the character at `offset` within this fragment.
-    Lamport timestamp_at(uint32_t offset) const {
-        return Lamport(origin.replica_id, origin.value + offset);
+    /// Identity of the item at `offset` within this fragment.
+    ///
+    /// Derived, never allocated: the fragment's items are consecutive
+    /// positions of the owning operation's reserved interval
+    /// (docs/specs/vnext-identity.md §3.3), so a split partitions them.
+    Identity item_at(uint32_t offset) const {
+        return Identity(origin.actor, origin.counter + offset);
+    }
+
+    /// Placement of the item at `offset`: the first item carries the stored link,
+    /// every later one is a right child of its predecessor with the same right
+    /// origin. This is what makes a split free of new data: the tail's first
+    /// item is `link_at(k)`.
+    Link link_at(uint32_t offset) const {
+        if (offset == 0) return link;
+        return Link{item_at(offset - 1), Side::Right, link.right_origin};
+    }
+
+    /// Cut this fragment before item `k` (0 < k < length) and return the tail.
+    ///
+    /// Splitting is a presentation artifact, not an edit: the tail's first item is
+    /// `link_at(k)`, which is what it already was, so no tree relation changes.
+    Fragment split_off(uint32_t k) {
+        uint32_t byte = 0;
+        for (uint32_t c = 0; c < k; ++c) {
+            const auto lead = static_cast<unsigned char>(text[byte]);
+            byte += lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : 4;
+        }
+        Fragment tail;
+        tail.origin = item_at(k);
+        tail.link = link_at(k);
+        tail.text = text.substr(byte);
+        tail.byte_length = static_cast<uint32_t>(tail.text.size());
+        tail.length = length - k;
+        tail.deletions = deletions;
+        tail.visible = visible;
+        text.resize(byte);
+        byte_length = byte;
+        length = k;
+        return tail;
     }
 
     /// True if this fragment has been deleted (by any replica).
@@ -181,14 +190,6 @@ struct Fragment {
             s.visible_bytes = bytes;
         } else {
             s.deleted_bytes = bytes;
-        }
-        s.max_locator = locator;
-        s.max_origin = origin;
-        if (length > 0) {
-            s.max_version.observe(Lamport(origin.replica_id, origin.value + length - 1));
-            Lamport ins_ts(origin.replica_id, origin.value);
-            s.min_insertion_version.observe(ins_ts);
-            s.max_insertion_version.observe(ins_ts);
         }
         return s;
     }

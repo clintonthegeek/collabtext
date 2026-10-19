@@ -1,14 +1,39 @@
 #include <QTest>
+#include <collabtext/CrdtEngine.h>
 #include "crdt/Buffer.h"
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
+
+template<class Engine> bool scoped_left_affinity_probe() {
+    if constexpr (requires(Engine& e) {
+        e.boundary_at(1, {});
+        Engine::create(CollabText::Test::test_counter(1), {"doc", "block", {}, 1});
+    }) {
+        auto created = Engine::create(CollabText::Test::test_counter(1), {"doc", "block", {}, 1});
+        if (!created.ok()) return false;
+        auto& engine = *created.value();
+        engine.insert(0, "ab");
+        auto token = engine.boundary_at(1, {});
+        if (!token.ok()) return false;
+        engine.insert(1, "X");
+        auto resolved = engine.resolve(token.value());
+        return resolved.ok() && resolved.value().byte_offset == 1 && engine.text() == "aXb";
+    }
+    return false;
+}
 
 class TestAnchor : public QObject {
     Q_OBJECT
 private slots:
+    void scoped_left_affinity_under_insertion() {
+        QVERIFY(scoped_left_affinity_probe<CollabText::CrdtEngine>());
+    }
 
     void anchor_at_beginning() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto anchor = buf.anchor_at(0, Bias::Left);
@@ -16,7 +41,7 @@ private slots:
     }
 
     void anchor_at_end() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto anchor = buf.anchor_at(5, Bias::Left);
@@ -25,7 +50,7 @@ private slots:
     }
 
     void anchor_in_middle() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto anchor = buf.anchor_at(2, Bias::Left);
@@ -33,7 +58,7 @@ private slots:
     }
 
     void anchor_survives_insert_before() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         // Anchor at position 2 (between 'e' and 'l')
@@ -48,7 +73,7 @@ private slots:
     }
 
     void anchor_survives_insert_after() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         // Anchor at position 2
@@ -62,7 +87,7 @@ private slots:
     }
 
     void anchor_survives_delete_before() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         // Anchor at position 3 ('l')
@@ -77,7 +102,7 @@ private slots:
     }
 
     void anchor_min_always_zero() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto anchor = Anchor::min();
@@ -88,10 +113,10 @@ private slots:
     }
 
     void anchor_max_always_end() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
-        auto anchor = Anchor::max();
+        auto anchor = Anchor::end();
         QCOMPARE(buf.resolve_anchor(anchor), 5u);
 
         buf.apply_local_edit({{5, 5}}, {" world"});
@@ -99,7 +124,7 @@ private slots:
     }
 
     void compare_anchors_ordering() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto a = buf.anchor_at(1, Bias::Left);
@@ -111,7 +136,7 @@ private slots:
     }
 
     void anchor_on_deleted_text() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         // Anchor at position 2 ('l')
@@ -126,7 +151,7 @@ private slots:
     }
 
     void anchor_with_multiple_edits() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
 
         // Anchor at position 3 ('d')
@@ -147,7 +172,7 @@ private slots:
     // -----------------------------------------------------------------------
 
     void anchor_through_undo_redo() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
         auto anchor = buf.anchor_at(3, Bias::Left);
         QCOMPARE(buf.resolve_anchor(anchor), 3u);
@@ -163,7 +188,7 @@ private slots:
     }
 
     void anchor_with_remote_insert() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op = bufA.apply_local_edit({{0, 0}}, {"abcdef"});
         bufB.apply_ops({op});
 
@@ -177,7 +202,7 @@ private slots:
     }
 
     void anchor_with_concurrent_inserts_at_same_position() {
-        Buffer bufA(1), bufB(2);
+        Buffer bufA(CollabText::Test::test_counter(1)), bufB(CollabText::Test::test_counter(2));
         auto op = bufA.apply_local_edit({{0, 0}}, {"abc"});
         bufB.apply_ops({op});
 
@@ -195,11 +220,11 @@ private slots:
     }
 
     void anchor_min_max_always_stable() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
 
         auto amin = Anchor::min();
-        auto amax = Anchor::max();
+        auto amax = Anchor::end();
 
         QCOMPARE(buf.resolve_anchor(amin), 0u);
         QCOMPARE(buf.resolve_anchor(amax), 5u);
@@ -218,7 +243,7 @@ private slots:
     }
 
     void anchor_through_many_edits() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"0123456789"});
         auto anchor = buf.anchor_at(5, Bias::Left);
 
@@ -233,7 +258,7 @@ private slots:
     }
 
     void compare_anchors_with_edits() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"abcdef"});
 
         auto a = buf.anchor_at(2, Bias::Left);
@@ -249,7 +274,7 @@ private slots:
     }
 
     void anchor_on_empty_document() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         auto anchor = buf.anchor_at(0, Bias::Left);
         QCOMPARE(buf.resolve_anchor(anchor), 0u);
 
@@ -259,7 +284,7 @@ private slots:
     }
 
     void anchor_on_fully_deleted_text() {
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         buf.apply_local_edit({{0, 0}}, {"hello"});
         auto anchor = buf.anchor_at(2, Bias::Left);
         QCOMPARE(buf.resolve_anchor(anchor), 2u);

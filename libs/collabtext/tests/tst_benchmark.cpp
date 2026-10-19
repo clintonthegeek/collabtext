@@ -1,4 +1,5 @@
 #include <QTest>
+#include "BenchmarkSupport.h"
 #include "crdt/Buffer.h"
 #include "crdt/NetworkSim.h"
 #include "crdt/EditStrategy.h"
@@ -9,45 +10,51 @@
 #include <numeric>
 #include <random>
 #include <string>
-#include <unistd.h>
 #include <vector>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText::Crdt;
-using Clock = std::chrono::high_resolution_clock;
+using CollabText::Bench::Buffer;
+using CollabText::Test::NetworkRecorder;
+using CollabText::Test::Trace;
+using CollabText::Test::TraceModel;
+namespace Bench = CollabText::Bench;
+using namespace CollabText::Bench;
 
 // ============================================================================
 // Helpers
 // ============================================================================
+//
+// V06: timing is steady, every figure carries its unit and its work count, and
+// a metric that was not measured is absent. See BenchmarkSupport.h.
 
-struct BenchResult {
-    std::string name;
-    int64_t ns_per_op = 0;
-    double ops_per_sec = 0;
-    uint32_t total_fragments = 0;
-    uint32_t visible_bytes = 0;
-    int64_t memory_delta_kb = 0;
-};
-
-static void report(const BenchResult& r) {
-    char buf[512];
-    std::snprintf(buf, sizeof(buf),
-        "  %-42s %'10lld ns/op  %'12.0f ops/sec  frags=%u  vis=%u  mem_delta=%lldKB",
-        r.name.c_str(),
-        static_cast<long long>(r.ns_per_op),
-        r.ops_per_sec,
-        r.total_fragments,
-        r.visible_bytes,
-        static_cast<long long>(r.memory_delta_kb));
-    qDebug().noquote() << buf;
+/// Report a measured region. The caller names what `work_items` counts, so a
+/// reader never has to infer the denominator, and the engine's structural size
+/// is reported separately from process RSS.
+static void report(const std::string& name, uint64_t wall_ns, uint64_t work_items,
+                   const char* work_label, uint64_t source_edits = 0,
+                   uint64_t remote_applications = 0, const Buffer* engine = nullptr) {
+    Measurement measurement;
+    measurement.name = name;
+    measurement.wall_ns = wall_ns;
+    measurement.work_items = work_items;
+    measurement.work_label = work_label;
+    measurement.source_edits = source_edits;
+    measurement.remote_applications = remote_applications;
+    measurement.rss_kb = process_rss_kb();
+    if (engine) measurement.engine = engine_size(*engine);
+    Bench::print(measurement);
 }
 
-static int64_t rss_kb() {
-    std::ifstream f("/proc/self/statm");
-    if (!f.is_open()) return 0;
-    long pages_total, pages_resident;
-    f >> pages_total >> pages_resident;
-    long page_size = sysconf(_SC_PAGESIZE);
-    return (pages_resident * page_size) / 1024;
+/// Report a region measured by a Stopwatch.
+static void report(const std::string& name, const Stopwatch& watch,
+                   uint64_t work_items, const char* work_label,
+                   uint64_t source_edits = 0, uint64_t remote_applications = 0,
+                   const Buffer* engine = nullptr) {
+    report(name, watch.elapsed_ns(), work_items, work_label, source_edits,
+           remote_applications, engine);
 }
 
 // Generate a random UTF-8 string of 1..maxChars characters (reuses tst_fuzz pattern)
@@ -147,6 +154,9 @@ static Operation random_edit(Buffer& buf, std::mt19937& rng) {
     return buf.apply_local_edit({{start, end}}, {replacement});
 }
 
+// Tombstone count, used by the GC comparison's state check.
+static size_t tombstone_count(const Buffer& buf) { return buf.tombstone_count(); }
+
 // Perform an edit at a specific byte range
 static Operation edit_at(Buffer& buf, uint32_t start, uint32_t end,
                          const std::string& replacement) {
@@ -161,6 +171,57 @@ class TestBenchmark : public QObject {
     Q_OBJECT
 
 private slots:
+
+    // ========================================================================
+    // 0. The report format itself
+    // ========================================================================
+    void measurement_reports_carry_units_and_honest_availability() {
+        // A benchmark number is only evidence if a reader can tell what it
+        // measured. These assertions are about the report format, not about any
+        // engine performance, so they are cheap and must never be weakened to
+        // accommodate a measurement.
+        Measurement full;
+        full.name = "sample";
+        full.wall_ns = 2'000'000;
+        full.work_items = 200;
+        full.work_label = "local edits";
+        full.source_edits = 200;
+        full.remote_applications = 50;
+        full.rss_kb = 4096;
+        full.engine = EngineSize{128, 32, 1024, 2048};
+
+        const QString text = QString::fromStdString(full.to_text());
+        QVERIFY(text.contains("2 ms"));            // wall duration
+        QVERIFY(text.contains("200 local edits")); // work count named
+        QVERIFY(text.contains("10000 ns/local edits")); // per-unit figure
+        QVERIFY(text.contains("process_rss=4096 KB"));
+        QVERIFY(text.contains("tombstones=32"));
+        QVERIFY(text.contains("remote_applications=50"));
+
+        const QString json = QString::fromStdString(full.to_json());
+        for (const char* key : {"\"wall_ns\":2000000", "\"work_items\":200",
+                                "\"work_label\":\"local edits\"",
+                                "\"ns_per_work_item\":10000",
+                                "\"tombstones\":32", "\"visible_bytes\":1024",
+                                "\"process_rss_kb\":4096"})
+            QVERIFY2(json.contains(key), key);
+
+        // An unmeasured metric is null/absent, never 0.
+        Measurement empty;
+        empty.name = "unmeasured";
+        QVERIFY(!empty.ns_per_work_item().has_value());
+        QVERIFY(!empty.work_per_sec().has_value());
+        const QString empty_json = QString::fromStdString(empty.to_json());
+        QVERIFY(empty_json.contains("\"ns_per_work_item\":null"));
+        QVERIFY(empty_json.contains("\"process_rss_kb\":null"));
+        QVERIFY(empty_json.contains("\"fragments\"") == false);
+        const QString empty_text = QString::fromStdString(empty.to_text());
+        QVERIFY(empty_text.contains("process_rss=absent"));
+        // Wall duration is zero only because the region measured nothing; it is
+        // still reported as a duration rather than omitted.
+        QVERIFY(empty_text.contains("wall=0 ms"));
+    }
+
     // ========================================================================
     // 1. Single-replica throughput at different document sizes
     // ========================================================================
@@ -168,7 +229,7 @@ private slots:
         qDebug().noquote() << "\n=== Single-Replica Throughput ===";
         for (uint32_t size : {1000u, 10000u, 100000u}) {
             std::mt19937 rng(42);
-            Buffer buf(1);
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, size, rng);
 
             const int NUM_OPS = 200;
@@ -178,13 +239,7 @@ private slots:
             auto t1 = Clock::now();
 
             int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
-            BenchResult r;
-            r.name = std::to_string(size / 1000) + "K doc, random edit";
-            r.ns_per_op = total_ns / NUM_OPS;
-            r.ops_per_sec = NUM_OPS * 1e9 / total_ns;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report(std::to_string(size / 1000) + "K doc, random edit", total_ns, NUM_OPS, "local edits", NUM_OPS, 0, &buf);
         }
     }
 
@@ -194,7 +249,7 @@ private slots:
     void single_replica_large_doc() {
         qDebug().noquote() << "\n=== Single-Replica Large Doc (1M) ===";
         std::mt19937 rng(42);
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         build_document(buf, 1000000, rng, 1000);
 
         const int NUM_OPS = 100;
@@ -204,13 +259,7 @@ private slots:
         auto t1 = Clock::now();
 
         int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
-        BenchResult r;
-        r.name = "1M doc, random edit";
-        r.ns_per_op = total_ns / NUM_OPS;
-        r.ops_per_sec = NUM_OPS * 1e9 / total_ns;
-        r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-        r.visible_bytes = buf.visible_length();
-        report(r);
+                report("1M doc, random edit", total_ns, NUM_OPS, "local edits", NUM_OPS, 0, &buf);
     }
 
     // ========================================================================
@@ -224,7 +273,7 @@ private slots:
         // --- Sequential (append at end) ---
         {
             std::mt19937 rng(42);
-            Buffer buf(1);
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, DOC_SIZE, rng);
             auto t0 = Clock::now();
             for (int i = 0; i < NUM_OPS; ++i) {
@@ -234,38 +283,26 @@ private slots:
             }
             auto t1 = Clock::now();
             int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
-            BenchResult r;
-            r.name = "sequential (append)";
-            r.ns_per_op = total_ns / NUM_OPS;
-            r.ops_per_sec = NUM_OPS * 1e9 / total_ns;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report("sequential (append)", total_ns, NUM_OPS, "local edits", NUM_OPS, 0, &buf);
         }
 
         // --- Random ---
         {
             std::mt19937 rng(42);
-            Buffer buf(1);
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, DOC_SIZE, rng);
             auto t0 = Clock::now();
             for (int i = 0; i < NUM_OPS; ++i)
                 random_edit(buf, rng);
             auto t1 = Clock::now();
             int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
-            BenchResult r;
-            r.name = "random position";
-            r.ns_per_op = total_ns / NUM_OPS;
-            r.ops_per_sec = NUM_OPS * 1e9 / total_ns;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report("random position", total_ns, NUM_OPS, "local edits", NUM_OPS, 0, &buf);
         }
 
         // --- Hotspot (bytes [5000, 5100]) ---
         {
             std::mt19937 rng(42);
-            Buffer buf(1);
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, DOC_SIZE, rng);
             auto t0 = Clock::now();
             for (int i = 0; i < NUM_OPS; ++i) {
@@ -280,13 +317,7 @@ private slots:
             }
             auto t1 = Clock::now();
             int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
-            BenchResult r;
-            r.name = "hotspot [5000, 5100]";
-            r.ns_per_op = total_ns / NUM_OPS;
-            r.ops_per_sec = NUM_OPS * 1e9 / total_ns;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report("hotspot [5000, 5100]", total_ns, NUM_OPS, "local edits", NUM_OPS, 0, &buf);
         }
     }
 
@@ -300,7 +331,7 @@ private slots:
 
         for (int insert_size : {1, 10, 100, 1000}) {
             std::mt19937 rng(42);
-            Buffer buf(1);
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, DOC_SIZE, rng);
 
             auto t0 = Clock::now();
@@ -313,13 +344,7 @@ private slots:
             auto t1 = Clock::now();
 
             int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
-            BenchResult r;
-            r.name = "insert " + std::to_string(insert_size) + " chars";
-            r.ns_per_op = total_ns / NUM_OPS;
-            r.ops_per_sec = NUM_OPS * 1e9 / total_ns;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report("insert " + std::to_string(insert_size) + " chars", total_ns, NUM_OPS, "local edits", NUM_OPS, 0, &buf);
         }
     }
 
@@ -332,7 +357,7 @@ private slots:
 
         for (double frac : {0.0, 0.5, 0.9}) {
             std::mt19937 rng(42);
-            Buffer buf(1);
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, 5000, rng);
 
             if (frac > 0.0)
@@ -348,13 +373,7 @@ private slots:
             int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
             char label[64];
             std::snprintf(label, sizeof(label), "%.0f%% tombstones", frac * 100);
-            BenchResult r;
-            r.name = label;
-            r.ns_per_op = total_ns / NUM_OPS;
-            r.ops_per_sec = NUM_OPS * 1e9 / total_ns;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report(label, total_ns, NUM_OPS, "local edits", NUM_OPS, 0, &buf);
             qDebug().noquote() << "    frags before edits:" << frags_before;
         }
     }
@@ -373,7 +392,7 @@ private slots:
         // Shows whether tombstone cost scales linearly with total fragments.
         for (uint32_t doc_size : {3000u, 5000u, 8000u}) {
             std::mt19937 rng(42);
-            Buffer buf(1);
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, doc_size, rng);
 
             create_tombstones(buf, 0.5, rng);
@@ -389,13 +408,7 @@ private slots:
             char label[64];
             std::snprintf(label, sizeof(label), "%uK, 50%% tombstones (%u frags)",
                           doc_size / 1000, frags_before);
-            BenchResult r;
-            r.name = label;
-            r.ns_per_op = total_ns / NUM_OPS;
-            r.ops_per_sec = NUM_OPS * 1e9 / total_ns;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report(label, total_ns, NUM_OPS, "local edits", NUM_OPS, 0, &buf);
         }
     }
 
@@ -412,7 +425,7 @@ private slots:
             // Create K replicas
             std::vector<Buffer> replicas;
             for (int i = 0; i < K; ++i)
-                replicas.emplace_back(static_cast<uint16_t>(i + 1));
+                replicas.emplace_back(CollabText::Test::test_counter(static_cast<uint8_t>(i + 1)));
 
             // Each replica performs edits independently, collecting operations
             std::vector<std::vector<Operation>> all_ops(K);
@@ -423,40 +436,41 @@ private slots:
             }
 
             // Cross-apply: each replica applies all OTHER replicas' ops
-            auto t0 = Clock::now();
+            // Timed region: every remote operation application, including the
+            // deferred retry passes that actually finish the merge.
+            uint64_t applications = 0;
+            Stopwatch watch;
             for (int r = 0; r < K; ++r) {
                 for (int s = 0; s < K; ++s) {
                     if (s == r) continue;
                     replicas[r].apply_ops(all_ops[s]);
+                    applications += all_ops[s].size();
                 }
                 // Flush deferred
                 for (int pass = 0; pass < 20; ++pass)
                     replicas[r].apply_ops({});
             }
-            auto t1 = Clock::now();
+            const uint64_t total_ns = watch.elapsed_ns();
 
-            int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
-
-            // Verify convergence
-            std::string expected = replicas[0].text();
-            bool converged = true;
+            // Convergence is a correctness property, not a report line: a
+            // benchmark that prints "converged: NO" and passes is worse than no
+            // benchmark, because it looks like evidence.
+            const std::string expected = replicas[0].text();
             for (int i = 1; i < K; ++i) {
-                if (replicas[i].text() != expected) {
-                    converged = false;
-                    qDebug() << "  DIVERGENCE: replica" << i << "differs from replica 0";
-                }
+                QVERIFY2(replicas[i].text() == expected,
+                         qPrintable(QString("convergence benchmark K=%1: replica %2 "
+                                            "differs from replica 0 (%3 vs %4 bytes)")
+                                        .arg(K).arg(i)
+                                        .arg(replicas[i].text().size())
+                                        .arg(expected.size())));
             }
 
             char label[64];
-            std::snprintf(label, sizeof(label), "K=%d replicas, %d edits each", K, EDITS_PER_REPLICA);
-            BenchResult r;
-            r.name = label;
-            r.ns_per_op = total_ns;  // total convergence time
-            r.ops_per_sec = (K * EDITS_PER_REPLICA) * 1e9 / total_ns;
-            r.total_fragments = static_cast<uint32_t>(replicas[0].fragments().size());
-            r.visible_bytes = replicas[0].visible_length();
-            report(r);
-            qDebug().noquote() << "    converged:" << (converged ? "YES" : "NO");
+            std::snprintf(label, sizeof(label), "K=%d replicas, %d edits each",
+                          K, EDITS_PER_REPLICA);
+            report(label, total_ns, applications, "remote applications",
+                   static_cast<uint64_t>(K) * EDITS_PER_REPLICA, applications,
+                   &replicas[0]);
         }
     }
 
@@ -473,7 +487,7 @@ private slots:
         // Build shared base on replica 1, then sync to all others
         std::vector<Buffer> replicas;
         for (int i = 0; i < K; ++i)
-            replicas.emplace_back(static_cast<uint16_t>(i + 1));
+            replicas.emplace_back(CollabText::Test::test_counter(static_cast<uint8_t>(i + 1)));
 
         // Replica 0 builds the doc, collecting ops to broadcast
         std::vector<Operation> base_ops;
@@ -525,20 +539,21 @@ private slots:
 
         int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
 
-        std::string expected = replicas[0].text();
-        bool converged = true;
+        const std::string expected = replicas[0].text();
         for (int i = 1; i < K; ++i) {
-            if (replicas[i].text() != expected) converged = false;
+            QVERIFY2(replicas[i].text() == expected,
+                     qPrintable(QString("hotspot benchmark: replica %1 differs from "
+                                        "replica 0 (%2 vs %3 bytes)")
+                                        .arg(i).arg(replicas[i].text().size())
+                                        .arg(expected.size())));
         }
 
-        BenchResult r;
-        r.name = "K=5 hotspot [5000,5100]";
-        r.ns_per_op = total_ns;
-        r.ops_per_sec = (K * EDITS_PER_REPLICA) * 1e9 / total_ns;
-        r.total_fragments = static_cast<uint32_t>(replicas[0].fragments().size());
-        r.visible_bytes = replicas[0].visible_length();
-        report(r);
-        qDebug().noquote() << "    converged:" << (converged ? "YES" : "NO");
+        report("K=5 hotspot [5000,5100]", total_ns,
+               static_cast<uint64_t>(K) * EDITS_PER_REPLICA * (K - 1),
+               "remote applications",
+               static_cast<uint64_t>(K) * EDITS_PER_REPLICA,
+               static_cast<uint64_t>(K) * EDITS_PER_REPLICA * (K - 1),
+               &replicas[0]);
     }
 
     // ========================================================================
@@ -547,7 +562,7 @@ private slots:
     void undo_redo_cycle() {
         qDebug().noquote() << "\n=== Undo/Redo Cycle (10K doc) ===";
         std::mt19937 rng(42);
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         build_document(buf, 10000, rng);
 
         const int NUM_EDITS = 500;
@@ -580,31 +595,19 @@ private slots:
         int64_t redo_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t5 - t4).count();
 
         {
-            BenchResult r;
-            r.name = "edit phase (" + std::to_string(NUM_EDITS) + " edits)";
-            r.ns_per_op = edit_ns / NUM_EDITS;
-            r.ops_per_sec = NUM_EDITS * 1e9 / edit_ns;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report("edit phase (" + std::to_string(NUM_EDITS) + " edits)", edit_ns,
+                   static_cast<uint64_t>(NUM_EDITS), "local edits",
+                   static_cast<uint64_t>(NUM_EDITS), 0, &buf);
         }
         {
-            BenchResult r;
-            r.name = "undo phase (" + std::to_string(undone) + " undos)";
-            r.ns_per_op = undone > 0 ? undo_ns / undone : 0;
-            r.ops_per_sec = undone > 0 ? undone * 1e9 / undo_ns : 0;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report("undo phase (" + std::to_string(undone) + " undos)", undo_ns,
+                   static_cast<uint64_t>(undone), "undo operations",
+                   static_cast<uint64_t>(undone), 0, &buf);
         }
         {
-            BenchResult r;
-            r.name = "redo phase (" + std::to_string(redone) + " redos)";
-            r.ns_per_op = redone > 0 ? redo_ns / redone : 0;
-            r.ops_per_sec = redone > 0 ? redone * 1e9 / redo_ns : 0;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report("redo phase (" + std::to_string(redone) + " redos)", redo_ns,
+                   static_cast<uint64_t>(redone), "redo operations",
+                   static_cast<uint64_t>(redone), 0, &buf);
         }
     }
 
@@ -616,7 +619,7 @@ private slots:
 
         for (int N : {100, 500, 1000}) {
             std::mt19937 rng(42);
-            Buffer buf(1);
+            Buffer buf(CollabText::Test::test_counter(1));
             build_document(buf, 10000, rng);
 
             // Perform N edits
@@ -635,13 +638,8 @@ private slots:
 
             char label[64];
             std::snprintf(label, sizeof(label), "undo N=%d edits", N);
-            BenchResult r;
-            r.name = label;
-            r.ns_per_op = undone > 0 ? total_ns / undone : 0;
-            r.ops_per_sec = undone > 0 ? undone * 1e9 / total_ns : 0;
-            r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-            r.visible_bytes = buf.visible_length();
-            report(r);
+                        report(label, total_ns, static_cast<uint64_t>(undone),
+                   "undo operations", static_cast<uint64_t>(undone), 0, &buf);
         }
     }
 
@@ -651,14 +649,17 @@ private slots:
     void fragment_proliferation() {
         qDebug().noquote() << "\n=== Fragment Proliferation (10K doc + 2K single-char inserts) ===";
         std::mt19937 rng(42);
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         build_document(buf, 10000, rng);
 
-        int64_t baseline_mem = rss_kb();
         const int TOTAL = 2000;
         const int INTERVAL = 500;
 
-        auto t_start = Clock::now();
+        // Cumulative region: fragments are reported structurally. The old
+        // "mem_delta" column was process RSS minus a baseline sampled once,
+        // which drifts with the allocator and says nothing about the engine.
+        Stopwatch watch;
+        const auto baseline_rss = process_rss_kb();
         for (int i = 1; i <= TOTAL; ++i) {
             // Single-char random insert (ASCII doc so all byte offsets valid)
             uint32_t len = buf.visible_length();
@@ -667,21 +668,23 @@ private slots:
             buf.apply_local_edit({{pos, pos}}, {std::string(1, c)});
 
             if (i % INTERVAL == 0) {
-                auto t_now = Clock::now();
-                int64_t elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t_now - t_start).count();
-                double ops_sec = i * 1e9 / elapsed_ns;
-                int64_t mem_now = rss_kb();
-
+                Measurement measurement;
                 char label[80];
                 std::snprintf(label, sizeof(label), "after %d inserts", i);
-                BenchResult r;
-                r.name = label;
-                r.ns_per_op = elapsed_ns / i;
-                r.ops_per_sec = ops_sec;
-                r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-                r.visible_bytes = buf.visible_length();
-                r.memory_delta_kb = mem_now - baseline_mem;
-                report(r);
+                measurement.name = label;
+                measurement.wall_ns = watch.elapsed_ns();
+                measurement.work_items = static_cast<uint64_t>(i);
+                measurement.work_label = "local edits";
+                measurement.source_edits = static_cast<uint64_t>(i);
+                measurement.engine = engine_size(buf);
+                // Process RSS, and explicitly as a delta from the sampled
+                // baseline when both samples exist.
+                measurement.rss_is_delta = true;
+                const auto now_rss = process_rss_kb();
+                measurement.rss_is_delta = true;
+                if (now_rss && baseline_rss)
+                    measurement.rss_kb = *now_rss - *baseline_rss;
+                Bench::print(measurement);
             }
         }
     }
@@ -692,7 +695,7 @@ private slots:
     void tombstone_undo_interaction() {
         qDebug().noquote() << "\n=== Tombstone-Undo Interaction ===";
         std::mt19937 rng(42);
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
         build_document(buf, 2000, rng);
 
         // Delete 80% char-by-char: ~1600 edits, each creating one tombstone.
@@ -725,15 +728,11 @@ private slots:
         auto t1 = Clock::now();
         int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
 
-        BenchResult r;
         char label[80];
-        std::snprintf(label, sizeof(label), "undo %d deletions (%u tombstone frags)", undone, frags_after_del);
-        r.name = label;
-        r.ns_per_op = undone > 0 ? total_ns / undone : 0;
-        r.ops_per_sec = undone > 0 ? undone * 1e9 / total_ns : 0;
-        r.total_fragments = static_cast<uint32_t>(buf.fragments().size());
-        r.visible_bytes = buf.visible_length();
-        report(r);
+        std::snprintf(label, sizeof(label), "undo %d deletions (%u tombstone frags)",
+                      undone, frags_after_del);
+        report(label, total_ns, static_cast<uint64_t>(undone), "undo operations",
+               static_cast<uint64_t>(undone), 0, &buf);
     }
 
     // ========================================================================
@@ -742,11 +741,12 @@ private slots:
     void memory_growth() {
         qDebug().noquote() << "\n=== Memory Growth (5000 edits from empty) ===";
         std::mt19937 rng(42);
-        Buffer buf(1);
+        Buffer buf(CollabText::Test::test_counter(1));
 
-        int64_t baseline_mem = rss_kb();
         const int TOTAL = 5000;
         const int INTERVAL = 500;
+        const auto baseline_rss = process_rss_kb();
+        Stopwatch watch;
 
         for (int i = 1; i <= TOTAL; ++i) {
             // Mix of insert and delete (ASCII only for speed)
@@ -764,85 +764,124 @@ private slots:
             }
 
             if (i % INTERVAL == 0) {
-                int64_t mem_now = rss_kb();
-                auto frags = buf.fragments();
-                uint32_t tombstone_frags = 0;
-                for (auto& f : frags) {
-                    if (!f.visible) ++tombstone_frags;
-                }
-
-                char line[256];
-                std::snprintf(line, sizeof(line),
-                    "  edit %5d: vis=%6u  frags=%5u  tombstone_frags=%5u  mem=%lldKB (delta=%lldKB)",
-                    i,
-                    buf.visible_length(),
-                    static_cast<uint32_t>(frags.size()),
-                    tombstone_frags,
-                    static_cast<long long>(mem_now),
-                    static_cast<long long>(mem_now - baseline_mem));
-                qDebug().noquote() << line;
+                const EngineSize size = engine_size(buf);
+                // Structural counts, plus process RSS when available. RSS is
+                // labelled as process RSS; engine memory is the fragment and
+                // tombstone counts above it.
+                const auto now_rss = process_rss_kb();
+                Measurement measurement;
+                measurement.name = "memory growth after " + std::to_string(i) + " edits";
+                measurement.wall_ns = watch.elapsed_ns();
+                measurement.work_items = static_cast<uint64_t>(i);
+                measurement.work_label = "local edits";
+                measurement.source_edits = static_cast<uint64_t>(i);
+                measurement.engine = size;
+                measurement.rss_is_delta = true;
+                if (now_rss && baseline_rss)
+                    measurement.rss_kb = *now_rss - *baseline_rss;
+                Bench::print(measurement);
             }
         }
     }
 
+    // ========================================================================
+    // 13b. GC before/after on independently recreated identical state
+    // ========================================================================
     void gc_effectiveness() {
-        qDebug() << "\n--- GC Effectiveness ---";
+        qDebug() << "\n--- GC Effectiveness (recreated identical state) ---";
 
+        // The workload is recorded once — including its document build and its
+        // tombstones — then replayed onto a fresh engine for each side of the
+        // comparison. Measuring "before" and "after" on the same buffer
+        // conflated the GC call with a warm allocator and a different fragment
+        // layout. Recording the setup matters: a rebuild that silently dropped
+        // the tombstones would compare an empty document with itself.
+        Workload workload(CollabText::Test::test_counter(1), "gc-compare");
         std::mt19937 rng(42);
-        Buffer buf(1);
-        buf.set_max_undo_depth(0);  // everything GC-eligible immediately
-        build_document(buf, 5000, rng, 100);
-
-        size_t frags_clean = buf.fragment_count();
-        qDebug().noquote() << QString("  Clean doc:   %1 fragments").arg(frags_clean);
-
-        create_tombstones(buf, 0.5, rng);
-        size_t frags_dirty = buf.fragment_count();
-        size_t tombstones = buf.tombstone_count();
-        qDebug().noquote() << QString("  After 50%% tombstones: %1 fragments (%2 tombstones)")
-            .arg(frags_dirty).arg(tombstones);
-
-        // Measure edit throughput BEFORE GC
-        auto t0 = Clock::now();
-        int ops_before = 0;
-        while (Clock::now() - t0 < std::chrono::milliseconds(500)) {
-            random_edit(buf, rng);
-            ++ops_before;
+        while (workload.buffer().visible_length() < 5000) {
+            const uint32_t end = workload.buffer().visible_length();
+            workload.edit(end, end, random_ascii(rng, 100));
         }
-        auto elapsed_before = Clock::now() - t0;
-        double ns_before = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed_before).count()
-                           / static_cast<double>(ops_before);
-
-        // Run GC
-        auto gc_start = Clock::now();
-        size_t removed = buf.collect_garbage();
-        auto gc_elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-            Clock::now() - gc_start).count();
-
-        size_t frags_after = buf.fragment_count();
-        qDebug().noquote() << QString("  After GC:    %1 fragments (removed %2, GC took %3 us)")
-            .arg(frags_after).arg(removed).arg(gc_elapsed);
-
-        // Measure edit throughput AFTER GC
-        auto t1 = Clock::now();
-        int ops_after = 0;
-        while (Clock::now() - t1 < std::chrono::milliseconds(500)) {
-            random_edit(buf, rng);
-            ++ops_after;
+        for (uint32_t i = 0; i < 2500; ++i) {
+            const uint32_t len = workload.buffer().visible_length();
+            if (len == 0) break;
+            const uint32_t pos = rng() % len;
+            workload.edit(pos, pos + 1, "");
         }
-        auto elapsed_after = Clock::now() - t1;
-        double ns_after = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed_after).count()
-                          / static_cast<double>(ops_after);
+        const size_t tombstones_before = workload.buffer().tombstone_count();
+        const size_t fragments_before = workload.buffer().fragment_count();
+        const std::string recorded_text = workload.buffer().text();
+        QVERIFY(tombstones_before > 0);
 
-        double speedup = ns_before / ns_after;
-        qDebug().noquote() << QString("  Before GC: %1 ns/op (%2 ops/sec)")
-            .arg(ns_before, 0, 'f', 0).arg(1e9 / ns_before, 0, 'f', 0);
-        qDebug().noquote() << QString("  After GC:  %1 ns/op (%2 ops/sec)")
-            .arg(ns_after, 0, 'f', 0).arg(1e9 / ns_after, 0, 'f', 0);
-        qDebug().noquote() << QString("  Speedup:   %1x").arg(speedup, 0, 'f', 1);
+        const int OPS = 200;
+        // A fixed decision sequence, so both runs execute identical work.
+        std::vector<std::pair<uint32_t, uint32_t>> ranges;
+        std::vector<std::string> payloads;
+        for (int i = 0; i < OPS; ++i) {
+            const uint32_t len = workload.buffer().visible_length();
+            const uint32_t start = len > 0 ? rng() % len : 0;
+            ranges.push_back({start, start});
+            payloads.push_back(rng() % 3 != 0 ? random_ascii(rng, 3) : std::string());
+        }
 
-        QVERIFY2(removed > 0, "GC should have removed tombstones");
-        QVERIFY2(frags_after < frags_dirty, "Fragment count should decrease after GC");
+        // The rebuild must reproduce the recorded state exactly, or the two
+        // sides are not the same experiment. Checked once, outside any lambda
+        // that has to return a value.
+        workload.rebuild();
+        QCOMPARE(workload.buffer().tombstone_count(), tombstones_before);
+        QCOMPARE(workload.buffer().fragment_count(), fragments_before);
+        QCOMPARE(workload.buffer().text(), recorded_text);
+
+        auto run = [&](bool collect) -> std::tuple<uint64_t, size_t, uint64_t, EngineSize> {
+            workload.rebuild();
+            Stopwatch watch;
+            for (int i = 0; i < OPS; ++i)
+                workload.buffer().apply_local_edit({ranges[i]}, {payloads[i]});
+            const uint64_t ns = watch.elapsed_ns();
+            size_t removed = 0;
+            uint64_t gc_ns = 0;
+            if (collect) {
+                Stopwatch gc_watch;
+                removed = workload.buffer().collect_garbage();
+                gc_ns = gc_watch.elapsed_ns();
+            }
+            return std::tuple<uint64_t, size_t, uint64_t, EngineSize>(
+                ns, removed, gc_ns, engine_size(workload.buffer()));
+        };
+
+        const auto before = run(false);
+        const auto after = run(true);
+        const uint64_t before_ns = std::get<0>(before);
+        const EngineSize before_size = std::get<3>(before);
+        const uint64_t after_ns = std::get<0>(after);
+        const size_t removed = std::get<1>(after);
+        const uint64_t gc_ns = std::get<2>(after);
+        const EngineSize after_size = std::get<3>(after);
+
+        report("edits before GC request", before_ns, OPS, "local edits",
+               static_cast<uint64_t>(OPS), 0, &workload.buffer());
+        report("edits after GC request", after_ns, OPS, "local edits",
+               static_cast<uint64_t>(OPS), 0, &workload.buffer());
+        Measurement gc_measurement;
+        gc_measurement.name = "collect_garbage() request (timed)";
+        gc_measurement.wall_ns = gc_ns;
+        gc_measurement.work_items = 1;
+        gc_measurement.work_label = "collect_garbage() calls";
+        gc_measurement.engine = after_size;
+        Bench::print(gc_measurement);
+
+        // Containment (V03): physical reclamation is unavailable until a
+        // certificate exists, so nothing may be reclaimed and no speedup may be
+        // claimed. This asserts the contract rather than the old expectation
+        // that reclamation succeeds.
+        QCOMPARE(removed, 0u);
+        QCOMPARE(before_size.units, after_size.units);
+        QCOMPARE(before_size.tombstones, after_size.tombstones);
+
+        qDebug().noquote()
+            << QString("  containment: %1 tombstones retained (%2 fragments); "
+                       "no reclamation speedup is claimed")
+                   .arg(after_size.tombstones).arg(after_size.units);
     }
 
     // ========================================================================
@@ -857,7 +896,11 @@ private slots:
         RealisticStrategy strategies[3];
 
         const int TOTAL_OPS = 300;  // 100 per replica (reduced for wall-time budget)
-        auto t0 = Clock::now();
+        // Timed region: the local edits and the simulated delivery they cause,
+        // including the final drain. Remote applications are counted, not
+        // guessed from the local op count.
+        const size_t deliveries_before = net.delivery_log().size();
+        Stopwatch watch;
         for (int i = 0; i < TOTAL_OPS; ++i) {
             int r = i % 3;
             auto action = strategies[r].next_edit(net.buffer(r), rng);
@@ -865,13 +908,13 @@ private slots:
             net.tick(2);  // 2ms between ops (fast typing)
         }
         net.drain();
-        auto t1 = Clock::now();
+        const uint64_t wall_ns = watch.elapsed_ns();
+        const uint64_t applications =
+            static_cast<uint64_t>(net.delivery_log().size() - deliveries_before);
 
-        double wall_ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
-        qDebug().noquote() << QString("  %1 ops (3 clients x %2), wall time: %3 ms")
-            .arg(TOTAL_OPS).arg(TOTAL_OPS / 3).arg(wall_ms, 0, 'f', 1);
-        qDebug().noquote() << QString("  Throughput: %1 ops/sec")
-            .arg(TOTAL_OPS / (wall_ms / 1000.0), 0, 'f', 0);
+        report("realistic 3-client session", wall_ns, applications,
+               "remote applications", static_cast<uint64_t>(TOTAL_OPS),
+               applications, &net.buffer(0));
         for (int r = 0; r < 3; ++r) {
             qDebug().noquote() << QString("  Replica %1: %2 fragments, %3 visible bytes")
                 .arg(r)
@@ -879,7 +922,13 @@ private slots:
                 .arg(net.buffer(r).visible_length());
         }
 
-        net.assert_convergence("realistic_throughput");
+        // Convergence is asserted, not reported.
+        const std::string expected = net.buffer(0).text();
+        for (int r = 1; r < 3; ++r) {
+            QVERIFY2(net.buffer(r).text() == expected,
+                     qPrintable(QString("realistic_throughput: replica %1 differs "
+                                        "from replica 0").arg(r)));
+        }
     }
 
     // ========================================================================
@@ -908,24 +957,104 @@ private slots:
                 net.tick(1);
             }
 
-            uint32_t frags_before = static_cast<uint32_t>(net.buffer(2).fragment_count());
+            const uint32_t frags_before = static_cast<uint32_t>(net.buffer(2).fragment_count());
+            const size_t deliveries_before = net.delivery_log().size();
 
-            // Reconnect and measure sync time (tick first to deliver bulk pending ops)
+            // The timed region is the catch-up itself: reconnect, deliver
+            // everything that piled up, and settle the deferred operations.
+            // Timing only the drain after a tick measured the leftovers, which
+            // is why this benchmark used to report a near-zero "sync cost" for
+            // work that had already happened outside the region.
+            Stopwatch watch;
             net.reconnect(2);
             net.tick(10000);
-            auto t0 = Clock::now();
+            for (int pass = 0; pass < 20; ++pass)
+                net.buffer(2).apply_ops({});
+            const uint64_t sync_ns = watch.elapsed_ns();
+            const uint64_t applied = net.delivery_log().size() - deliveries_before;
+
             net.drain();
-            auto t1 = Clock::now();
+            const uint32_t frags_after = static_cast<uint32_t>(net.buffer(2).fragment_count());
+            const std::string expected = net.buffer(0).text();
+            QVERIFY2(net.buffer(2).text() == expected,
+                     qPrintable(QString("reconnect_sync N=%1: replica 2 did not "
+                                        "converge").arg(n_edits)));
 
-            double sync_ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
-            uint32_t frags_after = static_cast<uint32_t>(net.buffer(2).fragment_count());
+            char label[64];
+            std::snprintf(label, sizeof(label), "N=%d edits: reconnect catch-up", n_edits);
+            report(label, sync_ns, applied, "remote applications",
+                   static_cast<uint64_t>(n_edits * 2), applied, &net.buffer(2));
 
-            qDebug().noquote() << QString("  N=%1 edits: sync=%2 ms, frags %3 -> %4")
-                .arg(n_edits).arg(sync_ms, 0, 'f', 1)
-                .arg(frags_before).arg(frags_after);
-
-            net.assert_convergence("reconnect_sync");
+            // The region did real work: deliveries were applied inside it.
+            QVERIFY2(applied > 0, "the timed reconnect region applied no operations");
+            QVERIFY2(sync_ns > 0, "the timed reconnect region measured zero duration");
+            qDebug().noquote() << QString("  frags %1 -> %2").arg(frags_before).arg(frags_after);
         }
+    }
+
+    // ========================================================================
+    // 15b. Controlled catch-up: the timed region contains the work
+    // ========================================================================
+    void catch_up_timed_region_contains_the_work() {
+        // The acceptance case for the timing repair: a run whose timed region
+        // provably contains real work, asserted without a speed threshold.
+        NetworkRecorder recorded(3, {.min_latency_ms = 0, .max_latency_ms = 0}, 42,
+                                 "catch-up");
+        std::mt19937 rng(42);
+        RealisticStrategy strategy;
+
+        recorded.edit(0, {{0, 0}}, {std::string(2000, 'x')});
+        recorded.tick(1);
+        recorded.drain();
+        recorded.disconnect(2);
+        for (int i = 0; i < 300; ++i) {
+            const int r = static_cast<int>(i % 2);
+            const auto action = strategy.next_edit(recorded.buffer(r), rng);
+            recorded.edit(r, action.ranges, action.new_text);
+            recorded.tick(1);
+        }
+
+        // Recreate the identical partitioned network, then time the catch-up.
+        NetworkSim net(3, recorded.trace().net, recorded.trace().seed);
+        Bench::reexecute(recorded.trace(), net);
+        QCOMPARE(net.buffer(2).text(), recorded.buffer(2).text());
+
+        const size_t deliveries_before = net.delivery_log().size();
+        const size_t fragments_before = net.buffer(2).fragment_count();
+        const std::string lagging = net.buffer(2).text();
+
+        Stopwatch watch;
+        net.reconnect(2);
+        net.tick(10000);
+        for (int pass = 0; pass < 20; ++pass)
+            net.buffer(2).apply_ops({});
+        const uint64_t catch_up_ns = watch.elapsed_ns();
+        const uint64_t applied = net.delivery_log().size() - deliveries_before;
+
+        Measurement measurement;
+        measurement.name = "controlled catch-up after partition";
+        measurement.wall_ns = catch_up_ns;
+        measurement.work_items = applied;
+        measurement.work_label = "remote applications";
+        measurement.source_edits = 300;
+        measurement.remote_applications = applied;
+        measurement.rss_kb = process_rss_kb();
+        measurement.engine = engine_size(net.buffer(2));
+        Bench::print(measurement);
+
+        // Nonzero work, nonzero time — no speed threshold, because a
+        // threshold on shared CI hardware measures the hardware.
+        QVERIFY2(applied > 0, "the catch-up region applied no operations");
+        QVERIFY2(catch_up_ns > 0, "the catch-up region measured zero duration");
+        QVERIFY2(net.buffer(2).fragment_count() > fragments_before,
+                 "the catch-up region did not change the lagging replica");
+        QVERIFY2(net.buffer(2).text() != lagging,
+                 "the catch-up region left the lagging replica unchanged");
+
+        net.drain();
+        const std::string expected = net.buffer(0).text();
+        QVERIFY2(net.buffer(2).text() == expected,
+                 "replicas did not converge after the catch-up");
     }
 
     // ========================================================================
@@ -934,50 +1063,88 @@ private slots:
     void gc_under_sustained_editing() {
         qDebug() << "\n--- GC Under Sustained Editing ---";
 
-        for (bool gc_enabled : {false, true}) {
-            NetworkSim net(3, {.min_latency_ms = 0, .max_latency_ms = 0}, 42);
+        // Record the session once, then run it twice on independently recreated
+        // networks: once with GC requests and once without. Running them in one
+        // process on the same buffers would let the first run warm the allocator
+        // and grow the trees the second run then reuses.
+        const int TOTAL_GC_OPS = 600;
+        const int GC_INTERVAL = 100;
+
+        Trace session;
+        session.model = TraceModel::NetworkSim;
+        session.label = "gc-under-sustained-editing";
+        session.seed = 42;
+        session.replicas = 3;
+        session.net = NetworkConfig{.min_latency_ms = 0, .max_latency_ms = 0};
+        {
+            NetworkRecorder record(3, session.net, session.seed, session.label);
             std::mt19937 rng(42);
             RealisticStrategy strategies[3];
-
-            qDebug().noquote() << QString("  GC %1:").arg(gc_enabled ? "ON" : "OFF");
-
-            const int TOTAL_GC_OPS = 600;  // reduced for wall-time budget (O(n^2) fragment cost)
-            const int GC_INTERVAL = 100;
-            const int REPORT_INTERVAL = 200;
-
-            auto t_start = Clock::now();
             for (int i = 0; i < TOTAL_GC_OPS; ++i) {
-                int r = i % 3;
-                net.edit(r, strategies[r].next_edit(net.buffer(r), rng));
-                net.tick(1);
-
-                // GC every GC_INTERVAL ops
-                if (gc_enabled && i > 0 && i % GC_INTERVAL == 0) {
-                    for (int gr = 0; gr < 3; ++gr)
-                        net.collect_garbage(gr);
-                }
-
-                // Report at intervals
-                if (i > 0 && i % REPORT_INTERVAL == 0) {
-                    auto t_now = Clock::now();
-                    double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-                        t_now - t_start).count() / 1000.0;
-                    qDebug().noquote() << QString("    @%1 ops: %2 frags (r0), %3 ms elapsed")
-                        .arg(i)
-                        .arg(net.buffer(0).fragment_count())
-                        .arg(elapsed, 0, 'f', 1);
+                const int r = i % 3;
+                const auto action = strategies[r].next_edit(record.buffer(r), rng);
+                record.edit(r, action.ranges, action.new_text);
+                record.tick(1);
+                if (i > 0 && i % GC_INTERVAL == 0) {
+                    for (int gr = 0; gr < 3; ++gr) {
+                        record.collect_garbage(gr);
+                        Event gc;
+                        gc.kind = EventKind::CollectGarbage;
+                        gc.replica = gr;
+                        record.trace().events.push_back(gc);
+                    }
                 }
             }
-            auto t_end = Clock::now();
-
-            net.drain();
-            double total_ms = std::chrono::duration_cast<std::chrono::microseconds>(
-                t_end - t_start).count() / 1000.0;
-            qDebug().noquote() << QString("    Final: %1 frags (r0), %2 ms total, %3 ops/sec")
-                .arg(net.buffer(0).fragment_count())
-                .arg(total_ms, 0, 'f', 1)
-                .arg(TOTAL_GC_OPS / (total_ms / 1000.0), 0, 'f', 0);
+            record.drain();
+            session.events = record.trace().events;
         }
+
+        auto run = [&](bool with_gc) {
+            NetworkSim net(3, session.net, session.seed);
+            Stopwatch watch;
+            uint64_t gc_calls = 0;
+            uint64_t produced = 0;
+            for (const Event& event : session.events) {
+                switch (event.kind) {
+                case EventKind::Edit:
+                    net.edit(event.replica, {{event.start, event.end}}, {event.text});
+                    ++produced;
+                    break;
+                case EventKind::CollectGarbage:
+                    net.collect_garbage(event.replica);
+                    ++gc_calls;
+                    break;
+                case EventKind::Tick: net.tick(event.ms); break;
+                case EventKind::Drain: net.drain(); break;
+                default: break;
+                }
+            }
+            return std::tuple<uint64_t, uint64_t, uint64_t, EngineSize>(
+                watch.elapsed_ns(), produced, gc_calls, engine_size(net.buffer(0)));
+        };
+
+        const auto without = run(false);
+        const auto with = run(true);
+
+        report("sustained editing, no GC requests", std::get<0>(without),
+               std::get<1>(without), "local edits", std::get<1>(without), 0);
+        report("sustained editing, GC requests every 100 ops", std::get<0>(with),
+               std::get<1>(with), "local edits", std::get<1>(with), 0);
+
+        Measurement gc_calls_measurement;
+        gc_calls_measurement.name = "collect_garbage() requests issued";
+        gc_calls_measurement.wall_ns = 0;
+        gc_calls_measurement.work_items = std::get<2>(with);
+        gc_calls_measurement.work_label = "collect_garbage() calls";
+        gc_calls_measurement.engine = std::get<3>(with);
+        Bench::print(gc_calls_measurement);
+
+        // Containment (V03): the two runs must end in identical engine state,
+        // because no reclamation is permitted yet. A difference here would mean
+        // a GC request changed something it is not allowed to change.
+        QCOMPARE(std::get<3>(without).units, std::get<3>(with).units);
+        QCOMPARE(std::get<3>(without).tombstones, std::get<3>(with).tombstones);
+        QCOMPARE(std::get<3>(without).visible_bytes, std::get<3>(with).visible_bytes);
     }
 };
 

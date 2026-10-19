@@ -1,6 +1,7 @@
-/// tst_opstream_convergence_idlist.cpp — Two-replica IdList convergence over OpStream
+#include "CodecTest.h"
+/// tst_opstream_convergence_idlist.cpp — Two-replica IdList convergence over StreamSync
 ///
-/// Proves that two IdLists wired through StreamSync (via the OpStream interface)
+/// Proves that two IdLists wired through StreamSync (through the internal legacy adapter)
 /// converge correctly:
 ///   - Sequential inserts: list1 inserts two elements, list2 receives and converges.
 ///   - Divergent concurrent inserts: both lists insert at head before any sync, then
@@ -10,14 +11,16 @@
 
 #include <QTest>
 #include <QTemporaryDir>
-#include <collabtext/StreamSync.h>
-#include <collabtext/OpStream.h>
+#include "transport/StreamSync.h"
 #include <collabtext/IdListOperations.h>
 #include <collabtext/Serialization.h>
 #include "crdt/IdList.h"
 
 #include <filesystem>
 #include <string>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText;
 using namespace CollabText::Crdt;
@@ -32,7 +35,7 @@ private slots:
     // list1 inserts id=100 at head, then id=200 after 100.  sync2 polls and
     // list2 applies both ops.  Both must hold the same ids() in the same order.
 
-    void two_replica_idlist_convergence_over_opstream() {
+    void two_replica_idlist_convergence_over_streamsync() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         std::filesystem::path shared = tmp.path().toStdString();
@@ -45,20 +48,20 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
-        IdList list1(1);
-        IdList list2(2);
+        IdList list1(CollabText::Test::test_counter(1));
+        IdList list2(CollabText::Test::test_counter(2));
 
         // Wire list1 → op1 (outbound)
         list1.set_on_local_op([&](const IdListOperation& op) {
-            op1->push("idlist:structure", encode_idlist_operation(op));
+            op1->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
 
         // Wire list2 → op2 (outbound) — not used in this test but wired for symmetry
         list2.set_on_local_op([&](const IdListOperation& op) {
-            op2->push("idlist:structure", encode_idlist_operation(op));
+            op2->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
 
         // Wire op1 inbound → list1 (skip own-replica ops)
@@ -66,8 +69,8 @@ private slots:
                                 const std::string& payload) {
             if (replica_id == 1) return;
             auto decoded = decode_idlist_operation(payload);
-            QVERIFY(decoded.has_value());
-            list1.apply_remote_op(*decoded);
+            QVERIFY(decoded.ok());
+            list1.apply_remote_op(decoded.value());
         });
 
         // Wire op2 inbound → list2 (skip own-replica ops)
@@ -75,8 +78,8 @@ private slots:
                                 const std::string& payload) {
             if (replica_id == 2) return;
             auto decoded = decode_idlist_operation(payload);
-            QVERIFY(decoded.has_value());
-            list2.apply_remote_op(*decoded);
+            QVERIFY(decoded.ok());
+            list2.apply_remote_op(decoded.value());
         });
 
         // Step 1: list1 inserts id=100 at head, then id=200 after 100
@@ -114,34 +117,34 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
-        IdList list1(1);
-        IdList list2(2);
+        IdList list1(CollabText::Test::test_counter(1));
+        IdList list2(CollabText::Test::test_counter(2));
 
         list1.set_on_local_op([&](const IdListOperation& op) {
-            op1->push("idlist:structure", encode_idlist_operation(op));
+            op1->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
 
         list2.set_on_local_op([&](const IdListOperation& op) {
-            op2->push("idlist:structure", encode_idlist_operation(op));
+            op2->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
 
         op1->set_on_inbound([&](const std::string& /*stream*/, uint16_t replica_id,
                                 const std::string& payload) {
             if (replica_id == 1) return;
             auto decoded = decode_idlist_operation(payload);
-            QVERIFY(decoded.has_value());
-            list1.apply_remote_op(*decoded);
+            QVERIFY(decoded.ok());
+            list1.apply_remote_op(decoded.value());
         });
 
         op2->set_on_inbound([&](const std::string& /*stream*/, uint16_t replica_id,
                                 const std::string& payload) {
             if (replica_id == 2) return;
             auto decoded = decode_idlist_operation(payload);
-            QVERIFY(decoded.has_value());
-            list2.apply_remote_op(*decoded);
+            QVERIFY(decoded.ok());
+            list2.apply_remote_op(decoded.value());
         });
 
         // Concurrent inserts — neither list has seen the other's op yet
@@ -184,21 +187,21 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
+        StreamSync* op1 = &sync1;
 
-        IdList list1(1);
-        IdList list2(2);
+        IdList list1(CollabText::Test::test_counter(1));
+        IdList list2(CollabText::Test::test_counter(2));
 
         // One-directional wiring: list1 → op1 → list2
         list1.set_on_local_op([&](const IdListOperation& op) {
-            op1->push("idlist:structure", encode_idlist_operation(op));
+            op1->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
 
         sync2.set_on_inbound([&](const std::string& /*stream*/, uint16_t /*replica_id*/,
                                  const std::string& payload) {
             auto decoded = decode_idlist_operation(payload);
-            QVERIFY(decoded.has_value());
-            list2.apply_remote_op(*decoded);
+            QVERIFY(decoded.ok());
+            list2.apply_remote_op(decoded.value());
         });
 
         // Step 1: list1 inserts id=42 at head

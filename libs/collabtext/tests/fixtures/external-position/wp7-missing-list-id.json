@@ -1,0 +1,121 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp7-missing-list-id",
+ "probe": "WP7",
+ "title": "A missing IdList id is a typed not-found, and mutations refuse it",
+ "primitive": "list",
+ "offset_unit": "list_index",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp7-missing-list-id",
+  "stream": "list",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/1",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": 10
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/1"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "list-0",
+   "after": [
+    "A/1"
+   ],
+   "between": [
+    "START",
+    "A/1"
+   ],
+   "affinity": "left"
+  }
+ ],
+ "attachment_kinds": {},
+ "invalid_requests": [
+  {
+   "kind": "missing_list_id",
+   "value": 999,
+   "error": "not_found"
+  }
+ ],
+ "expectations": [
+  {
+   "id": "missing_list_id_is_not_an_end_anchor",
+   "kind": "not_found",
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:77-81"
+  },
+  {
+   "id": "insert_after_refuses_a_missing_id",
+   "kind": "mutation_refused",
+   "operation": "insert_after",
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:77-81; W2"
+  },
+  {
+   "id": "remove_at_refuses_a_missing_id",
+   "kind": "mutation_refused",
+   "operation": "remove_at",
+   "source": "consumer_asserted",
+   "citation": "wave devs-our-asks:77-81; W2"
+  },
+  {
+   "id": "missing_list_lookup_never_fabricates_an_end_sentinel",
+   "kind": "no_fabricated_offset",
+   "source": "roadmap_inference",
+   "citation": "W2"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04a",
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S04",
+   "A02"
+  ]
+ },
+ "third_party_observations": [],
+ "seed": 20261005,
+ "missing_list_lookup": {
+  "value": 999,
+  "outcome": "not_found"
+ },
+ "expected": {
+  "order": [
+   "A/1"
+  ],
+  "hidden": [],
+  "ids": [
+   10
+  ],
+  "positions": {
+   "list-0": {
+    "offset": 0,
+    "state": "resolved"
+   }
+  },
+  "comparisons": []
+ }
+}

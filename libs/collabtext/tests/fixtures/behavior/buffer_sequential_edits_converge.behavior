@@ -1,0 +1,31 @@
+# behavior 1
+# name: buffer_sequential_edits_converge
+# provenance: CRDT_ENGINE_SPEC.md convergence requirement; the control every
+#   ordering fix must keep passing.
+# status: desired
+# scope: buffer, multiple producers
+# expect converged yes
+# expect text_of 0 68656c6c6f20776f726c64
+# expect visible_of 0 11
+# note: one producer types "hello" then appends " world"; deliveries to the peer
+#   arrive out of order. Convergence must hold and the text must be exactly
+#   "hello world" (11 bytes).
+#collabtext-trace 1
+#model buffer
+#label sequential-convergence
+#seed 42
+#replicas 2
+#net 50 200 500 1
+edit 0 0 0 68
+edit 0 1 1 65
+edit 0 2 2 6c
+edit 0 3 3 6c
+edit 0 4 4 6f
+edit 0 5 5 20776f726c64
+deliver 1 5
+deliver 1 0
+deliver 1 3
+deliver 1 1
+deliver 1 4
+deliver 1 2
+deliver 0 3

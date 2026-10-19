@@ -1,0 +1,21 @@
+# behavior 1
+# name: idlist_concurrent_operations
+# provenance: CRDT_IDLIST_SPEC.md convergence requirement; the control for S01-S07.
+# status: desired
+# scope: IdList, multiple producers
+# expect converged yes
+# note: two replicas insert concurrently at index 0 and each removes an entry,
+#   delivered out of order. The visible id sequence must be identical.
+#collabtext-trace 1
+#model idlist
+#label idlist-concurrent
+#seed 42
+#replicas 2
+#net 50 200 500 1
+insert 0 0 101 l
+insert 1 0 102 l
+deliver 1 0
+deliver 0 1
+remove 0 0 l
+deliver 1 2
+deliver 0 1

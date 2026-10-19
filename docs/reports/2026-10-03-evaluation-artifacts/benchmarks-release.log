@@ -1,0 +1,67 @@
+********* Start testing of TestBenchmark *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestBenchmark::initTestCase()
+QDEBUG : TestBenchmark::single_replica_throughput() 
+=== Single-Replica Throughput ===
+QDEBUG : TestBenchmark::single_replica_throughput()   1K doc, random edit                            760368 ns/op          1315 ops/sec  frags=450  vis=922  mem_delta=0KB
+QDEBUG : TestBenchmark::single_replica_throughput()   10K doc, random edit                          1070127 ns/op           934 ops/sec  frags=588  vis=9878  mem_delta=0KB
+QDEBUG : TestBenchmark::single_replica_throughput()   100K doc, random edit                         3621017 ns/op           276 ops/sec  frags=1495  vis=99848  mem_delta=0KB
+PASS   : TestBenchmark::single_replica_throughput()
+QDEBUG : TestBenchmark::single_replica_large_doc() 
+=== Single-Replica Large Doc (1M) ===
+QDEBUG : TestBenchmark::single_replica_large_doc()   1M doc, random edit                           3704078 ns/op           270 ops/sec  frags=1252  vis=999979  mem_delta=0KB
+PASS   : TestBenchmark::single_replica_large_doc()
+QDEBUG : TestBenchmark::edit_patterns() 
+=== Edit Patterns (100K doc) ===
+QDEBUG : TestBenchmark::edit_patterns()   sequential (append)                             85969 ns/op         11632 ops/sec  frags=1200  vis=100596  mem_delta=0KB
+QDEBUG : TestBenchmark::edit_patterns()   random position                               3423926 ns/op           292 ops/sec  frags=1495  vis=99848  mem_delta=0KB
+QDEBUG : TestBenchmark::edit_patterns()   hotspot [5000, 5100]                          2261518 ns/op           442 ops/sec  frags=1322  vis=99808  mem_delta=0KB
+PASS   : TestBenchmark::edit_patterns()
+QDEBUG : TestBenchmark::edit_sizes() 
+=== Edit Sizes (100K doc) ===
+QDEBUG : TestBenchmark::edit_sizes()   insert 1 chars                                4396614 ns/op           227 ops/sec  frags=1200  vis=100100  mem_delta=0KB
+QDEBUG : TestBenchmark::edit_sizes()   insert 10 chars                               4403113 ns/op           227 ops/sec  frags=1199  vis=101000  mem_delta=0KB
+QDEBUG : TestBenchmark::edit_sizes()   insert 100 chars                              5049429 ns/op           198 ops/sec  frags=1200  vis=110000  mem_delta=0KB
+QDEBUG : TestBenchmark::edit_sizes()   insert 1000 chars                             5242913 ns/op           191 ops/sec  frags=1199  vis=200000  mem_delta=0KB
+PASS   : TestBenchmark::edit_sizes()
+QDEBUG : TestBenchmark::multi_replica_convergence() 
+=== Multi-Replica Convergence ===
+QDEBUG : TestBenchmark::multi_replica_convergence()   K=2 replicas, 50 edits each                  25807205 ns/op          3875 ops/sec  frags=128  vis=14  mem_delta=0KB
+QDEBUG : TestBenchmark::multi_replica_convergence()     converged: YES
+QDEBUG : TestBenchmark::multi_replica_convergence()   K=5 replicas, 50 edits each                 887666947 ns/op           282 ops/sec  frags=368  vis=84  mem_delta=0KB
+QDEBUG : TestBenchmark::multi_replica_convergence()     converged: YES
+QDEBUG : TestBenchmark::multi_replica_convergence()   K=10 replicas, 50 edits each               8016773478 ns/op            62 ops/sec  frags=687  vis=116  mem_delta=0KB
+QDEBUG : TestBenchmark::multi_replica_convergence()     converged: YES
+PASS   : TestBenchmark::multi_replica_convergence()
+QDEBUG : TestBenchmark::realistic_3_client_throughput() 
+--- Realistic 3-Client Throughput ---
+QDEBUG : TestBenchmark::realistic_3_client_throughput()   300 ops (3 clients x 100), wall time: 1074.6 ms
+QDEBUG : TestBenchmark::realistic_3_client_throughput()   Throughput: 279 ops/sec
+QDEBUG : TestBenchmark::realistic_3_client_throughput()   Replica 0: 565 fragments, 952 visible bytes
+QDEBUG : TestBenchmark::realistic_3_client_throughput()   Replica 1: 578 fragments, 952 visible bytes
+QDEBUG : TestBenchmark::realistic_3_client_throughput()   Replica 2: 565 fragments, 952 visible bytes
+PASS   : TestBenchmark::realistic_3_client_throughput()
+QDEBUG : TestBenchmark::reconnect_sync_cost() 
+--- Reconnect Sync Cost ---
+QDEBUG : TestBenchmark::reconnect_sync_cost()   N=50 edits: sync=0.0 ms, frags 1 -> 116
+QDEBUG : TestBenchmark::reconnect_sync_cost()   N=100 edits: sync=0.0 ms, frags 1 -> 227
+QDEBUG : TestBenchmark::reconnect_sync_cost()   N=200 edits: sync=0.0 ms, frags 1 -> 448
+PASS   : TestBenchmark::reconnect_sync_cost()
+QDEBUG : TestBenchmark::undo_redo_cycle() 
+=== Undo/Redo Cycle (10K doc) ===
+QDEBUG : TestBenchmark::undo_redo_cycle()   edit phase (500 edits)                        2093011 ns/op           478 ops/sec  frags=1296  vis=9684  mem_delta=0KB
+QDEBUG : TestBenchmark::undo_redo_cycle()   undo phase (500 undos)                         852097 ns/op          1174 ops/sec  frags=1296  vis=9684  mem_delta=0KB
+QDEBUG : TestBenchmark::undo_redo_cycle()   redo phase (500 redos)                         954322 ns/op          1048 ops/sec  frags=1296  vis=9684  mem_delta=0KB
+PASS   : TestBenchmark::undo_redo_cycle()
+QDEBUG : TestBenchmark::gc_effectiveness() 
+--- GC Effectiveness ---
+QDEBUG : TestBenchmark::gc_effectiveness()   Clean doc:   50 fragments
+QDEBUG : TestBenchmark::gc_effectiveness()   After 50%% tombstones: 3746 fragments (2500 tombstones)
+QDEBUG : TestBenchmark::gc_effectiveness()   After GC:    1251 fragments (removed 2568, GC took 4679 us)
+QDEBUG : TestBenchmark::gc_effectiveness()   Before GC: 10275642 ns/op (97 ops/sec)
+QDEBUG : TestBenchmark::gc_effectiveness()   After GC:  3741736 ns/op (267 ops/sec)
+QDEBUG : TestBenchmark::gc_effectiveness()   Speedup:   2.7x
+PASS   : TestBenchmark::gc_effectiveness()
+PASS   : TestBenchmark::cleanupTestCase()
+Totals: 11 passed, 0 failed, 0 skipped, 0 blacklisted, 19574ms
+********* Finished testing of TestBenchmark *********

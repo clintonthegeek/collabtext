@@ -1,0 +1,110 @@
+{
+  "schema": "collabtext-sequence-fixture/1",
+  "id": "start-affinity",
+  "primitive": "text",
+  "offset_unit": "utf8_bytes",
+  "actors": {
+    "A": "00000000000000000000000000000001",
+    "B": "00000000000000000000000000000002",
+    "S": "00000000000000000000000000000003"
+  },
+  "context": {
+    "document": "start-affinity",
+    "stream": "text",
+    "epoch": 1
+  },
+  "initial": [
+    {
+      "id": "S/1",
+      "value": "a"
+    },
+    {
+      "id": "S/2",
+      "value": "b"
+    }
+  ],
+  "operations": [
+    {
+      "id": "A/5",
+      "kind": "insert",
+      "after": [],
+      "between": [
+        "START",
+        "S/1"
+      ],
+      "items": [
+        {
+          "id": "A/4",
+          "value": "X"
+        }
+      ]
+    }
+  ],
+  "arrival_orders": [
+    [
+      "A/5"
+    ]
+  ],
+  "tokens": [
+    {
+      "id": "left",
+      "between": [
+        "START",
+        "S/1"
+      ],
+      "affinity": "left",
+      "after": [],
+      "context": {
+        "document": "start-affinity",
+        "stream": "text",
+        "epoch": 1
+      }
+    },
+    {
+      "id": "right",
+      "between": [
+        "START",
+        "S/1"
+      ],
+      "affinity": "right",
+      "after": [],
+      "context": {
+        "document": "start-affinity",
+        "stream": "text",
+        "epoch": 1
+      }
+    }
+  ],
+  "expected": {
+    "order": [
+      "A/4",
+      "S/1",
+      "S/2"
+    ],
+    "hidden": [],
+    "positions": {
+      "left": {
+        "offset": 0,
+        "state": "resolved"
+      },
+      "right": {
+        "offset": 1,
+        "state": "resolved"
+      }
+    },
+    "text": "Xab",
+    "comparisons": [
+      {
+        "left": "left",
+        "right": "right",
+        "order": "less"
+      }
+    ]
+  },
+  "invalid_mint_offsets": [
+    3
+  ],
+  "contract_cases": [
+    "scoped_empty_start_end_tokens"
+  ]
+}

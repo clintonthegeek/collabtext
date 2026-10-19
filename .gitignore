@@ -9,6 +9,7 @@ cmake_install.cmake
 Makefile
 compile_commands.json
 .cache/
+__pycache__/
 .worktrees/
 
 # Generated test-run artifacts under docs/reports/*-artifacts/.
@@ -22,3 +23,6 @@ docs/reports/*-artifacts/**/*.txt
 docs/reports/*-artifacts/**/metadata.json
 docs/reports/*-artifacts/**/*.metadata.json
 docs/reports/*-artifacts/**/selected-tests.json
+
+# A06a: per-run producer/install/consumer trees from verify-consumer-package.sh
+build-consumer-verify/

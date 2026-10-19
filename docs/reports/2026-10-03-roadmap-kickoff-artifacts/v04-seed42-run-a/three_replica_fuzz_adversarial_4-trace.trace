@@ -1,0 +1,204 @@
+#collabtext-trace 1
+#model idlist
+#label three_replica_fuzz_adversarial_4
+#seed 17612694894683150534
+#replicas 3
+#net 50 200 500 1
+undo 0
+insert 0 0 10 l
+deliver 1 0
+remove 1 0 0 l
+insert 0 1 22 l
+undo 2
+deliver 1 2
+insert 0 1 31 l
+remove 1 0 0 l
+insert 0 1 37 l
+insert 1 0 41 l
+insert 2 0 45 l
+undo 1
+insert 1 0 50 l
+deliver 0 1
+insert 1 1 56 l
+insert 0 0 58 l
+deliver 1 3
+remove 2 0 0 l
+deliver 1 12
+deliver 1 11
+deliver 1 5
+deliver 1 7
+deliver 0 9
+deliver 0 4
+deliver 0 12
+deliver 0 6
+deliver 0 7
+deliver 2 6
+deliver 2 10
+deliver 2 3
+deliver 2 2
+insert 0 1 76 l
+deliver 0 8
+deliver 0 10
+undo 1
+undo 1
+insert 1 0 89 l
+insert 1 2 92 l
+deliver 1 13
+insert 0 0 97 l
+deliver 1 18
+insert 1 4 104 l
+remove 0 2 0 l
+insert 2 0 111 l
+deliver 0 19
+deliver 0 21
+deliver 0 14
+insert 2 1 117 l
+insert 1 7 119 l
+insert 0 0 121 l
+undo 2
+insert 0 1 127 l
+insert 0 5 130 l
+insert 2 0 135 l
+deliver 0 17
+deliver 0 16
+insert 1 2 143 l
+insert 2 0 147 l
+remove 0 4 0 l
+insert 2 1 153 l
+deliver 0 23
+deliver 0 15
+deliver 0 28
+insert 1 3 158 l
+deliver 0 22
+deliver 0 33
+insert 2 4 165 l
+insert 0 6 166 l
+remove 0 8 0 l
+undo 0
+undo 0
+undo 1
+deliver 0 32
+deliver 0 25
+deliver 0 34
+deliver 0 30
+deliver 0 29
+insert 1 3 188 l
+insert 2 5 192 l
+deliver 0 39
+deliver 0 41
+deliver 0 40
+insert 1 4 197 l
+remove 0 16 0 l
+deliver 1 36
+deliver 0 42
+deliver 1 43
+deliver 1 28
+deliver 1 34
+undo 1
+undo 1
+remove 2 1 0 l
+insert 2 2 228 l
+deliver 0 46
+deliver 0 47
+deliver 0 44
+deliver 0 45
+insert 0 9 235 l
+remove 1 8 0 l
+deliver 2 0
+deliver 2 11
+deliver 2 35
+deliver 2 16
+deliver 2 4
+deliver 1 47
+deliver 1 32
+deliver 1 46
+insert 1 4 248 l
+undo 0
+undo 0
+remove 2 0 0 l
+undo 0
+remove 0 17 0 l
+undo 2
+insert 1 1 269 l
+insert 0 2 271 l
+deliver 2 48
+deliver 2 18
+insert 1 8 278 l
+insert 2 1 282 l
+deliver 2 23
+insert 0 0 286 l
+insert 0 15 289 l
+insert 0 9 292 l
+deliver 2 1
+deliver 2 40
+deliver 2 61
+insert 1 6 299 l
+deliver 0 64
+deliver 0 53
+deliver 0 57
+deliver 0 49
+deliver 0 60
+deliver 0 59
+deliver 0 50
+deliver 0 56
+deliver 1 55
+deliver 1 30
+deliver 1 31
+deliver 1 60
+deliver 1 20
+deliver 1 22
+deliver 1 48
+deliver 1 24
+deliver 1 53
+deliver 1 62
+deliver 1 26
+deliver 1 27
+deliver 1 41
+deliver 1 61
+deliver 1 21
+deliver 1 35
+deliver 1 25
+deliver 1 37
+deliver 1 38
+deliver 1 51
+deliver 1 63
+deliver 1 52
+deliver 1 54
+deliver 1 56
+deliver 1 58
+deliver 2 5
+deliver 2 55
+deliver 2 13
+deliver 2 20
+deliver 2 29
+deliver 2 62
+deliver 2 27
+deliver 2 26
+deliver 2 50
+deliver 2 43
+deliver 2 33
+deliver 2 63
+deliver 2 8
+deliver 2 9
+deliver 2 36
+deliver 2 64
+deliver 2 14
+deliver 2 57
+deliver 2 31
+deliver 2 15
+deliver 2 49
+deliver 2 59
+deliver 2 19
+deliver 2 24
+deliver 2 17
+deliver 2 37
+deliver 2 38
+deliver 2 39
+deliver 2 42
+deliver 2 44
+deliver 2 45
+deliver 2 51
+deliver 2 58
+deliver 2 52
+deliver 2 54
+settle

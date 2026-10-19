@@ -1,0 +1,192 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp2-strict-referent-delete",
+ "probe": "WP2",
+ "title": "A strict content attachment surfaces loss when its referent is deleted",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp2-strict-referent-delete",
+  "stream": "text",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/2",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": "a"
+    }
+   ]
+  },
+  {
+   "id": "A/4",
+   "kind": "insert",
+   "after": [
+    "A/2"
+   ],
+   "between": [
+    "A/1",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/3",
+     "value": "b"
+    }
+   ]
+  },
+  {
+   "id": "A/6",
+   "kind": "insert",
+   "after": [
+    "A/4"
+   ],
+   "between": [
+    "A/3",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/5",
+     "value": "c"
+    }
+   ]
+  },
+  {
+   "id": "A/8",
+   "kind": "delete",
+   "after": [
+    "A/6"
+   ],
+   "targets": [
+    "A/3"
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/2",
+   "A/4",
+   "A/6",
+   "A/8"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "strict-around-b",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "caret-same-place",
+   "after": [
+    "A/6"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "left"
+  }
+ ],
+ "attachment_kinds": {
+  "strict-around-b": "strict",
+  "caret-same-place": "caret"
+ },
+ "invalid_requests": [],
+ "expectations": [
+  {
+   "id": "strict_attachment_surfaces_detachment",
+   "kind": "detached",
+   "token": "strict-around-b",
+   "source": "consumer_asserted",
+   "citation": "W2; wave devs-our-asks:66-72"
+  },
+  {
+   "id": "caret_at_same_boundary_reports_collapse",
+   "kind": "collapsed",
+   "token": "caret-same-place",
+   "collapsed": true,
+   "source": "roadmap_inference",
+   "citation": "W2; vnext-boundary-semantics.md \u00a73",
+   "offset": 1
+  },
+  {
+   "id": "undo_restores_deleted_referent",
+   "kind": "restored_after_undo",
+   "token": "strict-around-b",
+   "referent": "A/3",
+   "operation": "A/8",
+   "offset": 1,
+   "collapsed": false,
+   "source": "roadmap_inference",
+   "citation": "vnext-boundary-semantics.md \u00a73",
+   "note": "A valid selective undo of the sole deletion makes b visible again; resolve the original following-referent token, without reminting. A redo detaches it again."
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04a",
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S04",
+   "S05",
+   "S06"
+  ]
+ },
+ "third_party_observations": [
+  {
+   "library": "yrs",
+   "version": "0.28",
+   "claim": "skip_gc: true, which we need for snapshots, converts the typed failure into silent relocation.",
+   "citation": "alternatives:52-54",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  }
+ ],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "A/5"
+  ],
+  "hidden": [
+   "A/3"
+  ],
+  "text": "ac",
+  "positions": {
+   "caret-same-place": {
+    "offset": 1,
+    "state": "collapsed"
+   }
+  },
+  "comparisons": [],
+  "retained_order": [
+   "A/1",
+   "A/3",
+   "A/5"
+  ]
+ },
+ "strict_sides": {
+  "strict-around-b": "following"
+ }
+}

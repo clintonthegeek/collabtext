@@ -1,11 +1,12 @@
-/// tst_opstream_convergence_mixed.cpp — Mixed Buffer + IdList convergence over OpStream
+#include "CodecTest.h"
+/// tst_opstream_convergence_mixed.cpp — Mixed Buffer + IdList convergence over StreamSync
 ///
 /// Models the "document with structure" scenario: one IdList for block ordering
 /// and one CrdtEngine per block for text content.  Both stream types travel over
-/// the same OpStream pair (StreamSync), and all four convergence properties are
+/// the same legacy StreamSync pair, and all four convergence properties are
 /// verified:
 ///
-///   - mixed_idlist_and_buffer_convergence_over_opstream:
+///   - mixed_idlist_and_buffer_convergence_over_streamsync:
 ///       Sequential structural + text ops — both streams arrive at replica 2,
 ///       which appends text, and the edit propagates back to replica 1.
 ///
@@ -17,14 +18,16 @@
 #include <QTemporaryDir>
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/Operations.h>
-#include <collabtext/StreamSync.h>
-#include <collabtext/OpStream.h>
+#include "transport/StreamSync.h"
 #include <collabtext/IdListOperations.h>
 #include <collabtext/Serialization.h>
 #include "crdt/IdList.h"
 
 #include <filesystem>
 #include <string>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText;
 using namespace CollabText::Crdt;
@@ -42,7 +45,7 @@ private slots:
     // Sync delivers replica 2's text edit back to replica 1.
     // Both list1/list2 and engine1/engine2 must converge.
 
-    void mixed_idlist_and_buffer_convergence_over_opstream() {
+    void mixed_idlist_and_buffer_convergence_over_streamsync() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         std::filesystem::path shared = tmp.path().toStdString();
@@ -57,28 +60,28 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
-        IdList list1(1);
-        IdList list2(2);
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        IdList list1(CollabText::Test::test_counter(1));
+        IdList list2(CollabText::Test::test_counter(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         // Wire IdList ops outbound
         list1.set_on_local_op([&](const IdListOperation& op) {
-            op1->push("idlist:structure", encode_idlist_operation(op));
+            op1->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
         list2.set_on_local_op([&](const IdListOperation& op) {
-            op2->push("idlist:structure", encode_idlist_operation(op));
+            op2->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
 
         // Wire CrdtEngine ops outbound
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buffer:block-1", encode_operation(op));
+            op1->push("buffer:block-1", checked_codec(encode_operation(op)));
         });
         engine2.setOnLocalOp([&](const Operation& op) {
-            op2->push("buffer:block-1", encode_operation(op));
+            op2->push("buffer:block-1", checked_codec(encode_operation(op)));
         });
 
         // Wire op1 inbound → list1 + engine1 (skip own-replica)
@@ -87,12 +90,12 @@ private slots:
             if (replica_id == 1) return;
             if (stream == "idlist:structure") {
                 auto op = decode_idlist_operation(payload);
-                QVERIFY(op.has_value());
-                list1.apply_remote_op(*op);
+                QVERIFY(op.ok());
+                list1.apply_remote_op(op.value());
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
-                QVERIFY(op.has_value());
-                engine1.applyRemoteOp(*op);
+                QVERIFY(op.ok());
+                QVERIFY(CollabText::Test::apply_not_rejected(engine1.apply_remote(op.value())));
             }
         });
 
@@ -102,12 +105,12 @@ private slots:
             if (replica_id == 2) return;
             if (stream == "idlist:structure") {
                 auto op = decode_idlist_operation(payload);
-                QVERIFY(op.has_value());
-                list2.apply_remote_op(*op);
+                QVERIFY(op.ok());
+                list2.apply_remote_op(op.value());
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
-                QVERIFY(op.has_value());
-                engine2.applyRemoteOp(*op);
+                QVERIFY(op.ok());
+                QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(op.value())));
             }
         });
 
@@ -162,26 +165,26 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
-        IdList list1(1);
-        IdList list2(2);
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        IdList list1(CollabText::Test::test_counter(1));
+        IdList list2(CollabText::Test::test_counter(2));
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         list1.set_on_local_op([&](const IdListOperation& op) {
-            op1->push("idlist:structure", encode_idlist_operation(op));
+            op1->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
         list2.set_on_local_op([&](const IdListOperation& op) {
-            op2->push("idlist:structure", encode_idlist_operation(op));
+            op2->push("idlist:structure", checked_codec(encode_idlist_operation(op)));
         });
 
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buffer:block-1", encode_operation(op));
+            op1->push("buffer:block-1", checked_codec(encode_operation(op)));
         });
         engine2.setOnLocalOp([&](const Operation& op) {
-            op2->push("buffer:block-1", encode_operation(op));
+            op2->push("buffer:block-1", checked_codec(encode_operation(op)));
         });
 
         op1->set_on_inbound([&](const std::string& stream, uint16_t replica_id,
@@ -189,12 +192,12 @@ private slots:
             if (replica_id == 1) return;
             if (stream == "idlist:structure") {
                 auto op = decode_idlist_operation(payload);
-                QVERIFY(op.has_value());
-                list1.apply_remote_op(*op);
+                QVERIFY(op.ok());
+                list1.apply_remote_op(op.value());
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
-                QVERIFY(op.has_value());
-                engine1.applyRemoteOp(*op);
+                QVERIFY(op.ok());
+                QVERIFY(CollabText::Test::apply_not_rejected(engine1.apply_remote(op.value())));
             }
         });
 
@@ -203,12 +206,12 @@ private slots:
             if (replica_id == 2) return;
             if (stream == "idlist:structure") {
                 auto op = decode_idlist_operation(payload);
-                QVERIFY(op.has_value());
-                list2.apply_remote_op(*op);
+                QVERIFY(op.ok());
+                list2.apply_remote_op(op.value());
             } else if (stream == "buffer:block-1") {
                 auto op = decode_operation(payload);
-                QVERIFY(op.has_value());
-                engine2.applyRemoteOp(*op);
+                QVERIFY(op.ok());
+                QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(op.value())));
             }
         });
 

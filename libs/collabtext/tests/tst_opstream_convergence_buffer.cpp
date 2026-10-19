@@ -1,6 +1,7 @@
-/// tst_opstream_convergence_buffer.cpp — Two-replica Buffer convergence over OpStream
+#include "CodecTest.h"
+/// tst_opstream_convergence_buffer.cpp — Two-replica Buffer convergence over StreamSync
 ///
-/// Proves that two CrdtEngines wired through StreamSync (via the OpStream interface)
+/// Proves that two CrdtEngines wired through StreamSync (through the internal legacy adapter)
 /// converge correctly:
 ///   - Sequential edits: engine1 inserts, engine2 receives and appends, both converge.
 ///   - Divergent concurrent edits: both engines edit before syncing, then exchange ops
@@ -8,15 +9,18 @@
 ///   - Multi-op sequential: several ops from engine1 all arrive at engine2 correctly.
 
 #include <QTest>
+
 #include <QTemporaryDir>
 #include <collabtext/CrdtEngine.h>
 #include <collabtext/Operations.h>
 #include <collabtext/Serialization.h>
-#include <collabtext/StreamSync.h>
-#include <collabtext/OpStream.h>
+#include "transport/StreamSync.h"
 
 #include <filesystem>
 #include <string>
+#include "TestActor.h"
+
+using CollabText::Test::actor;
 
 using namespace CollabText;
 using namespace CollabText::Crdt;
@@ -33,7 +37,7 @@ private slots:
     // engine2's op.  Both replicas must converge to the same text containing both
     // "hello" and "world".
 
-    void two_replica_buffer_convergence_over_opstream() {
+    void two_replica_buffer_convergence_over_streamsync() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         std::filesystem::path shared = tmp.path().toStdString();
@@ -46,20 +50,20 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         // Wire engine1 → op1 (outbound)
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buf:doc", encode_operation(op));
+            op1->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         // Wire engine2 → op2 (outbound)
         engine2.setOnLocalOp([&](const Operation& op) {
-            op2->push("buf:doc", encode_operation(op));
+            op2->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         // Wire op1 inbound → engine1 (skip own-replica ops)
@@ -67,8 +71,8 @@ private slots:
                                 const std::string& payload) {
             if (replica_id == 1) return;  // don't apply own ops
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine1.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine1.apply_remote(decoded.value())));
         });
 
         // Wire op2 inbound → engine2 (skip own-replica ops)
@@ -76,8 +80,8 @@ private slots:
                                 const std::string& payload) {
             if (replica_id == 2) return;  // don't apply own ops
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         });
 
         // Step 1: engine1 inserts "hello " at position 0
@@ -123,34 +127,34 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
-        OpStream* op2 = &sync2;
+        StreamSync* op1 = &sync1;
+        StreamSync* op2 = &sync2;
 
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buf:doc", encode_operation(op));
+            op1->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         engine2.setOnLocalOp([&](const Operation& op) {
-            op2->push("buf:doc", encode_operation(op));
+            op2->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         op1->set_on_inbound([&](const std::string& /*stream*/, uint16_t replica_id,
                                 const std::string& payload) {
             if (replica_id == 1) return;
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine1.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine1.apply_remote(decoded.value())));
         });
 
         op2->set_on_inbound([&](const std::string& /*stream*/, uint16_t replica_id,
                                 const std::string& payload) {
             if (replica_id == 2) return;
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         });
 
         // Concurrent local inserts — neither engine has seen the other's ops yet
@@ -189,21 +193,21 @@ private slots:
         sync1.start();
         sync2.start();
 
-        OpStream* op1 = &sync1;
+        StreamSync* op1 = &sync1;
 
-        CrdtEngine engine1(1);
-        CrdtEngine engine2(2);
+        CrdtEngine engine1(CollabText::Test::test_counter(1));
+        CrdtEngine engine2(CollabText::Test::test_counter(2));
 
         // One-directional wiring: engine1 → op1 → engine2 only
         engine1.setOnLocalOp([&](const Operation& op) {
-            op1->push("buf:doc", encode_operation(op));
+            op1->push("buf:doc", checked_codec(encode_operation(op)));
         });
 
         sync2.set_on_inbound([&](const std::string& /*stream*/, uint16_t /*replica_id*/,
                                  const std::string& payload) {
             auto decoded = decode_operation(payload);
-            QVERIFY(decoded.has_value());
-            engine2.applyRemoteOp(*decoded);
+            QVERIFY(decoded.ok());
+            QVERIFY(CollabText::Test::apply_not_rejected(engine2.apply_remote(decoded.value())));
         });
 
         // Three sequential edits on engine1

@@ -1,0 +1,111 @@
+# collabtext-config.cmake — package configuration for the collabtext alpha.
+#
+# Roadmap task A06a. The shape of this file is the deliverable, not an
+# afterthought: a consumer that asks for Core must get Core and nothing else,
+# with no package discovery of any kind, and a consumer that asks for a component
+# that was not built must get a clear error rather than an empty target.
+#
+# Components
+#   core            always available. C++20 only. No Qt, no zstd, no crypto.
+#   file-transport  zstd. Only if the producer enabled it.
+#   qt              Qt6 Core/Gui/Widgets. Only if the producer enabled it.
+#
+# Each component is reported through collabtext_<component>_FOUND, and a
+# requested-but-unavailable component sets collabtext_FOUND false with a message
+# naming the option that would enable it.
+
+@PACKAGE_INIT@
+
+# find_dependency and check_required_components live in this file. Core-only
+# consumers never reach either, so omitting the include goes unnoticed until
+# someone asks for file-transport or qt -- which is how "Core works" and "the
+# optional components are broken" ship in the same release.
+include(CMakeFindDependencyMacro)
+
+set(COLLABTEXT_VERSION "@PROJECT_VERSION@")
+set(COLLABTEXT_PRERELEASE "@COLLABTEXT_PRERELEASE@")
+set(COLLABTEXT_VERSION_STRING "@COLLABTEXT_VERSION_STRING@")
+set(collabtext_core_FOUND TRUE)
+
+# ---------------------------------------------------------------------------
+# The producer's enabled components
+# ---------------------------------------------------------------------------
+set(_collabtext_enabled_components "@COLLABTEXT_EXPORTED_COMPONENTS@")
+set(collabtext_enabled_components ${_collabtext_enabled_components})
+
+# ---------------------------------------------------------------------------
+# Requested components
+# ---------------------------------------------------------------------------
+set(_collabtext_wanted core)
+if(collabtext_FIND_COMPONENTS)
+    set(_collabtext_wanted ${collabtext_FIND_COMPONENTS})
+endif()
+
+foreach(_comp IN LISTS _collabtext_wanted)
+    if(_comp STREQUAL "core")
+        set(collabtext_core_FOUND TRUE)
+    elseif(_comp STREQUAL "file-transport")
+        if("file-transport" IN_LIST _collabtext_enabled_components)
+            set(collabtext_file-transport_FOUND TRUE)
+        else()
+            set(collabtext_FILE-TRANSPORT_FOUND FALSE)
+            set(collabtext_FOUND FALSE)
+            set(collabtext_NOT_FOUND_MESSAGE
+                "collabtext was built without the file transport. Reconfigure the producer with -DCOLLABTEXT_BUILD_FILE_TRANSPORT=ON.")
+            return()
+        endif()
+    elseif(_comp STREQUAL "qt")
+        if("qt" IN_LIST _collabtext_enabled_components)
+            set(collabtext_qt_FOUND TRUE)
+        else()
+            set(collabtext_qt_FOUND FALSE)
+            set(collabtext_FOUND FALSE)
+            set(collabtext_NOT_FOUND_MESSAGE
+                "collabtext was built without the Qt components. Reconfigure the producer with -DCOLLABTEXT_BUILD_QT=ON.")
+            return()
+        endif()
+    else()
+        set(collabtext_${_comp}_FOUND FALSE)
+        set(collabtext_FOUND FALSE)
+        set(collabtext_NOT_FOUND_MESSAGE
+            "Unknown collabtext component '${_comp}'. Known components: core, file-transport, qt.")
+        return()
+    endif()
+endforeach()
+
+# QtAdapter links FileTransport when it was enabled in the producer. Load that
+# exported target (and its dependency) even when the consumer only requests qt.
+# Core-only requests still perform no optional dependency discovery.
+if("qt" IN_LIST _collabtext_wanted AND "file-transport" IN_LIST _collabtext_enabled_components)
+    list(APPEND _collabtext_wanted file-transport)
+endif()
+
+# ---------------------------------------------------------------------------
+# Dependencies for the components actually requested
+#
+# Core has none, deliberately. The file transport and the Qt components do, and
+# for a *static* build those dependencies must be findable by whoever links the
+# result -- CMake records them in the exported interface as $<LINK_ONLY:...>, so
+# a consumer that omits this fails at link time with an unresolved symbol rather
+# than a message.
+# ---------------------------------------------------------------------------
+if("file-transport" IN_LIST _collabtext_wanted AND "file-transport" IN_LIST _collabtext_enabled_components)
+    find_dependency(zstd)
+endif()
+
+if("qt" IN_LIST _collabtext_wanted AND "qt" IN_LIST _collabtext_enabled_components)
+    find_dependency(Qt6 6.8 COMPONENTS Core Gui Widgets)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/CollabTextCoreTargets.cmake")
+if("file-transport" IN_LIST _collabtext_wanted AND "file-transport" IN_LIST _collabtext_enabled_components)
+    include("${CMAKE_CURRENT_LIST_DIR}/CollabTextFileTransportTargets.cmake")
+endif()
+if("qt" IN_LIST _collabtext_wanted AND "qt" IN_LIST _collabtext_enabled_components)
+    include("${CMAKE_CURRENT_LIST_DIR}/CollabTextQtTargets.cmake")
+endif()
+
+# CollabText::Core is the headless path and must remain reachable with nothing
+# else configured. Say so, because a consumer that only wanted Core should not
+# have to read the export file to learn the name.
+check_required_components(collabtext)

@@ -1,0 +1,117 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp4-empty-document-token",
+ "probe": "WP4",
+ "title": "The empty document mints a real scoped token at offset zero",
+ "primitive": "text",
+ "offset_unit": "utf8_bytes",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp4-empty-document-token",
+  "stream": "text",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [],
+ "arrival_orders": [
+  []
+ ],
+ "tokens": [
+  {
+   "id": "empty-left",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "empty-right",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "affinity": "right"
+  }
+ ],
+ "attachment_kinds": {},
+ "invalid_requests": [
+  {
+   "kind": "mint_offset",
+   "offset": 1,
+   "error": "off_end"
+  }
+ ],
+ "expectations": [
+  {
+   "id": "empty_document_mints_at_zero",
+   "kind": "resolved",
+   "token": "empty-left",
+   "offset": 0,
+   "collapsed": false,
+   "source": "consumer_asserted",
+   "citation": "wave ask2:26-28"
+  },
+  {
+   "id": "empty_document_token_has_scope_and_affinity",
+   "kind": "scoped_affinity_token",
+   "token": "empty-right",
+   "source": "consumer_asserted",
+   "citation": "wave ask2:26-28; W2"
+  },
+  {
+   "id": "empty_document_off_end_is_rejected",
+   "kind": "typed_error",
+   "error": "off_end",
+   "source": "roadmap_inference",
+   "citation": "W2"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04a",
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S02",
+   "S04"
+  ]
+ },
+ "third_party_observations": [
+  {
+   "library": "Loro",
+   "version": "1.16.2",
+   "claim": "84-case sweep: Left/Middle/Right differ only in the empty-container degenerate.",
+   "citation": "alternatives:45-51",
+   "attribution": "reported_by_wave_not_reproduced_here"
+  }
+ ],
+ "seed": 20261005,
+ "expected": {
+  "order": [],
+  "hidden": [],
+  "text": "",
+  "positions": {
+   "empty-left": {
+    "offset": 0,
+    "state": "resolved"
+   },
+   "empty-right": {
+    "offset": 0,
+    "state": "resolved"
+   }
+  },
+  "comparisons": [
+   {
+    "left": "empty-left",
+    "right": "empty-right",
+    "order": "equal"
+   }
+  ]
+ }
+}

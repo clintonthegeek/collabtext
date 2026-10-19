@@ -1,0 +1,34 @@
+********* Start testing of TestFuzz *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestFuzz::initTestCase()
+[seed] suite=tst_fuzz scenario=invariants_after_random_edits campaign_seed=42 effective_seed=8443730236655692079 source=fixed kind=buffer
+PASS   : TestFuzz::invariants_after_random_edits()
+[seed] suite=tst_fuzz scenario=invariants_after_undo_redo_cycles campaign_seed=42 effective_seed=8482030072642651245 source=fixed kind=buffer
+PASS   : TestFuzz::invariants_after_undo_redo_cycles()
+[seed] suite=tst_fuzz scenario=convergence_utf8_stress campaign_seed=42 effective_seed=11509049639340877137 source=fixed kind=buffer
+PASS   : TestFuzz::convergence_utf8_stress()
+[seed] suite=tst_fuzz scenario=adversarial_all_insert_at_zero campaign_seed=42 effective_seed=7803705950407891728 source=fixed kind=buffer
+PASS   : TestFuzz::adversarial_all_insert_at_zero()
+[seed] suite=tst_fuzz scenario=adversarial_fight_over_one_char campaign_seed=42 effective_seed=4195393400874841185 source=fixed kind=buffer
+PASS   : TestFuzz::adversarial_fight_over_one_char()
+[seed] suite=tst_fuzz scenario=deep_undo_redo_with_remote campaign_seed=42 effective_seed=8966798208749343619 source=fixed kind=buffer
+PASS   : TestFuzz::deep_undo_redo_with_remote()
+[seed] suite=tst_fuzz scenario=rapid_multi_range_edits campaign_seed=42 effective_seed=4168365244986726447 source=fixed kind=buffer
+PASS   : TestFuzz::rapid_multi_range_edits()
+[seed] suite=tst_fuzz scenario=anchor_stability_under_chaos campaign_seed=42 effective_seed=17791035339110174562 source=fixed kind=buffer
+PASS   : TestFuzz::anchor_stability_under_chaos()
+[seed] suite=tst_fuzz scenario=large_document_pinpoint_edits campaign_seed=42 effective_seed=18269903212881063344 source=fixed kind=buffer
+QDEBUG : TestFuzz::large_document_pinpoint_edits() 200 pinpoint edits on 10KB doc: 824 ms
+PASS   : TestFuzz::large_document_pinpoint_edits()
+[seed] suite=tst_fuzz scenario=duplicate_ops_stress campaign_seed=42 effective_seed=12707508813122869614 source=fixed kind=buffer
+PASS   : TestFuzz::duplicate_ops_stress()
+[seed] suite=tst_fuzz scenario=partition_then_merge campaign_seed=42 effective_seed=678397646389999982 source=fixed kind=buffer
+PASS   : TestFuzz::partition_then_merge()
+PASS   : TestFuzz::utf8_split_at_every_boundary()
+[seed] suite=tst_fuzz scenario=ten_replica_chaos campaign_seed=42 effective_seed=15024050507544129852 source=fixed kind=buffer
+PASS   : TestFuzz::ten_replica_chaos()
+[seed] suite=tst_fuzz scenario=undo_redo_storm campaign_seed=42 effective_seed=6389953039906150278 source=fixed kind=buffer
+PASS   : TestFuzz::undo_redo_storm()
+PASS   : TestFuzz::cleanupTestCase()
+Totals: 16 passed, 0 failed, 0 skipped, 0 blacklisted, 4874ms
+********* Finished testing of TestFuzz *********

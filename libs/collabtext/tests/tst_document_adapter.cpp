@@ -1,0 +1,309 @@
+#include <collabtext/CollabDocument.h>
+#include <collabtext/Serialization.h>
+
+#include "TestActor.h"
+#include "ui/CollabPlainTextEdit.h"
+
+#include <QPlainTextEdit>
+#include <QClipboard>
+#include <QInputMethodEvent>
+#include <QSignalSpy>
+#include <QTemporaryDir>
+#include <QTest>
+#include <QTextCursor>
+
+#include <filesystem>
+
+using namespace CollabText;
+
+class DocumentAdapterTest final : public QObject {
+  Q_OBJECT
+private slots:
+  void directDocumentEditsEmitOneLocalOperationAndStayUnicodeAligned() {
+    CollabDocument document(Test::test_counter(121));
+    QSignalSpy updates(&document, &CollabDocument::updateReady);
+    QVERIFY(updates.isValid());
+
+    QTextCursor cursor(document.qtDocument());
+    cursor.insertText(QString::fromUtf8("a😀z"));
+    QCOMPARE(document.engine()->text(),
+             document.qtDocument()->toPlainText().toUtf8().toStdString());
+    QCOMPARE(updates.size(), 1);
+
+    cursor.setPosition(1);
+    cursor.setPosition(3, QTextCursor::KeepAnchor);
+    cursor.insertText(QString::fromUtf8("雪"));
+    QCOMPARE(document.engine()->text(),
+             document.qtDocument()->toPlainText().toUtf8().toStdString());
+    QCOMPARE(QString::fromUtf8(document.engine()->text().c_str()),
+             QString::fromUtf8("a雪z"));
+    QCOMPARE(updates.size(), 2);
+  }
+
+  void clipboardPasteIsAppliedToTheBackendAfterQtCommitsTheChange() {
+    const QString text = QStringLiteral("paste probe");
+    QApplication::clipboard()->setText(text);
+    QCOMPARE(QApplication::clipboard()->text(), text);
+
+    CollabDocument adapter(Test::test_counter(133));
+    Ui::CollabPlainTextEdit customExternal;
+    customExternal.setDocument(adapter.qtDocument());
+    customExternal.paste();
+    QCOMPARE(customExternal.toPlainText(), text);
+    QCOMPARE(QString::fromUtf8(adapter.engine()->text().c_str()), text);
+  }
+
+  void programmaticWholeDocumentReplacementUpdatesTheBackend() {
+    CollabDocument adapter(Test::test_counter(135));
+    adapter.qtDocument()->setPlainText(QString::fromUtf8("before 🧭"));
+    QCOMPARE(QString::fromUtf8(adapter.engine()->text().c_str()),
+             QString::fromUtf8("before 🧭"));
+
+    adapter.qtDocument()->setPlainText(QString::fromUtf8("after 🌊"));
+    QCOMPARE(QString::fromUtf8(adapter.engine()->text().c_str()),
+             QString::fromUtf8("after 🌊"));
+  }
+
+  void remoteOperationsUpdateQtWithoutBeingReemitted() {
+    CollabDocument document(Test::test_counter(122));
+    QSignalSpy updates(&document, &CollabDocument::updateReady);
+    CrdtEngine author(Test::test_counter(123));
+    std::string encoded;
+    author.setOnLocalOp([&](const Crdt::Operation &operation) {
+      auto bytes = encode_operation(operation);
+      QVERIFY(bytes.ok());
+      encoded = bytes.value();
+    });
+    author.insert(0, "remote 🌊");
+    QVERIFY(!encoded.empty());
+
+    const QByteArray update(encoded.data(), static_cast<qsizetype>(encoded.size()));
+    auto applied = document.applyUpdate(update);
+    QVERIFY(applied);
+    QCOMPARE(applied.value().kind(), ApplyOutcomeKind::applied);
+    QCOMPARE(document.engine()->text(), std::string("remote 🌊"));
+    QCOMPARE(document.qtDocument()->toPlainText(), QString::fromUtf8("remote 🌊"));
+    QCOMPARE(updates.size(), 0);
+
+    auto duplicate = document.applyUpdate(update);
+    QVERIFY(duplicate);
+    QCOMPARE(duplicate.value().kind(), ApplyOutcomeKind::duplicate);
+    QCOMPARE(updates.size(), 0);
+    QVERIFY(!document.applyUpdate(QByteArray("bad", 3)));
+  }
+
+  void remoteMinimalPatchPreservesDocumentCursorPosition() {
+    CollabDocument document(Test::test_counter(127));
+    QByteArray initial;
+    connect(&document, &CollabDocument::updateReady, this,
+            [&](const QByteArray &update) { initial = update; });
+    document.insertText(0, QStringLiteral("abcd"));
+    QTextCursor stable(document.qtDocument());
+    stable.setPosition(3);
+
+    CrdtEngine author(Test::test_counter(128));
+    auto initial_operation = Crdt::decode_operation(std::string_view(
+        initial.constData(), static_cast<size_t>(initial.size())));
+    QVERIFY(initial_operation.ok());
+    QCOMPARE(author.apply_remote(initial_operation.value()).kind(),
+             ApplyOutcomeKind::applied);
+    QCOMPARE(author.text(), std::string("abcd"));
+    std::string encoded;
+    author.setOnLocalOp([&](const Crdt::Operation &operation) {
+      auto bytes = encode_operation(operation);
+      QVERIFY(bytes.ok());
+      encoded = bytes.value();
+    });
+    author.insert(0, "X");
+    auto applied = document.applyUpdate(
+        QByteArray(encoded.data(), static_cast<qsizetype>(encoded.size())));
+    QVERIFY(applied);
+    QCOMPARE(document.qtDocument()->toPlainText(), QStringLiteral("Xabcd"));
+    QCOMPARE(stable.position(), 4);
+  }
+
+  void keyboardNonBmpAndMultiCursorMutationsReachTheEngine() {
+    CollabDocument document(Test::test_counter(124));
+    Ui::CollabPlainTextEdit editor;
+    editor.setDocument(document.qtDocument());
+    editor.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&editor));
+    editor.setFocus();
+    QCoreApplication::processEvents();
+    QTest::keyClicks(&editor, QStringLiteral("IME"));
+    QTextCursor nonBmp(document.qtDocument());
+    nonBmp.setPosition(document.qtDocument()->toPlainText().size());
+    nonBmp.insertText(QString::fromUtf8("🧭"));
+    QCOMPARE(document.engine()->text(),
+             document.qtDocument()->toPlainText().toUtf8().toStdString());
+    QCOMPARE(document.qtDocument()->toPlainText(), QString::fromUtf8("IME🧭"));
+
+    document.insertText(document.engine()->length(), QStringLiteral(" end"));
+    auto *controller = editor.multiCursorController();
+    controller->setPrimaryCursor(QTextCursor(document.qtDocument()));
+    QTextCursor primary(document.qtDocument());
+    primary.setPosition(1);
+    controller->setPrimaryCursor(primary);
+    controller->addCursorAt(document.qtDocument()->toPlainText().size() - 1);
+    controller->insertText(QStringLiteral("X"));
+    QCOMPARE(document.engine()->text(),
+             document.qtDocument()->toPlainText().toUtf8().toStdString());
+  }
+
+  void inputMethodCommitReachesDurableSessionExactlyOnce() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const std::filesystem::path root(temporary.path().toStdString());
+    DocumentSessionConfig config{root / "shared", root / "private",
+                                 "ime-session", "text", 1};
+    config.initial_text = "ab";
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    QVERIFY(session->ready());
+
+    CollabDocument adapter(*session);
+    QSignalSpy local_edits(&adapter, &CollabDocument::localEditApplied);
+    QVERIFY(local_edits.isValid());
+    Ui::CollabPlainTextEdit editor;
+    editor.setDocument(adapter.qtDocument());
+    editor.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&editor));
+    editor.setFocus();
+    QCoreApplication::processEvents();
+    QTextCursor cursor(adapter.qtDocument());
+    cursor.movePosition(QTextCursor::End);
+    editor.setTextCursor(cursor);
+
+    QInputMethodEvent preedit(QString::fromUtf8("かな"), {});
+    QApplication::sendEvent(&editor, &preedit);
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QStringLiteral("ab"));
+    QCOMPARE(session->text(), std::string("ab"));
+    QCOMPARE(local_edits.size(), 0);
+
+    QInputMethodEvent commit;
+    commit.setCommitString(QString::fromUtf8("é🧭"), -1, 1);
+    QApplication::sendEvent(&editor, &commit);
+
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("aé🧭"));
+    QCOMPARE(session->text(), std::string("aé🧭"));
+    QCOMPARE(local_edits.size(), 1);
+  }
+
+  void undoRedoAndProgrammaticAdapterCallsUseTheSameEnginePath() {
+    CollabDocument document(Test::test_counter(125));
+    QSignalSpy updates(&document, &CollabDocument::updateReady);
+    document.insertText(0, QStringLiteral("seed"));
+    QCOMPARE(document.engine()->text(), std::string("seed"));
+    QCOMPARE(updates.size(), 1);
+    QVERIFY(document.undo());
+    QCOMPARE(document.engine()->text(), std::string{});
+    QCOMPARE(document.qtDocument()->toPlainText(), QString{});
+    QCOMPARE(updates.size(), 2);
+    QVERIFY(document.redo());
+    QCOMPARE(document.engine()->text(), std::string("seed"));
+    QCOMPARE(document.qtDocument()->toPlainText(), QStringLiteral("seed"));
+    QCOMPARE(updates.size(), 3);
+
+    document.removeText(1, 2);
+    QCOMPARE(document.engine()->text(), std::string("sd"));
+    QCOMPARE(document.qtDocument()->toPlainText(), QStringLiteral("sd"));
+    QCOMPARE(updates.size(), 4);
+  }
+
+  void engineRejectsOutOfRangeAndSurrogateSplittingReplacements() {
+    CrdtEngine engine(Test::test_counter(129));
+    engine.insert(0, "a😀b");
+    const std::string before = engine.text();
+
+    QVERIFY(!engine.try_replace(-1, 0, "x"));
+    QVERIFY(!engine.try_replace(0, 5, "x"));
+    QVERIFY(!engine.try_replace(2, 0, "x"));
+    QVERIFY(!engine.try_replace(1, 1, "x"));
+    QVERIFY(!engine.try_replace(2, 1, "x"));
+    QCOMPARE(engine.text(), before);
+
+    auto valid = engine.try_replace(1, 2, "🌊");
+    QVERIFY(valid);
+    QCOMPARE(engine.text(), std::string("a🌊b"));
+  }
+
+  void durableSessionBackendTracksQtAndAppliesSessionDeltasWithoutFeedback() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const std::filesystem::path root(temporary.path().toStdString());
+    DocumentSessionConfig config{root / "shared", root / "private",
+                                 "adapter-session", "text", 1};
+    config.initial_text = "a😀z";
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    QVERIFY(session->ready());
+
+    CollabDocument adapter(*session);
+    QSignalSpy local_edits(&adapter, &CollabDocument::localEditApplied);
+    QVERIFY(local_edits.isValid());
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("a😀z"));
+
+    QTextCursor cursor(adapter.qtDocument());
+    cursor.setPosition(1);
+    cursor.setPosition(3, QTextCursor::KeepAnchor);
+    cursor.insertText(QString::fromUtf8("🌊"));
+    QCOMPARE(session->text(), std::string("a🌊z"));
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("a🌊z"));
+    QCOMPARE(local_edits.size(), 1);
+
+    const auto before_remote = session->recovery_frontier();
+    auto remote = session->apply_local({{0, 0}}, {"R"});
+    QVERIFY(remote.ok());
+    auto deltas = session->edits_since(before_remote);
+    QVERIFY(deltas.ok());
+    adapter.applySessionEdits(deltas.value());
+    QCOMPARE(session->text(), std::string("Ra🌊z"));
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("Ra🌊z"));
+    QCOMPARE(local_edits.size(), 1);
+
+    QVERIFY(adapter.undo());
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("a🌊z"));
+    QVERIFY(adapter.redo());
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QString::fromUtf8("Ra🌊z"));
+
+    QApplication::clipboard()->setText(QString::fromUtf8("paste 🌿"));
+    Ui::CollabPlainTextEdit editor;
+    editor.setDocument(adapter.qtDocument());
+    editor.paste();
+    QCOMPARE(adapter.qtDocument()->toPlainText(),
+             QString::fromUtf8("paste 🌿Ra🌊z"));
+    QCOMPARE(session->text(), std::string("paste 🌿Ra🌊z"));
+  }
+
+  void staleSessionDeltaCannotLeaveQtDifferentFromDurableState() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const std::filesystem::path root(temporary.path().toStdString());
+    DocumentSessionConfig config{root / "shared", root / "private",
+                                 "stale-delta-session", "text", 1};
+    config.initial_text = "abc";
+    auto opened = DocumentSession::open(config);
+    QVERIFY(opened.ok());
+    auto session = std::move(opened).value();
+    QVERIFY(session->ready());
+
+    CollabDocument adapter(*session);
+    QSignalSpy local_edits(&adapter, &CollabDocument::localEditApplied);
+    QVERIFY(local_edits.isValid());
+    auto edit = session->apply_local({{0, 0}}, {"X"});
+    QVERIFY(edit.ok());
+    const auto emitted = local_edits.size();
+
+    // This range is valid against the adapter's old text, but this replacement
+    // does not describe the durable session delta.
+    adapter.applySessionEdits({SessionTextEdit{0, 1, "wrong"}});
+    QCOMPARE(session->text(), std::string("Xabc"));
+    QCOMPARE(adapter.qtDocument()->toPlainText(), QStringLiteral("Xabc"));
+    QCOMPARE(local_edits.size(), emitted);
+  }
+};
+
+QTEST_MAIN(DocumentAdapterTest)
+#include "tst_document_adapter.moc"

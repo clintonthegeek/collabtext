@@ -1,0 +1,14 @@
+trace: docs/reports/2026-10-03-roadmap-kickoff-artifacts/v04-injected-failure/injected-full.trace
+  label=injected-loss seed=42 replicas=2 model=buffer events=42
+  predicate=convergence
+original: status=completed converged=no (replicas 0 and 1 differ)
+  events applied=41 blocked=0 lost=1 produced_ops=14
+  replica 0 (14): baZaaaaaaaaaaa
+  replica 1 (13): baaaaaaaaaaaa
+reduced: status=completed converged=no (replicas 0 and 1 differ)
+  events applied=16 blocked=0 lost=0 produced_ops=14
+  replica 0 (14): aZaaaaaaaaaaab
+  replica 1 (1): b
+failure preserved: convergence: replicas 0 and 1 differ
+removed 26 of 42 events after 203 candidates
+reduced trace: /tmp/cli-reduced.trace

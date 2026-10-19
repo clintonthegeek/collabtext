@@ -1,0 +1,175 @@
+{
+ "schema": "collabtext-consumer-probe/1",
+ "id": "wp4-list-indices",
+ "probe": "WP4",
+ "title": "List positions are element indices, never byte offsets",
+ "primitive": "list",
+ "offset_unit": "list_index",
+ "actors": {
+  "A": "00000000000000000000000000000001"
+ },
+ "context": {
+  "document": "wp4-list-indices",
+  "stream": "list",
+  "epoch": 1
+ },
+ "initial": [],
+ "operations": [
+  {
+   "id": "A/1",
+   "kind": "insert",
+   "after": [],
+   "between": [
+    "START",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/1",
+     "value": 10
+    }
+   ]
+  },
+  {
+   "id": "A/3",
+   "kind": "insert",
+   "after": [
+    "A/1"
+   ],
+   "between": [
+    "A/1",
+    "END"
+   ],
+   "items": [
+    {
+     "id": "A/3",
+     "value": 20
+    }
+   ]
+  }
+ ],
+ "arrival_orders": [
+  [
+   "A/1",
+   "A/3"
+  ]
+ ],
+ "tokens": [
+  {
+   "id": "index-0",
+   "after": [
+    "A/3"
+   ],
+   "between": [
+    "START",
+    "A/1"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "index-1",
+   "after": [
+    "A/3"
+   ],
+   "between": [
+    "A/1",
+    "A/3"
+   ],
+   "affinity": "left"
+  },
+  {
+   "id": "index-2",
+   "after": [
+    "A/3"
+   ],
+   "between": [
+    "A/3",
+    "END"
+   ],
+   "affinity": "right"
+  }
+ ],
+ "attachment_kinds": {},
+ "invalid_requests": [
+  {
+   "kind": "mint_index",
+   "index": 3,
+   "error": "off_end"
+  }
+ ],
+ "expectations": [
+  {
+   "id": "list_indices_are_element_indices",
+   "kind": "resolved",
+   "token": "index-1",
+   "offset": 1,
+   "collapsed": false,
+   "source": "roadmap_inference",
+   "citation": "W2"
+  },
+  {
+   "id": "list_index_is_not_a_byte_offset",
+   "kind": "unit_declaration",
+   "unit": "list_index",
+   "source": "roadmap_inference",
+   "citation": "W2"
+  },
+  {
+   "id": "list_off_end_index_is_rejected",
+   "kind": "typed_error",
+   "error": "off_end",
+   "source": "roadmap_inference",
+   "citation": "W2"
+  }
+ ],
+ "ownership": {
+  "early": [
+   "S04a",
+   "S04b",
+   "W03"
+  ],
+  "strict": [
+   "S02",
+   "S04"
+  ]
+ },
+ "third_party_observations": [],
+ "seed": 20261005,
+ "expected": {
+  "order": [
+   "A/1",
+   "A/3"
+  ],
+  "hidden": [],
+  "ids": [
+   10,
+   20
+  ],
+  "positions": {
+   "index-0": {
+    "offset": 0,
+    "state": "resolved"
+   },
+   "index-1": {
+    "offset": 1,
+    "state": "resolved"
+   },
+   "index-2": {
+    "offset": 2,
+    "state": "resolved"
+   }
+  },
+  "comparisons": [
+   {
+    "left": "index-0",
+    "right": "index-1",
+    "order": "less"
+   },
+   {
+    "left": "index-1",
+    "right": "index-2",
+    "order": "less"
+   }
+  ]
+ }
+}

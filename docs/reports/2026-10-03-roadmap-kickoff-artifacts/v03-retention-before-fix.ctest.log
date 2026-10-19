@@ -1,0 +1,93 @@
+Test project /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug
+    Start 14: tst_gc
+    Start 40: tst_idlist_gc
+1/2 Test #40: tst_idlist_gc ....................***Failed    0.01 sec
+********* Start testing of TestIdListGc *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestIdListGc::initTestCase()
+FAIL!  : TestIdListGc::collect_garbage_retains_trimmed_tombstones() Compared values are not the same
+   Actual   (collected): 1
+   Expected (size_t{0}): 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_idlist_gc.cpp(17)]
+PASS   : TestIdListGc::collect_garbage_skips_remote_deletions()
+FAIL!  : TestIdListGc::compact_with_watermark_preserves_remote_undo() Compared values are not the same
+   Actual   (reclaimed): 1
+   Expected (size_t{0}): 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_idlist_gc.cpp(46)]
+FAIL!  : TestIdListGc::gc_protects_entries_in_undo_stack() Compared values are not the same
+   Actual   (list.collect_garbage()): 1
+   Expected (size_t{0})             : 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_idlist_gc.cpp(62)]
+FAIL!  : TestIdListGc::gc_protects_undone_insertion_with_no_deletions() Compared values are not the same
+   Actual   (list.collect_garbage()): 1
+   Expected (size_t{0})             : 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_idlist_gc.cpp(80)]
+PASS   : TestIdListGc::cleanupTestCase()
+Totals: 3 passed, 4 failed, 0 skipped, 0 blacklisted, 1ms
+********* Finished testing of TestIdListGc *********
+
+2/2 Test #14: tst_gc ...........................***Failed    0.12 sec
+********* Start testing of TestGC *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestGC::initTestCase()
+PASS   : TestGC::fragment_count_empty()
+PASS   : TestGC::fragment_count_after_insert()
+PASS   : TestGC::tombstone_count_after_delete()
+PASS   : TestGC::max_undo_depth_default()
+PASS   : TestGC::set_max_undo_depth()
+PASS   : TestGC::gc_removes_tombstones()
+FAIL!  : TestGC::gc_retains_after_local_history_trim() Compared values are not the same
+   Actual   (removed)  : 1
+   Expected (size_t(0)): 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_gc.cpp(112)]
+FAIL!  : TestGC::gc_preserves_visible_text() Compared values are not the same
+   Actual   (removed)  : 2
+   Expected (size_t(0)): 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_gc.cpp(128)]
+PASS   : TestGC::gc_protects_undoable_deletions()
+FAIL!  : TestGC::gc_after_undo_redo_cycle() Compared values are not the same
+   Actual   (removed)  : 1
+   Expected (size_t(0)): 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_gc.cpp(164)]
+FAIL!  : TestGC::gc_partial_protection() Compared values are not the same
+   Actual   (removed)  : 1
+   Expected (size_t(0)): 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_gc.cpp(183)]
+PASS   : TestGC::gc_with_multiple_deletions_on_same_fragment()
+PASS   : TestGC::gc_preserves_fragment_layout()
+FAIL!  : TestGC::gc_preserves_deleted_anchor_context() Compared values are not the same
+   Actual   (buf.collect_garbage()): 1
+   Expected (size_t(0))            : 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_gc.cpp(245)]
+PASS   : TestGC::gc_preserves_distinct_insertions()
+QDEBUG : TestGC::gc_preserves_invariants_stress() Seed: 3821014897
+PASS   : TestGC::gc_preserves_invariants_stress()
+PASS   : TestGC::gc_preserves_convergence()
+QDEBUG : TestGC::gc_convergence_fuzz() Seed: 2141305319
+PASS   : TestGC::gc_convergence_fuzz()
+FAIL!  : TestGC::compact_retains_remote_tombstones() Compared values are not the same
+   Actual   (removed)  : 1
+   Expected (size_t(0)): 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_gc.cpp(458)]
+PASS   : TestGC::compact_respects_undo_protection()
+PASS   : TestGC::compact_ignores_deletions_beyond_watermark()
+FAIL!  : TestGC::compact_convergence_both_replicas() Compared values are not the same
+   Actual   (bufA.compact(watermark)): 2
+   Expected (size_t(0))              : 0
+   Loc: [/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/tests/tst_gc.cpp(532)]
+QDEBUG : TestGC::compact_convergence_fuzz() Seed: 2697477921
+PASS   : TestGC::compact_convergence_fuzz()
+PASS   : TestGC::cleanupTestCase()
+Totals: 18 passed, 7 failed, 0 skipped, 0 blacklisted, 95ms
+********* Finished testing of TestGC *********
+
+
+0% tests passed, 2 tests failed out of 2
+
+Total Test time (real) =   0.12 sec
+
+The following tests FAILED:
+	 14 - tst_gc (Failed)
+	 40 - tst_idlist_gc (Failed)
+Errors while running CTest
+Verification exit: 8; evidence: /home/clinton/dev/collabtext/.worktrees/reliability-v2/build-roadmap-debug/verification/20261003T213308Z-2

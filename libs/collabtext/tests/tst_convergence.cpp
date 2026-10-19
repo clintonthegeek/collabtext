@@ -1,4 +1,6 @@
 #include <QTest>
+
+#include "TestActor.h"
 #include "crdt/Buffer.h"
 #include <random>
 #include <iostream>
@@ -34,7 +36,7 @@ private:
         // Create independent replicas
         std::vector<Buffer> replicas;
         for (int i = 0; i < num_replicas; ++i)
-            replicas.emplace_back(static_cast<uint16_t>(i + 1)); // replica IDs start at 1
+            replicas.emplace_back(CollabText::Test::test_counter(static_cast<uint8_t>(i + 1))); // replica IDs start at 1
 
         // Per-replica incoming queues. Each queue holds ops from OTHER replicas
         // that haven't been delivered yet.
@@ -110,9 +112,9 @@ private:
         for (int i = 1; i < num_replicas; ++i) {
             if (replicas[i].text() != expected) {
                 std::cerr << "CONVERGENCE FAILURE with seed " << seed << "\n";
-                std::cerr << "Replica 0 (" << replicas[0].replica_id() << "): \""
+                std::cerr << "Replica 0 (" << replicas[0].actor_id().to_string() << "): \""
                           << expected << "\"\n";
-                std::cerr << "Replica " << i << " (" << replicas[i].replica_id()
+                std::cerr << "Replica " << i << " (" << replicas[i].actor_id().to_string()
                           << "): \"" << replicas[i].text() << "\"\n";
             }
             QCOMPARE(replicas[i].text(), expected);

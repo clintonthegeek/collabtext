@@ -13,7 +13,7 @@ class TestSidecarManifest : public QObject {
 private slots:
     void round_trip() {
         SidecarManifest m;
-        m.schema_version    = 3;
+        m.schema_version    = 4;
         m.doc_id            = "01HXXX0000000000000000000A";
         m.enrolled_at       = "2026-04-30T14:22:01Z";
         m.original_filename = "notes.md";
@@ -41,12 +41,12 @@ private slots:
     }
 
     void sha256_helper_matches_known_value() {
-        QCOMPARE(sha256_hex("abc"), std::string(
+        QCOMPARE(CollabText::sha256_hex("abc"), std::string(
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
     }
 
     void sha256_helper_empty_input() {
-        QCOMPARE(sha256_hex(""), std::string(
+        QCOMPARE(CollabText::sha256_hex(""), std::string(
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"));
     }
 
@@ -55,11 +55,11 @@ private slots:
         fs::path dir = tmp.path().toStdString();
 
         SidecarManifest m;
-        m.schema_version = 3;
+        m.schema_version = 4;
         m.doc_id         = "01HABC";
         m.enrolled_at    = "2026-04-30T14:22:01Z";
         m.original_filename = "notes.md";
-        m.seed_sha256    = sha256_hex("hello");
+        m.seed_sha256    = CollabText::sha256_hex("hello");
 
         auto path = dir / "manifest.json";
         write_manifest(path, m);
@@ -68,7 +68,21 @@ private slots:
         auto loaded = read_manifest(path);
         QVERIFY(loaded.has_value());
         QCOMPARE(loaded->doc_id, m.doc_id);
-        QCOMPARE(loaded->schema_version, 3);
+        QCOMPARE(loaded->schema_version, 4);
+    }
+
+    // Schema 4 changed how an identity and a version vector are written; a
+    // schema 3 record does not load. That is a deliberate cut, not an
+    // oversight — see SidecarManifest.h.
+    void rejects_schema_version_3() {
+        QTemporaryDir tmp;
+        fs::path p = fs::path(tmp.path().toStdString()) / "manifest.json";
+        std::ofstream(p) << "{\"schema_version\":3,\"doc_id\":\"x\","
+                            "\"enrolled_at\":\"2026-04-30T00:00:00Z\","
+                            "\"original_filename\":\"f.txt\","
+                            "\"seed_sha256\":\"00\"}";
+        auto loaded = read_manifest(p);
+        QVERIFY(!loaded.has_value());
     }
 
     void rejects_schema_version_1() {

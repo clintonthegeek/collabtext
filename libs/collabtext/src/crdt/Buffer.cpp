@@ -1,16 +1,95 @@
+#include "crdt/Utf16.h"
 #include "crdt/Buffer.h"
+#include "crdt/LocalHistoryBudget.h"
 #include "crdt/OperationQueue.h"
+#include "crdt/SequenceOrder.h"
+#include "codec/Utf.h"
 #include <algorithm>
 #include <cassert>
 #include <numeric>
-#include <unordered_set>
 
 namespace CollabText::Crdt {
 
-Buffer::Buffer(uint16_t replica_id)
-    : m_replica_id(replica_id)
-    , m_clock(replica_id, 1)  // Start at 1; value 0 is the "unseen" sentinel
+namespace {
+bool gap_conflicts(const CounterGapLedger& gaps, const Operation& op) {
+    if (gaps.records().empty() || !op_identity(op).actor.valid()) return false;
+    if (gaps.conflicts(op)) return true;
+    return visit_operation([&](const auto& value) {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, EditOperation>) {
+            for (const auto& fragment : value.inserted_fragments)
+                if ((fragment.link.parent && gaps.contains(*fragment.link.parent)) ||
+                    (fragment.link.right_origin && gaps.contains(*fragment.link.right_origin))) return true;
+            for (const auto& run : value.deletion_runs)
+                if (run.count && run.count - 1 <= UINT64_MAX - run.first.counter &&
+                    gaps.overlaps(run.first.actor, run.first.counter, run.first.counter + run.count - 1)) return true;
+        } else {
+            for (const auto& [target, count] : value.counts) {
+                (void)count;
+                if (gaps.contains(target)) return true;
+            }
+        }
+        return false;
+    }, op);
+}
+}
+
+
+Buffer::Buffer(SharedIdentityAllocator allocator)
+    : m_allocator(std::move(allocator))
 {
+    // A null allocator is a programming error: nothing can be minted and there
+    // is no state to recover to, so it fails loudly here.
+    assert(m_allocator && "an engine without an allocator cannot mint identity");
+    // An *invalid actor* is not asserted on, because it is a state rather than a
+    // bug: an engine may exist before its private state has an identity. Minting
+    // is refused at the reservation site instead (check_allocator), where the
+    // refusal can be reported to a caller instead of vanishing in Release.
+}
+
+Result<std::vector<CollabText::detail::PositionItem>> Buffer::position_items() const {
+    std::vector<CollabText::detail::PositionItem> items;
+    for (const auto& fragment : get_fragments()) {
+        size_t scalars = 0;
+        if (!Codec::utf8_length(fragment.text, scalars).ok())
+            return Error(ErrorCode::invalid_unicode, "invalid retained fragment text");
+        if ((fragment.marker ? (fragment.length != 1 || scalars != 0) : scalars != fragment.length) || fragment.text.size() != fragment.byte_length)
+            return Error(ErrorCode::history_unavailable, "retained fragment length mismatch");
+        if (fragment.length && (!fragment.origin.actor.valid() || !fragment.origin.counter ||
+            fragment.length > UINT64_MAX - fragment.origin.counter))
+            return Error(ErrorCode::history_unavailable, "retained item interval is invalid");
+        if (fragment.marker) {
+            items.push_back({fragment.origin, 0, fragment.visible, std::nullopt, true});
+            continue;
+        }
+        size_t byte = 0;
+        for (uint32_t scalar = 0; scalar < fragment.length; ++scalar) {
+            const auto lead = static_cast<unsigned char>(fragment.text[byte]);
+            const uint32_t width = lead < 0x80 ? 1 : lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4;
+            items.push_back({fragment.item_at(scalar), width, fragment.visible, std::nullopt});
+            byte += width;
+        }
+    }
+    return items;
+}
+
+void Buffer::discard_local_view() noexcept {
+    auto allocator = m_allocator;
+    auto version = m_version;
+    auto reclamation = m_reclamation;
+    auto retired = std::move(m_retired_undo_entries);
+    const auto retired_bytes = m_retired_undo_bytes;
+    const auto undo_limit = max_undo_depth();
+    const auto undo_byte_limit = max_undo_bytes();
+    auto changed = std::move(m_on_change);
+    *this = Buffer(std::move(allocator));
+    m_version = std::move(version);
+    m_reclamation = std::move(reclamation);
+    m_retired_undo_entries = std::move(retired);
+    m_retired_undo_bytes = retired_bytes;
+    m_on_change = std::move(changed);
+    (void)set_max_undo_depth(undo_limit);
+    (void)set_max_undo_bytes(undo_byte_limit);
 }
 
 // ---------------------------------------------------------------------------
@@ -21,62 +100,196 @@ std::vector<Fragment> Buffer::get_fragments() const {
     return m_fragment_tree.items();
 }
 
-/// Pack (replica_id, value) into a single uint64_t for map lookup.
-static uint64_t origin_key(const Lamport& origin) {
-    return (static_cast<uint64_t>(origin.replica_id) << 32) | origin.value;
-}
-
 void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     for (auto& f : frags) {
         f.visible = f.compute_visible(m_undo_map);
         assert(f.byte_length == f.text.size());
     }
-    rebuild_insertion_index(frags);
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
     m_fragment_tree = std::move(tree);
-    rebuild_origin_index();
-}
-
-void Buffer::rebuild_origin_index() {
-    m_origin_index.clear();
-    m_fragment_tree.for_each([this](const Fragment& f) {
-        m_origin_index[f.origin.replica_id][f.origin.value] = f.locator;
-    });
-}
-
-std::optional<Locator> Buffer::origin_index_lookup(
-    uint16_t replica_id, uint32_t origin_value) const
-{
-    auto rep_it = m_origin_index.find(replica_id);
-    if (rep_it == m_origin_index.end()) return std::nullopt;
-    auto& rep_map = rep_it->second;
-    if (rep_map.empty()) return std::nullopt;
-    auto it = rep_map.upper_bound(origin_value);
-    if (it == rep_map.begin()) return std::nullopt;
-    --it;
-    return it->second;
-}
-
-void Buffer::rebuild_insertion_index(const std::vector<Fragment>& frags) {
-    InsertionIndex index;
-    for (auto& f : frags) {
-        // Each fragment maps from (origin timestamp, byte offset within insertion)
-        // to its locator. The split_offset is the character offset from the
-        // original insertion's start (origin.value - origin.value = 0 for the
-        // first fragment, or the offset for split fragments).
-        index.push_item(InsertionFragment(
-            f.origin,
-            0,  // split_offset: 0 for the first/only fragment of an insertion
-            f.locator,
-            f.byte_length
-        ));
-    }
-    m_insertion_index = std::move(index);
 }
 
 std::vector<Fragment> Buffer::fragments() const {
     return get_fragments();
+}
+
+BufferCheckpointState Buffer::checkpoint_state() const {
+    BufferCheckpointState snapshot;
+    snapshot.version = m_version;
+    snapshot.counter_gaps = m_counter_gaps.records();
+    snapshot.reclamation = m_reclamation;
+    snapshot.fragments = get_fragments();
+    snapshot.undo_entries = m_undo_map.entries();
+    snapshot.deferred = m_deferred_queue.items();
+    snapshot.quarantined = m_quarantined;
+    return snapshot;
+}
+
+Result<void> Buffer::restore_checkpoint_state(
+    const BufferCheckpointState &snapshot) {
+    if (!reclamation_binding_is_well_formed(snapshot.reclamation))
+        return Error(ErrorCode::malformed,
+                     "checkpoint reclamation binding is incomplete or invalid",
+                     "checkpoint.engine.reclamation");
+    for (const auto &[actor, through] : snapshot.reclamation.operation_frontier)
+        if (snapshot.version.get(actor) < through)
+            return Error(ErrorCode::counter_regression,
+                         "checkpoint reclamation frontier exceeds causal state",
+                         "checkpoint.engine.reclamation");
+    if (snapshot.version.get(actor_id()) >= m_allocator->peek())
+        return Error(ErrorCode::counter_regression,
+                     "checkpoint exceeds the owner's durable identity reservation",
+                     "checkpoint.owner_writer");
+    if (snapshot.deferred.size() > m_deferred_budget.max_operations ||
+        snapshot.quarantined.size() > m_quarantine_budget.max_operations)
+        return Error(ErrorCode::limit_exceeded,
+                     "checkpoint deferred or quarantine record count exceeds configured budget",
+                     "checkpoint.deferred");
+    Buffer rebuilt(m_allocator);
+    auto gaps = rebuilt.m_counter_gaps.restore(snapshot.counter_gaps, snapshot.version);
+    if (!gaps) return gaps.error();
+    rebuilt.m_deferred_budget = m_deferred_budget;
+    rebuilt.m_quarantine_budget = m_quarantine_budget;
+    rebuilt.m_max_undo_depth = m_max_undo_depth;
+    rebuilt.m_max_undo_bytes = m_max_undo_bytes;
+
+    auto valid_identity = [](const Identity &id) {
+        return id.actor.valid() && id.counter != 0;
+    };
+    auto observed_identity = [&](const Identity &id) {
+        return valid_identity(id) && snapshot.version.observed(id) && !rebuilt.m_counter_gaps.contains(id);
+    };
+    auto map_restore = rebuilt.m_undo_map.restore_entries(snapshot.undo_entries);
+    if (!map_restore) return map_restore.error();
+    for (const auto &entry : snapshot.undo_entries) {
+        if (!observed_identity(entry.key.edit_id) ||
+            !observed_identity(entry.key.undo_id))
+            return Error(ErrorCode::malformed,
+                         "checkpoint UndoMap references an identity outside its causal state",
+                         "checkpoint.causal.undo_map");
+    }
+
+    std::map<ActorId, std::vector<std::pair<uint64_t, uint64_t>>> ranges;
+    for (const auto &fragment : snapshot.fragments) {
+        size_t scalar_count = 0;
+        if (!fragment.origin.actor.valid() || fragment.origin.counter == 0 ||
+            fragment.length == 0 ||
+            fragment.length > UINT64_MAX - fragment.origin.counter ||
+            fragment.byte_length != fragment.text.size() ||
+            !Codec::utf8_length(fragment.text, scalar_count).ok() ||
+            (fragment.marker ? (fragment.length != 1 || scalar_count != 0) : scalar_count != fragment.length))
+            return Error(ErrorCode::malformed,
+                         "checkpoint fragment identity or UTF-8 lengths are invalid",
+                         "checkpoint.engine.text");
+        const uint64_t end = fragment.origin.counter + fragment.length;
+        ranges[fragment.origin.actor].emplace_back(fragment.origin.counter, end);
+        if (rebuilt.m_counter_gaps.overlaps(fragment.origin.actor, fragment.origin.counter, end - 1) ||
+            !observed_identity(Identity(fragment.origin.actor, end - 1)))
+            return Error(ErrorCode::malformed,
+                         "checkpoint fragment is outside its causal state",
+                         "checkpoint.engine.text");
+        if (fragment.link.side != Side::Left && fragment.link.side != Side::Right)
+            return Error(ErrorCode::malformed,
+                         "checkpoint fragment has an invalid placement side",
+                         "checkpoint.engine.text");
+        if ((fragment.link.parent && !observed_identity(*fragment.link.parent)) ||
+            (fragment.link.right_origin &&
+             !observed_identity(*fragment.link.right_origin)))
+            return Error(ErrorCode::malformed,
+                         "checkpoint fragment link is outside its causal state",
+                         "checkpoint.engine.text");
+        std::set<Identity> deletions;
+        for (const auto &deletion : fragment.deletions) {
+            if (!observed_identity(deletion) ||
+                !deletions.insert(deletion).second)
+                return Error(ErrorCode::malformed,
+                             "checkpoint fragment deletion identity is invalid or repeated",
+                             "checkpoint.engine.text");
+        }
+    }
+    for (auto &[actor, actor_ranges] : ranges) {
+        (void)actor;
+        std::sort(actor_ranges.begin(), actor_ranges.end());
+        for (size_t i = 1; i < actor_ranges.size(); ++i)
+            if (actor_ranges[i - 1].second > actor_ranges[i].first)
+                return Error(ErrorCode::malformed,
+                             "checkpoint fragment identity intervals overlap",
+                             "checkpoint.engine.text");
+    }
+    if (const auto issue = SequenceOrder::check_consistency(snapshot.fragments))
+        return Error(ErrorCode::malformed, *issue, "checkpoint.engine.text.links");
+    rebuilt.m_version = snapshot.version;
+    rebuilt.m_reclamation = snapshot.reclamation;
+    auto fragments = snapshot.fragments;
+    rebuilt.set_fragments(std::move(fragments));
+
+    size_t deferred_bytes = 0;
+    std::optional<Identity> previous_deferred;
+    std::set<Identity> deferred_and_quarantined_ids;
+    for (const auto &entry : snapshot.deferred) {
+        if (gap_conflicts(rebuilt.m_counter_gaps, entry.op)) return CounterGapLedger::conflict();
+        const auto timestamp = get_op_timestamp(entry.op);
+        if (timestamp != entry.timestamp || !valid_identity(timestamp) ||
+            snapshot.version.observed(timestamp) ||
+            (previous_deferred && !(*previous_deferred < timestamp)) ||
+            !deferred_and_quarantined_ids.insert(timestamp).second)
+            return Error(ErrorCode::malformed,
+                         "checkpoint deferred operations have invalid or duplicate identities",
+                         "checkpoint.deferred");
+        const auto verdict = validate_operation(entry.op, snapshot.version);
+        if (verdict.verdict == ValidationVerdict::rejected)
+            return verdict.error.with_context("checkpoint.deferred");
+        const auto bytes = estimate_operation_bytes(entry.op);
+        if (bytes > SIZE_MAX - deferred_bytes ||
+            bytes > m_deferred_budget.max_bytes -
+                        std::min(deferred_bytes, m_deferred_budget.max_bytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "checkpoint deferred input exceeds configured byte budget",
+                         "checkpoint.deferred");
+        deferred_bytes += bytes;
+        rebuilt.m_deferred_queue.push_item(entry);
+        rebuilt.m_deferred_actors.insert(timestamp.actor);
+        previous_deferred = timestamp;
+    }
+    if (deferred_bytes > m_deferred_budget.max_bytes)
+        return Error(ErrorCode::limit_exceeded,
+                     "checkpoint deferred input exceeds configured budget",
+                     "checkpoint.deferred");
+    rebuilt.m_deferred_count = snapshot.deferred.size();
+    rebuilt.m_deferred_bytes = deferred_bytes;
+
+    size_t quarantine_bytes = 0;
+    for (const auto &entry : snapshot.quarantined) {
+        if (gap_conflicts(rebuilt.m_counter_gaps, entry.op)) return CounterGapLedger::conflict();
+        const auto timestamp = get_op_timestamp(entry.op);
+        if (!valid_identity(timestamp) || snapshot.version.observed(timestamp) ||
+            entry.reason.empty() ||
+            !deferred_and_quarantined_ids.insert(timestamp).second)
+            return Error(ErrorCode::malformed,
+                         "checkpoint quarantine record is invalid",
+                         "checkpoint.quarantine");
+        const auto bytes = estimate_operation_bytes(entry.op);
+        if (bytes > SIZE_MAX - quarantine_bytes ||
+            bytes > m_quarantine_budget.max_bytes -
+                        std::min(quarantine_bytes, m_quarantine_budget.max_bytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "checkpoint quarantine exceeds configured byte budget",
+                         "checkpoint.quarantine");
+        quarantine_bytes += bytes;
+    }
+    if (quarantine_bytes > m_quarantine_budget.max_bytes)
+        return Error(ErrorCode::limit_exceeded,
+                     "checkpoint quarantine exceeds configured budget",
+                     "checkpoint.quarantine");
+    rebuilt.m_quarantined = snapshot.quarantined;
+    rebuilt.m_quarantined_bytes = quarantine_bytes;
+
+    auto history = rebuilt.restore_local_history(local_history_snapshot());
+    if (!history) return history.error().with_context("checkpoint.owner_history");
+    rebuilt.m_on_change = m_on_change;
+    *this = std::move(rebuilt);
+    return Result<void>::success();
 }
 
 // ---------------------------------------------------------------------------
@@ -122,80 +335,276 @@ size_t Buffer::max_undo_depth() const {
     return m_max_undo_depth;
 }
 
-void Buffer::set_max_undo_depth(size_t depth) {
+Result<void> Buffer::set_max_undo_depth(size_t depth) {
+    if (depth > detail::kMaxPendingUndoRetirementGroups)
+        return Error(ErrorCode::limit_exceeded,
+                     "undo history group limit exceeds 100,000");
+    auto budget = check_retirement_budget_for_limits(depth, m_max_undo_bytes);
+    if (!budget.ok()) return budget.error();
     m_max_undo_depth = depth;
     trim_undo_stack();
+    return Result<void>::success();
+}
+
+Result<void> Buffer::set_max_undo_bytes(size_t bytes) {
+    auto budget = check_retirement_budget_for_limits(m_max_undo_depth, bytes);
+    if (!budget.ok()) return budget.error();
+    m_max_undo_bytes = bytes;
+    trim_undo_stack();
+    return Result<void>::success();
+}
+
+void Buffer::recalculate_undo_bytes() {
+    m_undo_bytes = 0;
+    for (const auto &entry : m_undo_stack) {
+        if (entry.retained_bytes > SIZE_MAX - m_undo_bytes) {
+            m_undo_bytes = SIZE_MAX;
+            return;
+        }
+        m_undo_bytes += entry.retained_bytes;
+    }
 }
 
 void Buffer::trim_undo_stack() {
-    if (m_undo_stack.size() <= m_max_undo_depth) return;
-    size_t excess = m_undo_stack.size() - m_max_undo_depth;
-    m_undo_stack.erase(m_undo_stack.begin(),
-                       m_undo_stack.begin() + static_cast<ptrdiff_t>(excess));
-    if (excess > m_undo_cursor)
-        m_undo_cursor = 0;
-    else
-        m_undo_cursor -= excess;
+    recalculate_undo_bytes();
+    while (!m_undo_stack.empty() &&
+           (m_undo_stack.size() > m_max_undo_depth ||
+            m_undo_bytes > m_max_undo_bytes)) {
+        retire_undo_entry(m_undo_stack.front());
+        m_undo_stack.erase(m_undo_stack.begin());
+        if (m_undo_cursor != 0) --m_undo_cursor;
+        recalculate_undo_bytes();
+    }
 }
 
-template<typename Pred>
-size_t Buffer::sweep_and_coalesce(Pred is_gc_eligible) {
-    auto frags = get_fragments();
-    size_t original_count = frags.size();
+void Buffer::retire_undo_entry(const UndoEntry &entry) {
+    auto snapshot = snapshot_undo_entry(entry);
+    m_retired_undo_bytes += detail::local_undo_retirement_charge(snapshot);
+    m_retired_undo_entries.push_back(std::move(snapshot));
+}
 
-    frags.erase(
-        std::remove_if(frags.begin(), frags.end(), is_gc_eligible),
-        frags.end());
-
-    size_t removed = original_count - frags.size();
-
-    coalesce_fragments(frags);
-
-    if (removed > 0 || frags.size() < original_count) {
-        set_fragments(std::move(frags));
+Result<void> Buffer::check_retirement_budget_for_limits(size_t depth,
+                                                         size_t bytes) const {
+    size_t remaining_bytes = m_undo_bytes;
+    size_t added_bytes = 0;
+    size_t added_groups = 0;
+    size_t first = 0;
+    size_t count = m_undo_stack.size();
+    while (count > depth || remaining_bytes > bytes) {
+        if (first >= m_undo_stack.size()) break;
+        const auto &entry = m_undo_stack[first++];
+        remaining_bytes -= std::min(remaining_bytes, entry.retained_bytes);
+        const size_t charge = detail::local_undo_retirement_charge(
+            entry.operation_ids.size(), entry.inserted_keys.size(),
+            entry.deletion_ids.size());
+        if (charge > detail::kMaxPendingUndoRetirementBytes -
+                         std::min(added_bytes, detail::kMaxPendingUndoRetirementBytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "pending undo retirement memory budget would be exceeded");
+        added_bytes += charge;
+        ++added_groups;
+        --count;
     }
-    return removed;
+    const size_t existing_groups = m_retired_undo_entries.size();
+    if (existing_groups > detail::kMaxPendingUndoRetirementGroups ||
+        added_groups > detail::kMaxPendingUndoRetirementGroups - existing_groups ||
+        count > detail::kMaxPendingUndoRetirementGroups - existing_groups - added_groups ||
+        added_bytes > detail::kMaxPendingUndoRetirementBytes -
+                          std::min(m_retired_undo_bytes,
+                                   detail::kMaxPendingUndoRetirementBytes))
+        return Error(ErrorCode::limit_exceeded,
+                     "pending undo retirement memory budget would be exceeded");
+    return Result<void>::success();
+}
+
+Result<void> Buffer::check_retirement_budget_for_new_entry(
+    size_t retained_bytes, size_t inserted_count, size_t deletion_count) const {
+    size_t added_bytes = 0;
+    size_t added_groups = 0;
+    auto add = [&](size_t charge) -> bool {
+        if (charge > detail::kMaxPendingUndoRetirementBytes -
+                         std::min(added_bytes, detail::kMaxPendingUndoRetirementBytes))
+            return false;
+        added_bytes += charge;
+        ++added_groups;
+        return true;
+    };
+    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i) {
+        const auto &entry = m_undo_stack[i];
+        if (!add(detail::local_undo_retirement_charge(
+                entry.operation_ids.size(), entry.inserted_keys.size(),
+                entry.deletion_ids.size())))
+            return Error(ErrorCode::limit_exceeded,
+                         "pending undo retirement memory budget would be exceeded");
+    }
+
+    size_t remaining_bytes = 0;
+    for (size_t i = 0; i < m_undo_cursor; ++i) {
+        if (m_undo_stack[i].retained_bytes > SIZE_MAX - remaining_bytes) {
+            remaining_bytes = SIZE_MAX;
+            break;
+        }
+        remaining_bytes += m_undo_stack[i].retained_bytes;
+    }
+    remaining_bytes = retained_bytes > SIZE_MAX - remaining_bytes
+                          ? SIZE_MAX : remaining_bytes + retained_bytes;
+    size_t count = m_undo_cursor + 1;
+    size_t first = 0;
+    const size_t candidate_charge = detail::local_undo_retirement_charge(
+        1, inserted_count, deletion_count);
+    while (count > m_max_undo_depth || remaining_bytes > m_max_undo_bytes) {
+        if (first < m_undo_cursor) {
+            const auto &entry = m_undo_stack[first++];
+            remaining_bytes -= std::min(remaining_bytes, entry.retained_bytes);
+            if (!add(detail::local_undo_retirement_charge(
+                    entry.operation_ids.size(), entry.inserted_keys.size(),
+                    entry.deletion_ids.size())))
+                return Error(ErrorCode::limit_exceeded,
+                             "pending undo retirement memory budget would be exceeded");
+        } else {
+            remaining_bytes -= std::min(remaining_bytes, retained_bytes);
+            if (!add(candidate_charge))
+                return Error(ErrorCode::limit_exceeded,
+                             "pending undo retirement memory budget would be exceeded");
+        }
+        --count;
+    }
+    const size_t existing_groups = m_retired_undo_entries.size();
+    if (existing_groups > detail::kMaxPendingUndoRetirementGroups ||
+        added_groups > detail::kMaxPendingUndoRetirementGroups - existing_groups ||
+        count > detail::kMaxPendingUndoRetirementGroups - existing_groups - added_groups ||
+        added_bytes > detail::kMaxPendingUndoRetirementBytes -
+                          std::min(m_retired_undo_bytes,
+                                   detail::kMaxPendingUndoRetirementBytes))
+        return Error(ErrorCode::limit_exceeded,
+                     "pending undo retirement memory budget would be exceeded");
+    return Result<void>::success();
 }
 
 size_t Buffer::collect_garbage() {
-    // Build protected set: deletion IDs still in the undo stack
-    std::unordered_set<uint64_t> protected_ids;
-    for (const auto& entry : m_undo_stack) {
-        for (const auto& del_id : entry.deletion_ids)
-            protected_ids.insert(origin_key(del_id));
-    }
-
-    return sweep_and_coalesce([&](const Fragment& f) {
-        if (f.visible) return false;
-        for (const auto& del : f.deletions) {
-            if (del.replica_id != m_replica_id)
-                return false;  // remote deletion — needs watermark GC
-            if (protected_ids.count(origin_key(del)))
-                return false;  // protected by undo stack
-        }
-        return true;
-    });
+    // Local history cannot prove that remote redo or anchors have expired.
+    // Retain all restoration state until certified reclamation is available.
+    return 0;
 }
 
-size_t Buffer::compact(const Global& watermark) {
-    // Build local undo protection set
-    std::unordered_set<uint64_t> protected_ids;
-    for (const auto& entry : m_undo_stack) {
-        for (const auto& del_id : entry.deletion_ids)
-            protected_ids.insert(origin_key(del_id));
+Result<size_t> Buffer::collect_garbage(
+    const std::set<Identity> &pinned_identities) {
+    if (!reclamation_binding_is_well_formed(m_reclamation))
+        return Error(ErrorCode::awaiting_state,
+                     "physical reclamation requires an installed certified frontier");
+    for (const auto &[actor, through] : m_reclamation.operation_frontier)
+        if (m_version.get(actor) < through)
+            return Error(ErrorCode::counter_regression,
+                         "installed reclamation frontier exceeds engine state");
+
+    auto fragments = get_fragments();
+    std::vector<bool> remove(fragments.size(), false);
+    size_t reclaimed_items = 0;
+    const auto interval_contains = [](const Fragment &fragment,
+                                      const Identity &identity) {
+        return identity.actor == fragment.origin.actor &&
+               identity.counter >= fragment.origin.counter &&
+               identity.counter - fragment.origin.counter < fragment.length;
+    };
+    const auto undo_snapshot = m_undo_map.entries();
+    const auto retained_by_local_history = [&](const Fragment &fragment) {
+        for (const auto &entry : m_undo_stack) {
+            for (const auto &key : entry.inserted_keys)
+                if (interval_contains(fragment, key.position)) return true;
+            for (const auto &deletion : entry.deletion_ids)
+                if (std::find(fragment.deletions.begin(),
+                              fragment.deletions.end(), deletion) !=
+                    fragment.deletions.end())
+                    return true;
+        }
+        for (const auto &entry : m_retired_undo_entries) {
+            for (const auto &identity : entry.inserted_items)
+                if (interval_contains(fragment, identity)) return true;
+            for (const auto &deletion : entry.deletion_operations)
+                if (std::find(fragment.deletions.begin(),
+                              fragment.deletions.end(), deletion) !=
+                    fragment.deletions.end())
+                    return true;
+        }
+        return false;
+    };
+
+    for (size_t i = 0; i < fragments.size(); ++i) {
+        const auto &fragment = fragments[i];
+        if (fragment.visible ||
+            !tombstone_is_covered(m_reclamation.operation_frontier,
+                                  fragment.origin, fragment.length,
+                                  fragment.deletions) ||
+            retained_by_local_history(fragment))
+            continue;
+
+        bool protected_by_pin = false;
+        for (const auto &identity : pinned_identities)
+            if (interval_contains(fragment, identity)) {
+                protected_by_pin = true;
+                break;
+            }
+        if (protected_by_pin) continue;
+
+        bool referenced = false;
+        for (size_t j = 0; j < fragments.size() && !referenced; ++j) {
+            if (i == j) continue;
+            const auto &link = fragments[j].link;
+            referenced = (link.parent && interval_contains(fragment, *link.parent)) ||
+                         (link.right_origin &&
+                          interval_contains(fragment, *link.right_origin));
+        }
+        if (referenced) continue;
+
+        bool has_uncovered_undo = false;
+        for (const auto &entry : undo_snapshot) {
+            const bool targets_fragment =
+                interval_contains(fragment, entry.key.edit_id) ||
+                std::find(fragment.deletions.begin(), fragment.deletions.end(),
+                          entry.key.edit_id) != fragment.deletions.end();
+            if (targets_fragment && !operation_is_covered(
+                                        m_reclamation.operation_frontier,
+                                        entry.key.undo_id)) {
+                has_uncovered_undo = true;
+                break;
+            }
+        }
+        if (has_uncovered_undo) continue;
+        remove[i] = true;
+        reclaimed_items += fragment.length;
     }
 
-    return sweep_and_coalesce([&](const Fragment& f) {
-        if (f.visible) return false;
-        if (f.deletions.empty()) return false;  // undone insertion, not a deletion tombstone
-        for (const auto& del : f.deletions) {
-            if (!watermark.observed(del))
-                return false;  // not all replicas have seen this deletion
-            if (protected_ids.count(origin_key(del)))
-                return false;  // locally undo-protected
-        }
-        return true;
+    if (reclaimed_items == 0) return size_t{0};
+    const auto is_reclaimed_target = [&](const Identity &identity) {
+        for (size_t i = 0; i < fragments.size(); ++i)
+            if (remove[i] &&
+                (interval_contains(fragments[i], identity) ||
+                 std::find(fragments[i].deletions.begin(),
+                           fragments[i].deletions.end(), identity) !=
+                     fragments[i].deletions.end()))
+                return true;
+        return false;
+    };
+
+    auto undo_entries = m_undo_map.entries();
+    std::erase_if(undo_entries, [&](const UndoMapEntry &entry) {
+        return is_reclaimed_target(entry.key.edit_id);
     });
+    UndoMap rebuilt_undo;
+    if (auto restored = rebuilt_undo.restore_entries(undo_entries);
+        !restored.ok())
+        return restored.error();
+
+    FragmentTree rebuilt_tree;
+    for (size_t i = 0; i < fragments.size(); ++i) {
+        if (remove[i]) continue;
+        auto &fragment = fragments[i];
+        fragment.visible = fragment.compute_visible(rebuilt_undo);
+        rebuilt_tree.push_item(std::move(fragment));
+    }
+    m_undo_map = std::move(rebuilt_undo);
+    m_fragment_tree = std::move(rebuilt_tree);
+    return reclaimed_items;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,38 +616,14 @@ std::vector<TextEdit> Buffer::edits_since(const Global &since) const {
 
     // Walk every fragment. Track two running byte offsets:
     // old_pos: position in the visible text as of `since`
-    // new_pos: position in the current visible text
     uint32_t old_pos = 0;
-    uint32_t new_pos = 0;
 
-    // Accumulator for merging adjacent edits into single TextEdits
-    // (e.g., a deleted fragment immediately followed by an inserted one
-    // is one replacement, not two separate edits)
+    // Merge adjacent changed fragments into one replacement. Accumulate the
+    // new text during this same tree walk; unchanged visible fragments are the
+    // only boundaries that flush a pending edit.
     bool in_edit = false;
     uint32_t edit_old_start = 0;
     uint32_t edit_old_end = 0;
-    uint32_t edit_new_start = 0;
-
-    auto flush_edit = [&]() {
-        if (!in_edit) return;
-        uint32_t edit_new_end = new_pos;
-        if (edit_old_start != edit_old_end || edit_new_start != edit_new_end) {
-            TextEdit e;
-            e.old_start = edit_old_start;
-            e.old_end = edit_old_end;
-            // Extract the new text from the current visible text
-            // by walking the tree again... OR we can accumulate it.
-            // For efficiency, we'll collect new text during the walk.
-        }
-        in_edit = false;
-    };
-
-    // Better approach: two-pass is complex. Single pass that accumulates
-    // new_text as we go.
-    edits.clear();
-    old_pos = 0;
-    new_pos = 0;
-    in_edit = false;
     std::string edit_new_text;
 
     auto flush = [&]() {
@@ -258,7 +643,6 @@ std::vector<TextEdit> Buffer::edits_since(const Global &since) const {
             // Unchanged visible fragment — flush any pending edit, advance both
             flush();
             old_pos += f.byte_length;
-            new_pos += f.byte_length;
         } else if (was_vis && !is_vis) {
             // Was visible, now invisible — DELETION
             if (!in_edit) {
@@ -278,7 +662,6 @@ std::vector<TextEdit> Buffer::edits_since(const Global &since) const {
                 edit_new_text.clear();
             }
             edit_new_text += f.text;
-            new_pos += f.byte_length;
         } else {
             // Invisible in both versions — skip, but don't flush
             // (could be a tombstone between two changed fragments
@@ -288,29 +671,6 @@ std::vector<TextEdit> Buffer::edits_since(const Global &since) const {
 
     flush();
     return edits;
-}
-
-void Buffer::coalesce_fragments(std::vector<Fragment>& frags) {
-    if (frags.size() < 2) return;
-    size_t write = 0;
-    for (size_t read = 1; read < frags.size(); ++read) {
-        Fragment& prev = frags[write];
-        Fragment& curr = frags[read];
-        if (prev.visible == curr.visible &&
-            prev.locator == curr.locator &&
-            prev.origin.replica_id == curr.origin.replica_id &&
-            prev.origin.value + prev.length == curr.origin.value &&
-            prev.deletions == curr.deletions) {
-            prev.text += curr.text;
-            prev.byte_length += curr.byte_length;
-            prev.length += curr.length;
-        } else {
-            ++write;
-            if (write != read)
-                frags[write] = std::move(curr);
-        }
-    }
-    frags.resize(write + 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +707,7 @@ static uint32_t chars_to_bytes(const std::string &s, uint32_t char_offset) {
 Anchor Buffer::anchor_at(uint32_t byte_offset, Bias bias) const {
     if (m_fragment_tree.empty()) return Anchor::min();
     uint32_t accumulated = 0;
-    Anchor result = Anchor::max();
+    Anchor result = Anchor::end();
     bool found = false;
     m_fragment_tree.for_each([&](const Fragment& f) {
         if (found) return;
@@ -355,7 +715,7 @@ Anchor Buffer::anchor_at(uint32_t byte_offset, Bias bias) const {
         if (accumulated + f.byte_length > byte_offset) {
             uint32_t offset_in_frag = byte_offset - accumulated;
             uint32_t char_offset = count_chars(f.text, offset_in_frag);
-            result = Anchor(f.origin.replica_id, f.origin.value + char_offset, bias);
+            result = Anchor(f.item_at(char_offset), bias);
             found = true;
             return;
         }
@@ -366,17 +726,18 @@ Anchor Buffer::anchor_at(uint32_t byte_offset, Bias bias) const {
 
 uint32_t Buffer::resolve_anchor(const Anchor& anchor) const {
     if (anchor.is_min()) return 0;
-    if (anchor.is_max()) return visible_length();
+    if (anchor.is_end()) return visible_length();
     uint32_t accumulated = 0;
     uint32_t result = visible_length();
     bool found = false;
     m_fragment_tree.for_each([&](const Fragment& f) {
         if (found) return;
-        if (f.origin.replica_id == anchor.replica_id &&
-            anchor.char_value >= f.origin.value &&
-            anchor.char_value < f.origin.value + f.length) {
+        if (f.origin.actor == anchor.position.actor &&
+            anchor.position.counter >= f.origin.counter &&
+            anchor.position.counter < f.origin.counter + f.length) {
             if (f.visible) {
-                uint32_t char_offset = anchor.char_value - f.origin.value;
+                uint32_t char_offset =
+                    static_cast<uint32_t>(anchor.position.counter - f.origin.counter);
                 uint32_t byte_off = chars_to_bytes(f.text, char_offset);
                 result = accumulated + byte_off;
             } else {
@@ -406,8 +767,8 @@ const Global &Buffer::version() const {
     return m_version;
 }
 
-uint16_t Buffer::replica_id() const {
-    return m_replica_id;
+const ActorId &Buffer::actor_id() const {
+    return m_allocator->actor();
 }
 
 // ---------------------------------------------------------------------------
@@ -450,16 +811,6 @@ static uint32_t char_to_byte_offset(const std::string &s, uint32_t char_offset) 
     return b;
 }
 
-void Buffer::insert_fragment(std::vector<Fragment>& frags, Fragment frag) const {
-    auto it = std::lower_bound(frags.begin(), frags.end(), frag,
-        [](const Fragment &a, const Fragment &b) {
-            auto cmp = a.locator <=> b.locator;
-            if (cmp != 0) return cmp < 0;
-            return a.origin < b.origin;
-        });
-    frags.insert(it, std::move(frag));
-}
-
 std::pair<size_t, uint32_t> Buffer::resolve_visible_offset(
     const std::vector<Fragment>& frags, uint32_t byte_offset) const
 {
@@ -483,120 +834,45 @@ size_t Buffer::split_fragment_at(std::vector<Fragment>& frags,
     assert(offset_in_frag > 0);
     assert(offset_in_frag < frags[frag_idx].byte_length);
 
-    Fragment &orig = frags[frag_idx];
-    uint32_t char_count = count_utf8_chars(orig.text, offset_in_frag);
-
-    Fragment second;
-    second.origin = Lamport(orig.origin.replica_id, orig.origin.value + char_count);
-    second.locator = orig.locator;
-    second.text = orig.text.substr(offset_in_frag);
-    second.byte_length = static_cast<uint32_t>(second.text.size());
-    second.length = orig.length - char_count;
-    second.deletions = orig.deletions;
-    second.visible = orig.visible;
-
-    orig.text.resize(offset_in_frag);
-    orig.byte_length = offset_in_frag;
-    orig.length = char_count;
-
-    Lamport second_origin = second.origin;
-    Locator saved_locator = orig.locator;
-    insert_fragment(frags, std::move(second));
-
-    for (size_t i = frag_idx + 1; i < frags.size(); ++i) {
-        if (frags[i].origin == second_origin && frags[i].locator == saved_locator)
-            return i;
-    }
-    assert(false && "split_fragment_at: could not find second half after insert");
+    // A split does not change any tree relation: the tail's first item is the
+    // fragment's own `link_at(k)`. It stays adjacent, so the tail goes right after.
+    const uint32_t chars = count_utf8_chars(frags[frag_idx].text, offset_in_frag);
+    Fragment tail = frags[frag_idx].split_off(chars);
+    frags.insert(frags.begin() + static_cast<ptrdiff_t>(frag_idx) + 1, std::move(tail));
     return frag_idx + 1;
 }
 
-Locator Buffer::locator_between(const std::vector<Fragment>& frags,
-                                 size_t ins_frag) const
-{
-    Locator lo = Locator::min();
-    if (ins_frag > 0) {
-        lo = frags[ins_frag - 1].locator;
-    }
-
-    Locator hi = Locator::max();
-    for (size_t i = ins_frag; i < frags.size(); ++i) {
-        if (frags[i].locator > lo) {
-            hi = frags[i].locator;
-            break;
+/// The element a new insertion at visible byte offset `start` goes immediately
+/// after: the visible scalar that ends exactly at `start`, or nothing at the
+/// document start. `start` is a validated scalar boundary within the text.
+static std::optional<Identity> visible_element_before(const std::vector<Fragment>& frags,
+                                                      uint32_t start) {
+    if (start == 0) return std::nullopt;
+    uint32_t seen = 0;
+    for (const auto& f : frags) {
+        if (!f.visible || f.marker) continue;
+        if (seen + f.byte_length >= start) {
+            const uint32_t scalars = count_utf8_chars(f.text, start - seen);
+            return f.item_at(scalars - 1);
         }
+        seen += f.byte_length;
     }
-
-    assert(lo < hi);
-    return Locator::between(lo, hi);
+    return std::nullopt;
 }
 
-void Buffer::normalize_fragments(std::vector<Fragment>& frags) const {
-    size_t i = 0;
-    while (i < frags.size()) {
-        size_t run_start = i;
-        Locator loc = frags[i].locator;
-        size_t run_end = i + 1;
-        while (run_end < frags.size() && frags[run_end].locator == loc)
-            run_end++;
-
-        bool multi_replica = false;
-        uint16_t first_replica = frags[run_start].origin.replica_id;
-        for (size_t j = run_start + 1; j < run_end; ++j) {
-            if (frags[j].origin.replica_id != first_replica) {
-                multi_replica = true;
-                break;
-            }
+/// Split the visible fragment that straddles visible byte offset `off`, if any, so
+/// that `off` falls on a fragment boundary.
+static void split_at_visible_offset(std::vector<Fragment>& frags, uint32_t off) {
+    uint32_t seen = 0;
+    for (size_t i = 0; i < frags.size(); ++i) {
+        if (!frags[i].visible) continue;
+        const uint32_t length = frags[i].byte_length;
+        if (off > seen && off < seen + length) {
+            Fragment tail = frags[i].split_off(count_utf8_chars(frags[i].text, off - seen));
+            frags.insert(frags.begin() + static_cast<ptrdiff_t>(i) + 1, std::move(tail));
+            return;
         }
-
-        if (multi_replica) {
-            std::vector<Fragment> extracted;
-            for (size_t j = run_start; j < run_end; ++j) {
-                auto &f = frags[j];
-                if (f.length == 1) {
-                    extracted.push_back(std::move(f));
-                } else {
-                    const std::string& ftext = f.text;
-                    uint32_t byte_pos = 0;
-                    for (uint32_t c = 0; c < f.length; ++c) {
-                        uint32_t char_bytes = 1;
-                        unsigned char ch = static_cast<unsigned char>(ftext[byte_pos]);
-                        if (ch >= 0xF0) char_bytes = 4;
-                        else if (ch >= 0xE0) char_bytes = 3;
-                        else if (ch >= 0xC0) char_bytes = 2;
-
-                        Lamport single_origin(f.origin.replica_id, f.origin.value + c);
-                        Fragment single;
-                        single.origin = single_origin;
-                        single.locator = f.locator;
-                        single.text = ftext.substr(byte_pos, char_bytes);
-                        single.byte_length = char_bytes;
-                        single.length = 1;
-                        single.deletions = f.deletions;
-                        extracted.push_back(std::move(single));
-                        byte_pos += char_bytes;
-                    }
-                }
-            }
-
-            std::sort(extracted.begin(), extracted.end(),
-                [](const Fragment &a, const Fragment &b) {
-                    auto cmp = a.locator <=> b.locator;
-                    if (cmp != 0) return cmp < 0;
-                    return a.origin < b.origin;
-                });
-
-            frags.erase(
-                frags.begin() + static_cast<ptrdiff_t>(run_start),
-                frags.begin() + static_cast<ptrdiff_t>(run_end));
-            frags.insert(
-                frags.begin() + static_cast<ptrdiff_t>(run_start),
-                std::make_move_iterator(extracted.begin()),
-                std::make_move_iterator(extracted.end()));
-            i = run_start + extracted.size();
-        } else {
-            i = run_end;
-        }
+        seen += length;
     }
 }
 
@@ -608,431 +884,401 @@ Operation Buffer::apply_local_edit(
     const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
     const std::vector<std::string> &new_text)
 {
+    // Kept for callers that cannot handle a failure. A refused edit returns an
+    // empty operation and mutates nothing; it does not assert, because an
+    // assertion is not a behaviour a Release build is allowed to have.
+    auto result = try_apply_local_edit(ranges, new_text);
+    if (!result.ok()) return Operation{};
+    return std::move(result).value();
+}
+
+Result<Operation> Buffer::try_apply_local_edit(
+    const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
+    const std::vector<std::string> &new_text)
+{
+    // Validate against the *current* visible length before any mutation: an
+    // offset outside the document, an inverted range, or a pair of vectors that
+    // disagree in length would otherwise be consumed by the edit walk below,
+    // which assumes all three hold.
+    if (auto valid = validate_local_edit(ranges, new_text, visible_length());
+        !valid.ok()) {
+        return valid.error();
+    }
+    // Byte offsets must be Unicode scalar boundaries. Seek the containing run
+    // rather than copying the entire document for every edit.
+    const auto boundary = [&](uint32_t offset) {
+        if (offset == 0 || offset == visible_length()) return true;
+        auto cursor = m_fragment_tree.cursor<VisibleOffset>();
+        // SumTree's Left seek selects the first item whose end is strictly
+        // beyond offset, skipping prior runs and zero-width tombstones.
+        if (!cursor.seek({offset}, Bias::Left) || !cursor.item()) return false;
+        const auto& fragment = *cursor.item();
+        const auto start = cursor.position().value;
+        if (offset < start || offset - start >= fragment.text.size()) return false;
+        return (static_cast<unsigned char>(fragment.text[offset - start]) & 0xc0) != 0x80;
+    };
+    for (const auto& [start, end] : ranges) {
+        if (!boundary(start) || !boundary(end))
+            return Error(ErrorCode::invalid_unicode,
+                         "local edit range splits a UTF-8 scalar");
+    }
+    return try_apply_validated_local_edit(ranges, new_text);
+}
+
+Result<Operation> Buffer::try_apply_validated_local_edit(
+    const std::vector<std::pair<uint32_t, uint32_t>> &ranges,
+    const std::vector<std::string> &new_text)
+{
     assert(ranges.size() == new_text.size());
+
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
+
+    // One reservation for the whole operation, before anything is mutated
+    // (identity spec §3.2): `n` item identities followed by the operation's own.
+    //
+    // The item count has to be known before the walk, not discovered during it,
+    // because the operation's identity is the *last* value of the reservation
+    // and the deletion identity is that same value (§3.3) — the fragments being
+    // tombstoned need it before the first one is visited.
+    uint64_t inserted_scalars = 0;
+    std::vector<uint32_t> scalar_counts(ranges.size());
+    for (size_t i = 0; i < ranges.size(); ++i) {
+        scalar_counts[i] = count_utf8_chars(
+            new_text[i], static_cast<uint32_t>(new_text[i].size()));
+        inserted_scalars += scalar_counts[i];
+    }
+
+    size_t retained_bytes = 0;
+    auto add_retained = [&](size_t amount) {
+        if (amount > SIZE_MAX - retained_bytes) return false;
+        retained_bytes += amount;
+        return true;
+    };
+    for (size_t i = 0; i < ranges.size(); ++i) {
+        const auto [start, end] = ranges[i];
+        if (!add_retained(new_text[i].size()) || !add_retained(end - start))
+            return Error(ErrorCode::limit_exceeded,
+                         "local undo restoration size exceeds addressable memory");
+    }
+    if (inserted_scalars > SIZE_MAX / sizeof(UndoMapKey) ||
+        !add_retained(static_cast<size_t>(inserted_scalars) * sizeof(UndoMapKey)) ||
+        (std::any_of(ranges.begin(), ranges.end(), [](const auto &range) {
+             return range.second > range.first;
+         }) && !add_retained(sizeof(Identity))))
+        return Error(ErrorCode::limit_exceeded,
+                     "local undo identity metadata exceeds addressable memory");
+    if (retained_bytes > m_max_undo_bytes)
+        return Error(ErrorCode::limit_exceeded,
+                     "local edit exceeds configured undo byte limit");
+    const size_t prospective_deletions =
+        std::any_of(ranges.begin(), ranges.end(), [](const auto &range) {
+            return range.second > range.first;
+        }) ? 1 : 0;
+    auto retirement_budget = check_retirement_budget_for_new_entry(
+        retained_bytes, static_cast<size_t>(inserted_scalars),
+        prospective_deletions);
+    if (!retirement_budget.ok()) return retirement_budget.error();
+
+    auto reserved = m_allocator->reserve_run(inserted_scalars + 1);
+    if (!reserved.ok()) {
+        // Exhaustion, or a durable write that failed. Either way nothing has
+        // been touched: the reservation is all-or-nothing and this is the first
+        // statement that mutates anything.
+        return reserved.error().with_context("allocating identities for a local edit");
+    }
+
+    uint64_t next_item = reserved.value();
+    const Identity op_identity(m_allocator->actor(), next_item + inserted_scalars);
 
     EditOperation op;
     op.ranges = ranges;
     op.new_text = new_text;
     op.version = m_version;
     UndoEntry undo_entry;
-    Lamport deletion_ts = m_clock.tick();
+    undo_entry.group_id = op_identity;
+    undo_entry.operation_ids.push_back(op_identity);
+    undo_entry.retained_bytes = retained_bytes;
     bool had_deletions = false;
 
     // Track actually-deleted character timestamps for building deletion_runs.
-    std::vector<Lamport> deleted_timestamps;
+    std::vector<Identity> deleted_timestamps;
 
-    // Sort ranges ascending (left-to-right) — offsets are in the OLD tree's
-    // visible space and never change during processing.
+    // Ascending, left to right. Every offset is in the OLD visible text.
     std::vector<size_t> order(ranges.size());
     std::iota(order.begin(), order.end(), 0);
     std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         return ranges[a].first < ranges[b].first;
     });
 
-    auto cursor = m_fragment_tree.cursor<VisibleOffset>();
-    // Note: do NOT seek({0}) here — that would skip past invisible prefix
+    // The edit is applied to a flat copy of the document. SequenceOrder decides
+    // every position for the originator and peers, using its checked append
+    // shortcut only when the link proves the new run belongs at the end.
+    auto frags = get_fragments();
 
-    // Deferred relocations: applied during the final sort phase.
-    // Each entry: {old_locator, min_origin, new_locator}
-    // All fragments with locator == old_locator and origin >= min_origin
-    // will have their locator changed to new_locator.
-    struct DeferredReloc {
-        Locator old_loc;
-        Lamport min_origin;
-        Locator new_loc;
-    };
-    std::vector<DeferredReloc> deferred_relocs;
-    // fragments. The slice() method handles the !m_did_seek case by starting
-    // from the leftmost item.
-    FragmentTree new_tree;
-
-    // Pending: the remaining half of a fragment split at a range boundary.
-    // Carried across ranges when a single old-tree fragment spans multiple ranges.
-    std::optional<Fragment> pending;
-
-    // Helper: mark a fragment as deleted and record timestamps for op/undo.
-    auto mark_deleted = [&](Fragment& f) {
-        f.deletions.push_back(deletion_ts);
-        f.visible = false;
-        had_deletions = true;
-        for (uint32_t c = 0; c < f.length; ++c) {
-            deleted_timestamps.push_back(f.timestamp_at(c));
-        }
-    };
-
-    // Helper: split a fragment at a byte offset, returning {first_half, second_half}.
-    auto split_frag = [](const Fragment& f, uint32_t byte_off)
-        -> std::pair<Fragment, Fragment>
-    {
-        uint32_t char_count = count_utf8_chars(f.text, byte_off);
-        Fragment first;
-        first.origin = f.origin;
-        first.locator = f.locator;
-        first.text = f.text.substr(0, byte_off);
-        first.byte_length = byte_off;
-        first.length = char_count;
-        first.deletions = f.deletions;
-        first.visible = f.visible;
-
-        Fragment second;
-        second.origin = Lamport(f.origin.replica_id, f.origin.value + char_count);
-        second.locator = f.locator;
-        second.text = f.text.substr(byte_off);
-        second.byte_length = f.byte_length - byte_off;
-        second.length = f.length - char_count;
-        second.deletions = f.deletions;
-        second.visible = f.visible;
-        return {std::move(first), std::move(second)};
-    };
-
-    // Helper: consume visible bytes from pending/cursor, pushing unchanged
-    // fragments to new_tree. Used for inter-range gaps.
-    auto consume_unchanged = [&](uint32_t vis_bytes) {
-        // Consume from pending first
-        while (pending && vis_bytes > 0) {
-            if (pending->visible) {
-                uint32_t pv = pending->byte_length;
-                if (pv <= vis_bytes) {
-                    new_tree.push_item(std::move(*pending));
-                    vis_bytes -= pv;
-                    pending.reset();
-                } else {
-                    auto [first, second] = split_frag(*pending, vis_bytes);
-                    new_tree.push_item(std::move(first));
-                    pending = std::move(second);
-                    vis_bytes = 0;
-                }
-            } else {
-                // Invisible — push, no visible bytes consumed
-                new_tree.push_item(std::move(*pending));
-                pending.reset();
-            }
-        }
-        // Consume from cursor
-        while (vis_bytes > 0 && cursor.item()) {
-            if (!cursor.item()->visible) {
-                Fragment frag = *cursor.item();
-                new_tree.push_item(std::move(frag));
-                cursor.next();
-                continue;
-            }
-            Fragment frag = *cursor.item();
-            uint32_t fv = frag.byte_length;
-            if (fv <= vis_bytes) {
-                new_tree.push_item(std::move(frag));
-                vis_bytes -= fv;
-                cursor.next();
-            } else {
-                auto [first, second] = split_frag(frag, vis_bytes);
-                new_tree.push_item(std::move(first));
-                pending = std::move(second);
-                cursor.next();
-                vis_bytes = 0;
-            }
-        }
-    };
-
-    // Helper: consume and delete visible bytes from pending/cursor.
-    auto consume_deleted = [&](uint32_t vis_bytes) {
-        // From pending
-        while (pending && vis_bytes > 0) {
-            if (pending->visible) {
-                uint32_t pv = pending->byte_length;
-                if (pv <= vis_bytes) {
-                    mark_deleted(*pending);
-                    new_tree.push_item(std::move(*pending));
-                    vis_bytes -= pv;
-                    pending.reset();
-                } else {
-                    auto [first, second] = split_frag(*pending, vis_bytes);
-                    mark_deleted(first);
-                    new_tree.push_item(std::move(first));
-                    pending = std::move(second);
-                    vis_bytes = 0;
-                }
-            } else {
-                new_tree.push_item(std::move(*pending));
-                pending.reset();
-            }
-        }
-        // From cursor
-        while (vis_bytes > 0 && cursor.item()) {
-            if (!cursor.item()->visible) {
-                Fragment frag = *cursor.item();
-                new_tree.push_item(std::move(frag));
-                cursor.next();
-                continue;
-            }
-            Fragment frag = *cursor.item();
-            uint32_t fv = frag.byte_length;
-            if (fv <= vis_bytes) {
-                mark_deleted(frag);
-                new_tree.push_item(std::move(frag));
-                vis_bytes -= fv;
-                cursor.next();
-            } else {
-                auto [first, second] = split_frag(frag, vis_bytes);
-                mark_deleted(first);
-                new_tree.push_item(std::move(first));
-                pending = std::move(second);
-                cursor.next();
-                vis_bytes = 0;
-            }
-        }
-    };
-
-    // ---- Phase 0: Prefix copy (up to first range) ----
-    if (!order.empty()) {
-        uint32_t first_start = ranges[order[0]].first;
-        // Use cursor.slice for O(log n) bulk copy
-        new_tree.push_tree(cursor.slice({first_start}));
-        // Handle straddling fragment (cursor.position < first_start means
-        // a visible fragment spans the boundary)
-        if (cursor.item() && cursor.position().value < first_start) {
-            uint32_t split_byte = first_start - cursor.position().value;
-            auto [first, second] = split_frag(*cursor.item(), split_byte);
-            new_tree.push_item(std::move(first));
-            pending = std::move(second);
-            cursor.next();
-        }
-    }
-
-    // ---- Process each range ----
-    uint32_t prev_end = order.empty() ? 0 : ranges[order[0]].first;
-
-    for (size_t oi = 0; oi < order.size(); ++oi) {
-        size_t idx = order[oi];
-        uint32_t start = ranges[idx].first;
-        uint32_t end = ranges[idx].second;
+    // ---- Mint every insertion against the OLD state ----
+    //
+    // An insertion is "immediately after the visible element before `start`".
+    // Minting every range against the same old state keeps one range's items from
+    // depending on another's, so the operation's fragments can be integrated in any
+    // order by a receiver. The paper's definition is the same: the left origin is
+    // the (i-1)th VISIBLE element, and the new element sits right after it, ahead
+    // of any tombstones that follow.
+    std::vector<Fragment> inserts;
+    for (const size_t idx : order) {
         const std::string &replacement = new_text[idx];
+        if (replacement.empty()) continue;
 
-        // Inter-range gap: copy unchanged content between previous end and this start
-        if (start > prev_end) {
-            consume_unchanged(start - prev_end);
+        const std::optional<Identity> left = visible_element_before(frags, ranges[idx].first);
+        const Link link = SequenceOrder::mint_link(frags, left);
+
+        // The scalar count was computed before the reservation, so the item
+        // identities are consecutive positions of the one interval this
+        // operation owns — run by run, in document order.
+        const uint32_t char_count = scalar_counts[idx];
+        const Identity frag_origin(m_allocator->actor(), next_item);
+        next_item += char_count;
+
+        Fragment frag(frag_origin, link, static_cast<uint32_t>(replacement.size()),
+                      char_count, replacement);
+        frag.visible = true;
+        inserts.push_back(std::move(frag));
+
+        EditOperation::InsertedFragment ins_rec;
+        ins_rec.origin = frag_origin;
+        ins_rec.link = link;
+        ins_rec.content = replacement;
+        ins_rec.length = char_count;
+        op.inserted_fragments.push_back(std::move(ins_rec));
+
+        for (uint32_t c = 0; c < char_count; ++c) {
+            undo_entry.inserted_keys.push_back(
+                UndoMapKey(Identity(frag_origin.actor, frag_origin.counter + c)));
         }
-
-        // ---- Delete phase ----
-        if (end > start) {
-            consume_deleted(end - start);
-        }
-
-        // ---- Insert phase ----
-        if (!replacement.empty()) {
-            // Determine lo/hi locators for the new fragment.
-            Locator lo = new_tree.empty() ? Locator::min() : new_tree.last().locator;
-
-            // Check the immediate next fragment's locator.
-            Locator imm_loc;
-            bool has_imm = false;
-            if (pending) {
-                imm_loc = pending->locator;
-                has_imm = true;
-            } else if (cursor.item()) {
-                imm_loc = cursor.item()->locator;
-                has_imm = true;
-            }
-
-            Locator hi = Locator::max();
-            bool needs_relocation = false;
-            if (has_imm && imm_loc > lo) {
-                hi = imm_loc;
-            } else if (has_imm) {
-                // Same-locator group — need relocation to create space.
-                needs_relocation = true;
-                // Find the next locator strictly > lo in the original tree.
-                {
-                    auto loc_cursor = m_fragment_tree.cursor<FragmentOrderDim>();
-                    auto _prefix = loc_cursor.slice(
-                        FragmentOrderDim{lo, Lamport::max()});
-                    if (loc_cursor.item() && loc_cursor.item()->locator > lo) {
-                        hi = loc_cursor.item()->locator;
-                    }
-                }
-            }
-
-            // When inserting between same-locator fragments, relocate them
-            // to create ordering space. We relocate the pending fragment now,
-            // and record a deferred relocation for remaining same-locator
-            // cursor fragments — they'll be relocated during the final sort.
-            if (needs_relocation) {
-                Locator new_next_loc = Locator::between(lo, hi);
-
-                Lamport reloc_origin;
-                uint32_t reloc_length = 0;
-
-                if (pending) {
-                    reloc_origin = pending->origin;
-                    reloc_length = pending->length;
-                    pending->locator = new_next_loc;
-                } else if (cursor.item()) {
-                    Fragment f = *cursor.item();
-                    reloc_origin = f.origin;
-                    reloc_length = f.length;
-                    f.locator = new_next_loc;
-                    pending = std::move(f);
-                    cursor.next();
-                }
-
-                // Record deferred relocation: all fragments at old locator
-                // with origin >= reloc_origin will be relocated during sort.
-                deferred_relocs.push_back({lo, reloc_origin, new_next_loc});
-
-                // Record SplitRelocation for remote replicas
-                EditOperation::SplitRelocation reloc;
-                reloc.fragment_origin = reloc_origin;
-                reloc.split_offset = 0;
-                reloc.fragment_length = reloc_length;
-                reloc.new_locator = new_next_loc;
-                op.split_relocations.push_back(std::move(reloc));
-
-                hi = new_next_loc;
-            }
-
-            Locator new_loc = Locator::between(lo, hi);
-
-            uint32_t char_count = count_utf8_chars(
-                replacement, static_cast<uint32_t>(replacement.size()));
-
-            Lamport frag_origin = m_clock.tick();
-            for (uint32_t c = 1; c < char_count; ++c) m_clock.tick();
-
-            Fragment frag(frag_origin, new_loc,
-                          static_cast<uint32_t>(replacement.size()), char_count,
-                          replacement);
-            frag.visible = true;
-            new_tree.push_item(std::move(frag));
-
-            EditOperation::InsertedFragment ins_rec;
-            ins_rec.origin = frag_origin;
-            ins_rec.locator = new_loc;
-            ins_rec.content = replacement;
-            ins_rec.length = char_count;
-            op.inserted_fragments.push_back(std::move(ins_rec));
-
-            for (uint32_t c = 0; c < char_count; ++c) {
-                undo_entry.inserted_keys.push_back(
-                    UndoMapKey(frag_origin.replica_id, frag_origin.value + c));
-            }
-        }
-
-        prev_end = end;
     }
 
-    // ---- Suffix ----
-    if (pending) {
-        new_tree.push_item(std::move(*pending));
-        pending.reset();
+    // ---- Deletions ----
+    // Right to left, so the old-text offsets of the ranges still to be processed
+    // stay valid while earlier ones are tombstoned.
+    for (auto at = order.rbegin(); at != order.rend(); ++at) {
+        const auto [start, end] = ranges[*at];
+        if (end <= start) continue;
+        split_at_visible_offset(frags, start);
+        split_at_visible_offset(frags, end);
+        uint32_t seen = 0;
+        for (auto &f : frags) {
+            if (!f.visible || f.marker) continue;
+            const uint32_t from = seen;
+            seen += f.byte_length;
+            if (from < start || seen > end) continue;
+            f.deletions.push_back(op_identity);
+            f.visible = false;
+            had_deletions = true;
+            for (uint32_t c = 0; c < f.length; ++c)
+                deleted_timestamps.push_back(f.item_at(c));
+        }
     }
-    new_tree.push_tree(cursor.suffix());
 
-    // ---- Timestamp ----
-    if (op.inserted_fragments.empty()) {
-        op.timestamp = m_clock.tick();
-    } else {
-        op.timestamp = Lamport(m_replica_id, m_clock.value - 1);
+    // ---- Placement, then commit ----
+    for (auto &frag : inserts) {
+        const bool placed = SequenceOrder::integrate(frags, std::move(frag));
+        assert(placed && "a link minted from this very state names a present element");
+        (void)placed;
     }
-    op.deletion_id = deletion_ts;
+    set_fragments(std::move(frags));
+
+    // ---- Identity ----
+    // The operation's identity is the last value of the interval reserved above,
+    // so it is strictly above every item identity it created and strictly below
+    // whatever the next reservation returns. An insert operation and one of its
+    // own characters no longer share an identity, and "which operation inserted
+    // this character" is a range-containment question.
+    //
+    // A deletion-only operation reserves exactly one value, and `next_item` was
+    // never advanced, so `op_identity` is that single value.
+    assert(next_item == op_identity.counter);
+    op.timestamp = op_identity;
+    // The deleting operation's own identity marks the tombstone (§3.3). Before
+    // the domains were separated this needed a second counter tick
+    // (`deletion_ts`) because the operation's timestamp could not serve twice.
+    op.deletion_id = op_identity;
     m_version.observe(op.timestamp);
 
     // ---- Undo entry ----
     if (had_deletions)
-        undo_entry.deletion_ids.push_back(deletion_ts);
-    m_undo_stack.resize(m_undo_cursor);
-    m_undo_stack.push_back(std::move(undo_entry));
-    m_undo_cursor = m_undo_stack.size();
-    trim_undo_stack();
+        undo_entry.deletion_ids.push_back(op_identity);
+    commit_local_history(std::move(undo_entry));
 
-    // ---- Commit tree: fast path, in-place relocation, or full rebuild ----
-    // Check ordering of the cursor-built tree (O(n) walk, tiny constant).
-    bool ordering_ok = true;
-    {
-        Locator prev_loc;
-        Lamport prev_origin;
-        bool first = true;
-        new_tree.for_each([&](const Fragment& f) {
-            if (!ordering_ok) return;
-            if (!first) {
-                if (f.locator < prev_loc ||
-                    (f.locator == prev_loc && f.origin < prev_origin)) {
-                    ordering_ok = false;
-                }
-            }
-            prev_loc = f.locator;
-            prev_origin = f.origin;
-            first = false;
-        });
-    }
-
-    bool used_fast_path = false;
-    if (ordering_ok && deferred_relocs.empty()) {
-        // Tree is ordered, no relocations needed. Commit directly.
-        // Visibility is already correct from the cursor walk:
-        // - Unchanged fragments: copied with original visibility (undo_map unchanged)
-        // - Deleted fragments: mark_deleted set visible=false
-        // - Inserted fragments: set visible=true
-        m_fragment_tree = std::move(new_tree);
-
-        // Incremental origin index update for inserted fragments
-        for (auto& ins : op.inserted_fragments) {
-            m_origin_index[ins.origin.replica_id][ins.origin.value] = ins.locator;
-        }
-        used_fast_path = true;
-    }
-
-    if (!used_fast_path) {
-        // Full path: extract, relocate, sort, normalize, rebuild.
-        // Only reached when the cursor-built tree has ordering violations
-        // (~2.3% of edits in adversarial patterns).
-        auto frags = new_tree.items();
-
-        for (auto& dr : deferred_relocs) {
-            Lamport next_expected = dr.min_origin;
-            uint32_t total_chars = 0;
-            for (auto& f : frags) {
-                if (f.origin.replica_id != dr.min_origin.replica_id) continue;
-                if (f.origin.value != next_expected.value) continue;
-                if (f.locator == dr.old_loc) {
-                    f.locator = dr.new_loc;
-                }
-                total_chars += f.length;
-                next_expected = Lamport(f.origin.replica_id,
-                                        f.origin.value + f.length);
-            }
-            for (auto& sr : op.split_relocations) {
-                if (sr.fragment_origin == dr.min_origin && sr.new_locator == dr.new_loc) {
-                    sr.fragment_length = total_chars;
-                    break;
-                }
-            }
-        }
-
-        std::sort(frags.begin(), frags.end(), [](const Fragment& a, const Fragment& b) {
-            if (auto cmp = a.locator <=> b.locator; cmp != 0) return cmp < 0;
-            return a.origin < b.origin;
-        });
-        normalize_fragments(frags);
-        set_fragments(std::move(frags));
-    }
-
-    // Build run-length encoded deletion descriptors from the deleted timestamps.
-    // Sort by (replica_id, value) then group contiguous runs.
+    // Build run-length encoded deletion descriptors from the deleted identities.
+    // Sort by (actor, counter) then group consecutive runs.
     {
         std::sort(deleted_timestamps.begin(), deleted_timestamps.end());
         for (size_t i = 0; i < deleted_timestamps.size(); ) {
-            uint16_t rid = deleted_timestamps[i].replica_id;
-            uint32_t start = deleted_timestamps[i].value;
+            const ActorId who = deleted_timestamps[i].actor;
+            const uint64_t start = deleted_timestamps[i].counter;
             uint32_t count = 1;
             while (i + count < deleted_timestamps.size() &&
-                   deleted_timestamps[i + count].replica_id == rid &&
-                   deleted_timestamps[i + count].value == start + count) {
+                   deleted_timestamps[i + count].actor == who &&
+                   deleted_timestamps[i + count].counter == start + count) {
                 ++count;
             }
-            op.deletion_runs.push_back({rid, start, count});
+            op.deletion_runs.push_back({Identity(who, start), count});
             i += count;
         }
     }
 
-    return op;
+    if (m_on_change) m_on_change();
+
+    return Result<Operation>(std::move(op));
+}
+
+Result<uint32_t> Buffer::marker_offset(Identity marker) const {
+    uint32_t offset = 0;
+    std::optional<Result<uint32_t>> result;
+    m_fragment_tree.for_each([&](const Fragment& f) {
+        if (!f.marker && f.origin.actor == marker.actor && marker.counter >= f.origin.counter &&
+            marker.counter - f.origin.counter < f.length)
+            result = Error(ErrorCode::malformed, "marker token names text");
+        if (f.origin == marker && f.marker)
+            result = f.visible ? Result<uint32_t>(offset) : Result<uint32_t>(Error(ErrorCode::detached, "marker is hidden"));
+        if (f.visible) offset += f.byte_length;
+    });
+    if (result) return std::move(*result);
+    return Error(ErrorCode::history_unavailable, "marker is not retained");
+}
+
+size_t Buffer::utf16_length() const {
+    size_t length = 0;
+    m_fragment_tree.for_each([&](const Fragment& f) { if (f.visible) length += Crdt::utf16_length(f.text); });
+    return length;
+}
+
+Result<std::pair<uint32_t,uint32_t>> Buffer::utf16_range(int position, int length) const {
+    if (position < 0 || length < 0) return Error(ErrorCode::malformed, "negative text range");
+    const uint64_t start = static_cast<uint64_t>(position), end = start + static_cast<uint64_t>(length);
+    uint64_t units = 0, bytes = 0;
+    std::optional<uint32_t> first, last;
+    bool split = false;
+    m_fragment_tree.for_each([&](const Fragment& f) {
+        if (!f.visible || f.marker) return;
+        const auto width = Crdt::utf16_length(f.text);
+        const auto convert = [&](uint64_t target, std::optional<uint32_t>& out) {
+            if (out || target < units || target > units + width) return;
+            const auto local = static_cast<size_t>(target - units);
+            const auto byte = Crdt::utf16_to_byte_offset(f.text, local);
+            if (Crdt::byte_to_utf16_offset(f.text, byte) != local) { split = true; return; }
+            out = static_cast<uint32_t>(bytes + byte);
+        };
+        convert(start, first); convert(end, last);
+        units += width; bytes += f.byte_length;
+    });
+    if (bytes > UINT32_MAX)
+        return Error(ErrorCode::malformed, "document byte length exceeds the operation offset range");
+    if (split) return Error(ErrorCode::malformed, "text range splits a UTF-16 surrogate pair");
+    if (end > units) return Error(ErrorCode::malformed, "text range is outside the document");
+    // Empty text, including a sequence containing only markers.
+    if (start == units && !first) first = static_cast<uint32_t>(bytes);
+    if (end == units && !last) last = static_cast<uint32_t>(bytes);
+    if (!first || !last) return Error(ErrorCode::history_unavailable, "text range is unavailable");
+    return std::pair{*first, *last};
+}
+
+void Buffer::commit_local_history(UndoEntry&& entry) {
+    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i)
+        retire_undo_entry(m_undo_stack[i]);
+    m_undo_stack.resize(m_undo_cursor);
+    m_undo_stack.push_back(std::move(entry));
+    m_undo_cursor = m_undo_stack.size();
+    trim_undo_stack();
+}
+
+Result<Operation> Buffer::try_insert_marker(uint32_t offset) {
+    auto valid = validate_local_edit({{offset, offset}}, {""}, visible_length());
+    if (!valid) return valid.error();
+    auto frags = get_fragments();
+    uint32_t seen = 0;
+    for (const auto& f : frags) {
+        if (!f.visible || f.marker) continue;
+        if (offset > seen && offset < seen + f.byte_length &&
+            (static_cast<unsigned char>(f.text[offset-seen]) & 0xc0) == 0x80)
+            return Error(ErrorCode::not_scalar_boundary, "marker splits a UTF-8 scalar");
+        seen += f.byte_length;
+    }
+    return try_insert_item(visible_element_before(frags, offset), "", true);
+}
+
+Result<Operation> Buffer::try_insert_relative(Identity marker, MarkerSide side,
+                                             const std::string& text, bool insert_marker) {
+    if (side != MarkerSide::before && side != MarkerSide::after)
+        return Error(ErrorCode::malformed, "invalid marker side");
+    auto frags = get_fragments();
+    std::optional<Identity> previous;
+    for (const auto& f : frags) {
+        if (f.origin == marker && f.marker) {
+            if (!f.visible) return Error(ErrorCode::detached, "marker is hidden");
+            return try_insert_item(side == MarkerSide::before ? previous : marker, text, insert_marker);
+        }
+        // Explicit side denotes a retained sequence gap, including tombstones.
+        previous = f.item_at(f.length-1);
+    }
+    return Error(ErrorCode::history_unavailable, "marker is not retained");
+}
+
+Result<Operation> Buffer::try_insert_item(std::optional<Identity> left,
+                                         const std::string& text, bool marker) {
+    if (auto valid = check_allocator(); !valid) return valid.error();
+    size_t scalars = 0;
+    if (!Codec::utf8_length(text, scalars).ok())
+        return Error(ErrorCode::invalid_unicode, "inserted text is invalid UTF-8");
+    if ((!marker && scalars == 0) || scalars > UINT32_MAX || text.size() > UINT32_MAX)
+        return Error(ErrorCode::malformed, "relative insertion requires nonempty bounded text");
+    const size_t count = marker ? 1 : scalars;
+    if (count > SIZE_MAX / sizeof(UndoMapKey) ||
+        text.size() > SIZE_MAX - count * sizeof(UndoMapKey))
+        return Error(ErrorCode::limit_exceeded, "undo charge overflows");
+    const size_t charge = text.size() + count * sizeof(UndoMapKey);
+    if (charge > m_max_undo_bytes)
+        return Error(ErrorCode::limit_exceeded, "insertion exceeds undo byte budget");
+    if (auto budget = check_retirement_budget_for_new_entry(charge, count, 0); !budget)
+        return budget.error();
+    auto frags = get_fragments();
+    const auto link = SequenceOrder::mint_link(frags, left);
+    auto reserved = m_allocator->reserve_run(count + 1);
+    if (!reserved) return reserved.error();
+    Identity origin(actor_id(), reserved.value()), timestamp(actor_id(), reserved.value()+count);
+    Fragment fragment(origin, link, static_cast<uint32_t>(text.size()), static_cast<uint32_t>(count), text);
+    fragment.marker = marker;
+    if (!SequenceOrder::integrate(frags, std::move(fragment)))
+        return Error(ErrorCode::history_unavailable, "insertion gap is unavailable");
+    EditOperation op;
+    op.marker_edit = marker; op.timestamp = timestamp; op.deletion_id = timestamp; op.version = m_version;
+    op.inserted_fragments.push_back({origin, link, text, static_cast<uint32_t>(count), marker});
+    UndoEntry entry; entry.group_id = timestamp; entry.operation_ids = {timestamp}; entry.retained_bytes = charge;
+    for (uint32_t i=0; i<count; ++i) entry.inserted_keys.emplace_back(Identity(origin.actor, origin.counter+i));
+    set_fragments(std::move(frags)); m_version.observe(timestamp);
+    commit_local_history(std::move(entry));
+    if (m_on_change) m_on_change();
+    return Operation(std::move(op));
+}
+
+Result<Operation> Buffer::try_remove_marker(Identity target) {
+    if (auto valid = check_allocator(); !valid) return valid.error();
+    auto frags = get_fragments();
+    auto found = std::find_if(frags.begin(), frags.end(), [&](const auto& f){return f.origin == target && f.marker;});
+    if (found == frags.end()) return Error(ErrorCode::history_unavailable, "marker is not retained");
+    if (!found->visible) return Error(ErrorCode::detached, "marker is hidden");
+    const size_t charge = sizeof(Identity);
+    if (charge > m_max_undo_bytes) return Error(ErrorCode::limit_exceeded, "removal exceeds undo byte budget");
+    if (auto budget = check_retirement_budget_for_new_entry(charge, 0, 1); !budget) return budget.error();
+    auto reserved = m_allocator->reserve_run(1); if (!reserved) return reserved.error();
+    Identity timestamp(actor_id(), reserved.value());
+    EditOperation op; op.marker_edit = true; op.timestamp = timestamp; op.deletion_id = timestamp;
+    op.version = m_version; op.deletion_runs.push_back({target, 1});
+    found->deletions.push_back(timestamp);
+    UndoEntry entry; entry.group_id = timestamp; entry.operation_ids = {timestamp};
+    entry.deletion_ids = {timestamp}; entry.retained_bytes = charge;
+    set_fragments(std::move(frags)); m_version.observe(timestamp); commit_local_history(std::move(entry));
+    if (m_on_change) m_on_change();
+    return Operation(std::move(op));
 }
 
 // ---------------------------------------------------------------------------
@@ -1042,26 +1288,27 @@ Operation Buffer::apply_local_edit(
 void Buffer::apply_deletion_runs(
     std::vector<Fragment>& frags,
     const std::vector<EditOperation::DeletionRun>& runs,
-    Lamport deletion_id)
+    Identity deletion_id)
 {
-    // Process each deletion run. Each run targets characters from a single
-    // replica with contiguous Lamport values. Find the fragment(s) containing
-    // those characters, split at boundaries, and mark deleted.
+    // Process each deletion run. Each run targets consecutive item identities
+    // from a single actor. Find the fragment(s) containing those items, split
+    // at boundaries, and mark deleted.
     for (auto& run : runs) {
         uint32_t remaining = run.count;
-        uint32_t next_val = run.start_value;
+        uint64_t next_counter = run.first.counter;
 
         while (remaining > 0) {
-            // Find the fragment containing character (run.replica_id, next_val)
+            // Find the fragment containing item (run.first.actor, next_counter)
             bool found = false;
             for (size_t fi = 0; fi < frags.size(); ++fi) {
                 auto &f = frags[fi];
-                if (f.origin.replica_id != run.replica_id) continue;
-                if (next_val < f.origin.value ||
-                    next_val >= f.origin.value + f.length) continue;
+                if (f.origin.actor != run.first.actor) continue;
+                if (next_counter < f.origin.counter ||
+                    next_counter >= f.origin.counter + f.length) continue;
 
                 found = true;
-                uint32_t char_off = next_val - f.origin.value;
+                uint32_t char_off =
+                    static_cast<uint32_t>(next_counter - f.origin.counter);
                 uint32_t avail = f.length - char_off;
                 uint32_t to_del = std::min(remaining, avail);
 
@@ -1086,293 +1333,150 @@ void Buffer::apply_deletion_runs(
                     frags[fi].deletions.push_back(deletion_id);
                 }
 
-                next_val += to_del;
+                next_counter += to_del;
                 remaining -= to_del;
                 break;
             }
-            if (!found) break; // Character not found, skip remaining
+            if (!found) break; // Item not found, skip remaining
         }
     }
 }
 
-bool Buffer::apply_remote_edit_fast(const EditOperation &op) {
-    if (!op.split_relocations.empty()) return false;
-    for (auto &ins : op.inserted_fragments) {
-        if (ins.length != 1) return false;
-    }
-
-    // Locator-collision check: if any incoming insert lands on a locator that
-    // already has a fragment in the tree, fall back to the slow path so
-    // normalize_fragments can atomize multi-character fragments at the shared
-    // locator.  Without this, an existing multi-char fragment from one replica
-    // would coexist with the incoming single-char fragment from another
-    // replica, producing a tree that reads in the wrong order versus replicas
-    // that received the multi-char insert via the slow path.
-    for (auto &ins : op.inserted_fragments) {
-        auto check_cursor = m_fragment_tree.cursor<FragmentOrderDim>();
-        check_cursor.seek(
-            FragmentOrderDim{ins.locator, Lamport::min()}, Bias::Right);
-        if (check_cursor.item() && check_cursor.item()->locator == ins.locator)
-            return false;
-    }
-
-    // Apply deletion runs via origin index + in-place tree mutations.
-    // Handles partial deletions by splitting fragments in place.
-    for (auto& run : op.deletion_runs) {
-        uint32_t remaining = run.count;
-        uint32_t next_val = run.start_value;
-
-        while (remaining > 0) {
-            auto loc_opt = origin_index_lookup(run.replica_id, next_val);
-            if (!loc_opt) return false;  // Can't find fragment, fall back
-
-            FragmentOrderDim target{*loc_opt, Lamport(run.replica_id, next_val)};
-
-            // Capture fragment info for potential splitting
-            struct SplitInfo {
-                bool found = false;
-                bool needs_split_before = false;  // split at char_off > 0
-                bool needs_split_after = false;   // split after to_del < length
-                uint32_t char_off = 0;
-                uint32_t to_del = 0;
-                // Info for building the split-off fragments
-                Fragment before_frag;  // chars [0, char_off)
-                Fragment after_frag;   // chars [char_off + to_del, length)
-            };
-            SplitInfo info;
-
-            bool found = m_fragment_tree.edit_item<FragmentOrderDim>(
-                target,
-                [&](Fragment& f) {
-                    if (f.origin.replica_id != run.replica_id) return;
-                    if (next_val < f.origin.value ||
-                        next_val >= f.origin.value + f.length) return;
-
-                    info.found = true;
-                    info.char_off = next_val - f.origin.value;
-                    uint32_t avail = f.length - info.char_off;
-                    info.to_del = std::min(remaining, avail);
-
-                    if (info.char_off == 0 && info.to_del == f.length) {
-                        // Whole-fragment deletion — simple case
-                        f.deletions.push_back(op.deletion_id);
-                    } else {
-                        // Partial deletion — need to split.
-                        // Build the split-off fragments BEFORE modifying f.
-                        uint32_t byte_off_start = (info.char_off > 0)
-                            ? char_to_byte_offset(f.text, info.char_off) : 0;
-                        uint32_t byte_off_end = char_to_byte_offset(
-                            f.text, info.char_off + info.to_del);
-
-                        if (info.char_off > 0) {
-                            // "before" fragment: chars [0, char_off)
-                            info.needs_split_before = true;
-                            info.before_frag.origin = f.origin;
-                            info.before_frag.locator = f.locator;
-                            info.before_frag.text = f.text.substr(0, byte_off_start);
-                            info.before_frag.byte_length = byte_off_start;
-                            info.before_frag.length = info.char_off;
-                            info.before_frag.deletions = f.deletions;
-                            info.before_frag.visible = f.visible;
-                        }
-
-                        if (info.char_off + info.to_del < f.length) {
-                            // "after" fragment: chars [char_off + to_del, length)
-                            info.needs_split_after = true;
-                            uint32_t after_char_start = info.char_off + info.to_del;
-                            info.after_frag.origin = Lamport(
-                                f.origin.replica_id,
-                                f.origin.value + after_char_start);
-                            info.after_frag.locator = f.locator;
-                            info.after_frag.text = f.text.substr(byte_off_end);
-                            info.after_frag.byte_length = static_cast<uint32_t>(
-                                info.after_frag.text.size());
-                            info.after_frag.length = f.length - after_char_start;
-                            info.after_frag.deletions = f.deletions;
-                            info.after_frag.visible = f.visible;
-                        }
-
-                        // Mutate f in place to become the deleted middle part
-                        f.origin = Lamport(f.origin.replica_id,
-                                           f.origin.value + info.char_off);
-                        f.text = f.text.substr(byte_off_start,
-                                               byte_off_end - byte_off_start);
-                        f.byte_length = static_cast<uint32_t>(f.text.size());
-                        f.length = info.to_del;
-                        f.deletions.push_back(op.deletion_id);
-                    }
-
-                    next_val += info.to_del;
-                    remaining -= info.to_del;
-                });
-
-            if (!found || !info.found) return false;
-
-            // Insert split-off fragments outside of edit_item
-            if (info.needs_split_before) {
-                FragmentOrderDim before_target{
-                    info.before_frag.locator, info.before_frag.origin};
-                m_fragment_tree.insert_item<FragmentOrderDim>(
-                    before_target, std::move(info.before_frag));
-                m_origin_index[info.before_frag.origin.replica_id]
-                              [info.before_frag.origin.value] =
-                    info.before_frag.locator;
-            }
-            if (info.needs_split_after) {
-                FragmentOrderDim after_target{
-                    info.after_frag.locator, info.after_frag.origin};
-                m_fragment_tree.insert_item<FragmentOrderDim>(
-                    after_target, std::move(info.after_frag));
-                m_origin_index[info.after_frag.origin.replica_id]
-                              [info.after_frag.origin.value] =
-                    info.after_frag.locator;
-            }
-        }
-    }
-
-    // Apply insertions
-    for (auto &ins : op.inserted_fragments) {
-        Fragment frag(ins.origin, ins.locator,
-                      static_cast<uint32_t>(ins.content.size()), ins.length,
-                      ins.content);
-        frag.visible = true;
-        FragmentOrderDim target{ins.locator, ins.origin};
-        m_fragment_tree.insert_item<FragmentOrderDim>(target, std::move(frag));
-        m_origin_index[ins.origin.replica_id][ins.origin.value] = ins.locator;
-    }
-
-    m_clock.observe(op.timestamp);
-    m_version.observe(op.timestamp);
-    m_clock.observe(op.deletion_id);
-    m_version.observe(op.deletion_id);
-    for (auto &ins : op.inserted_fragments) {
-        Lamport last_ts(ins.origin.replica_id, ins.origin.value + ins.length - 1);
-        m_clock.observe(last_ts);
-        m_version.observe(last_ts);
-    }
-    m_version.join(op.version);
-    return true;
-}
-
-bool Buffer::apply_remote_edit(const EditOperation &op) {
+Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
     if (m_version.observed(op.timestamp))
-        return true;
+        return ApplyStep::applied;
 
     if (!m_version.observed_all(op.version))
-        return false;
+        return ApplyStep::not_ready;
 
-    // Try fast path
-    if (apply_remote_edit_fast(op))
-        return true;
-
-    // Full path (existing code)
+    // Remote edits copy the document, apply deletions, integrate inserted runs by
+    // their tree relation, then rebuild. The append shortcut avoids index
+    // construction and middle insertion for a proven tail run; every other link
+    // follows the general placement algorithm.
     auto frags = get_fragments();
 
-    // Apply deletion runs
+    if (op.marker_edit && !op.deletion_runs.empty()) {
+        const auto target = SequenceOrder::find_item(frags, op.deletion_runs[0].first);
+        if (!target) {
+            m_apply_error = Error(ErrorCode::history_unavailable, "marker target is not retained");
+            return ApplyStep::malformed;
+        }
+        if (!frags[target->run].marker) {
+            m_apply_error = Error(ErrorCode::malformed, "marker deletion targets text");
+            return ApplyStep::malformed;
+        }
+    } else {
+        // Ordinary text deletion examines only marker identities for type
+        // confusion; avoid a second text-run/deletion-run cross product.
+        for (const auto& f : frags) {
+            if (!f.marker) continue;
+            for (const auto& run : op.deletion_runs) {
+                if (f.origin.actor == run.first.actor && f.origin.counter >= run.first.counter &&
+                    f.origin.counter - run.first.counter < run.count) {
+                    m_apply_error = Error(ErrorCode::malformed, "text deletion targets a marker");
+                    return ApplyStep::malformed;
+                }
+            }
+        }
+    }
     apply_deletion_runs(frags, op.deletion_runs, op.deletion_id);
 
-    // Apply split relocations.
-    for (auto &reloc : op.split_relocations) {
-        Lamport target_ts(reloc.fragment_origin.replica_id,
-                          reloc.fragment_origin.value + reloc.split_offset);
-
-        for (size_t fi = 0; fi < frags.size(); ++fi) {
-            auto &f = frags[fi];
-            if (f.origin.replica_id != target_ts.replica_id) continue;
-            if (target_ts.value < f.origin.value ||
-                target_ts.value >= f.origin.value + f.length) continue;
-
-            uint32_t char_off = target_ts.value - f.origin.value;
-            if (char_off > 0) {
-                uint32_t byte_off = char_to_byte_offset(f.text, char_off);
-                fi = split_fragment_at(frags, fi, byte_off);
+    for (auto &ins : op.inserted_fragments) {
+        for (const auto *dependency : {&ins.link.parent, &ins.link.right_origin}) {
+            if (*dependency &&
+                !SequenceOrder::find_item(frags, **dependency) &&
+                operation_is_covered(m_reclamation.operation_frontier,
+                                     **dependency)) {
+                m_apply_error = Error(
+                    ErrorCode::history_unavailable,
+                    "inserted run depends on a reclaimed placement identity",
+                    "placement dependency " + (*dependency)->actor.to_string() +
+                        "/" + std::to_string((*dependency)->counter));
+                return ApplyStep::malformed;
             }
-
-            uint32_t end_ts = reloc.fragment_origin.value + reloc.fragment_length;
-            uint32_t next_expected = target_ts.value;
-            struct RelocEntry { size_t idx; Locator effective; };
-            std::vector<RelocEntry> to_relocate;
-            for (size_t si = 0; si < frags.size(); ++si) {
-                if (next_expected >= end_ts) break;
-                auto &sf = frags[si];
-                if (sf.origin.replica_id != target_ts.replica_id) continue;
-                if (sf.origin.value != next_expected) continue;
-                Locator eff = (reloc.new_locator > sf.locator)
-                              ? reloc.new_locator : sf.locator;
-                if (eff != sf.locator) {
-                    to_relocate.push_back({si, eff});
-                }
-                next_expected = sf.origin.value + sf.length;
-            }
-
-            for (auto it = to_relocate.rbegin(); it != to_relocate.rend(); ++it) {
-                Fragment moved = std::move(frags[it->idx]);
-                frags.erase(frags.begin() + static_cast<ptrdiff_t>(it->idx));
-                moved.locator = it->effective;
-                insert_fragment(frags, std::move(moved));
-            }
-            break;
+        }
+        Fragment frag(ins.origin, ins.link, static_cast<uint32_t>(ins.content.size()),
+                      ins.length, ins.content);
+        frag.marker = ins.marker;
+        if (!SequenceOrder::integrate(frags, std::move(frag))) {
+            // The run hangs off an element this replica does not hold even though the
+            // operation's frontier says it was observed: no honest replica produces
+            // that, and waiting will not make it true. Nothing has been committed.
+            m_apply_error = Error(ErrorCode::malformed,
+                                  "inserted run attaches to an element that is not in the document",
+                                  "run origin " + ins.origin.actor.to_string() + "/" +
+                                      std::to_string(ins.origin.counter));
+            return ApplyStep::malformed;
         }
     }
 
-    // Apply insertions
-    for (auto &ins : op.inserted_fragments) {
-        Fragment frag(ins.origin, ins.locator,
-                      static_cast<uint32_t>(ins.content.size()), ins.length,
-                      ins.content);
-        insert_fragment(frags, std::move(frag));
-    }
-
-    // Update clock and version
-    m_clock.observe(op.timestamp);
+    // The raise is derived state, not durable allocation (§3.4): applying a
+    // remote operation lifts the local counter above everything that operation
+    // used, so a later local identity sorts after it. Under §3.2 the operation
+    // identity is the highest value in its interval, so observing it covers the
+    // whole run; the per-run observations below are retained because they are
+    // what makes this correct for an operation minted by a peer that has not
+    // adopted interval allocation.
+    observe_remote(op.timestamp);
     m_version.observe(op.timestamp);
-    m_clock.observe(op.deletion_id);
     m_version.observe(op.deletion_id);
 
     for (auto &ins : op.inserted_fragments) {
-        Lamport last_ts(ins.origin.replica_id, ins.origin.value + ins.length - 1);
-        m_clock.observe(last_ts);
+        Identity last_ts(ins.origin.actor, ins.origin.counter + ins.length - 1);
+        observe_remote(last_ts);
         m_version.observe(last_ts);
     }
 
     m_version.join(op.version);
 
-    normalize_fragments(frags);
     set_fragments(std::move(frags));
-    return true;
+    return ApplyStep::applied;
 }
 
 // ---------------------------------------------------------------------------
 // Remote undo application
 // ---------------------------------------------------------------------------
 
-bool Buffer::apply_remote_undo(const UndoOperation &op) {
+Buffer::ApplyStep Buffer::apply_remote_undo(const UndoOperation &op) {
     if (m_version.observed(op.timestamp))
-        return true;
+        return ApplyStep::applied;
 
     if (!m_version.observed_all(op.version))
-        return false;
+        return ApplyStep::not_ready;
+
+    for (const auto &[edit_id, count] : op.counts) {
+        (void)count;
+        if (operation_is_covered(m_reclamation.operation_frontier, edit_id)) {
+            m_apply_error = Error(
+                ErrorCode::history_unavailable,
+                "undo targets an operation at or below the certified reclamation frontier",
+                "undo target " + edit_id.actor.to_string() + "/" +
+                    std::to_string(edit_id.counter));
+            return ApplyStep::malformed;
+        }
+    }
 
     for (auto &[edit_id, count] : op.counts) {
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, count});
     }
 
-    m_clock.observe(op.timestamp);
+    observe_remote(op.timestamp);
     m_version.observe(op.timestamp);
     m_version.join(op.version);
 
     m_fragment_tree.for_each_mut([this](Fragment& f) {
         f.visible = f.compute_visible(m_undo_map);
     });
-    return true;
+    return ApplyStep::applied;
 }
 
 // ---------------------------------------------------------------------------
 // apply_ops
 // ---------------------------------------------------------------------------
 
-bool Buffer::try_apply(const Operation& op) {
-    return std::visit([this](const auto &o) -> bool {
+Buffer::ApplyStep Buffer::try_apply(const Operation& op) {
+    m_apply_error.reset();
+    return visit_operation([this](const auto &o) -> ApplyStep {
         using T = std::decay_t<decltype(o)>;
         if constexpr (std::is_same_v<T, EditOperation>) {
             return apply_remote_edit(o);
@@ -1382,49 +1486,180 @@ bool Buffer::try_apply(const Operation& op) {
     }, op);
 }
 
-void Buffer::apply_ops(const std::vector<Operation> &ops) {
-    for (auto &op : ops) {
-        Lamport ts = get_op_timestamp(op);
-        uint16_t replica = ts.replica_id;
+ApplyOutcome Buffer::defer_or_quarantine(const Operation& op, Identity awaiting) {
+    const size_t bytes = estimate_operation_bytes(op);
 
-        if (m_deferred_replicas.count(replica)) {
-            // This replica already has a deferred op — defer this one too.
-            // Since ops from the same replica are causally ordered, if an
-            // earlier op couldn't apply, this one can't either.
-            enqueue_deferred({ts, op});
-            continue;
+    if (deferred_budget_exhausted(m_deferred_budget, m_deferred_count,
+                                   m_deferred_bytes, bytes)) {
+        // Backpressure is explicit. Diagnostic copies are separately bounded;
+        // the caller retains ownership of every refused operation.
+        const Error reason(
+            ErrorCode::deferred_queue_full,
+            "deferral budget exhausted: " + std::to_string(m_deferred_count) +
+                "/" + std::to_string(m_deferred_budget.max_operations) +
+                " operations and " + std::to_string(m_deferred_bytes) + "/" +
+                std::to_string(m_deferred_budget.max_bytes) + " bytes held",
+            "waiting on actor " + awaiting.actor.to_string() +
+                " counter " + std::to_string(awaiting.counter));
+        if (!deferred_budget_exhausted(m_quarantine_budget, m_quarantined.size(),
+                                       m_quarantined_bytes, bytes)) {
+            m_quarantined.push_back(QuarantinedBufferOp{op, reason});
+            m_quarantined_bytes += bytes;
         }
+        // The offered operation is a const reference: ownership never transfers
+        // on refusal. The store/transport must retain it until accepted.
 
-        bool applied = try_apply(op);
-        if (!applied) {
-            m_deferred_replicas.insert(replica);
-            enqueue_deferred({ts, op});
+        return ApplyOutcome::rejected(reason);
+    }
+
+    enqueue_deferred({get_op_timestamp(op), op});
+    m_deferred_actors.insert(get_op_timestamp(op).actor);
+    m_deferred_count += 1;
+    m_deferred_bytes += bytes;
+    return ApplyOutcome::deferred(awaiting);
+}
+
+ApplyOutcome Buffer::apply_counter_gap(const CounterGap& gap) {
+    auto outcome = m_counter_gaps.check(gap, m_version);
+    if (outcome.kind() != ApplyOutcomeKind::applied) return outcome;
+    CounterGapLedger offered; Global prior = gap.prior; offered.commit(gap, prior);
+    bool conflict = false;
+    m_deferred_queue.for_each([&](const auto& entry) { conflict |= gap_conflicts(offered, entry.op); });
+    for (const auto& entry : m_quarantined) conflict |= gap_conflicts(offered, entry.op);
+    if (conflict) return ApplyOutcome::rejected(CounterGapLedger::conflict());
+    m_counter_gaps.commit(gap, m_version);
+    observe_remote({gap.actor, gap.first + gap.count - 1});
+    retry_deferred();
+    return ApplyOutcome::applied();
+}
+
+ApplyOutcome Buffer::apply_one(const Operation& op) {
+    const Identity ts = get_op_timestamp(op);
+
+    // Identity first, and deliberately before the duplicate check.
+    // `observed()` is vacuously true for counter 0, so asking "have I seen
+    // this?" of an operation with no usable identity reports a duplicate
+    // forever and the malformed record is never refused.
+    if (const ValidationResult identity = validate_operation_identity(op);
+        !identity.ok()) {
+        return ApplyOutcome::rejected(identity.error);
+    }
+
+    // Duplicate. Idempotence has to hold even for an operation we could not
+    // fully validate, because the commonest cause of an unexpected record is a
+    // transport re-delivering one we already applied.
+    if (gap_conflicts(m_counter_gaps, op)) return ApplyOutcome::rejected(CounterGapLedger::conflict());
+    if (m_version.observed(ts)) return ApplyOutcome::duplicate();
+
+    // Validity before causality: a record that can never be applied is refused
+    // now rather than parked in the queue behind a dependency that will not
+    // make it valid.
+    const ValidationResult verdict = validate_operation(op, m_version);
+    switch (verdict.verdict) {
+    case ValidationVerdict::rejected:
+        return ApplyOutcome::rejected(verdict.error);
+    case ValidationVerdict::deferred:
+        return defer_or_quarantine(op, *verdict.awaiting);
+    case ValidationVerdict::valid:
+        break;
+    }
+
+    // Head-of-line blocking within a replica. Operations from one replica are
+    // causally ordered, so if an earlier one is waiting, this one is too.
+    if (m_deferred_actors.count(ts.actor)) {
+        uint64_t earliest_pending_counter = UINT64_MAX;
+        m_deferred_queue.for_each([&](const OperationEntry &entry) {
+            if (entry.timestamp.actor == ts.actor)
+                earliest_pending_counter = std::min(earliest_pending_counter,
+                                                   entry.timestamp.counter);
+        });
+        // A lower counter from the same actor may be the missing prerequisite
+        // that releases the retained suffix. Only preserve head-of-line order
+        // for this pending operation and later counters.
+        if (ts.counter < earliest_pending_counter) {
+            // Continue through normal validation/application below.
+        } else {
+            // The identity this one is ultimately waiting for is the earliest
+            // thing its actor is still missing; the blocked actor's own pending
+            // operation is the honest answer when it is not otherwise derivable.
+            const Identity awaiting = ts.counter > 0
+                                          ? Identity(ts.actor, ts.counter - 1)
+                                          : ts;
+            m_deferred_actors.insert(ts.actor);
+            return defer_or_quarantine(op, awaiting);
         }
     }
+
+    switch (try_apply(op)) {
+    case ApplyStep::applied:
+        break;
+    case ApplyStep::malformed:
+        // Not a causal wait: this operation can never apply. Say so now instead of
+        // parking it behind a dependency that will not make it valid.
+        return ApplyOutcome::rejected(*m_apply_error);
+    case ApplyStep::not_ready:
+        // Validation said this was applicable, so a refusal here means the
+        // engine's own causal gate disagrees. Treat it as a deferral rather
+        // than pretending it applied: the operation is still owed.
+        m_deferred_actors.insert(ts.actor);
+        return defer_or_quarantine(op, ts);
+    }
+
+    if (m_on_change) m_on_change();
+    return ApplyOutcome::applied();
+}
+
+std::vector<ApplyOutcome> Buffer::apply_ops(const std::vector<Operation> &ops) {
+    std::vector<ApplyOutcome> outcomes;
+    outcomes.reserve(ops.size());
+    for (const auto &op : ops) {
+        outcomes.push_back(apply_one(op));
+    }
     retry_deferred();
+    return outcomes;
 }
 
 void Buffer::retry_deferred() {
     bool progress = true;
     while (progress) {
         progress = false;
-        m_deferred_replicas.clear();
+        m_deferred_actors.clear();
 
         OperationQueue remaining;
+        size_t remaining_count = 0;
+        size_t remaining_bytes = 0;
         m_deferred_queue.for_each([&](const OperationEntry& entry) {
-            if (m_deferred_replicas.count(entry.timestamp.replica_id)) {
+            if (m_deferred_actors.count(entry.timestamp.actor)) {
                 remaining.push_item(entry);
+                ++remaining_count;
+                remaining_bytes += estimate_operation_bytes(entry.op);
                 return;
             }
-            bool applied = try_apply(entry.op);
-            if (applied) {
+            const ApplyStep step = try_apply(entry.op);
+            if (step == ApplyStep::malformed) {
+                // It waited for its prerequisites and then turned out to be
+                // unappliable. Quarantine it with the reason rather than let it
+                // block its actor's queue forever.
                 progress = true;
+                const size_t bytes = estimate_operation_bytes(entry.op);
+                if (!deferred_budget_exhausted(m_quarantine_budget, m_quarantined.size(),
+                                               m_quarantined_bytes, bytes)) {
+                    m_quarantined.push_back(QuarantinedBufferOp{entry.op, *m_apply_error});
+                    m_quarantined_bytes += bytes;
+                }
+            } else if (step == ApplyStep::applied) {
+                progress = true;
+                if (m_on_change) m_on_change();
             } else {
-                m_deferred_replicas.insert(entry.timestamp.replica_id);
+                m_deferred_actors.insert(entry.timestamp.actor);
                 remaining.push_item(entry);
+                ++remaining_count;
+                remaining_bytes += estimate_operation_bytes(entry.op);
             }
         });
         m_deferred_queue = std::move(remaining);
+        m_deferred_count = remaining_count;
+        m_deferred_bytes = remaining_bytes;
     }
 }
 
@@ -1461,32 +1696,216 @@ bool Buffer::coalesce_last_undo() {
     previous.deletion_ids.insert(previous.deletion_ids.end(),
                                  latest.deletion_ids.begin(),
                                  latest.deletion_ids.end());
+    previous.operation_ids.insert(previous.operation_ids.end(),
+                                  latest.operation_ids.begin(),
+                                  latest.operation_ids.end());
+    previous.retained_bytes = latest.retained_bytes > SIZE_MAX - previous.retained_bytes
+                                  ? SIZE_MAX
+                                  : previous.retained_bytes + latest.retained_bytes;
 
     m_undo_stack.erase(m_undo_stack.begin()
                        + static_cast<ptrdiff_t>(m_undo_cursor - 1));
     m_undo_cursor--;
+    recalculate_undo_bytes();
     return true;
 }
 
-std::optional<Operation> Buffer::undo() {
-    if (m_undo_cursor == 0)
-        return std::nullopt;
+LocalUndoEntrySnapshot Buffer::snapshot_undo_entry(const UndoEntry &entry) const {
+    LocalUndoEntrySnapshot saved;
+    saved.group_id = entry.group_id;
+    saved.operation_ids = entry.operation_ids;
+    saved.inserted_items.reserve(entry.inserted_keys.size());
+    for (const auto &key : entry.inserted_keys)
+        saved.inserted_items.push_back(key.position);
+    saved.deletion_operations = entry.deletion_ids;
+    saved.retained_bytes = entry.retained_bytes;
+    return saved;
+}
 
-    m_undo_cursor--;
-    auto &entry = m_undo_stack[m_undo_cursor];
+LocalHistorySnapshot Buffer::local_history_snapshot() const {
+    LocalHistorySnapshot snapshot;
+    snapshot.cursor = m_undo_cursor;
+    snapshot.retired_entries = m_retired_undo_entries;
+    snapshot.entries.reserve(m_undo_stack.size());
+    for (const auto &entry : m_undo_stack)
+        snapshot.entries.push_back(snapshot_undo_entry(entry));
+    return snapshot;
+}
+
+std::optional<LocalUndoEntrySnapshot> Buffer::next_undo_group() const {
+    if (m_undo_cursor == 0) return std::nullopt;
+    return local_history_snapshot().entries[m_undo_cursor - 1];
+}
+
+std::optional<LocalUndoEntrySnapshot> Buffer::next_redo_group() const {
+    if (m_undo_cursor >= m_undo_stack.size()) return std::nullopt;
+    return local_history_snapshot().entries[m_undo_cursor];
+}
+
+Result<void> Buffer::acknowledge_undo_retirements(
+    const std::vector<Identity> &group_ids) {
+    std::set<Identity> unique;
+    for (const auto &id : group_ids) {
+        if (!unique.insert(id).second)
+            return Error(ErrorCode::malformed,
+                         "undo retirement acknowledgement repeats a group");
+        if (std::none_of(m_retired_undo_entries.begin(),
+                         m_retired_undo_entries.end(),
+                         [&](const auto &entry) { return entry.group_id == id; }))
+            return Error(ErrorCode::not_found,
+                         "undo retirement group is not pending");
+    }
+    for (const auto &entry : m_retired_undo_entries)
+        if (unique.contains(entry.group_id))
+            m_retired_undo_bytes -= detail::local_undo_retirement_charge(entry);
+    std::erase_if(m_retired_undo_entries, [&](const auto &entry) {
+        return unique.contains(entry.group_id);
+    });
+    return Result<void>::success();
+}
+
+Result<void>
+Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
+    if (snapshot.cursor > snapshot.entries.size() ||
+        snapshot.entries.size() > m_max_undo_depth ||
+        snapshot.retired_entries.size() >
+            detail::kMaxPendingUndoRetirementGroups ||
+        snapshot.entries.size() > detail::kMaxPendingUndoRetirementGroups -
+                                      snapshot.retired_entries.size())
+        return Error(ErrorCode::malformed,
+                     "local history cursor or depth is outside configured bounds");
+
+    const auto &owner = actor_id();
+    std::vector<UndoEntry> restored;
+    restored.reserve(snapshot.entries.size());
+    std::vector<LocalUndoEntrySnapshot> retired;
+    retired.reserve(snapshot.retired_entries.size());
+    size_t retired_bytes = 0;
+    size_t restored_bytes = 0;
+    auto valid_local_identity = [&](const Identity &id) {
+        return id.actor == owner && id.counter != 0 &&
+               id.counter <= m_version.get(owner) && !m_counter_gaps.contains(id);
+    };
+    for (const auto &saved : snapshot.entries) {
+        if (saved.retained_bytes > m_max_undo_bytes -
+                                       std::min(restored_bytes, m_max_undo_bytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "local history exceeds configured byte bound");
+        restored_bytes += saved.retained_bytes;
+        UndoEntry entry;
+        if (!valid_local_identity(saved.group_id) || saved.operation_ids.empty())
+            return Error(ErrorCode::history_unavailable,
+                         "local undo group metadata is absent from owner history");
+        entry.group_id = saved.group_id;
+        for (const auto &id : saved.operation_ids) {
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "local undo group member is absent from owner history");
+            entry.operation_ids.push_back(id);
+        }
+        entry.inserted_keys.reserve(saved.inserted_items.size());
+        for (const auto &id : saved.inserted_items) {
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "local undo item is absent from replayed owner history");
+            entry.inserted_keys.emplace_back(id);
+        }
+        for (const auto &id : saved.deletion_operations) {
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "local undo deletion is absent from replayed owner history");
+            entry.deletion_ids.push_back(id);
+        }
+        entry.retained_bytes = saved.retained_bytes;
+        restored.push_back(std::move(entry));
+    }
+    for (const auto &saved : snapshot.retired_entries) {
+        const size_t charge = detail::local_undo_retirement_charge(saved);
+        if (charge > detail::kMaxPendingUndoRetirementBytes -
+                         std::min(retired_bytes,
+                                  detail::kMaxPendingUndoRetirementBytes))
+            return Error(ErrorCode::limit_exceeded,
+                         "pending undo retirement memory budget exceeded");
+        retired_bytes += charge;
+        if (!valid_local_identity(saved.group_id) || saved.operation_ids.empty())
+            return Error(ErrorCode::history_unavailable,
+                         "retired undo group metadata is absent from owner history");
+        for (const auto &id : saved.operation_ids)
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "retired undo member is absent from owner history");
+        for (const auto &id : saved.inserted_items)
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "retired undo item is absent from owner history");
+        for (const auto &id : saved.deletion_operations)
+            if (!valid_local_identity(id))
+                return Error(ErrorCode::history_unavailable,
+                             "retired undo deletion is absent from owner history");
+        retired.push_back(saved);
+    }
+    m_undo_stack = std::move(restored);
+    m_retired_undo_entries = std::move(retired);
+    m_retired_undo_bytes = retired_bytes;
+    m_undo_cursor = snapshot.cursor;
+    m_undo_bytes = restored_bytes;
+    return Result<void>::success();
+}
+
+std::optional<Operation> Buffer::undo() {
+    auto result = try_undo();
+    if (!result.ok()) return std::nullopt;
+    return std::move(result).value();
+}
+
+Result<std::optional<Operation>> Buffer::try_undo() {
+    if (m_undo_cursor == 0)
+        return std::optional<Operation>{};
+
+    return try_undo_group(m_undo_stack[m_undo_cursor - 1].group_id);
+}
+
+Result<std::optional<Operation>> Buffer::try_undo_group(const Identity &group_id) {
+    auto found = std::find_if(m_undo_stack.begin(),
+                              m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor),
+                              [&](const UndoEntry &entry) { return entry.group_id == group_id; });
+    if (found == m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor))
+        return Error(ErrorCode::history_unavailable,
+                     "requested undo group is not active");
+
+    // An undo inserts no items, so it reserves exactly one value: its own
+    // identity (§3.2 with n == 0). The identities it targets are item
+    // identities from a different domain, which is why no undo-map entry can be
+    // confused with the operation that produced it (§3.3).
+    //
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
+
+    // Reserved *before* the cursor moves: a refused undo that had already
+    // decremented m_undo_cursor would silently drop an entry from the undo
+    // history.
+    auto reserved = m_allocator->reserve_run(1);
+    if (!reserved.ok()) return reserved.error();
+
+    UndoEntry entry = std::move(*found);
+    const auto index = static_cast<size_t>(std::distance(m_undo_stack.begin(), found));
+    m_undo_stack.erase(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(index));
+    --m_undo_cursor;
+    m_undo_stack.insert(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor),
+                        std::move(entry));
+    auto &undo_entry = m_undo_stack[m_undo_cursor];
 
     UndoOperation op;
     op.version = m_version;
-    op.timestamp = m_clock.tick();
+    op.timestamp = Identity(m_allocator->actor(), reserved.value());
 
-    for (auto &key : entry.inserted_keys) {
-        Lamport edit_id(key.replica_id, key.lamport_value);
+    for (auto &key : undo_entry.inserted_keys) {
+        const Identity edit_id = key.position;
         uint32_t current = m_undo_map.undo_count(edit_id);
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
         op.counts.push_back({edit_id, current + 1});
     }
 
-    for (auto &deletion_id : entry.deletion_ids) {
+    for (auto &deletion_id : undo_entry.deletion_ids) {
         uint32_t current = m_undo_map.undo_count(deletion_id);
         m_undo_map.insert(
             UndoMapEntry{{deletion_id, op.timestamp}, current + 1});
@@ -1498,28 +1917,59 @@ std::optional<Operation> Buffer::undo() {
     });
 
     m_version.observe(op.timestamp);
-    return op;
+    return std::optional<Operation>(std::move(op));
 }
 
 std::optional<Operation> Buffer::redo() {
+    auto result = try_redo();
+    if (!result.ok()) return std::nullopt;
+    return std::move(result).value();
+}
+
+Result<std::optional<Operation>> Buffer::try_redo() {
     if (m_undo_cursor >= m_undo_stack.size())
-        return std::nullopt;
+        return std::optional<Operation>{};
 
-    auto &entry = m_undo_stack[m_undo_cursor];
-    m_undo_cursor++;
+    return try_redo_group(m_undo_stack[m_undo_cursor].group_id);
+}
 
+Result<std::optional<Operation>> Buffer::try_redo_group(const Identity &group_id) {
+    auto found = std::find_if(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor),
+                              m_undo_stack.end(),
+                              [&](const UndoEntry &entry) { return entry.group_id == group_id; });
+    if (found == m_undo_stack.end())
+        return Error(ErrorCode::history_unavailable,
+                     "requested redo group is not available");
+
+    if (auto usable = check_allocator(); !usable.ok()) return usable.error();
+
+    auto reserved = m_allocator->reserve_run(1);
+    if (!reserved.ok()) return reserved.error();
+
+    UndoEntry entry = std::move(*found);
+    const auto index = static_cast<size_t>(std::distance(m_undo_stack.begin(), found));
+    m_undo_stack.erase(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(index));
+    m_undo_stack.insert(m_undo_stack.begin() + static_cast<std::ptrdiff_t>(m_undo_cursor),
+                        std::move(entry));
+    auto &redo_entry = m_undo_stack[m_undo_cursor];
+    ++m_undo_cursor;
+
+    // An undo inserts no items, so it reserves exactly one value: its own
+    // identity (§3.2 with n == 0). The identities it targets are item
+    // identities from a different domain, which is why no undo-map entry can be
+    // confused with the operation that produced it (§3.3).
     UndoOperation op;
     op.version = m_version;
-    op.timestamp = m_clock.tick();
+    op.timestamp = Identity(m_allocator->actor(), reserved.value());
 
-    for (auto &key : entry.inserted_keys) {
-        Lamport edit_id(key.replica_id, key.lamport_value);
+    for (auto &key : redo_entry.inserted_keys) {
+        const Identity edit_id = key.position;
         uint32_t current = m_undo_map.undo_count(edit_id);
         m_undo_map.insert(UndoMapEntry{{edit_id, op.timestamp}, current + 1});
         op.counts.push_back({edit_id, current + 1});
     }
 
-    for (auto &deletion_id : entry.deletion_ids) {
+    for (auto &deletion_id : redo_entry.deletion_ids) {
         uint32_t current = m_undo_map.undo_count(deletion_id);
         m_undo_map.insert(
             UndoMapEntry{{deletion_id, op.timestamp}, current + 1});
@@ -1531,7 +1981,7 @@ std::optional<Operation> Buffer::redo() {
     });
 
     m_version.observe(op.timestamp);
-    return op;
+    return std::optional<Operation>(std::move(op));
 }
 
 } // namespace CollabText::Crdt

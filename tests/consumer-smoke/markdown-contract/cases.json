@@ -1,0 +1,115 @@
+{
+  "schema": "collabtext-markdown-probe-cases/1",
+  "seed": 20261005,
+  "cases": [
+    {
+      "id": "exact_markdown_bytes_round_trip",
+      "worker": "exact_bytes",
+      "capability": "consumer_markdown_composition",
+      "requirement": "W3",
+      "formats": [
+        "CTBO/2"
+      ],
+      "expected": {
+        "exact": true,
+        "bytes": 51,
+        "blocks": 3,
+        "kinds": [
+          "heading",
+          "paragraph",
+          "list"
+        ]
+      }
+    },
+    {
+      "id": "optional_transport_routing",
+      "worker": "transport_routing",
+      "capability": "consumer_markdown_composition",
+      "requirement": "W3",
+      "formats": [
+        "CTBO/2"
+      ],
+      "expected": {
+        "seed_frames": 3,
+        "frames": 1,
+        "converged": true,
+        "text": "seeded # Notes",
+        "peer_text": "seeded # Notes",
+        "transported_render_exact": true,
+        "queued_without_transport": 1,
+        "wire_untouched": true,
+        "payload_fields_read": false
+      }
+    },
+    {
+      "id": "caret_collapse_independent_of_strict_loss",
+      "worker": "caret_versus_strict",
+      "capability": "consumer_markdown_composition",
+      "requirement": "W2",
+      "formats": [
+        "CTBO/2",
+        "CTPT/1"
+      ],
+      "expected": {
+        "text": {
+          "state": "Collapsed",
+          "offset": 5,
+          "error": "",
+          "lost_left": false,
+          "lost_right": true
+        },
+        "after_edit": {
+          "state": "Resolved",
+          "offset": 5,
+          "error": "",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "after_edit_strict": {
+          "state": "Resolved",
+          "offset": 5,
+          "error": "",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "text_after_strict_delete": "ello orld",
+        "strict_after_delete": {
+          "state": "Stale",
+          "offset": null,
+          "error": "detached",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "bytes_preserved": true
+      }
+    },
+    {
+      "id": "consumer_block_deletion_is_gone",
+      "worker": "deleted_block_gone",
+      "capability": "consumer_markdown_composition",
+      "requirement": "W3",
+      "formats": [
+        "CTPT/1"
+      ],
+      "expected": {
+        "valid": {
+          "state": "Gone",
+          "offset": null,
+          "error": "missing_block",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "invalid": {
+          "state": "Gone",
+          "offset": null,
+          "error": "missing_block",
+          "lost_left": false,
+          "lost_right": false
+        },
+        "retained": true,
+        "rendered": "# Notes\n",
+        "blocks": 1
+      }
+    }
+  ]
+}
