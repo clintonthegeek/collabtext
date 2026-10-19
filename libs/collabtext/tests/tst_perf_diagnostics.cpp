@@ -74,9 +74,11 @@ private slots:
         Diagnostics::end_sample();
         QVERIFY(resolved);
         counts = Diagnostics::snapshot();
-        QCOMPARE(counts.get(Diagnostics::Counter::position_items_materialized), uint64_t{6});
-        QCOMPARE(counts.get(Diagnostics::Counter::position_scalars_materialized), uint64_t{6});
-        QCOMPARE(counts.get(Diagnostics::Counter::position_items_examined), uint64_t{6});
+        QCOMPARE(counts.get(Diagnostics::Counter::position_items_materialized), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::position_scalars_materialized), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::position_items_examined), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::sumtree_items_visited), uint64_t{2});
 
         auto list = CollabText::IdListEngine::create(
             CollabText::Test::test_counter(5),

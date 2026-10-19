@@ -127,8 +127,8 @@ Result<std::unique_ptr<CrdtEngine>> CrdtEngine::create(Crdt::SharedIdentityAlloc
 Result<TextBoundary> CrdtEngine::boundary_at(uint32_t offset, Affinity affinity) const {
     if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
     if (!m_impl->position_history_available) return Error(ErrorCode::history_unavailable, "local history was cleared");
-    auto items = m_impl->buffer.position_items(); if (!items) return items.error();
-    auto p = detail::mint_boundary(*m_impl->scope, m_impl->buffer.version(), items.value(), offset, affinity);
+    auto p = detail::PositionTraversalAccess::mint_boundary(
+        *m_impl->scope, m_impl->buffer.version(), m_impl->buffer, offset, affinity);
     if (!p) return p.error();
     return detail::PositionAccess::make<TextBoundary>(std::move(p).value());
 }
@@ -144,16 +144,14 @@ Result<ResolvedTextPosition> CrdtEngine::resolve(const TextBoundary& token) cons
     auto p = detail::PositionAccess::get(token);
     auto valid = detail::check_position_context(*m_impl->scope, p, m_impl->buffer.version(), m_impl->position_history_available);
     if (!valid) return valid.error();
-    auto items = m_impl->buffer.position_items(); if (!items) return items.error();
-    return detail::resolve_boundary(*p, items.value());
+    return detail::PositionTraversalAccess::resolve_boundary(*p, m_impl->buffer);
 }
 Result<ResolvedTextPosition> CrdtEngine::resolve(const TextAttachment& token) const {
     if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
     auto p = detail::PositionAccess::get(token);
     auto valid = detail::check_position_context(*m_impl->scope, p, m_impl->buffer.version(), m_impl->position_history_available);
     if (!valid) return valid.error();
-    auto items = m_impl->buffer.position_items(); if (!items) return items.error();
-    return detail::resolve_boundary(*p, items.value());
+    return detail::PositionTraversalAccess::resolve_boundary(*p, m_impl->buffer);
 }
 Result<ResolvedTextPosition> CrdtEngine::resolve(const TextMarker& token) const {
     if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");

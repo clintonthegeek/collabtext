@@ -25,6 +25,7 @@
 #include <vector>
 
 namespace CollabText { class DocumentSession; }
+namespace CollabText::detail { class PositionTraversalAccess; }
 
 namespace CollabText::Crdt {
 
@@ -282,6 +283,7 @@ public:
 
 private:
     friend class ::CollabText::DocumentSession;
+    friend class ::CollabText::detail::PositionTraversalAccess;
     [[nodiscard]] Result<size_t> collect_garbage(
         const std::set<Identity> &pinned_identities);
     void set_reclamation_binding(ReclamationBinding binding) {

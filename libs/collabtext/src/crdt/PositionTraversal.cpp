@@ -1,11 +1,64 @@
 #include "crdt/PositionTraversal.h"
+#include "crdt/Buffer.h"
 #include "crdt/Diagnostics.h"
-#include <limits>
 namespace CollabText::detail {
 namespace {
 Error failure(ErrorCode code, const char* message) { return Error(code, message, "scoped position"); }
 bool usable(Crdt::Identity id) { return id.actor.valid() && id.counter && id.counter != UINT64_MAX; }
 bool affinity_valid(Affinity a) { return a == Affinity::left || a == Affinity::right; }
+
+Result<void> validate_run(const Crdt::Fragment& run) {
+    if (run.byte_length != run.text.size() ||
+        (run.marker ? (run.length != 1 || !run.text.empty())
+                    : ((run.length == 0) != run.text.empty())) ||
+        (run.length && (!run.origin.actor.valid() || !run.origin.counter ||
+                         run.length > UINT64_MAX - run.origin.counter)))
+        return failure(ErrorCode::history_unavailable, "retained run metadata is invalid");
+    return {};
+}
+
+uint32_t scalar_width(const std::string& text, size_t byte) {
+    const auto lead = static_cast<unsigned char>(text[byte]);
+    return lead < 0x80 ? 1 : lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4;
+}
+
+Result<uint32_t> scalar_index_at_byte(const Crdt::Fragment& run, uint32_t byte_offset) {
+    if (byte_offset > run.byte_length)
+        return failure(ErrorCode::not_scalar_boundary, "offset is outside retained run");
+    if (run.byte_length == run.length) return byte_offset;
+    size_t byte = 0;
+    uint32_t scalar = 0;
+    while (byte < byte_offset) {
+        const uint32_t width = scalar_width(run.text, byte);
+        if (width > run.text.size() - byte)
+            return failure(ErrorCode::invalid_unicode, "invalid retained fragment text");
+        for (uint32_t i = 1; i < width; ++i)
+            if ((static_cast<unsigned char>(run.text[byte + i]) & 0xc0) != 0x80)
+                return failure(ErrorCode::invalid_unicode, "invalid retained fragment text");
+        byte += width;
+        ++scalar;
+    }
+    if (byte != byte_offset)
+        return failure(ErrorCode::not_scalar_boundary, "offset lies inside a UTF-8 scalar");
+    return scalar;
+}
+
+Result<uint32_t> byte_offset_at_scalar(const Crdt::Fragment& run, uint32_t scalar_offset) {
+    if (scalar_offset > run.length)
+        return failure(ErrorCode::history_unavailable, "identity lies outside retained run");
+    if (run.byte_length == run.length) return scalar_offset;
+    size_t byte = 0;
+    for (uint32_t scalar = 0; scalar < scalar_offset; ++scalar) {
+        const uint32_t width = scalar_width(run.text, byte);
+        if (width > run.text.size() - byte)
+            return failure(ErrorCode::invalid_unicode, "invalid retained fragment text");
+        for (uint32_t i = 1; i < width; ++i)
+            if ((static_cast<unsigned char>(run.text[byte + i]) & 0xc0) != 0x80)
+                return failure(ErrorCode::invalid_unicode, "invalid retained fragment text");
+        byte += width;
+    }
+    return static_cast<uint32_t>(byte);
+}
 }
 Result<void> validate_scope(const PositionScope& scope, Primitive expected) {
     if (scope.document.empty() || scope.stream.empty() || !scope.epoch)
@@ -119,5 +172,118 @@ Result<ResolvedListPosition> resolve_element(const PositionPayload& p, const std
         if (item.visible && ++index > UINT32_MAX) return failure(ErrorCode::limit_exceeded, "visible list exceeds uint32");
     }
     return failure(ErrorCode::history_unavailable, "list referent no longer retained");
+}
+
+Result<PositionPayload> PositionTraversalAccess::mint_boundary(
+    const PositionScope& scope, const Crdt::Global& version, const Crdt::Buffer& buffer,
+    uint32_t offset, Affinity affinity) {
+    if (!affinity_valid(affinity)) return failure(ErrorCode::malformed, "invalid affinity");
+    PositionPayload p{scope, scope.primitive == Primitive::text ? PositionKind::text_boundary : PositionKind::list_boundary};
+    p.affinity = affinity;
+    p.frontier = version;
+    uint64_t prefix = 0;
+    bool finished = false;
+    std::optional<Error> error;
+    buffer.m_fragment_tree.for_each([&](const Crdt::Fragment& run) {
+        if (finished || error) return;
+        auto valid = validate_run(run);
+        if (!valid) { error = valid.error(); return; }
+        if (!run.visible || run.marker) return;
+        const uint64_t end = prefix + run.byte_length;
+        if (end > UINT32_MAX) {
+            error = failure(ErrorCode::limit_exceeded, "visible position exceeds uint32");
+            return;
+        }
+        if (offset >= prefix && offset < end) {
+            auto scalar = scalar_index_at_byte(run, offset - static_cast<uint32_t>(prefix));
+            if (!scalar) { error = scalar.error(); return; }
+            if (scalar.value()) p.left = run.item_at(scalar.value() - 1);
+            p.right = run.item_at(scalar.value());
+            finished = true;
+            return;
+        }
+        if (offset == prefix) {
+            p.right = run.origin;
+            finished = true;
+            return;
+        }
+        p.left = run.item_at(run.length - 1);
+        prefix = end;
+    });
+    if (error) return *error;
+    if (!finished && offset > prefix) return failure(ErrorCode::off_end, "offset exceeds visible length");
+    if (!finished && offset != prefix) return failure(ErrorCode::not_scalar_boundary, "offset is not a scalar boundary");
+    auto valid = validate_position(p);
+    if (!valid) return valid.error();
+    return p;
+}
+
+Result<ResolvedTextPosition> PositionTraversalAccess::resolve_boundary(
+    const PositionPayload& p, const Crdt::Buffer& buffer) {
+    uint64_t prefix = 0;
+    uint64_t rank = 0;
+    bool left_found = !p.left, right_found = !p.right;
+    bool lost_left = false, lost_right = false;
+    uint32_t left_position = 0, right_position = 0;
+    std::optional<uint64_t> left_rank, right_rank;
+    std::optional<Error> error;
+    buffer.m_fragment_tree.for_each([&](const Crdt::Fragment& run) {
+        if (error) return;
+        auto valid = validate_run(run);
+        if (!valid) { error = valid.error(); return; }
+        if (run.length > UINT64_MAX - rank) {
+            error = failure(ErrorCode::limit_exceeded, "retained position rank overflow");
+            return;
+        }
+        const uint64_t run_end = run.origin.counter + run.length;
+        const auto locate = [&](const std::optional<Crdt::Identity>& identity,
+                                bool& found, bool& lost, std::optional<uint64_t>& found_rank,
+                                bool is_left) {
+            if (!identity || identity->actor != run.origin.actor ||
+                identity->counter < run.origin.counter || identity->counter >= run_end) return;
+            if (found_rank) {
+                error = failure(ErrorCode::history_unavailable, "duplicate retained identity");
+                return;
+            }
+            const uint32_t scalar = static_cast<uint32_t>(identity->counter - run.origin.counter);
+            found = true;
+            lost = !run.visible;
+            found_rank = rank + scalar;
+            uint64_t position = prefix;
+            if (!run.visible) {
+                if (is_left) left_position = static_cast<uint32_t>(position);
+                else right_position = static_cast<uint32_t>(position);
+                return;
+            }
+            auto byte = byte_offset_at_scalar(run, scalar + (is_left ? 1u : 0u));
+            if (!byte) { error = byte.error(); return; }
+            position += byte.value();
+            if (position > UINT32_MAX) {
+                error = failure(ErrorCode::limit_exceeded, "visible position exceeds uint32");
+                return;
+            }
+            if (is_left) left_position = static_cast<uint32_t>(position);
+            else right_position = static_cast<uint32_t>(position);
+        };
+        locate(p.left, left_found, lost_left, left_rank, true);
+        locate(p.right, right_found, lost_right, right_rank, false);
+        if (error) return;
+        if (run.visible) {
+            prefix += run.byte_length;
+            if (prefix > UINT32_MAX)
+                error = failure(ErrorCode::limit_exceeded, "visible position exceeds uint32");
+        }
+        rank += run.length;
+    });
+    if (error) return *error;
+    if (!p.right) right_position = static_cast<uint32_t>(prefix);
+    if (!left_found || !right_found ||
+        (left_rank && right_rank && *left_rank >= *right_rank) || left_position > right_position)
+        return failure(ErrorCode::history_unavailable, "retained fences missing or inverted");
+    if (p.kind == PositionKind::text_attachment &&
+        (p.selection == ReferentSide::following ? lost_right : lost_left))
+        return failure(ErrorCode::detached, "selected content item is hidden");
+    return ResolvedTextPosition{p.affinity == Affinity::left ? left_position : right_position,
+                                lost_left, lost_right};
 }
 } // namespace CollabText::detail
