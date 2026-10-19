@@ -29,6 +29,7 @@ ROUTES = [
     ('benchmarks/traces/*.json', 'tst_verification_tools'),
     ('tools/run_performance_matrix.py', 'tst_verification_tools'),
     ('tools/test_run_performance_matrix.py', 'tst_verification_tools'),
+    ('docs/reports/2026-10-19-x01-baseline/raw/*', 'tst_verification_tools'),
     *[(f'docs/reports/2026-10-19-performance/{name}', 'tst_verification_tools')
       for name in PERFORMANCE_EVIDENCE],
     ('.gitignore', ''), ('*.md', ''), ('docs/*.json', ''),

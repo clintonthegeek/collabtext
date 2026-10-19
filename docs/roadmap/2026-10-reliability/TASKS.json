@@ -4179,7 +4179,9 @@
         "tools/run_performance_matrix.py",
         "tools/test_verify_changed.py",
         "benchmarks/README.md",
-        "tools/test_run_performance_matrix.py"
+        "tools/test_run_performance_matrix.py",
+        "docs/reports/2026-10-19-x01-baseline/README.md",
+        "docs/reports/2026-10-19-x01-baseline/raw/"
       ],
       "steps": [
         "Read the October 19 report and its exact public_api.cpp, aggregate.py and environment.json artifacts. Preserve those artifacts unchanged. Build the pinned d04f151 baseline separately from the candidate; never reset the working source or move a tag to obtain a baseline.",
@@ -4198,15 +4200,20 @@
         "R12"
       ],
       "gate": null,
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
       "work_started_revision": "0d9977c",
       "verification_results": {
         "start_commit": "0d9977c",
         "measurement_baseline": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
         "failures_at_start": "none; plan/registry checks pass",
-    "harness_smoke": "Pass: end-to-end runner smoke against baseline d04f151 and feat/fuguemax-placement; 54 cases validated with exact result/operation fingerprints and sample accounting. Output: /tmp/collabtext-x01-2026-10-19/matrix-smoke-worktree (quick profile only, not performance evidence).",
-        "trace_validation": "Pass: schema, seed, text-size, call-window and list/actor-grid mutations are covered by unit tests."
+        "harness_smoke": "Pass: end-to-end runner smoke against baseline d04f151 and feat/fuguemax-placement; 54 cases validated with exact result/operation fingerprints and sample accounting. Output: /tmp/collabtext-x01-2026-10-19/matrix-smoke-worktree (quick profile only, not performance evidence).",
+        "trace_validation": "Pass: schema, seed, text-size, call-window and list/actor-grid mutations are covered by unit tests.",
+        "full_paired_matrix": "Pass: 5 alternating Release pairs, 54 public workloads per run, 12 native methods (14 QtTest passes), recovery at 512 and 2048 operations; 45/45 commands passed with exact public fingerprints and state/work checks.",
+        "full_matrix_artifacts": "docs/reports/2026-10-19-x01-baseline/README.md and docs/reports/2026-10-19-x01-baseline/raw/; candidate 1701d35fe9f88a4071d4fb9e71224cd5d8a429bd, baseline d04f151b3a70b161b72c33a8de6895efbd1c13e2, trace SHA-256 75deec6b0dbc221d03031c1c5d816e90d3eb1ef045a6a6f8f723b0e02c4c28ea.",
+        "timing_interpretation": "No engine source differences between candidate and baseline. Median across 54 casewise medians of paired mean ratios is 1.009; this is the repeatability baseline, not a speedup. Host load ranged 1.92\u20136.27 on 8 logical CPUs with powersave governor.",
+        "archived_matrix_validation": "tools/test_run_performance_matrix.py validates all ten public JSONL files, five native logs per side, all recovery logs, manifest and aggregate.",
+        "changed_path_verifier": "Pass: tools/verify-changed.sh selected tst_verification_tools and passed 1/1 with --no-tests=error at 20261019T215416Z-changed-42jhjkq3."
       }
     },
     {
@@ -4244,8 +4251,14 @@
         "R10"
       ],
       "gate": null,
-      "status": "not_started",
-      "baseline_revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2"
+      "status": "in_progress",
+      "baseline_revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
+      "work_started_revision": "1701d35fe9f88a4071d4fb9e71224cd5d8a429bd",
+      "verification_results": {
+        "start_commit": "1701d35fe9f88a4071d4fb9e71224cd5d8a429bd",
+        "dependency": "X01 complete; baseline artifacts archived at docs/reports/2026-10-19-x01-baseline/",
+        "failures_at_start": "none"
+      }
     },
     {
       "id": "X07a",

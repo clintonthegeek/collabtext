@@ -29,6 +29,10 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(verify.route(['tools/run_performance_matrix.py'])[0]
                          ['tools/run_performance_matrix.py'],
                          'tst_verification_tools')
+        self.assertEqual(verify.route([
+            'docs/reports/2026-10-19-x01-baseline/raw/aggregate.json'])[0][
+                'docs/reports/2026-10-19-x01-baseline/raw/aggregate.json'],
+            'tst_verification_tools')
 
     def test_frozen_performance_archive_does_not_allow_unknown_code(self):
         paths = ['docs/reports/2026-10-19-performance/' + name

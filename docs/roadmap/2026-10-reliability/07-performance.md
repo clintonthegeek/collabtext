@@ -44,7 +44,7 @@ artifacts if they are not part of your selected task.
 
 ## X01 — Freeze checked workloads and paired baseline measurement
 
-**Status:** in progress (started at `0d9977c`; see TASKS.json)
+**Status:** complete at `1701d35`; full results in `docs/reports/2026-10-19-x01-baseline/README.md` and TASKS.json.
 **Depends on:** V06, V04, S07, A04, Q05, M05
 **Coverage:** R5, R12
 
@@ -59,6 +59,8 @@ artifacts if they are not part of your selected task.
 - `tools/run_performance_matrix.py`
 - `tools/test_verify_changed.py`
 - `tools/test_run_performance_matrix.py`
+- `docs/reports/2026-10-19-x01-baseline/README.md`
+- `docs/reports/2026-10-19-x01-baseline/raw/`
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
 
@@ -81,7 +83,7 @@ Run workload-schema mutation tests, all sample/accounting and cross-build finger
 
 ## X02 — Profile allocations and select concrete mutation mechanisms
 
-**Status:** see TASKS.json (not started)
+**Status:** in progress from `1701d35` (see TASKS.json)
 **Depends on:** X01
 **Coverage:** R5, R6, R7, R10
 

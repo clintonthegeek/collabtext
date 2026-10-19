@@ -3263,3 +3263,28 @@ with the expanded 54-case trace against the pinned d04f151 baseline and the
 designated feature worktree (`/tmp/collabtext-x01-2026-10-19/matrix-smoke-worktree`).
 These quick checks validate harness parity and runner setup only; they do not
 replace the five-pair X01 acceptance run.
+
+## 2026-10-19 — X01 complete
+
+Committed the checked harness and runner as `1701d35` on
+`feat/fuguemax-placement`. The five-pair Release matrix completed with 45/45
+commands passing. Every run validated all 54 public cases, 12 selected native
+methods and recovery at 512/2,048 operations; cross-build result/operation
+fingerprints and logical work/state counts matched. The archived artifact set
+is `docs/reports/2026-10-19-x01-baseline/raw/` and is checked by
+`test_run_performance_matrix.py`.
+
+The median of casewise medians for public mean-latency ratios was 1.009 (31
+cases above 1, 23 below); the median across 43 native measurement names was
+0.998. The measured candidate has no engine source/header differences from
+d04f151, so these are repeatability observations, not an optimization result.
+The host ran with the `powersave` governor and load averages from 1.92 to 6.27
+on eight logical CPUs. Keep that limitation attached to future comparisons.
+X02 is now unblocked and starts from the archived X01 baseline.
+
+## 2026-10-19 — X02 started
+
+X01's archive-integrity test and changed-path verifier pass. X02 is in progress
+from `1701d35`; initial work is tracing actual allocation and tree/index paths
+before adding opt-in counters. No performance claims or implementation choices
+will be based on unmeasured hypotheses.
