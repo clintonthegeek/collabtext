@@ -1,11 +1,23 @@
 # Consumer adoption handoff: Wave and Markoff
 
-Date: 2026-10-11. Source branch: **`feat/fuguemax-placement`**, isolated in
-`.worktrees/reliability-v2`. Current candidate: **`collabtext-wave-core-2026-10-11`**,
-package `0.2.0-alpha.3`, manifest v15. Resolve the annotated local tag to its
-commit SHA for consumer locks and test evidence. The prior adoption tag
-`collabtext-adoption-2026-10-11` at `0d21670896d02dda3dc44d18d37f9657935333ed`
-is immutable. A local tag is not publication or distribution.
+**Current candidate (2026-10-19):** annotated tag
+**`collabtext-integration-2026-10-19`** on **`master`**, package
+`0.2.0-alpha.5`, capability manifest v17. Resolve it with
+`git rev-parse collabtext-integration-2026-10-19^{commit}`. Pin that commit SHA.
+
+The library tree at this tag is **byte-identical** to the alpha.5 candidate the
+consumers already installed, `collabtext-markoff-core-2026-10-13-alpha5`
+(`e8a8e7d1a95dd50e23f38d6727921b47b814e44b`). The merge changed repository-level
+files plus the manifest's branch/status metadata only; no Core, FileTransport,
+Qt, test, fixture or packaging file differs. Source evidence:
+`git diff --stat collabtext-markoff-core-2026-10-13-alpha5 collabtext-integration-2026-10-19 -- libs app cmake CMakeLists.txt tools tests`.
+
+History (unchanged, all immutable): `collabtext-adoption-2026-10-11` at
+`0d21670896d02dda3dc44d18d37f9657935333ed`; `collabtext-wave-core-2026-10-11` at
+`ffe9875ee35a525f422eff3c1aaee2841f55d962`; `collabtext-markoff-core-2026-10-11`
+at `1399e9533c9cfc1006854487af4e71b8b79989fd`. Date 2026-10-11: source branch
+`feat/fuguemax-placement`, isolated in `.worktrees/reliability-v2`; candidate
+`collabtext-wave-core-2026-10-11`, package `0.2.0-alpha.3`, manifest v15.
 
 Wave-specific requirements, APIs and adoption checks are settled in
 [wave-core-response.md](wave-core-response.md); this document covers the shared

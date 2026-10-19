@@ -2,8 +2,9 @@
 
 **Version:** 17
 **Package:** `0.2.0-alpha.5`
-**Branch:** `feat/fuguemax-placement`
-**Status:** local adoption candidate; not published. C++ API/ABI remains alpha.
+**Branch:** `master` (integration tag `collabtext-integration-2026-10-19`)
+**Status:** the reliability engine line is merged into `master` and published
+under that tag. C++ API/ABI remains alpha.
 Pin the exact candidate SHA and rebuild. CMake numeric package comparison uses
 `0.2.0`; that alone does not distinguish adoption snapshots.
 

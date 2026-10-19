@@ -1,7 +1,9 @@
-> Historical alpha.1/alpha.2 preparation evidence. The current alpha.3 adoption
-> candidate and reader promises are in [wave-core-response.md](../handoff/wave-core-response.md)
-> and the installed capability manifest. Capability limits below describe those
-> earlier snapshots, not the current branch.
+> Historical alpha.1/alpha.2 preparation evidence. The current candidate is the
+> annotated integration tag `collabtext-integration-2026-10-19` on `master`
+> (package `0.2.0-alpha.5`, capability manifest v17); its reader promises are in
+> [consumer-adoption.md](../handoff/consumer-adoption.md) and the installed
+> capability manifest. Capability limits below describe those earlier snapshots,
+> not the current branch.
 
 # collabtext 0.2.0-alpha.2 — position-capable integration alpha
 

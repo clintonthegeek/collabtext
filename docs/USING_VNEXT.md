@@ -4,12 +4,15 @@ Start with the [Wave and Markoff adoption handoff](handoff/consumer-adoption.md)
 It settles persistence ownership, coordinates, affinity, callbacks, failures,
 initial lifecycle policy, and the gate for merging this branch into master.
 
-The source branch is **`feat/fuguemax-placement`**, in
-`.worktrees/reliability-v2`. The annotated adoption tag is
-**`collabtext-wave-core-2026-10-11`**. Pin its resolved commit SHA, rather than a
+The engine line is on **`master`**. The annotated integration tag is
+**`collabtext-integration-2026-10-19`**. Pin its resolved commit SHA, rather than a
 moving branch or the package label alone. This is an adoption snapshot; the
-package candidate now reports **`0.2.0-alpha.5`**, and its C++ API/ABI remains alpha.
-A local tag must be distributed separately before other repositories can fetch it.
+package candidate reports **`0.2.0-alpha.5`** (capability manifest v17), and its
+C++ API/ABI remains alpha. Earlier candidate tags
+(`collabtext-adoption-2026-10-11`, `collabtext-wave-core-2026-10-11`,
+`collabtext-markoff-core-2026-10-11`, `collabtext-markoff-core-2026-10-13-alpha5`)
+stay immutable; the integration tree is byte-identical to alpha.5 for every
+library, test, fixture and packaging path.
 
 The [installed capability manifest](../libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md)
 describes supported formats and component limits. CTBO/0002–0003 operation

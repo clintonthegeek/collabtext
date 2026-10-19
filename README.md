@@ -4,12 +4,14 @@ A native C++20 CRDT for collaborative text and ordered structural lists. Text
 and IdList share FugueMax sequence ordering. Operations and scoped positions
 are opaque public values; consumers own authorization and transport.
 
-The active branch is `feat/fuguemax-placement`, in the reliability-v2 worktree.
-Current adoption work targets `0.2.0-alpha.5`. Read the
+The reliability engine line is merged into `master` and tagged
+`collabtext-integration-2026-10-19`; the package target is `0.2.0-alpha.5`
+(capability manifest v17). Read the
 [consumer handoff](docs/handoff/consumer-adoption.md) and
 [Wave Core response](docs/handoff/wave-core-response.md) before integration.
-The earlier adoption tag is preserved; candidate tags identify exact source,
-and publication/master merge remain separate steps.
+Earlier candidate tags are preserved and immutable; the integration tree is
+byte-identical to the `collabtext-markoff-core-2026-10-13-alpha5` candidate for
+every library, test, fixture and packaging path.
 
 ## Use the installed library
 

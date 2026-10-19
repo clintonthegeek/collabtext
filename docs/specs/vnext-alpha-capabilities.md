@@ -1,5 +1,13 @@
 # Position capability staging
 
+> **Status correction (2026-10-19).** This page recorded the position of the work
+> after E07b. Development continued: the current candidate is the annotated
+> integration tag `collabtext-integration-2026-10-19` on `master`, package
+> `0.2.0-alpha.5`, capability manifest **v17**. The installed authoritative
+> manifest is `libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md`; use it
+> and [consumer-adoption.md](../handoff/consumer-adoption.md) for the current
+> contract. Everything below is the alpha.2-era record.
+
 Status after E07b: package alpha candidate `0.2.0-alpha.2` is **prepared, not
 published**. Scoped live boundaries, strict attachments, list elements and the
 CTPT version 1 codec/replay are implemented. Acceptance results are recorded in

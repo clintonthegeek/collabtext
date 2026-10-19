@@ -1,5 +1,11 @@
 # Wave Core adoption response
 
+> **Superseded for pinning purposes (2026-10-19).** The current candidate is
+> `collabtext-integration-2026-10-19` on `master` — see
+> [consumer-adoption.md](consumer-adoption.md). Everything below describes the
+> immutable `collabtext-wave-core-2026-10-11` snapshot and its API contract,
+> which the integration tree still satisfies unchanged.
+
 2026-10-11. Branch `feat/fuguemax-placement`; package `0.2.0-alpha.3`, capability
 manifest v15. The new immutable candidate tag is
 `collabtext-wave-core-2026-10-11` (resolve it with `git rev-parse TAG^{commit}`

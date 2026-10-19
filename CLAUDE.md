@@ -1,12 +1,18 @@
 # collabtext — orientation
 
-## Current isolated workstream: reliability roadmap
+## Reliability roadmap: merged into `master`
 
-On branch `feat/fuguemax-placement` in this worktree, read `AGENTS.md` and
-`docs/roadmap/2026-10-reliability/README.md` first. That roadmap supersedes the
-historical OpStream scope below for this branch. Current status is
-`docs/roadmap/2026-10-reliability/DIRECTION.md`: S03 is complete. Next is
-E07a, then E07b. Continue from that file and the registry.
+The reliability engine line (329 commits) merged into `master` on 2026-10-19 and
+is tagged `collabtext-integration-2026-10-19` (package `0.2.0-alpha.5`, manifest
+v17). Read `AGENTS.md` and `docs/roadmap/2026-10-reliability/README.md` first;
+`TASKS.json` owns status and `DIRECTION.md` carries the current next steps
+(E07a/E07b complete; Q06 Wave acceptance and M06 Markoff acceptance are next,
+then the G03/G06/G07/G08 reclamation series and the X-series performance work).
+
+Historical engine checkouts, both now ancestors of `master`:
+`feat/fuguemax-placement` (`.worktrees/reliability-v2`) and
+`roadmap/reliability-v2`. That roadmap supersedes the historical OpStream scope
+below.
 W1–W6 external consumer requirements are in `docs/specs/vnext-external-position-contract.md`. All product-policy questions are resolved
 in its `DECISIONS.md`: improve the existing C++ engine incrementally. No Rust
 rewrite, Yrs adoption, or replacement-engine trial is in scope. No Superpowers

@@ -1,9 +1,9 @@
 name: Installed alpha consumers
 on:
   push:
-    branches: [roadmap/reliability-v2]
+    branches: [roadmap/reliability-v2, master]
   pull_request:
-    branches: [roadmap/reliability-v2]
+    branches: [roadmap/reliability-v2, master]
   workflow_dispatch:
 permissions:
   contents: read

@@ -1,5 +1,13 @@
 # Markoff Core adoption response
 
+> **Superseded for pinning purposes (2026-10-19).** The current candidate is
+> `collabtext-integration-2026-10-19` on `master` — see
+> [consumer-adoption.md](consumer-adoption.md). Everything below describes the
+> immutable `collabtext-markoff-core-2026-10-11` snapshot and its API contract;
+> the alpha.5 tree that `collabtext-integration-2026-10-19` carries additionally
+> includes ordered full list identities, durable CTLO/CTGP readers and selective
+> local-history group compensation.
+
 2026-10-11. This answers Markoff's
 `docs/handoff/2026-10-11-collabtext-vnext-consumer-asks.md`.
 New candidate: `collabtext-markoff-core-2026-10-11`, package `0.2.0-alpha.4`,
