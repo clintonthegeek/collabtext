@@ -145,7 +145,8 @@ Run diagnostic count tests and affected warm correctness checks; run isolated Re
 
 ## X07a — Replace scalar boundary projections with run-aware reads
 
-**Status:** see TASKS.json (not started)
+**Status:** in progress from the completed X02 profile; implementation is gated by
+the independent boundary model and the exact scoped-position contract above.
 **Depends on:** X02, S04a, S04b, S05
 **Coverage:** F7, R6, R8
 
@@ -176,6 +177,13 @@ Run diagnostic count tests and affected warm correctness checks; run isolated Re
 **Verification:**
 
 Run tst_boundary_model, tst_positions, tst_position_token_reader, tst_text_markers, tst_marker_model and tst_anchor_retention plus routed checks; finish arc A gates and five paired query measurements as defined in vnext-performance-targets.md.
+
+**Progress (2026-10-19):** X02 confirms that each public boundary mint/resolve
+currently snapshots every retained fragment and expands each scalar into a
+`PositionItem`. The first X07a implementation step is a private ordered
+fragment-run read path. It will preserve the scalar traversal as a differential
+oracle until the independent model and targeted fixtures pass. No API, token,
+ordering or retention changes are in scope.
 
 ## X04a — Specify and model incremental tree and index transactions
 

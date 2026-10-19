@@ -4304,8 +4304,9 @@
         "R8"
       ],
       "gate": null,
-      "status": "not_started",
-      "baseline_revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2"
+      "status": "in_progress",
+      "baseline_revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
+      "progress_2026_10_19": "Started after X02 completion. The next implementation step is private ordered retained-fragment traversal for boundary mint/resolve, preserving scalar traversal for differential oracle. No API/token/order/retention change planned; model and targeted fixtures gate each cut."
     },
     {
       "id": "X04a",

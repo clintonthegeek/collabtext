@@ -3301,3 +3301,13 @@ pass, and the final changed-path Debug verification passed 100/100 tests
 source-path analysis and conditional strategy dispositions are in
 `docs/reports/vnext-performance-profile.md`. X07a is next in dependency order;
 X04a remains gated on X07a and the existing model prerequisites.
+
+## 2026-10-19 — X07a started
+
+The X02 profile identified per-call fragment snapshots and scalar
+`PositionItem` expansion on public boundary mint/resolve as the next read-side
+target. X07a is now in progress. The implementation will traverse retained
+fragment runs directly and preserve the scalar traversal for differential
+checking until model, marker, attachment and history outcomes are verified.
+No public API or token format change is planned. Initial implementation and
+verification results will be appended here as they are committed.
