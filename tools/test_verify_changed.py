@@ -15,6 +15,21 @@ spec.loader.exec_module(verify)
 
 
 class VerificationTests(unittest.TestCase):
+    def test_performance_benchmark_has_correctness_routes_without_ctest_registration(self):
+        routes, package = verify.route(['benchmarks/BenchmarkRunner.cpp'])
+        selected = next(iter(routes.values()))
+        for test in ('tst_boundary_model', 'tst_positions',
+                     'tst_sequence_differential', 'tst_idlist_undo',
+                     'tst_operation_validation'):
+            self.assertRegex(test, '^' + selected + '$')
+        self.assertFalse(package)
+        self.assertEqual(verify.route(['benchmarks/traces/workloads-v1.json'])[0]
+                         ['benchmarks/traces/workloads-v1.json'],
+                         'tst_verification_tools')
+        self.assertEqual(verify.route(['tools/run_performance_matrix.py'])[0]
+                         ['tools/run_performance_matrix.py'],
+                         'tst_verification_tools')
+
     def test_frozen_performance_archive_does_not_allow_unknown_code(self):
         paths = ['docs/reports/2026-10-19-performance/' + name
                  for name in verify.PERFORMANCE_EVIDENCE]
@@ -23,7 +38,7 @@ class VerificationTests(unittest.TestCase):
         self.assertFalse(package)
         for unknown in ('docs/reports/2026-10-19-performance/new.cpp',
                         'docs/reports/2026-10-20-performance/public_api.cpp',
-                        'benchmarks/BenchmarkRunner.cpp'):
+                        'benchmarks/new-component.cpp'):
             with self.subTest(unknown=unknown), self.assertRaisesRegex(ValueError, 'Unrouted'):
                 verify.route([paths[0], unknown])
 

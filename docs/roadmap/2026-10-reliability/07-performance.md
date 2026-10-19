@@ -51,19 +51,23 @@ artifacts if they are not part of your selected task.
 **Files / scope:**
 
 - `benchmarks/TraceFormat.md`
+- `benchmarks/README.md`
 - `benchmarks/BenchmarkRunner.cpp`
 - `benchmarks/traces/`
 - `libs/collabtext/CMakeLists.txt`
 - `tools/verify_changed.py`
+- `tools/run_performance_matrix.py`
+- `tools/test_verify_changed.py`
+- `tools/test_run_performance_matrix.py`
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
 
 **Steps:**
 
 1. Read the October 19 report and its exact public_api.cpp, aggregate.py and environment.json artifacts. Preserve those artifacts unchanged. Build the pinned d04f151 baseline separately from the candidate; never reset the working source or move a tag to obtain a baseline.
-2. Promote the checked cases into an opt-in, non-CTest benchmark target. Retain seeds, one-insertion versus chunked seeding, prior-edit counts, 200-call windows, matched byte controls and final-operation bytes. Add raw per-call samples, exact accepted/refused/no-op counts, final text/version/identity/position checks and explicit sample/percentile definitions.
-3. Add varying-position boundary/attachment reads between edits, Unicode offset sweeps, bulk insert/delete/replace, aged lists and exact-identity lookup, targeted undo/deletion, checkpoint reopen and actor-frontier cases. Establish new baselines for cases absent from the October 19 report; do not invent historical numbers.
-4. Emit a versioned JSON schema with revision, harness/trace hash, compiler/flags, hardware, filesystem, power/load conditions, work units, actor/fragment/history counts, samples and metric availability. Separate engine, codec, durable allocator, recovery and adapter stages. Run five alternating baseline/candidate pairs without competing builds and preserve all runs.
+2. Promote the checked cases into an opt-in, non-CTest benchmark target. Preserve the seed-42, one-insertion fixtures, prior-edit counts, 200-call windows, matched byte controls and final-operation bytes. Add raw per-call samples, exact accepted/refused/no-op counts, checked state/position results and explicit sample/percentile definitions.
+3. Add varying-position boundary and strict-attachment reads, marker resolution between edits, Unicode offset sweeps, bulk insert/delete/replace and undo, aged lists with exact-identity lookup, actor-frontier codec cases, and checkpoint reopen at two replay sizes. Record new baselines for cases absent from the October 19 report; never infer historical timings.
+4. Emit versioned samples and a run manifest with revision/input hashes, compiler/flags, host/CPU, filesystem, available governor and per-command load, work units, history/actor/structure counts, and metric availability. Keep public engine, byte-control, codec, existing native benchmark and checkpoint-recovery cases identifiable. Run five alternating Release baseline/candidate pairs without competing builds and preserve every raw run.
 5. Implement the ratio/target and regression rules in docs/specs/vnext-performance-targets.md, including unchanged default undo settings and a labeled 256-MiB override only where required. Register changed-path routes for new source; keep benchmarks opt-in and outside CTest.
 
 **Acceptance:**
@@ -73,7 +77,7 @@ artifacts if they are not part of your selected task.
 
 **Verification:**
 
-Run schema/count validation, deliberately invalid trace checks and five Release baseline/candidate pairs; run plan/scope and verifier-tooling checks. See the measurement protocol in vnext-performance-targets.md.
+Run workload-schema mutation tests, all sample/accounting and cross-build fingerprint checks, the opt-in/non-CTest build check, five Release baseline/candidate pairs, and plan/scope plus verifier-tooling checks. See the measurement protocol in vnext-performance-targets.md.
 
 ## X02 — Profile allocations and select concrete mutation mechanisms
 

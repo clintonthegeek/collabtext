@@ -294,6 +294,15 @@ if(COLLABTEXT_BUILD_TESTS OR COLLABTEXT_BUILD_BENCHMARKS)
 endif()
 
 if(COLLABTEXT_BUILD_BENCHMARKS)
+    # This deterministic Release measurement harness is opt-in and never
+    # registered with CTest. It can also be compiled against a pinned source
+    # archive by the paired-matrix runner.
+    add_executable(collabtext_performance_benchmark EXCLUDE_FROM_ALL
+                   ../../benchmarks/BenchmarkRunner.cpp)
+    target_link_libraries(collabtext_performance_benchmark PRIVATE CollabText::Core)
+    target_include_directories(collabtext_performance_benchmark
+                               PRIVATE ${COLLABTEXT_INTERNAL_INCLUDES})
+
     add_executable(tst_benchmark EXCLUDE_FROM_ALL tests/tst_benchmark.cpp)
     target_link_libraries(tst_benchmark PRIVATE CollabText::TestSupport Qt6::Test)
     target_include_directories(tst_benchmark PRIVATE ${COLLABTEXT_INTERNAL_INCLUDES})

@@ -3233,3 +3233,33 @@ Work starts from commit `0d9977c`; engine comparison baseline stays pinned to
 `d04f151b3a70b161b72c33a8de6895efbd1c13e2`. Start checks pass and no failures
 were inherited. X01 is marked `in_progress`; build/trace/harness work and its
 paired measurements are pending.
+
+## 2026-10-19 — X01 harness milestone
+
+Added an opt-in `collabtext_performance_benchmark` target and a deterministic
+JSONL harness covering public/byte replacement controls, Unicode edits,
+varying boundary and strict-attachment reads, marker resolution, list identity
+operations, causal-frontier codec work, bulk edits/undo, and the deliberate
+default-budget refusal. The paired runner pins d04f151, alternates baseline and
+candidate order, records raw build/run logs and environment hashes, and checks
+sample accounting plus result/operation fingerprints. Existing native benchmark
+and checkpoint-recovery executables are included in the full matrix. Trace
+dimension mutation tests and changed-path routing are in place. The target is
+excluded from CTest.
+
+Both baseline and candidate quick harnesses passed independent comparison at
+the first milestone (50 cases/246 samples); the end-to-end runner smoke also
+passed before strict-attachment cases were added. That smoke is setup evidence,
+not a performance result. The initial matrix attempt exposed a disabled
+FileTransport dependency for the recovery benchmark; the runner now enables it.
+The first complete five-pair Release matrix is still pending. Do not use these
+smoke measurements as an optimization baseline or claim a speedup.
+
+After adding strict-attachment mint/resolve cases, both standalone quick runs
+were rebuilt and rechecked: 54 cases and 266 samples per build, with matching
+result and operation fingerprints, accepted/refused/no-op accounting, byte
+controls and default-limit refusal. The end-to-end matrix smoke then passed
+with the expanded 54-case trace against the pinned d04f151 baseline and the
+designated feature worktree (`/tmp/collabtext-x01-2026-10-19/matrix-smoke-worktree`).
+These quick checks validate harness parity and runner setup only; they do not
+replace the five-pair X01 acceptance run.

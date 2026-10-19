@@ -25,6 +25,10 @@ PERFORMANCE_EVIDENCE = [
 ]
 # First match wins. Regexes describe complete families, not accidental prefixes.
 ROUTES = [
+    ('benchmarks/BenchmarkRunner.cpp', r'tst_(boundary_model|positions|position_token_reader|sequence_differential|idlist.*|operation_validation)'),
+    ('benchmarks/traces/*.json', 'tst_verification_tools'),
+    ('tools/run_performance_matrix.py', 'tst_verification_tools'),
+    ('tools/test_run_performance_matrix.py', 'tst_verification_tools'),
     *[(f'docs/reports/2026-10-19-performance/{name}', 'tst_verification_tools')
       for name in PERFORMANCE_EVIDENCE],
     ('.gitignore', ''), ('*.md', ''), ('docs/*.json', ''),
