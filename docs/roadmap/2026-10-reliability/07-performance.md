@@ -159,6 +159,7 @@ the independent boundary model and the exact scoped-position contract above.
 - `libs/collabtext/src/crdt/PositionTraversal.cpp`
 - `libs/collabtext/tests/tst_positions.cpp`
 - `libs/collabtext/tests/tst_boundary_model.cpp`
+- `tools/run_performance_matrix.py` (pinned-baseline harness compatibility)
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
 

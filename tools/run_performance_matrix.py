@@ -175,7 +175,12 @@ def main():
         source = baseline_root / "libs/collabtext"
         run("baseline-harness-compile", [
             "ccache", "c++", "-std=c++20", "-O3", "-DNDEBUG",
-            "-I", source / "include", "-I", source / "src",
+            "-I", source / "include",
+            # The checked harness may depend on post-baseline, header-only
+            # diagnostics. Their disabled inline implementation lets the same
+            # harness compile against the pinned baseline without copying new
+            # engine code or changing its library binary.
+            "-I", candidate_root / "libs/collabtext/src", "-I", source / "src",
             harness, build / "libs/collabtext/libcollabtext_core.a",
             "-pthread", "-o", binary,
         ], timeout=180)
