@@ -30,6 +30,7 @@ ROUTES = [
     ('tools/run_performance_matrix.py', 'tst_verification_tools'),
     ('tools/test_run_performance_matrix.py', 'tst_verification_tools'),
     ('docs/reports/2026-10-19-x01-baseline/raw/*', 'tst_verification_tools'),
+    ('docs/reports/2026-10-19-x02-profile/raw/*', 'tst_verification_tools'),
     *[(f'docs/reports/2026-10-19-performance/{name}', 'tst_verification_tools')
       for name in PERFORMANCE_EVIDENCE],
     ('.gitignore', ''), ('*.md', ''), ('docs/*.json', ''),
@@ -73,6 +74,9 @@ ROUTES = [
     ('libs/collabtext/tests/reference/SequenceModel.h', 'tst_sequence_model'),
     ('libs/collabtext/tests/reference/FugueMaxModel.h', 'tst_fuguemax_model'),
     ('libs/collabtext/tests/reference/Boundary*.h', r'tst_(boundary|sequence)_model'),
+    # This test target is only generated in the opt-in diagnostics build; normal
+    # changed-path verification runs the always-available Buffer/position suites.
+    ('libs/collabtext/tests/tst_perf_diagnostics.cpp', r'tst_(buffer|positions)'),
     ('libs/collabtext/tests/fixtures/sequence-semantics/*', r'tst_(sequence|fuguemax)_model'),
     ('libs/collabtext/tests/tst_sequence_model.cpp', 'tst_sequence_model'),
     ('libs/collabtext/tests/tst_*.cpp', 'OWN_TEST'),

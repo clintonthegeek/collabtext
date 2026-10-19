@@ -11,3 +11,20 @@ CPU profile:
 Heap profile:
   valgrind --tool=massif --time-unit=B --massif-out-file=/tmp/collabtext-x02-single-large.massif.out /tmp/collabtext-x01-2026-10-19/matrix-full/build-candidate/libs/collabtext/tst_benchmark single_replica_large_doc
   ms_print /tmp/collabtext-x02-single-large.massif.out
+
+Diagnostics overhead comparison (run from the candidate worktree; ccache is
+kept inside that worktree):
+  mkdir -p .ccache
+  CCACHE_DIR="$PWD/.ccache" cmake -S . -B build-x02-no-diagnostics -DCMAKE_BUILD_TYPE=Release -DCOLLABTEXT_BUILD_TESTS=OFF -DCOLLABTEXT_BUILD_BENCHMARKS=ON -DCOLLABTEXT_ENABLE_PERF_DIAGNOSTICS=OFF
+  CCACHE_DIR="$PWD/.ccache" cmake --build build-x02-no-diagnostics --target collabtext_performance_benchmark -j2
+  CCACHE_DIR="$PWD/.ccache" cmake -S . -B build-x02-diagnostics -DCMAKE_BUILD_TYPE=Release -DCOLLABTEXT_BUILD_TESTS=ON -DCOLLABTEXT_BUILD_BENCHMARKS=ON -DCOLLABTEXT_ENABLE_PERF_DIAGNOSTICS=ON
+  CCACHE_DIR="$PWD/.ccache" cmake --build build-x02-diagnostics --target tst_perf_diagnostics collabtext_performance_benchmark -j2
+  # Run each binary five times, alternating which mode runs first; save each
+  # complete stdout JSONL as diagnostics-{off,on}-pair-{1..5}.jsonl.
+  build-x02-no-diagnostics/libs/collabtext/collabtext_performance_benchmark --quick
+  build-x02-diagnostics/libs/collabtext/collabtext_performance_benchmark --quick
+  QT_QPA_PLATFORM=offscreen ctest --test-dir build-x02-diagnostics -R '^tst_perf_diagnostics$' --output-on-failure --no-tests=error
+
+The archived five-pair JSONL outputs were checked for all 54 case names,
+work counts and logical/operation fingerprints before calculating the
+per-case paired ratios in diagnostics-overhead.json.

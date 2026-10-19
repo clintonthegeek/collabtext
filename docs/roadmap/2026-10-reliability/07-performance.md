@@ -114,6 +114,26 @@ Run workload-schema mutation tests, all sample/accounting and cross-build finger
 
 Run diagnostic count tests and affected warm correctness checks; run isolated Release profiles and a disabled-diagnostics paired benchmark. Publish raw profiler/count evidence with limitations.
 
+**Progress (2026-10-19, X02 remains in progress):**
+
+- Initial Release `perf` and Massif evidence plus five alternating diagnostics
+  on/off quick-profile pairs are recorded in
+  [`vnext-performance-profile.md`](../../reports/vnext-performance-profile.md);
+  raw profiler and JSONL files are in
+  [`2026-10-19-x02-profile/raw/`](../../reports/2026-10-19-x02-profile/raw/).
+- Opt-in counters compile to no-ops by default. The exact snapshot and scalar
+  projection fixtures pass. All 54 quick-profile cases preserve logical and
+  operation fingerprints with counters enabled. The median case-level paired
+  timing ratio is 1.060, with broad spread; treat it as a noisy diagnostic
+  overhead estimate.
+- Confirmed measured paths include full IdList snapshot/rebuild and linear
+  origin search, fragment-text snapshots, per-call placement-index building,
+  undo retirement and causal-frontier iteration. Remaining X02 work is to
+  separate byte-size, retained-fragment, active/retired undo and actor-count
+  slopes, trace the specified UTF-16/position/list paths, and finish warm
+  correctness plus full verification. No algorithm or API change is selected
+  by this profile; X04a retains the mutation/model gate.
+
 ## X07a — Replace scalar boundary projections with run-aware reads
 
 **Status:** see TASKS.json (not started)

@@ -33,6 +33,10 @@ class VerificationTests(unittest.TestCase):
             'docs/reports/2026-10-19-x01-baseline/raw/aggregate.json'])[0][
                 'docs/reports/2026-10-19-x01-baseline/raw/aggregate.json'],
             'tst_verification_tools')
+        self.assertEqual(verify.route([
+            'docs/reports/2026-10-19-x02-profile/raw/diagnostics-overhead.json'])[0][
+                'docs/reports/2026-10-19-x02-profile/raw/diagnostics-overhead.json'],
+            'tst_verification_tools')
 
     def test_frozen_performance_archive_does_not_allow_unknown_code(self):
         paths = ['docs/reports/2026-10-19-performance/' + name
@@ -73,6 +77,8 @@ class VerificationTests(unittest.TestCase):
     def test_changed_test_routes_itself(self):
         routes, _ = verify.route(['libs/collabtext/tests/tst_identity_allocation_model.cpp'])
         self.assertEqual(next(iter(routes.values())), 'tst_identity_allocation_model')
+        routes, _ = verify.route(['libs/collabtext/tests/tst_perf_diagnostics.cpp'])
+        self.assertEqual(next(iter(routes.values())), 'tst_(buffer|positions)')
 
     def test_boundary_model_change_is_narrow_and_fixture_changes_are_executable(self):
         # BoundaryModel.h is consumed by two independent model tests since S02:

@@ -4227,8 +4227,10 @@
         "libs/collabtext/src/crdt/Diagnostics.h",
         "libs/collabtext/src/crdt/Buffer.cpp",
         "libs/collabtext/src/crdt/IdList.cpp",
+        "libs/collabtext/tests/tst_perf_diagnostics.cpp",
         "libs/collabtext/src/crdt/SumTree.h",
         "benchmarks/BenchmarkRunner.cpp",
+        "benchmarks/TraceFormat.md",
         "docs/reports/vnext-performance-profile.md",
         "docs/specs/vnext-performance-targets.md",
         "docs/roadmap/2026-10-reliability/07-performance.md"
@@ -4257,7 +4259,8 @@
       "verification_results": {
         "start_commit": "1701d35fe9f88a4071d4fb9e71224cd5d8a429bd",
         "dependency": "X01 complete; baseline artifacts archived at docs/reports/2026-10-19-x01-baseline/",
-        "failures_at_start": "none"
+        "failures_at_start": "none",
+        "progress_2026_10_19": "Committed opt-in per-thread counter instrumentation at 249320172338f5f46d617421d4c7093cf3972166. Release diagnostics build and tst_perf_diagnostics pass; exact fixtures cover fragment snapshot and scalar position projection counts. Five alternating quick-profile pairs preserve identical fingerprints/work counts across all 54 cases; median case-level paired diagnostic/disabled ratio 1.060, with broad per-case spread. Initial perf/Massif and counter evidence is in docs/reports/vnext-performance-profile.md and docs/reports/2026-10-19-x02-profile/raw/. X02 remains in progress: finish byte-size/retained-fragment/active-retired undo/actor-count slopes, inspect UTF-16/PositionTraversal/IdListEngine paths, run affected warm correctness and full gates. No algorithm or API change selected; X04a model gate remains authoritative."
       }
     },
     {
