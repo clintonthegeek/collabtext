@@ -1,5 +1,7 @@
 #pragma once
 
+#include "crdt/Diagnostics.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -16,6 +18,7 @@ inline size_t utf16_to_byte_offset(std::string_view utf8, size_t utf16_offset) {
     size_t u16 = 0;
     size_t i = 0;
     while (i < utf8.size() && u16 < utf16_offset) {
+        Diagnostics::record(Diagnostics::Counter::utf16_decoder_steps);
         uint8_t byte = static_cast<uint8_t>(utf8[i]);
         size_t char_bytes;
         size_t u16_units;
@@ -50,6 +53,7 @@ inline size_t byte_to_utf16_offset(std::string_view utf8, size_t byte_offset) {
     size_t u16 = 0;
     size_t i = 0;
     while (i < utf8.size() && i < byte_offset) {
+        Diagnostics::record(Diagnostics::Counter::utf16_decoder_steps);
         uint8_t byte = static_cast<uint8_t>(utf8[i]);
         size_t char_bytes;
         size_t u16_units;

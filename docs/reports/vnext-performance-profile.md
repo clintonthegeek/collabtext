@@ -1,4 +1,4 @@
-# X02 initial profile
+# X02 profile and work-selection record
 
 This is the first X02 profile of the X01 baseline, measured from Release build
 `1701d35fe9f88a4071d4fb9e71224cd5d8a429bd` before diagnostics were added. It
@@ -35,23 +35,71 @@ measures copy and allocation counts on all relevant workloads.
 
 The opt-in counter build is enabled with
 `-DCOLLABTEXT_ENABLE_PERF_DIAGNOSTICS=ON`; the default is OFF and counter
-updates compile to no-ops. Two exact QtTest fixtures validate snapshot and
-position-projection counts. Five alternating quick-profile pairs compared
-Release builds with diagnostics disabled/enabled across all 54 cases. Every
-case retained identical result/operation fingerprints and work counts. The
-median across case-level paired ratios was 1.060 (diagnostic / disabled);
-23 case medians exceeded 1.10 and 12 were below 0.90. That spread, together
-with the host's load and governor conditions, makes this a rough estimate of
-measurement overhead rather than a stable per-call penalty. Raw JSONL and the
-per-case paired calculation are archived in `2026-10-19-x02-profile/raw/diagnostics-*.jsonl` and
-`2026-10-19-x02-profile/raw/diagnostics-overhead.json`.
+updates compile to no-ops. Exact QtTest fixtures cover fragment snapshots,
+scalar projection, UTF-16 conversion, boundary mint/resolve, list identity
+lookup, and active/retired undo accounting. Five alternating quick-profile
+pairs compared Release builds with diagnostics disabled/enabled across all 54
+cases. Every case retained identical result/operation fingerprints and work
+counts. The complete counter set is versioned as
+`collabtext-perf-diagnostics/3`. Its median case-level paired timing ratio was
+0.887 (diagnostic / disabled), with 8 case medians above 1.10 and 28 below
+0.90. The host was heavily loaded after the run (load averages 20.02, 16.93,
+13.52 on eight logical CPUs, powersave governor), and earlier counter versions
+gave different medians (1.060 and 1.023). Treat overhead as unquantified: these
+quick runs establish output parity, but their timing spread does not support a
+stable overhead estimate. Raw JSONL and per-case calculations are archived in
+`2026-10-19-x02-profile/raw/diagnostics-{off,on}-pair-*.jsonl`,
+`diagnostics-v2-{off,on}-pair-*.jsonl`, `diagnostics-v3-{off,on}-pair-*.jsonl`,
+and their corresponding overhead JSON files.
 
-Representative quick-profile counts show the mechanisms the next task should
-separate: five aged 5,000-entry list insertions visit and flatten 50,020 tree
-items, rebuild 25,015 entries, and perform 25,010 linear origin comparisons;
-one 1 MB bulk replacement snapshots 1,000,000 fragment-text bytes; ten codec
-encodes at a 512-actor frontier visit 5,120 actor entries. These are exact
-counts for the named fixtures, not estimates of total allocator traffic.
+Representative quick-profile counts show the measured mechanisms. Five
+1,000,000-byte public UTF-16 replacements perform 9,707,606 UTF-16 decoder
+steps and snapshot 5,000,010 fragment-text bytes. Five boundary mint calls and
+five resolves at 100 KB each materialize and examine 505,000 scalar items.
+Five aged 5,000-entry list insertions visit/flatten 50,020 tree items, rebuild
+25,015 entries, and perform 25,010 linear origin comparisons. The list facade's
+identity and anchor lookups each flatten 25,000 entries over five samples and
+perform 12,501 identity comparisons. Ten codec encodes at a 512-actor frontier
+visit 5,120 actor entries.
+
+Undo budget counters separate active and retired logical retention from newly
+retired work. Across five 10,000-byte edits after 3,000 prior edits, the timed
+samples observe 5,000 active groups / 250,000 active budget bytes in aggregate
+and 10,020 retired groups / 2,963,280 retired budget bytes; five new retirement
+groups contribute 880 budget bytes. These are sums of post-edit budget
+observations across the five calls, not unique bytes or allocator usage.
+Massif remains the evidence for heap attribution. All counter values above are
+exact counts for their named fixtures, not estimates of total allocator
+traffic.
+
+The measured source paths explain these counts. `Buffer::try_apply_validated_local_edit`
+uses `get_fragments()` (`SumTree::items()`, a full vector materialization), then
+`set_fragments()` recomputes visibility and pushes the full resulting vector
+back into the tree. `Buffer::utf16_range()` traverses retained fragments and
+uses `utf16_length()`, `utf16_to_byte_offset()` and `byte_to_utf16_offset()`;
+the million-byte fixture confirms repeated document-scale scans. Boundary
+`CrdtEngine` methods call `Buffer::position_items()`, which expands text runs
+to one `PositionItem` per scalar; `PositionTraversal::mint_boundary()` and
+`resolve_boundary()` then inspect that projection. The IdList facade's
+`element_of()` and `try_anchor_of()` each obtain a full `position_items()`
+projection and linearly compare identities; `IdList::get_entries()` and
+`set_entries()` separately flatten and rebuild the retained tree, while
+`find_origin()` performs a linear origin scan. `SequenceOrder::mint_link()`
+builds a per-call placement index. `OperationCodec` visits each causal-frontier
+actor, which is expected linear work in the encoded frontier size. Undo
+retirement snapshots old groups, while the new counters distinguish active and
+retired logical budget charges from the one operation's retirement work.
+
+The evidence justifies measuring summary-guided UTF-16 rank/seek, run-aware
+boundary traversal, indexed list identity lookup, and transactional affected-
+range mutation. X07a/X07/X08 own the read-path strategies. For mutation,
+X04a's independent model/design gate must define stable handles, split/splice,
+visibility maintenance, and rebuild behavior before X05 changes the tree path.
+Codec actor traversal is expected to scale with frontier size; optimize it only
+if X11 finds time or allocation beyond that linear payload requirement. X03
+layout changes remain conditional on a real live-memory comparison. This profile
+does not authorize API, ordering, undo-policy, collection, or archive-reader
+changes.
 
 The profile used Valgrind 3.25.1 Massif and Linux `perf`; `heaptrack` was not
 installed. The X01 host ran with the `powersave` governor and a 1-minute load

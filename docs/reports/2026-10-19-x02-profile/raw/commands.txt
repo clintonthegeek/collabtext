@@ -25,6 +25,9 @@ kept inside that worktree):
   build-x02-diagnostics/libs/collabtext/collabtext_performance_benchmark --quick
   QT_QPA_PLATFORM=offscreen ctest --test-dir build-x02-diagnostics -R '^tst_perf_diagnostics$' --output-on-failure --no-tests=error
 
-The archived five-pair JSONL outputs were checked for all 54 case names,
-work counts and logical/operation fingerprints before calculating the
-per-case paired ratios in diagnostics-overhead.json.
+The archived five-pair JSONL outputs use diagnostics-v3-{off,on}-pair-{1..5}.jsonl.
+They were checked for all 54 case names, sample/work counts, exact result and
+operation fingerprints, and diagnostics schema before the per-case paired
+ratios and counter medians were saved to diagnostics-v3-overhead.json. Earlier
+counter sets remain in diagnostics-{off,on}-pair-* and diagnostics-v2-* files;
+the current counter schema is collabtext-perf-diagnostics/3.

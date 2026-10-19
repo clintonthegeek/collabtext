@@ -83,7 +83,7 @@ Run workload-schema mutation tests, all sample/accounting and cross-build finger
 
 ## X02 — Profile allocations and select concrete mutation mechanisms
 
-**Status:** in progress from `1701d35` (see TASKS.json)
+**Status:** complete (see TASKS.json)
 **Depends on:** X01
 **Coverage:** R5, R6, R7, R10
 
@@ -114,25 +114,34 @@ Run workload-schema mutation tests, all sample/accounting and cross-build finger
 
 Run diagnostic count tests and affected warm correctness checks; run isolated Release profiles and a disabled-diagnostics paired benchmark. Publish raw profiler/count evidence with limitations.
 
-**Progress (2026-10-19, X02 remains in progress):**
+**Completion (2026-10-19):**
 
 - Initial Release `perf` and Massif evidence plus five alternating diagnostics
   on/off quick-profile pairs are recorded in
   [`vnext-performance-profile.md`](../../reports/vnext-performance-profile.md);
   raw profiler and JSONL files are in
   [`2026-10-19-x02-profile/raw/`](../../reports/2026-10-19-x02-profile/raw/).
-- Opt-in counters compile to no-ops by default. The exact snapshot and scalar
-  projection fixtures pass. All 54 quick-profile cases preserve logical and
-  operation fingerprints with counters enabled. The median case-level paired
-  timing ratio is 1.060, with broad spread; treat it as a noisy diagnostic
-  overhead estimate.
-- Confirmed measured paths include full IdList snapshot/rebuild and linear
-  origin search, fragment-text snapshots, per-call placement-index building,
-  undo retirement and causal-frontier iteration. Remaining X02 work is to
-  separate byte-size, retained-fragment, active/retired undo and actor-count
-  slopes, trace the specified UTF-16/position/list paths, and finish warm
-  correctness plus full verification. No algorithm or API change is selected
-  by this profile; X04a retains the mutation/model gate.
+- Opt-in counters compile to no-ops by default. Exact snapshot, scalar
+  projection, UTF-16, position traversal, list identity, and undo-state
+  fixtures pass. The current counter set is
+  `collabtext-perf-diagnostics/3`; all 54 quick-profile cases preserve logical
+  and operation fingerprints with it enabled. Its apparent median overhead
+  ratio was 0.887, but the run occurred under extreme load (20.02/16.93/13.52
+  on an eight-CPU host); earlier counter sets reported 1.060 and 1.023. Treat
+  timing overhead as unquantified and use diagnostics only for work counts.
+- Counts show 9.71 million UTF-16 decoder steps across five 1-MB public edits;
+  505,000 scalar items materialized/examined across five 100-KB boundary mints
+  and five resolves; and 50,020 list items flattened across five aged 5,000-
+  entry insertions. The history-3,000 text case separately observes active and
+  retired undo budget charges. Source-path interpretation and X04a/X05/X07/
+  X07a/X08 dispositions are recorded in the profile; algorithm changes remain
+  behind the independent model gate.
+- Byte-size, retained-fragment, active/retired undo, actor-count, UTF-16 and
+  position/list paths are measured. Schema-3 counter fixtures pass and the
+  final affected Debug verification passed all 100 selected tests at
+  `build-roadmap-debug/verification/20261019T224402Z-changed-0o1o2fsh`.
+  No algorithm or API change is selected by this profile; X04a retains the
+  mutation/model gate.
 
 ## X07a — Replace scalar boundary projections with run-aware reads
 

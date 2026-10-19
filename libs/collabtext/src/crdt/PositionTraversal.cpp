@@ -1,4 +1,5 @@
 #include "crdt/PositionTraversal.h"
+#include "crdt/Diagnostics.h"
 #include <limits>
 namespace CollabText::detail {
 namespace {
@@ -68,6 +69,7 @@ Result<PositionPayload> mint_boundary(const PositionScope& scope, const Crdt::Gl
     uint64_t prefix = 0;
     bool found = false;
     for (const auto& item : items) {
+        Crdt::Diagnostics::record(Crdt::Diagnostics::Counter::position_items_examined);
         if (!item.visible || item.marker) continue;
         if (prefix == offset && !found) { p.right = item.identity; found = true; }
         if (!found) p.left = item.identity;
@@ -86,6 +88,7 @@ Result<ResolvedTextPosition> resolve_boundary(const PositionPayload& p, const st
     bool lost_left = false, lost_right = false;
     std::optional<size_t> left_rank, right_rank;
     for (size_t rank = 0; rank < items.size(); ++rank) {
+        Crdt::Diagnostics::record(Crdt::Diagnostics::Counter::position_items_examined);
         const auto& item = items[rank];
         if (p.right && item.identity == *p.right) {
             if (right_rank) return failure(ErrorCode::history_unavailable, "duplicate retained identity");
@@ -108,6 +111,7 @@ Result<ResolvedTextPosition> resolve_boundary(const PositionPayload& p, const st
 Result<ResolvedListPosition> resolve_element(const PositionPayload& p, const std::vector<PositionItem>& items) {
     uint64_t index = 0;
     for (const auto& item : items) {
+        Crdt::Diagnostics::record(Crdt::Diagnostics::Counter::position_items_examined);
         if (item.identity == *p.referent) {
             if (!item.visible) return failure(ErrorCode::detached, "list element is hidden");
             return ResolvedListPosition{static_cast<uint32_t>(index), false, false};

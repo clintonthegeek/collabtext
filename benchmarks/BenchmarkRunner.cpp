@@ -493,6 +493,10 @@ int main(int argc, char** argv) {
                   << "\",\"seed\":" << workload_seed
                   << ",\"diagnostics_available\":"
                   << (Diagnostics::enabled() ? "true" : "false")
+                  << ",\"diagnostics_schema\":"
+                  << (Diagnostics::enabled()
+                          ? std::string("\"") + std::string(Diagnostics::schema) + "\""
+                          : "null")
                   << ",\"percentile\":\"lower_order_statistic_floor_q_n_minus_1\"}\n";
         for (size_t bytes : {1'000u, 10'000u, 100'000u, 1'000'000u}) {
             public_edits(bytes, 0);

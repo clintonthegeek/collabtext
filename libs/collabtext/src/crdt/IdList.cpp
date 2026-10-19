@@ -142,6 +142,14 @@ Result<IdListOperation> IdList::insert_after_resolved(const Anchor& after, uint6
         sizeof(uint64_t) + sizeof(UndoMapKey)});
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
+    Diagnostics::record(Diagnostics::Counter::undo_active_groups_observed,
+                        m_undo_cursor);
+    Diagnostics::record(Diagnostics::Counter::undo_active_budget_bytes_observed,
+                        m_undo_bytes);
+    Diagnostics::record(Diagnostics::Counter::undo_retired_groups_observed,
+                        m_retired_undo_entries.size());
+    Diagnostics::record(Diagnostics::Counter::undo_retired_budget_bytes_observed,
+                        m_retired_undo_bytes);
 
     // l. Notify change
     if (m_on_change) m_on_change();
@@ -220,6 +228,14 @@ Result<IdListOperation> IdList::remove_at_resolved(const Anchor& target) {
         sizeof(uint64_t) + sizeof(Identity)});
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
+    Diagnostics::record(Diagnostics::Counter::undo_active_groups_observed,
+                        m_undo_cursor);
+    Diagnostics::record(Diagnostics::Counter::undo_active_budget_bytes_observed,
+                        m_undo_bytes);
+    Diagnostics::record(Diagnostics::Counter::undo_retired_groups_observed,
+                        m_retired_undo_entries.size());
+    Diagnostics::record(Diagnostics::Counter::undo_retired_budget_bytes_observed,
+                        m_retired_undo_bytes);
 
     // k. Notify change
     if (m_on_change) m_on_change();

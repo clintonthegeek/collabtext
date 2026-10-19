@@ -1180,6 +1180,7 @@ size_t Buffer::utf16_length() const {
 }
 
 Result<std::pair<uint32_t,uint32_t>> Buffer::utf16_range(int position, int length) const {
+    Diagnostics::record(Diagnostics::Counter::utf16_range_calls);
     if (position < 0 || length < 0) return Error(ErrorCode::malformed, "negative text range");
     const uint64_t start = static_cast<uint64_t>(position), end = start + static_cast<uint64_t>(length);
     uint64_t units = 0, bytes = 0;
@@ -1187,6 +1188,7 @@ Result<std::pair<uint32_t,uint32_t>> Buffer::utf16_range(int position, int lengt
     bool split = false;
     m_fragment_tree.for_each([&](const Fragment& f) {
         if (!f.visible || f.marker) return;
+        Diagnostics::record(Diagnostics::Counter::utf16_range_fragments_visited);
         const auto width = Crdt::utf16_length(f.text);
         const auto convert = [&](uint64_t target, std::optional<uint32_t>& out) {
             if (out || target < units || target > units + width) return;
@@ -1216,6 +1218,14 @@ void Buffer::commit_local_history(UndoEntry&& entry) {
     m_undo_stack.push_back(std::move(entry));
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
+    Diagnostics::record(Diagnostics::Counter::undo_active_groups_observed,
+                        m_undo_cursor);
+    Diagnostics::record(Diagnostics::Counter::undo_active_budget_bytes_observed,
+                        m_undo_bytes);
+    Diagnostics::record(Diagnostics::Counter::undo_retired_groups_observed,
+                        m_retired_undo_entries.size());
+    Diagnostics::record(Diagnostics::Counter::undo_retired_budget_bytes_observed,
+                        m_retired_undo_bytes);
 }
 
 Result<Operation> Buffer::try_insert_marker(uint32_t offset) {

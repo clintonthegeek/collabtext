@@ -8,6 +8,7 @@
 #include "collabtext/IdListEngine.h"
 
 #include "crdt/IdList.h"
+#include "crdt/Diagnostics.h"
 
 #include <utility>
 
@@ -75,11 +76,14 @@ Result<ListElement> IdListEngine::element_of(uint64_t value) const {
     if (!m_impl->scope) return Error(ErrorCode::unknown_stream, "engine has no bound position scope");
     if (!m_impl->position_history_available) return Error(ErrorCode::history_unavailable, "local history was cleared");
     auto items = m_impl->list.position_items(); if (!items) return items.error();
-    for (const auto& item : items.value()) if (item.visible && item.application_value == value) {
-        detail::PositionPayload p{*m_impl->scope, detail::PositionKind::list_element};
-        p.referent = item.identity; p.frontier = m_impl->list.version();
-        auto valid = detail::validate_position(p); if (!valid) return valid.error();
-        return detail::PositionAccess::make<ListElement>(std::move(p));
+    for (const auto& item : items.value()) {
+        Crdt::Diagnostics::record(Crdt::Diagnostics::Counter::idlist_engine_identity_comparisons);
+        if (item.visible && item.application_value == value) {
+            detail::PositionPayload p{*m_impl->scope, detail::PositionKind::list_element};
+            p.referent = item.identity; p.frontier = m_impl->list.version();
+            auto valid = detail::validate_position(p); if (!valid) return valid.error();
+            return detail::PositionAccess::make<ListElement>(std::move(p));
+        }
     }
     return Error(ErrorCode::not_found, "application value has no visible list element");
 }
@@ -96,7 +100,10 @@ Result<std::vector<VisibleIdListEntry>> IdListEngine::visible_entries() const {
 Result<Crdt::Anchor> IdListEngine::try_anchor_of(const Crdt::Identity& identity, Crdt::Bias bias) const {
     if (!identity.actor.valid() || !identity.counter || identity.counter == UINT64_MAX) return Error(ErrorCode::invalid_identity, "invalid entry identity");
     auto entries = visible_entries(); if (!entries) return entries.error();
-    for (const auto& entry : entries.value()) if (entry.identity == identity) return Crdt::Anchor{identity,bias};
+    for (const auto& entry : entries.value()) {
+        Crdt::Diagnostics::record(Crdt::Diagnostics::Counter::idlist_engine_identity_comparisons);
+        if (entry.identity == identity) return Crdt::Anchor{identity,bias};
+    }
     return Error(ErrorCode::unresolvable_anchor, "identity has no visible list entry");
 }
 Result<ListElement> IdListEngine::element_of(const Crdt::Identity& identity) const {
