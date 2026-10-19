@@ -3288,3 +3288,16 @@ X01's archive-integrity test and changed-path verifier pass. X02 is in progress
 from `1701d35`; initial work is tracing actual allocation and tree/index paths
 before adding opt-in counters. No performance claims or implementation choices
 will be based on unmeasured hypotheses.
+
+## 2026-10-19 — X02 complete
+
+The X02 profile and schema-3 instrumentation are committed at
+`da845085cfa8791001427be4f6f8f4bcff050747`. Five alternating Release quick
+pairs preserve all 54 cases' logical/operation fingerprints and work counts.
+The overhead ratio is inconclusive under heavy host load; the report records
+that limit rather than treating it as a speed result. Exact diagnostics fixtures
+pass, and the final changed-path Debug verification passed 100/100 tests
+(`build-roadmap-debug/verification/20261019T224402Z-changed-0o1o2fsh`). The
+source-path analysis and conditional strategy dispositions are in
+`docs/reports/vnext-performance-profile.md`. X07a is next in dependency order;
+X04a remains gated on X07a and the existing model prerequisites.

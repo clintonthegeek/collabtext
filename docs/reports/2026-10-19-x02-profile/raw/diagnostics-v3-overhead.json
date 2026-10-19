@@ -1,6 +1,6 @@
 {
   "counter_schema": "collabtext-perf-diagnostics/3",
-  "candidate_revision": "working tree based on b3dd36c; v3 source pending commit",
+  "candidate_revision": "da845085cfa8791001427be4f6f8f4bcff050747",
   "method": "Five alternating quick-profile pairs. Each case ratio is the on/off ratio of per-process sample medians; overall is the median of 54 case-level medians. These ratios estimate instrumentation overhead and are not engine performance claims.",
   "pairs": 5,
   "profile": "quick",
