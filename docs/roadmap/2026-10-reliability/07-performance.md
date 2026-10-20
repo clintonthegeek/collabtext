@@ -67,7 +67,7 @@ artifacts if they are not part of your selected task.
 **Steps:**
 
 1. Read the October 19 report and its exact public_api.cpp, aggregate.py and environment.json artifacts. Preserve those artifacts unchanged. Build the pinned d04f151 baseline separately from the candidate; never reset the working source or move a tag to obtain a baseline.
-2. Promote the checked cases into an opt-in, non-CTest benchmark target. Preserve the seed-42, one-insertion fixtures, prior-edit counts, 200-call windows, matched byte controls and final-operation bytes. Add raw per-call samples, exact accepted/refused/no-op counts, checked state/position results and explicit sample/percentile definitions.
+2. Promote the October 19 public cases into an opt-in, non-CTest benchmark target. Preserve its seed-42, one-insertion fixtures, prior-edit counts, 200-call windows, matched byte controls and final-operation bytes. Add raw per-call samples, exact accepted/refused/no-op counts, checked state/position results and explicit sample/percentile definitions.
 3. Add varying-position boundary and strict-attachment reads, marker resolution between edits, Unicode offset sweeps, bulk insert/delete/replace and undo, aged lists with exact-identity lookup, actor-frontier codec cases, and checkpoint reopen at two replay sizes. Record new baselines for cases absent from the October 19 report; never infer historical timings.
 4. Emit versioned samples and a run manifest with revision/input hashes, compiler/flags, host/CPU, filesystem, available governor and per-command load, work units, history/actor/structure counts, and metric availability. Keep public engine, byte-control, codec, existing native benchmark and checkpoint-recovery cases identifiable. Run five alternating Release baseline/candidate pairs without competing builds and preserve every raw run.
 5. Implement the ratio/target and regression rules in docs/specs/vnext-performance-targets.md, including unchanged default undo settings and a labeled 256-MiB override only where required. Register changed-path routes for new source; keep benchmarks opt-in and outside CTest.
@@ -79,7 +79,7 @@ artifacts if they are not part of your selected task.
 
 **Verification:**
 
-Run workload-schema mutation tests, all sample/accounting and cross-build fingerprint checks, the opt-in/non-CTest build check, five Release baseline/candidate pairs, and plan/scope plus verifier-tooling checks. See the measurement protocol in vnext-performance-targets.md.
+Run workload-schema mutation tests, all sample/accounting and cross-build fingerprint checks, the opt-in/non-CTest build check, five Release baseline/candidate pairs, and plan/scope plus verifier-tooling checks. See vnext-performance-targets.md for the measurement protocol.
 
 ## X02 — Profile allocations and select concrete mutation mechanisms
 
@@ -91,6 +91,11 @@ Run workload-schema mutation tests, all sample/accounting and cross-build finger
 
 - `libs/collabtext/src/crdt/Diagnostics.h`
 - `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/src/crdt/PositionTraversal.cpp`
+- `libs/collabtext/src/crdt/Utf16.h`
+- `libs/collabtext/src/IdListEngine.cpp`
+- `libs/collabtext/tests/tst_perf_diagnostics.cpp`
+- `benchmarks/TraceFormat.md`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/src/crdt/SumTree.h`
 - `benchmarks/BenchmarkRunner.cpp`
@@ -145,8 +150,7 @@ Run diagnostic count tests and affected warm correctness checks; run isolated Re
 
 ## X07a — Replace scalar boundary projections with run-aware reads
 
-**Status:** in progress from the completed X02 profile; implementation is gated by
-the independent boundary model and the exact scoped-position contract above.
+**Status:** complete; implementation and evidence are recorded below and in TASKS.json.
 **Depends on:** X02, S04a, S04b, S05
 **Coverage:** F7, R6, R8
 
@@ -159,9 +163,18 @@ the independent boundary model and the exact scoped-position contract above.
 - `libs/collabtext/src/crdt/PositionTraversal.cpp`
 - `libs/collabtext/tests/tst_positions.cpp`
 - `libs/collabtext/tests/tst_boundary_model.cpp`
+- `libs/collabtext/tests/tst_position_token_reader.cpp`
+- `libs/collabtext/tests/tst_text_markers.cpp`
+- `libs/collabtext/tests/tst_marker_model.cpp`
+- `libs/collabtext/tests/tst_anchor_retention.cpp`
+- `libs/collabtext/tests/tst_perf_diagnostics.cpp`
 - `tools/run_performance_matrix.py` (pinned-baseline harness compatibility)
+- `tools/verify_changed.py`
+- `docs/reports/2026-10-19-x07a/README.md`
+- `docs/reports/2026-10-19-x07a/raw/`
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
+- `docs/roadmap/2026-10-reliability/TASKS.json`
 
 **Steps:**
 
@@ -179,12 +192,24 @@ the independent boundary model and the exact scoped-position contract above.
 
 Run tst_boundary_model, tst_positions, tst_position_token_reader, tst_text_markers, tst_marker_model and tst_anchor_retention plus routed checks; finish arc A gates and five paired query measurements as defined in vnext-performance-targets.md.
 
-**Progress (2026-10-19):** X02 confirms that each public boundary mint/resolve
-currently snapshots every retained fragment and expands each scalar into a
-`PositionItem`. The first X07a implementation step is a private ordered
-fragment-run read path. It will preserve the scalar traversal as a differential
-oracle until the independent model and targeted fixtures pass. No API, token,
-ordering or retention changes are in scope.
+**Completion (2026-10-20):** X07a is implemented at
+`3e3d4c141afe90cafc4f25898559d478523c6555`. The paired-runner baseline
+compatibility fix is `eb9176156ec83d5f1514094d630669d787add6d0`; benchmark
+environment capture is `1a1cbe48d949433e4aa005b1477d7dd76e84492a`. The report
+and raw five-pair results are in
+[`2026-10-19-x07a/`](../../reports/2026-10-19-x07a/README.md). All eight
+varied-offset/token boundary and attachment cases met the 10x target, with
+63x–20,392x median speedups. The full 54-case public harness preserved result
+and operation fingerprints. A pinned follow-up found no reproducible bulk
+insert regression after one full-matrix outlier.
+
+Focused position/model/marker/retention suites passed. Fresh Arc A Debug and
+Release each passed 101/101 tests; ASan/UBSan with leak detection enabled passed
+101/101 after running outside the sandbox's ptrace restriction. Relocated live
+installed-Core package gates passed Debug, Release and ASan/UBSan (5/5 consumer
+tests in each mode, Wave 16/16 strict cases, Markdown 4/4). Evidence paths and
+environment limitations are recorded in the report and TASKS.json. The roadmap
+validator and strict scope checker pass.
 
 ## X04a — Specify and model incremental tree and index transactions
 

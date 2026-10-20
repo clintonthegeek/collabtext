@@ -20,9 +20,9 @@ publication or master merge is authorized. One executor; model before gaps.
 
 # Reliability roadmap
 
-Execution branch: `master` — the engine line merged 2026-10-19 and is tagged
-`collabtext-integration-2026-10-19`. The former `feat/fuguemax-placement`
-worktree (`.worktrees/reliability-v2`) was removed after the merge.
+Execution branch: `feat/fuguemax-placement` in the isolated
+`.worktrees/reliability-v2` worktree. Root `master` contains unrelated work and
+must be preserved.
 Read [DIRECTION.md](DIRECTION.md), [DECISIONS.md](DECISIONS.md), then
 [EXECUTION.md](EXECUTION.md). [TASKS.json](TASKS.json) is the authoritative
 status/dependency registry. Numbered phase files mirror the registry exactly;
@@ -32,7 +32,9 @@ As of 2026-10-11, validation, native FugueMax ordering, checked protocol,
 recovery, semantic/pin work and early installed-package gates are complete.
 G03/G06 have unfinished broader certification work. Remaining reclamation,
 packaging, performance and release tasks retain their exact registry status.
-The active user-directed lane is [07 — measured performance](07-performance.md).
+The active user-directed lane is [07 — measured performance](07-performance.md);
+X01/X02/X07a are complete and X04a is the next performance task after its
+dependencies, including the X07a model/evidence gate, are satisfied.
 [09 — Wave Core](09-wave-core.md) and [10 — Markoff Core](10-markoff-core.md)
 record completed upstream work and remaining external acceptance. Do not repeat
 completed implementation or treat external acceptance as an optimization prerequisite.

@@ -1,0 +1,778 @@
+{
+  "schema": "collabtext-performance-matrix/1",
+  "baseline_sha": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
+  "baseline_source": "/tmp/collabtext-x07a-baseline",
+  "candidate_sha": "eb9176156ec83d5f1514094d630669d787add6d0",
+  "candidate_status": "?? docs/reports/2026-10-19-x07a/",
+  "candidate_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "trace_sha256": "75deec6b0dbc221d03031c1c5d816e90d3eb1ef045a6a6f8f723b0e02c4c28ea",
+  "harness_sha256": "d8638bfb48929603a8aca9d3c8a3e636eb86e97725e20123f20198157276b3e9",
+  "matrix_runner_sha256": "03f5101cf82c4441d9e10baddbfa5fe020511e924ba440946e4d33ff82b4b1a1",
+  "candidate_input_sha256": {
+    "superproject_cmake": "ad3fd31c8a8e594939cd601bccd1249c5b40e7c601cdc29faf7d26d81d9ba8c7",
+    "library_cmake": "56702cbce33f840b1e85021790af6e986f848388ad0899b20013efbb9ba8cfdf",
+    "harness": "d8638bfb48929603a8aca9d3c8a3e636eb86e97725e20123f20198157276b3e9",
+    "trace": "75deec6b0dbc221d03031c1c5d816e90d3eb1ef045a6a6f8f723b0e02c4c28ea"
+  },
+  "host": "Linux-6.18.49-1-MANJARO-x86_64-with-glibc2.44",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  8\nOn-line CPU(s) list:                     0-7\nVendor ID:                               GenuineIntel\nModel name:                              11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz\nCPU family:                              6\nModel:                                   140\nThread(s) per core:                      2\nCore(s) per socket:                      4\nSocket(s):                               1\nStepping:                                1\nMicrocode version:                       0xbe\nCPU(s) scaling MHz:                      60%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5990.40\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l2 cdp_l2 ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid movdiri movdir64b fsrm avx512_vp2intersect md_clear ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               192 KiB (4 instances)\nL1i cache:                               128 KiB (4 instances)\nL2 cache:                                5 MiB (4 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-7\nVulnerability Gather data sampling:      Mitigation; Microcode\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Mitigation; Aligned branch/return thunks\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI SW loop, KVM SW loop\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected",
+  "compiler": "c++ (GCC) 16.2.1 20260810\nCopyright (C) 2026 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+  "filesystem": "tmpfs",
+  "governor": "powersave",
+  "build_flags": "-O3 -DNDEBUG; C++20; COLLABTEXT_ENABLE_SANITIZERS=OFF",
+  "profile": "full-paired-matrix",
+  "repeats": 5,
+  "native_methods": [
+    "single_replica_throughput",
+    "single_replica_large_doc",
+    "edit_patterns",
+    "edit_sizes",
+    "tombstone_degradation",
+    "tombstone_degradation_large",
+    "multi_replica_convergence",
+    "undo_redo_cycle",
+    "undo_stack_depth",
+    "fragment_proliferation",
+    "memory_growth",
+    "reconnect_sync_cost"
+  ],
+  "commands": [
+    {
+      "label": "baseline-configure",
+      "command": [
+        "cmake",
+        "-S",
+        "/tmp/collabtext-x07a-baseline",
+        "-B",
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCOLLABTEXT_BUILD_TESTS=OFF",
+        "-DCOLLABTEXT_BUILD_BENCHMARKS=ON",
+        "-DCOLLABTEXT_BUILD_QT=OFF",
+        "-DCOLLABTEXT_BUILD_APPS=OFF",
+        "-DCOLLABTEXT_BUILD_FILE_TRANSPORT=ON",
+        "-DCOLLABTEXT_ENABLE_SANITIZERS=OFF",
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.6654422283172607,
+      "load_before": "3.07 4.95 8.45 1/2283 23",
+      "load_after": "3.07 4.95 8.45 1/2283 75",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-configure.log"
+    },
+    {
+      "label": "baseline-build",
+      "command": [
+        "cmake",
+        "--build",
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline",
+        "--target",
+        "collabtext_core",
+        "collabtext_filetransport",
+        "tst_benchmark",
+        "tst_checkpoint_recovery_benchmark",
+        "-j16"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 10.499106407165527,
+      "load_before": "3.07 4.95 8.45 1/2283 75",
+      "load_after": "2.90 4.86 8.38 1/2311 563",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-build.log"
+    },
+    {
+      "label": "candidate-configure",
+      "command": [
+        "cmake",
+        "-S",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2",
+        "-B",
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCOLLABTEXT_BUILD_TESTS=OFF",
+        "-DCOLLABTEXT_BUILD_BENCHMARKS=ON",
+        "-DCOLLABTEXT_BUILD_QT=OFF",
+        "-DCOLLABTEXT_BUILD_APPS=OFF",
+        "-DCOLLABTEXT_BUILD_FILE_TRANSPORT=ON",
+        "-DCOLLABTEXT_ENABLE_SANITIZERS=OFF",
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.6651585102081299,
+      "load_before": "2.90 4.86 8.38 1/2311 563",
+      "load_after": "2.90 4.86 8.38 2/2312 615",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-configure.log"
+    },
+    {
+      "label": "candidate-build",
+      "command": [
+        "cmake",
+        "--build",
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate",
+        "--target",
+        "collabtext_core",
+        "collabtext_filetransport",
+        "tst_benchmark",
+        "tst_checkpoint_recovery_benchmark",
+        "collabtext_performance_benchmark",
+        "-j16"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 11.175631284713745,
+      "load_before": "2.90 4.86 8.38 4/2312 615",
+      "load_after": "3.50 4.93 8.37 2/2319 1157",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-build.log"
+    },
+    {
+      "label": "baseline-harness-compile",
+      "command": [
+        "ccache",
+        "c++",
+        "-std=c++20",
+        "-O3",
+        "-DNDEBUG",
+        "-I",
+        "/tmp/collabtext-x07a-baseline/libs/collabtext/include",
+        "-I",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/libs/collabtext/src",
+        "-I",
+        "/tmp/collabtext-x07a-baseline/libs/collabtext/src",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/benchmarks/BenchmarkRunner.cpp",
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/libcollabtext_core.a",
+        "-pthread",
+        "-o",
+        "/tmp/collabtext-x07a-2026-10-19-recheck/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 3.7220516204833984,
+      "load_before": "3.50 4.93 8.37 2/2319 1157",
+      "load_after": "3.46 4.89 8.34 2/2279 1162",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-harness-compile.log"
+    },
+    {
+      "label": "baseline-public-1",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 17.955005645751953,
+      "load_before": "3.46 4.89 8.34 2/2279 1162",
+      "load_after": "3.27 4.75 8.22 2/2300 1163",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-public-1.jsonl"
+    },
+    {
+      "label": "baseline-native-1",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 30.8575336933136,
+      "load_before": "3.27 4.75 8.22 2/2299 1163",
+      "load_after": "3.52 4.68 8.08 5/2325 1165",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-native-1.log"
+    },
+    {
+      "label": "baseline-recovery-512-1",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.4647858142852783,
+      "load_before": "3.52 4.68 8.08 2/2325 1165",
+      "load_after": "3.52 4.68 8.08 2/2343 1166",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-512-1.log"
+    },
+    {
+      "label": "baseline-recovery-2048-1",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 8.400328874588013,
+      "load_before": "3.52 4.68 8.08 2/2343 1166",
+      "load_after": "4.12 4.77 8.08 6/2318 1167",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-2048-1.log"
+    },
+    {
+      "label": "candidate-public-1",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 27.06437087059021,
+      "load_before": "4.12 4.77 8.08 6/2318 1167",
+      "load_after": "5.32 5.01 8.07 5/2347 1168",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-public-1.jsonl"
+    },
+    {
+      "label": "candidate-native-1",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 35.58759593963623,
+      "load_before": "5.32 5.01 8.07 6/2347 1168",
+      "load_after": "5.27 5.05 7.97 2/2312 1170",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-native-1.log"
+    },
+    {
+      "label": "candidate-recovery-512-1",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.5148582458496094,
+      "load_before": "5.27 5.05 7.97 5/2312 1170",
+      "load_after": "5.27 5.05 7.97 4/2309 1171",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-512-1.log"
+    },
+    {
+      "label": "candidate-recovery-2048-1",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 9.342555522918701,
+      "load_before": "5.27 5.05 7.97 5/2309 1171",
+      "load_after": "5.38 5.09 7.95 8/2309 1172",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-2048-1.log"
+    },
+    {
+      "label": "candidate-public-2",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 29.37545132637024,
+      "load_before": "5.38 5.09 7.95 8/2309 1172",
+      "load_after": "5.51 5.13 7.87 5/2320 1173",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-public-2.jsonl"
+    },
+    {
+      "label": "candidate-native-2",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 38.10940861701965,
+      "load_before": "5.51 5.13 7.87 10/2320 1173",
+      "load_after": "5.90 5.26 7.80 4/2324 1175",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-native-2.log"
+    },
+    {
+      "label": "candidate-recovery-512-2",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.6157939434051514,
+      "load_before": "5.90 5.26 7.80 2/2324 1175",
+      "load_after": "5.90 5.26 7.80 6/2324 1176",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-512-2.log"
+    },
+    {
+      "label": "candidate-recovery-2048-2",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 7.591172933578491,
+      "load_before": "5.90 5.26 7.80 6/2324 1176",
+      "load_after": "5.59 5.21 7.77 7/2329 1177",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-2048-2.log"
+    },
+    {
+      "label": "baseline-public-2",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 31.0781147480011,
+      "load_before": "5.59 5.21 7.77 7/2329 1177",
+      "load_after": "5.55 5.23 7.69 6/2338 1178",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-public-2.jsonl"
+    },
+    {
+      "label": "baseline-native-2",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 36.39786243438721,
+      "load_before": "5.55 5.23 7.69 6/2338 1178",
+      "load_after": "5.30 5.21 7.58 7/2299 1180",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-native-2.log"
+    },
+    {
+      "label": "baseline-recovery-512-2",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.7658607959747314,
+      "load_before": "5.30 5.21 7.58 7/2299 1180",
+      "load_after": "5.30 5.21 7.58 4/2297 1181",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-512-2.log"
+    },
+    {
+      "label": "baseline-recovery-2048-2",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 11.109818458557129,
+      "load_before": "5.30 5.21 7.58 4/2297 1181",
+      "load_after": "6.63 5.50 7.65 10/2323 1182",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-2048-2.log"
+    },
+    {
+      "label": "baseline-public-3",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 27.680894374847412,
+      "load_before": "6.63 5.50 7.65 8/2323 1182",
+      "load_after": "6.22 5.50 7.58 6/2306 1183",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-public-3.jsonl"
+    },
+    {
+      "label": "baseline-native-3",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 37.50934076309204,
+      "load_before": "6.22 5.50 7.58 5/2306 1183",
+      "load_after": "6.19 5.56 7.52 3/2326 1185",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-native-3.log"
+    },
+    {
+      "label": "baseline-recovery-512-3",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.6150953769683838,
+      "load_before": "6.19 5.56 7.52 3/2326 1185",
+      "load_after": "6.19 5.56 7.52 5/2331 1186",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-512-3.log"
+    },
+    {
+      "label": "baseline-recovery-2048-3",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 12.012125730514526,
+      "load_before": "6.19 5.56 7.52 7/2331 1186",
+      "load_after": "6.71 5.71 7.54 6/2289 1187",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-2048-3.log"
+    },
+    {
+      "label": "candidate-public-3",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 19.318925380706787,
+      "load_before": "6.71 5.71 7.54 6/2289 1187",
+      "load_after": "5.46 5.50 7.43 6/2294 1188",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-public-3.jsonl"
+    },
+    {
+      "label": "candidate-native-3",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 22.41413187980652,
+      "load_before": "5.46 5.50 7.43 1/2294 1188",
+      "load_after": "4.34 5.24 7.30 2/2290 1190",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-native-3.log"
+    },
+    {
+      "label": "candidate-recovery-512-3",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.414808988571167,
+      "load_before": "4.34 5.24 7.30 2/2290 1190",
+      "load_after": "4.34 5.24 7.30 1/2290 1191",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-512-3.log"
+    },
+    {
+      "label": "candidate-recovery-2048-3",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 5.375807285308838,
+      "load_before": "4.34 5.24 7.30 1/2290 1191",
+      "load_after": "4.23 5.20 7.28 2/2312 1192",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-2048-3.log"
+    },
+    {
+      "label": "candidate-public-4",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 16.151815176010132,
+      "load_before": "4.23 5.20 7.28 2/2312 1192",
+      "load_after": "3.66 5.03 7.19 2/2281 1193",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-public-4.jsonl"
+    },
+    {
+      "label": "candidate-native-4",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 22.513915061950684,
+      "load_before": "3.66 5.03 7.19 2/2281 1193",
+      "load_after": "2.94 4.75 7.04 2/2287 1195",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-native-4.log"
+    },
+    {
+      "label": "candidate-recovery-512-4",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.41460347175598145,
+      "load_before": "2.94 4.75 7.04 2/2287 1195",
+      "load_after": "2.94 4.75 7.04 2/2280 1196",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-512-4.log"
+    },
+    {
+      "label": "candidate-recovery-2048-4",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 5.426748752593994,
+      "load_before": "2.94 4.75 7.04 3/2280 1196",
+      "load_after": "2.87 4.70 7.01 2/2274 1197",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-2048-4.log"
+    },
+    {
+      "label": "baseline-public-4",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 17.403862237930298,
+      "load_before": "2.87 4.70 7.01 2/2274 1197",
+      "load_after": "2.40 4.48 6.89 1/2306 1198",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-public-4.jsonl"
+    },
+    {
+      "label": "baseline-native-4",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 22.51656413078308,
+      "load_before": "2.40 4.48 6.89 1/2306 1198",
+      "load_after": "2.28 4.32 6.78 1/2286 1200",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-native-4.log"
+    },
+    {
+      "label": "baseline-recovery-512-4",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.41466808319091797,
+      "load_before": "2.28 4.32 6.78 1/2286 1200",
+      "load_after": "2.28 4.32 6.78 2/2286 1201",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-512-4.log"
+    },
+    {
+      "label": "baseline-recovery-2048-4",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 5.425352096557617,
+      "load_before": "2.28 4.32 6.78 1/2286 1201",
+      "load_after": "2.18 4.26 6.75 2/2304 1202",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-2048-4.log"
+    },
+    {
+      "label": "baseline-public-5",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 17.153159618377686,
+      "load_before": "2.18 4.26 6.75 3/2304 1202",
+      "load_after": "2.17 4.13 6.65 1/2276 1203",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-public-5.jsonl"
+    },
+    {
+      "label": "baseline-native-5",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 22.76656436920166,
+      "load_before": "2.17 4.13 6.65 1/2276 1203",
+      "load_after": "1.84 3.93 6.53 2/2268 1205",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-native-5.log"
+    },
+    {
+      "label": "baseline-recovery-512-5",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.4147350788116455,
+      "load_before": "1.84 3.93 6.53 1/2268 1205",
+      "load_after": "1.84 3.93 6.53 1/2268 1206",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-512-5.log"
+    },
+    {
+      "label": "baseline-recovery-2048-5",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 5.276440143585205,
+      "load_before": "1.84 3.93 6.53 3/2268 1206",
+      "load_after": "1.77 3.88 6.50 1/2273 1207",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/baseline-recovery-2048-5.log"
+    },
+    {
+      "label": "candidate-public-5",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 15.700448274612427,
+      "load_before": "1.77 3.88 6.50 1/2273 1207",
+      "load_after": "1.60 3.74 6.41 1/2301 1208",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-public-5.jsonl"
+    },
+    {
+      "label": "candidate-native-5",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 22.51601529121399,
+      "load_before": "1.60 3.74 6.41 1/2301 1208",
+      "load_after": "1.51 3.54 6.28 3/2296 1210",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-native-5.log"
+    },
+    {
+      "label": "candidate-recovery-512-5",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.4147813320159912,
+      "load_before": "1.51 3.54 6.28 3/2296 1210",
+      "load_after": "1.51 3.54 6.28 1/2296 1211",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-512-5.log"
+    },
+    {
+      "label": "candidate-recovery-2048-5",
+      "command": [
+        "/tmp/collabtext-x07a-2026-10-19-recheck/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 5.376584053039551,
+      "load_before": "1.51 3.54 6.28 1/2296 1211",
+      "load_after": "1.55 3.52 6.25 1/2318 1212",
+      "log": "/tmp/collabtext-x07a-2026-10-19-recheck/candidate-recovery-2048-5.log"
+    }
+  ],
+  "matrix_status": "paired_measurements_complete"
+}

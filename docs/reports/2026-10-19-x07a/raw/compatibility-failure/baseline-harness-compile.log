@@ -1,0 +1,4 @@
+/home/clinton/dev/collabtext/.worktrees/reliability-v2/benchmarks/BenchmarkRunner.cpp:2:10: fatal error: crdt/Diagnostics.h: No such file or directory
+    2 | #include "crdt/Diagnostics.h"
+      |          ^~~~~~~~~~~~~~~~~~~~
+compilation terminated.

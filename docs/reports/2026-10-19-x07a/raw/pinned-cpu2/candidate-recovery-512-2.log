@@ -1,0 +1,1 @@
+checkpoint_recovery_benchmark operations=512 text_bytes=512 repeats=5 checkpoint_median_ns=7972235 full_replay_median_ns=31133104 checkpoint_to_full_ratio=0.256069

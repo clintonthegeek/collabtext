@@ -1,18 +1,21 @@
 # Current direction
 
-As of 2026-10-19. Branch `master`; the engine line merged on 2026-10-19 and is
-tagged `collabtext-integration-2026-10-19`. The former `feat/fuguemax-placement`
-worktree was removed after the merge. TASKS.json owns exact
-status/dependencies; completed phase procedures are history, not work to repeat.
+As of 2026-10-20. Performance work is executing in the isolated
+`.worktrees/reliability-v2` worktree on `feat/fuguemax-placement`; preserve root
+`master` and its unrelated changes. TASKS.json owns exact status/dependencies;
+completed phase procedures are history, not work to repeat.
 
-The selected local lane is now **[07 — measured performance](07-performance.md)**,
-starting at **X01**. The user requested an implementable optimization plan after
+The selected local lane is **[07 — measured performance](07-performance.md)**.
+X01 and X02 established the benchmark and profile; X07a is complete. The next
+eligible performance task is **X04a**, whose independent model/design gate must
+pass before dependent index implementation. The user requested an implementable optimization plan after
 [the new evaluation](../../reports/2026-10-19-performance-evaluation.md).
 The frozen source baseline is `d04f151b3a70b161b72c33a8de6895efbd1c13e2`.
 Follow the exact serial order and measurement/disposition rules in
 [the performance target contract](../../specs/vnext-performance-targets.md).
-All revised X tasks remain not started; producing a baseline did not implement
-them. Do not optimize before establishing the checked paired harness.
+The frozen source baseline is not a substitute for the paired harness: X01 has
+now established that checked harness, and each optimization must retain its
+correctness and measurement gates.
 
 Wave Q01–Q05/Q04a and Markoff M01–M05 are upstream complete. Q06/M06 remain
 external production acceptance on the exact candidate, independent of local
