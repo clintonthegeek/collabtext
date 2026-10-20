@@ -55,6 +55,33 @@ private slots:
         QVERIFY(undone);
         QVERIFY(undone.value().has_value());
         QCOMPARE(buffer.text(), std::string(128, 'x'));
+
+        Buffer marker_buffer(CollabText::Test::test_counter(32));
+        QCOMPARE(marker_buffer.apply_ops(seed).size(), seed.size());
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto marker = marker_buffer.try_insert_marker(128);
+        Diagnostics::end_sample();
+        QVERIFY(marker);
+        QCOMPARE(marker_buffer.fragment_count(), size_t{129});
+        QVERIFY(marker_buffer.fragments().back().marker);
+        const auto marker_counts = Diagnostics::snapshot();
+        QCOMPARE(marker_counts.get(Diagnostics::Counter::fragment_snapshots),
+                 uint64_t{0});
+        QCOMPARE(marker_counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(marker_counts.get(Diagnostics::Counter::placement_index_builds),
+                 uint64_t{0});
+        QCOMPARE(marker_counts.get(Diagnostics::Counter::fragment_index_publications),
+                 uint64_t{1});
+        QCOMPARE(marker_counts.get(Diagnostics::Counter::sumtree_items_pushed),
+                 uint64_t{1});
+
+        Buffer marker_peer(CollabText::Test::test_counter(31));
+        QCOMPARE(marker_peer.apply_ops(seed).size(), seed.size());
+        QCOMPARE(marker_peer.apply_ops({marker.value()}).size(), size_t{1});
+        QCOMPARE(marker_peer.text(), marker_buffer.text());
+        QVERIFY(marker_peer.fragments().back().marker);
     }
 
     void fragment_mutation_updates_only_changed_index_rows() {

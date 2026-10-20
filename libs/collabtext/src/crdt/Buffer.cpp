@@ -1561,18 +1561,41 @@ void Buffer::commit_local_history(UndoEntry&& entry) {
 }
 
 Result<Operation> Buffer::try_insert_marker(uint32_t offset) {
-    auto valid = validate_local_edit({{offset, offset}}, {""}, visible_length());
+    const uint32_t visible_bytes = visible_length();
+    auto valid = validate_local_edit({{offset, offset}}, {""}, visible_bytes);
     if (!valid) return valid.error();
-    auto frags = get_fragments();
-    uint32_t seen = 0;
-    for (const auto& f : frags) {
-        if (!f.visible || f.marker) continue;
-        if (offset > seen && offset < seen + f.byte_length &&
-            (static_cast<unsigned char>(f.text[offset-seen]) & 0xc0) == 0x80)
-            return Error(ErrorCode::not_scalar_boundary, "marker splits a UTF-8 scalar");
-        seen += f.byte_length;
+
+    if (offset != 0 && offset < visible_bytes) {
+        auto cursor = m_fragment_tree.cursor<VisibleOffset>();
+        if (!cursor.seek({offset}, Bias::Left) || !cursor.item())
+            return Error(ErrorCode::history_unavailable,
+                         "visible marker boundary is unavailable");
+        const Fragment& fragment = *cursor.item();
+        const uint32_t local = offset - cursor.position().value;
+        if (local >= fragment.text.size())
+            return Error(ErrorCode::history_unavailable,
+                         "visible marker boundary is inconsistent");
+        if ((static_cast<unsigned char>(fragment.text[local]) & 0xc0) == 0x80)
+            return Error(ErrorCode::not_scalar_boundary,
+                         "marker splits a UTF-8 scalar");
     }
-    return try_insert_item(visible_element_before(frags, offset), "", true);
+
+    std::optional<Identity> left;
+    if (offset > 0) {
+        auto cursor = m_fragment_tree.cursor<VisibleOffset>();
+        if (!cursor.seek({offset - 1}, Bias::Left) || !cursor.item())
+            return Error(ErrorCode::history_unavailable,
+                         "visible marker predecessor is unavailable");
+        const Fragment& fragment = *cursor.item();
+        const uint32_t prefix_bytes = offset - cursor.position().value;
+        const uint32_t prefix_scalars =
+            count_utf8_chars(fragment.text, prefix_bytes);
+        if (!prefix_scalars || prefix_scalars > fragment.length)
+            return Error(ErrorCode::history_unavailable,
+                         "visible marker predecessor is inconsistent");
+        left = fragment.item_at(prefix_scalars - 1);
+    }
+    return try_insert_item(left, "", true);
 }
 
 Result<Operation> Buffer::try_insert_relative(Identity marker, MarkerSide side,
@@ -1609,21 +1632,50 @@ Result<Operation> Buffer::try_insert_item(std::optional<Identity> left,
         return Error(ErrorCode::limit_exceeded, "insertion exceeds undo byte budget");
     if (auto budget = check_retirement_budget_for_new_entry(charge, count, 0); !budget)
         return budget.error();
-    auto frags = get_fragments();
-    const auto link = SequenceOrder::mint_link(frags, left);
+
+    bool append_candidate = false;
+    Link link;
+    if (m_fragment_indexes_valid && m_next_run_id != 0) {
+        if (m_fragment_tree.empty()) {
+            append_candidate = !left;
+        } else {
+            const Fragment& tail = m_fragment_tree.last();
+            if (tail.length > 0 &&
+                left == std::optional<Identity>{tail.item_at(tail.length - 1)})
+                append_candidate = true;
+        }
+        if (append_candidate) link = Link{left, Side::Right, std::nullopt};
+    }
+
+    std::vector<Fragment> frags;
+    bool have_fragments = false;
+    if (!append_candidate) {
+        frags = get_fragments();
+        have_fragments = true;
+        link = SequenceOrder::mint_link(frags, left);
+    }
     auto reserved = m_allocator->reserve_run(count + 1);
     if (!reserved) return reserved.error();
     Identity origin(actor_id(), reserved.value()), timestamp(actor_id(), reserved.value()+count);
     Fragment fragment(origin, link, static_cast<uint32_t>(text.size()), static_cast<uint32_t>(count), text);
     fragment.marker = marker;
-    if (!SequenceOrder::integrate(frags, std::move(fragment)))
-        return Error(ErrorCode::history_unavailable, "insertion gap is unavailable");
+    const bool appended = append_candidate && try_append_fragment(fragment);
+    if (!appended) {
+        if (!have_fragments) {
+            frags = get_fragments();
+            have_fragments = true;
+        }
+        if (!SequenceOrder::integrate(frags, std::move(fragment)))
+            return Error(ErrorCode::history_unavailable,
+                         "insertion gap is unavailable");
+    }
     EditOperation op;
     op.marker_edit = marker; op.timestamp = timestamp; op.deletion_id = timestamp; op.version = m_version;
     op.inserted_fragments.push_back({origin, link, text, static_cast<uint32_t>(count), marker});
     UndoEntry entry; entry.group_id = timestamp; entry.operation_ids = {timestamp}; entry.retained_bytes = charge;
     for (uint32_t i=0; i<count; ++i) entry.inserted_keys.emplace_back(Identity(origin.actor, origin.counter+i));
-    set_fragments(std::move(frags)); m_version.observe(timestamp);
+    if (!appended) set_fragments(std::move(frags));
+    m_version.observe(timestamp);
     commit_local_history(std::move(entry));
     if (m_on_change) m_on_change();
     return Operation(std::move(op));

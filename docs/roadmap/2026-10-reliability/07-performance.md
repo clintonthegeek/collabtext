@@ -529,16 +529,22 @@ aged 128-run state asserts zero fragment snapshots, zero tree rebuild items,
 zero placement-index builds, and one tree push/index publication; peer replay
 preserves the text. Intervening retained tombstones/markers and every other
 shape still use the general path. This is a proven work-count reduction for
-that exact case, not a latency claim; the paired performance workload remains
-required. After this change, the registered 33-suite Debug changed-path route
-passed 33/33, including sequence differential/model, convergence, undo,
-markers, checkpoints, GC, Buffer, index, and verification-tool coverage. The
-new branch's explicit work-count test is in `tst_perf_diagnostics`. Release and
-ASan checks also passed: the focused Release route passed 4/4; the leak-enabled
-ASan/UBSan route passed 3/3 outside the sandbox after the sandboxed run hit its
-ptrace restriction. The diagnostics target is not built in the ASan
-configuration. No paired latency measurement has been run, so this remains a
-work-count claim only.
+that exact case, not a latency claim.
+
+Tail marker creation now shares the incremental publisher, and marker
+scalar-boundary/predecessor discovery seeks through the summary tree rather
+than materializing all fragments. Tests exercise both append forms over an
+aged 128-run state, require zero fragment snapshots/rebuilds/placement-index
+builds, and replay both operations on peers. A trailing tombstone still forces
+the local text insertion through general FugueMax integration.
+
+The latest registered Debug changed-path route passed 32/32, including
+sequence differential/model, convergence, undo, marker, checkpoint, GC, Buffer,
+index, and verification-tool coverage. The focused Release route passed 4/4;
+the leak-enabled ASan/UBSan Buffer/convergence/sequence route passed 3/3 outside
+the sandbox after the sandboxed run hit its ptrace restriction. The diagnostics
+target is not built in the ASan configuration. No paired latency measurement
+has been run, so this remains a work-count claim only.
 
 **Acceptance:**
 
