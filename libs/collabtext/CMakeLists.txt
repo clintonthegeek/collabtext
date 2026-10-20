@@ -462,6 +462,7 @@ add_crdt_test(tst_identity_ordering_model)
 add_crdt_test(tst_identity_allocation_model)
 add_crdt_test(tst_identity_types)
 add_crdt_test(tst_identity_allocation_engine)
+add_crdt_test(tst_crdt_indexes)
 add_crdt_test(tst_sha256)
 add_crdt_test(tst_durable_file)
 target_compile_definitions(tst_behavior_fixtures PRIVATE

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cassert>
 #include <numeric>
+#include <tuple>
 
 namespace CollabText::Crdt {
 
@@ -122,9 +123,36 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
         assert(f.byte_length == f.text.size());
         if (!f.utf16_index_ready) f.rebuild_utf16_index();
     }
+    OriginIndex origins;
+    DeletionIndex deletions;
+    std::vector<std::tuple<ActorId, uint64_t, OriginInterval>> origin_rows;
+    std::vector<std::pair<std::tuple<Identity, ActorId, uint64_t>,
+                          DeletionIncidence>> deletion_rows;
+    origin_rows.reserve(frags.size());
+    for (size_t i = 0; i < frags.size(); ++i) {
+        const auto& fragment = frags[i];
+        const RunId run = static_cast<RunId>(i) + 1;
+        if (fragment.length) {
+            const uint64_t end = fragment.origin.counter + fragment.length;
+            origin_rows.emplace_back(fragment.origin.actor, fragment.origin.counter,
+                                      OriginInterval{end, run});
+            for (const auto& deletion : fragment.deletions) {
+                deletion_rows.emplace_back(
+                    std::tuple{deletion, fragment.origin.actor,
+                               fragment.origin.counter},
+                    DeletionIncidence{fragment.origin.actor,
+                                      fragment.origin.counter, end, run});
+            }
+        }
+    }
+    const bool origins_valid = origins.rebuild(std::move(origin_rows));
+    const bool deletions_valid = deletions.rebuild(std::move(deletion_rows));
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
     m_fragment_tree = std::move(tree);
+    m_origin_index = std::move(origins);
+    m_deletion_index = std::move(deletions);
+    m_fragment_indexes_valid = origins_valid && deletions_valid;
 }
 
 std::vector<Fragment> Buffer::fragments() const {
@@ -1326,55 +1354,97 @@ void Buffer::apply_deletion_runs(
     const std::vector<EditOperation::DeletionRun>& runs,
     Identity deletion_id)
 {
-    // Process each deletion run. Each run targets consecutive item identities
-    // from a single actor. Find the fragment(s) containing those items, split
-    // at boundaries, and mark deleted.
-    for (auto& run : runs) {
-        uint32_t remaining = run.count;
-        uint64_t next_counter = run.first.counter;
-
-        while (remaining > 0) {
-            // Find the fragment containing item (run.first.actor, next_counter)
-            bool found = false;
-            for (size_t fi = 0; fi < frags.size(); ++fi) {
-                auto &f = frags[fi];
-                if (f.origin.actor != run.first.actor) continue;
-                if (next_counter < f.origin.counter ||
-                    next_counter >= f.origin.counter + f.length) continue;
-
-                found = true;
-                uint32_t char_off =
-                    static_cast<uint32_t>(next_counter - f.origin.counter);
-                uint32_t avail = f.length - char_off;
-                uint32_t to_del = std::min(remaining, avail);
-
-                if (char_off == 0 && to_del == f.length) {
-                    // Delete entire fragment
-                    f.deletions.push_back(deletion_id);
-                } else {
-                    // Need to split
-                    if (char_off > 0) {
-                        uint32_t byte_off = char_to_byte_offset(frags[fi].text, char_off);
-                        fi = split_fragment_at(frags, fi, byte_off);
-                        // fi now points to the second half
-                        to_del = std::min(remaining, frags[fi].length);
+    if (!m_fragment_indexes_valid) {
+        // Derived-state corruption must not change CRDT outcomes. Preserve the
+        // authoritative scan behavior until a later transaction can rebuild.
+        for (auto& run : runs) {
+            uint32_t remaining = run.count;
+            uint64_t next_counter = run.first.counter;
+            while (remaining > 0) {
+                bool found = false;
+                for (size_t fi = 0; fi < frags.size(); ++fi) {
+                    auto& fragment = frags[fi];
+                    if (fragment.origin.actor != run.first.actor ||
+                        next_counter < fragment.origin.counter ||
+                        next_counter - fragment.origin.counter >= fragment.length)
+                        continue;
+                    found = true;
+                    const auto offset = static_cast<uint32_t>(
+                        next_counter - fragment.origin.counter);
+                    uint32_t count = std::min(remaining, fragment.length - offset);
+                    if (offset) {
+                        fi = split_fragment_at(
+                            frags, fi,
+                            char_to_byte_offset(frags[fi].text, offset));
+                        count = std::min(remaining, frags[fi].length);
                     }
-
-                    if (to_del < frags[fi].length) {
-                        uint32_t byte_off = char_to_byte_offset(frags[fi].text, to_del);
-                        split_fragment_at(frags, fi, byte_off);
-                        // fi still points to the first part (to be deleted)
-                    }
-
+                    if (count < frags[fi].length)
+                        split_fragment_at(frags, fi,
+                                          char_to_byte_offset(frags[fi].text, count));
                     frags[fi].deletions.push_back(deletion_id);
+                    next_counter += count;
+                    remaining -= count;
+                    break;
                 }
-
-                next_counter += to_del;
-                remaining -= to_del;
-                break;
+                if (!found) break;
             }
-            if (!found) break; // Item not found, skip remaining
         }
+        return;
+    }
+    struct Target {
+        size_t fragment = 0;
+        uint32_t offset = 0;
+        uint32_t count = 0;
+    };
+    std::vector<Target> targets;
+    // Resolve all target intervals against the current published index before
+    // editing the candidate vector. Processing right-to-left keeps fragment
+    // ordinals and offsets valid as splits insert vector elements.
+    for (auto& run : runs) {
+        if (!run.count || run.count > UINT64_MAX - run.first.counter) continue;
+        const uint64_t end = run.first.counter + run.count;
+        uint64_t covered = run.first.counter;
+        for (const auto& interval : m_origin_index.overlapping(
+                 run.first.actor, run.first.counter, end)) {
+            const uint64_t first = std::max(run.first.counter, interval.first);
+            const uint64_t last = std::min(end, interval.end);
+            // The previous scan stopped at the first missing identity. Keep
+            // that policy: a later retained interval cannot bridge a history
+            // hole for this deletion run.
+            if (first > covered) break;
+            if (last <= covered) continue;
+            if (last <= first || interval.run == 0 || interval.run > frags.size()) continue;
+            const uint64_t clipped_first = std::max(first, covered);
+            targets.push_back({static_cast<size_t>(interval.run - 1),
+                               static_cast<uint32_t>(clipped_first - interval.first),
+                               static_cast<uint32_t>(last - clipped_first)});
+            covered = last;
+            if (covered == end) break;
+        }
+    }
+
+    std::sort(targets.begin(), targets.end(), [](const Target& a, const Target& b) {
+        if (a.fragment != b.fragment) return a.fragment > b.fragment;
+        return a.offset > b.offset;
+    });
+    targets.erase(std::unique(targets.begin(), targets.end(), [](const Target& a,
+                                                                 const Target& b) {
+        return a.fragment == b.fragment && a.offset == b.offset && a.count == b.count;
+    }), targets.end());
+    for (const auto& target : targets) {
+        if (target.fragment >= frags.size()) continue;
+        size_t fi = target.fragment;
+        if (target.offset > frags[fi].length ||
+            target.count > frags[fi].length - target.offset) continue;
+        if (target.offset > 0) {
+            const uint32_t byte = char_to_byte_offset(frags[fi].text, target.offset);
+            fi = split_fragment_at(frags, fi, byte);
+        }
+        if (target.count < frags[fi].length) {
+            const uint32_t byte = char_to_byte_offset(frags[fi].text, target.count);
+            split_fragment_at(frags, fi, byte);
+        }
+        frags[fi].deletions.push_back(deletion_id);
     }
 }
 

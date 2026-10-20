@@ -11,6 +11,8 @@
 #include "crdt/OperationValidation.h"
 #include "crdt/ReclamationPolicy.h"
 #include "crdt/Operations.h"
+#include "crdt/OriginIndex.h"
+#include "crdt/DeletionIndex.h"
 #include "crdt/SumTree.h"
 #include "crdt/UndoMap.h"
 
@@ -397,6 +399,12 @@ private:
     /// tree IS the list order: placement is decided by SequenceOrder::integrate,
     /// not by a key stored on each fragment.
     FragmentTree m_fragment_tree;
+    // Rebuilt derived lookups, sharing persistent AVL pages across Buffer
+    // copies. RunIds are assigned in retained sequence order until X05 adds
+    // stable tree handles.
+    OriginIndex m_origin_index;
+    DeletionIndex m_deletion_index;
+    bool m_fragment_indexes_valid = true;
 
     /// Trim the undo stack to m_max_undo_depth entries.
     void trim_undo_stack();

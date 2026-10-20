@@ -3427,3 +3427,24 @@ Focused Debug summary/Unicode/SumTree/position tests passed 4/4, diagnostics
 passed 7/7, runner tests 4/4, changed-path verifier 16/16, and plan/scope
 validation passed. Full paired data, load caveats and artifact inventory are in
 `docs/reports/2026-10-20-x07b/README.md`. X04 is now the next task.
+
+## 2026-10-20 — X04 implementation slice 1
+
+Added immutable path-copied AVL storage, actor/counter origin intervals, and a
+reverse deletion-incidence index. `Buffer::set_fragments` reconstructs and
+validates both indexes from authoritative fragment state; full reconstruction
+uses sorted bulk loading into balanced AVL trees. Remote deletion now resolves
+retained identity intervals from OriginIndex and applies targets from right to
+left so vector splits do not invalidate pending ordinals. It stops at the first
+identity gap, preserving the previous scan behavior. If either derived index
+fails rebuild validation, remote deletion retains the previous full-scan path.
+The changed-path verifier routes Buffer/index sources to the new test.
+
+Debug validation passed `tst_crdt_indexes`, `tst_incremental_model`, and 13
+Buffer, convergence, marker, sequence, undo, checkpoint, GC, retention and
+gap suites (15/15). `test_verify_changed.py` passed 16/16. The plan validator
+initially caught that the phase file had not yet listed the new AVL header;
+that registry/phase mismatch is corrected in this update. Stable state-local
+RunIds/NodeIds, incremental updates instead of rebuilds, production deletion
+incidence queries for compensation, memory accounting, and paired performance
+measurements remain outstanding. This slice does not establish a speedup.

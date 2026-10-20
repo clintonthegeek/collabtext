@@ -355,6 +355,7 @@ Detailed ratios, load caveats, and raw artifacts are in the linked report.
 
 - `libs/collabtext/src/crdt/OriginIndex.h`
 - `libs/collabtext/src/crdt/DeletionIndex.h`
+- `libs/collabtext/src/crdt/PersistentAvlMap.h`
 - `libs/collabtext/src/crdt/Buffer.cpp`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/tests/tst_crdt_indexes.cpp`
@@ -378,6 +379,14 @@ Detailed ratios, load caveats, and raw artifacts are in the linked report.
 **Verification:**
 
 Run tst_crdt_indexes, tst_incremental_model, sequence/undo/IdList/anchor/GC/gap/restore routed suites and sanitizer fault injection; compare fixed-size targeted lookup visit counts and latency.
+
+**Current implementation slice:** Immutable path-copied AVL map storage and
+origin/deletion interval indexes now rebuild and validate alongside the
+existing fragment-tree publication. Remote deletion resolves matching retained
+intervals from the origin index and applies splits right-to-left. Per-snapshot
+ordinal handles are temporary and are rebuilt after each whole-tree mutation;
+stable tree/run handles and incremental mutation maintenance remain open. No
+performance claim is made yet. See the current X04 entry in TASKS.json.
 
 ## X05 — Replace whole-fragment text rebuilds with transactional splices
 
