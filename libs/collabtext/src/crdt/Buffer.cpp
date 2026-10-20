@@ -1183,7 +1183,7 @@ Result<std::pair<uint32_t,uint32_t>> Buffer::utf16_range(int position, int lengt
     if (position < 0 || length < 0) return Error(ErrorCode::malformed, "negative text range");
     const uint64_t start = static_cast<uint64_t>(position), end = start + static_cast<uint64_t>(length);
     const auto total = m_fragment_tree.summary();
-    if (total.visible_bytes_overflow)
+    if (total.visible_bytes > UINT32_MAX)
         return Error(ErrorCode::malformed, "document byte length exceeds the operation offset range");
     if (end > total.visible_utf16)
         return Error(ErrorCode::malformed, "text range is outside the document");
