@@ -48,9 +48,23 @@ private slots:
         Buffer peer(CollabText::Test::test_counter(30));
         const auto seeded = peer.apply_ops(seed);
         QCOMPARE(seeded.size(), seed.size());
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
         const auto delivered = peer.apply_ops({appended.value()});
+        Diagnostics::end_sample();
         QCOMPARE(delivered.size(), size_t{1});
         QCOMPARE(peer.text(), buffer.text());
+        const auto remote_counts = Diagnostics::snapshot();
+        QCOMPARE(remote_counts.get(Diagnostics::Counter::fragment_snapshots),
+                 uint64_t{0});
+        QCOMPARE(remote_counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(remote_counts.get(Diagnostics::Counter::placement_index_builds),
+                 uint64_t{0});
+        QCOMPARE(remote_counts.get(Diagnostics::Counter::fragment_index_publications),
+                 uint64_t{1});
+        QCOMPARE(remote_counts.get(Diagnostics::Counter::sumtree_items_pushed),
+                 uint64_t{1});
         const auto undone = buffer.try_undo();
         QVERIFY(undone);
         QVERIFY(undone.value().has_value());
@@ -79,9 +93,20 @@ private slots:
 
         Buffer marker_peer(CollabText::Test::test_counter(31));
         QCOMPARE(marker_peer.apply_ops(seed).size(), seed.size());
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
         QCOMPARE(marker_peer.apply_ops({marker.value()}).size(), size_t{1});
+        Diagnostics::end_sample();
         QCOMPARE(marker_peer.text(), marker_buffer.text());
         QVERIFY(marker_peer.fragments().back().marker);
+        const auto remote_marker_counts = Diagnostics::snapshot();
+        QCOMPARE(remote_marker_counts.get(Diagnostics::Counter::fragment_snapshots),
+                 uint64_t{0});
+        QCOMPARE(remote_marker_counts.get(
+                     Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(remote_marker_counts.get(Diagnostics::Counter::placement_index_builds),
+                 uint64_t{0});
     }
 
     void fragment_mutation_updates_only_changed_index_rows() {

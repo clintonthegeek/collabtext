@@ -1830,10 +1830,35 @@ Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
     if (!m_version.observed_all(op.version))
         return ApplyStep::not_ready;
 
-    // Remote edits copy the document, apply deletions, integrate inserted runs by
-    // their tree relation, then rebuild. The append shortcut avoids index
-    // construction and middle insertion for a proven tail run; every other link
-    // follows the general placement algorithm.
+    // A single deletion-free remote run with a proven final FugueMax link can
+    // use the same staged tail publisher as local appends. The operation's
+    // causal frontier is already satisfied, and try_append_fragment validates
+    // that its parent is exactly the retained tail before publishing the tree
+    // and identity indexes together. All non-tail or multi-part edits retain
+    // the general placement path below.
+    if (op.deletion_runs.empty() && op.inserted_fragments.size() == 1) {
+        const auto& inserted = op.inserted_fragments.front();
+        Fragment fragment(inserted.origin, inserted.link,
+                          static_cast<uint32_t>(inserted.content.size()),
+                          inserted.length, inserted.content);
+        fragment.marker = inserted.marker;
+        if (try_append_fragment(std::move(fragment))) {
+            observe_remote(op.timestamp);
+            m_version.observe(op.timestamp);
+            m_version.observe(op.deletion_id);
+            const Identity last_timestamp(
+                inserted.origin.actor,
+                inserted.origin.counter + inserted.length - 1);
+            observe_remote(last_timestamp);
+            m_version.observe(last_timestamp);
+            m_version.join(op.version);
+            return ApplyStep::applied;
+        }
+    }
+
+    // Other remote edits still stage against an ordered fragment snapshot and
+    // rebuild the derived tree/index state after general placement. X05 replaces
+    // this fallback with transactional tree splices for supported middle edits.
     auto frags = get_fragments();
 
     if (op.marker_edit && !op.deletion_runs.empty()) {
