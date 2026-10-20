@@ -1,0 +1,83 @@
+{
+  "purpose": "paired public timing at settled host load; compare only this run set",
+  "baseline_sha": "eef0d15f6759aa7ac753a07e6f489cf4052b586a",
+  "candidate_sha": "b2c47d6c90f5ba56b4f216c190e40f98ec049432",
+  "profile": "full-public-paired",
+  "repeats": 5,
+  "pin_cpu": 1,
+  "host": "Linux-6.18.49-1-MANJARO-x86_64-with-glibc2.44",
+  "cpu_count": 8,
+  "governor": "powersave",
+  "runs": [
+    {
+      "label": "baseline",
+      "repeat": 1,
+      "wall_seconds": 37.41155481338501,
+      "load_before": "1.62 4.00 7.27 2/2274 13",
+      "load_after": "3.82 4.30 7.24 10/2262 14"
+    },
+    {
+      "label": "candidate",
+      "repeat": 1,
+      "wall_seconds": 63.06187677383423,
+      "load_before": "3.82 4.30 7.24 10/2261 14",
+      "load_after": "15.88 7.02 7.95 9/2297 15"
+    },
+    {
+      "label": "candidate",
+      "repeat": 2,
+      "wall_seconds": 45.53173208236694,
+      "load_before": "15.88 7.02 7.95 16/2300 15",
+      "load_after": "11.69 7.35 8.02 5/2291 16"
+    },
+    {
+      "label": "baseline",
+      "repeat": 2,
+      "wall_seconds": 54.06135153770447,
+      "load_before": "11.69 7.35 8.02 3/2291 16",
+      "load_after": "8.49 7.12 7.91 5/2283 17"
+    },
+    {
+      "label": "baseline",
+      "repeat": 3,
+      "wall_seconds": 44.202441453933716,
+      "load_before": "8.49 7.12 7.91 4/2283 17",
+      "load_after": "5.63 6.58 7.69 1/2279 18"
+    },
+    {
+      "label": "candidate",
+      "repeat": 3,
+      "wall_seconds": 38.67329478263855,
+      "load_before": "5.63 6.58 7.69 1/2279 18",
+      "load_after": "3.88 6.01 7.45 3/2264 19"
+    },
+    {
+      "label": "candidate",
+      "repeat": 4,
+      "wall_seconds": 42.84736084938049,
+      "load_before": "3.88 6.01 7.45 3/2264 19",
+      "load_after": "3.07 5.53 7.23 1/2295 20"
+    },
+    {
+      "label": "baseline",
+      "repeat": 4,
+      "wall_seconds": 37.57481122016907,
+      "load_before": "3.07 5.53 7.23 1/2295 20",
+      "load_after": "2.57 5.09 7.00 1/2269 21"
+    },
+    {
+      "label": "baseline",
+      "repeat": 5,
+      "wall_seconds": 37.721822023391724,
+      "load_before": "2.57 5.09 7.00 1/2269 21",
+      "load_after": "2.17 4.67 6.78 1/2275 22"
+    },
+    {
+      "label": "candidate",
+      "repeat": 5,
+      "wall_seconds": 42.5165376663208,
+      "load_before": "2.17 4.67 6.78 1/2275 22",
+      "load_after": "2.77 4.51 6.63 1/2287 23"
+    }
+  ]
+}

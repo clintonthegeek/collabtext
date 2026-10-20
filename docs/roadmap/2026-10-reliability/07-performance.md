@@ -348,7 +348,7 @@ Detailed ratios, load caveats, and raw artifacts are in the linked report.
 
 ## X04 — Maintain origin and deletion indexes with checked updates
 
-**Status:** in progress; see TASKS.json for baseline and current implementation slice.
+**Status:** complete; implementation and evidence are recorded in TASKS.json and the linked X04 report.
 **Depends on:** X07b, S05
 **Coverage:** R6, R7, R10
 
@@ -366,6 +366,7 @@ Detailed ratios, load caveats, and raw artifacts are in the linked report.
 - `libs/collabtext/tests/tst_crdt_indexes.cpp`
 - `libs/collabtext/tests/tst_summary_laws.cpp`
 - `libs/collabtext/tests/tst_perf_diagnostics.cpp`
+- `libs/collabtext/tests/tst_benchmark.cpp`
 - `libs/collabtext/CMakeLists.txt`
 - `tools/verify_changed.py`
 - `docs/specs/vnext-performance-targets.md`
@@ -436,6 +437,20 @@ The current-source 21-suite model-sensitive set passed Release and leak-enabled
 ASan/UBSan outside the sandbox. The low-load paired timing comparison against
 the pre-delta X04 implementation remains outstanding.
 See the current X04 entry in TASKS.json.
+
+**Completion (2026-10-20):** The 5,000-run edit diagnostic visits 8 SumTree
+items on the indexed path versus 5,000 in the scan reference (99.84% fewer).
+Diagnostics measured 0 full index rebuilds across 74 sampled publications;
+5,000 entries in each of OriginIndex, DeletionIndex, and RunDirectory account
+for 1,440,000 bytes of AVL node payload before allocator/control-block costs.
+The opt-in direct lookup benchmark measured a 51.8x median speedup over the
+full scan reference, with fixture setup outside the timed loop. Current-source
+Debug, Release, and leak-enabled sanitizer gates passed. Paired end-to-end
+results are mixed: the aged 10-KB/3,000-edit byte replacement improved, while
+some light-history replacements and the 100-KB bulk undo case regressed. Keep
+that result visible as the X05 baseline; do not claim a general speedup. Raw
+lookup and paired results are in
+[`2026-10-20-x04-delta-paired/`](../../reports/2026-10-20-x04-delta-paired/README.md).
 
 ## X05 — Replace whole-fragment text rebuilds with transactional splices
 

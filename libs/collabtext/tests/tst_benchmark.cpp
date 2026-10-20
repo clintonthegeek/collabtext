@@ -3,6 +3,9 @@
 #include "crdt/Buffer.h"
 #include "crdt/NetworkSim.h"
 #include "crdt/EditStrategy.h"
+#include "crdt/DeletionIndex.h"
+#include "crdt/OriginIndex.h"
+#include "crdt/RunDirectory.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -171,6 +174,138 @@ class TestBenchmark : public QObject {
     Q_OBJECT
 
 private slots:
+
+    // Opt-in direct lookup comparison for X04. Index setup is deliberately
+    // outside the timed loops; each path resolves the same origin, deletion
+    // incidence and run ordinal over a fixed 5,000-run fixture.
+    void indexed_run_lookup_latency() {
+        constexpr uint64_t run_count = 5000;
+        constexpr uint64_t queries = 5000;
+        const auto origin_actor = actor(40);
+        const auto deletion_actor = actor(41);
+
+        std::vector<Fragment> fragments;
+        fragments.reserve(run_count);
+        OriginIndex origins;
+        DeletionIndex deletions;
+        std::vector<std::pair<RunId, uint64_t>> directory_rows;
+        directory_rows.reserve(run_count);
+        for (uint64_t i = 0; i < run_count; ++i) {
+            const uint64_t counter = i + 1;
+            const RunId run = i + 1;
+            const Identity deletion_id(deletion_actor, counter);
+            Fragment fragment;
+            fragment.origin = Identity(origin_actor, counter);
+            fragment.length = 1;
+            fragment.byte_length = 1;
+            fragment.deletions.push_back(deletion_id);
+            fragments.push_back(std::move(fragment));
+            if (!origins.insert(origin_actor, counter, counter + 1, run) ||
+                !deletions.insert(deletion_id, origin_actor, counter,
+                                  counter + 1, run))
+                QFAIL("failed to build indexed lookup fixture");
+            directory_rows.emplace_back(run, i);
+        }
+        RunDirectory directory;
+        QVERIFY(directory.rebuild(std::move(directory_rows)));
+
+        auto scan = [&](uint64_t repeat) {
+            uint64_t checksum = 0;
+            for (uint64_t query = 0; query < queries; ++query) {
+                const uint64_t offset =
+                    (query * 7919 + repeat * 997) % run_count;
+                const Identity origin_id(origin_actor, offset + 1);
+                const Identity deletion_id(deletion_actor, offset + 1);
+                RunId origin_run = 0;
+                std::vector<RunId> deletion_runs;
+                for (size_t ordinal = 0; ordinal < fragments.size(); ++ordinal) {
+                    const auto& fragment = fragments[ordinal];
+                    if (fragment.origin.actor == origin_id.actor &&
+                        origin_id.counter >= fragment.origin.counter &&
+                        origin_id.counter < fragment.origin.counter + fragment.length)
+                        origin_run = ordinal + 1;
+                    if (std::find(fragment.deletions.begin(),
+                                  fragment.deletions.end(), deletion_id) !=
+                        fragment.deletions.end())
+                        deletion_runs.push_back(ordinal + 1);
+                }
+                if (!origin_run || deletion_runs.size() != 1 ||
+                    deletion_runs.front() != origin_run)
+                    return std::pair{checksum, false};
+                checksum += origin_run;
+            }
+            return std::pair{checksum, true};
+        };
+        auto indexed = [&](uint64_t repeat) {
+            uint64_t checksum = 0;
+            for (uint64_t query = 0; query < queries; ++query) {
+                const uint64_t offset =
+                    (query * 7919 + repeat * 997) % run_count;
+                const auto origin = origins.locate(
+                    Identity(origin_actor, offset + 1));
+                const auto deletion_runs = deletions.incidences(
+                    Identity(deletion_actor, offset + 1));
+                if (!origin || deletion_runs.size() != 1 ||
+                    deletion_runs.front().run != origin->run)
+                    return std::pair{checksum, false};
+                const auto ordinal = directory.ordinal(origin->run);
+                if (!ordinal) return std::pair{checksum, false};
+                checksum += *ordinal + 1;
+            }
+            return std::pair{checksum, true};
+        };
+
+        std::vector<double> scan_ns_per_query;
+        std::vector<double> indexed_ns_per_query;
+        uint64_t expected_checksum = 0;
+        for (uint64_t repeat = 0; repeat < 5; ++repeat) {
+            std::pair<uint64_t, bool> scan_result{};
+            std::pair<uint64_t, bool> indexed_result{};
+            uint64_t scan_elapsed = 0;
+            uint64_t indexed_elapsed = 0;
+            const auto measure_scan = [&] {
+                const auto start = Clock::now();
+                scan_result = scan(repeat);
+                scan_elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    Clock::now() - start).count();
+            };
+            const auto measure_indexed = [&] {
+                const auto start = Clock::now();
+                indexed_result = indexed(repeat);
+                indexed_elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    Clock::now() - start).count();
+            };
+            if (repeat % 2) {
+                measure_indexed();
+                measure_scan();
+            } else {
+                measure_scan();
+                measure_indexed();
+            }
+            QVERIFY(scan_result.second);
+            QVERIFY(indexed_result.second);
+            QCOMPARE(scan_result.first, indexed_result.first);
+            if (!repeat) expected_checksum = scan_result.first;
+            QCOMPARE(scan_result.first, expected_checksum);
+            scan_ns_per_query.push_back(
+                static_cast<double>(scan_elapsed) / queries);
+            indexed_ns_per_query.push_back(
+                static_cast<double>(indexed_elapsed) / queries);
+            qInfo() << "X04 5,000-run lookup pair" << repeat
+                    << "scan_ns/query" << scan_ns_per_query.back()
+                    << "indexed_ns/query" << indexed_ns_per_query.back();
+        }
+        auto median = [](std::vector<double> values) {
+            std::sort(values.begin(), values.end());
+            return values[values.size() / 2];
+        };
+        const double scan_median = median(scan_ns_per_query);
+        const double indexed_median = median(indexed_ns_per_query);
+        qInfo() << "X04 5,000-run lookup median speedup:" << scan_median /
+                    indexed_median
+                << "x; scan/indexed ns per query:" << scan_median << "/"
+                << indexed_median;
+    }
 
     // ========================================================================
     // 0. The report format itself

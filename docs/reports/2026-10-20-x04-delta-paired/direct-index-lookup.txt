@@ -1,0 +1,16 @@
+********* Start testing of TestBenchmark *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+INFO   : TestBenchmark::initTestCase() entering
+PASS   : TestBenchmark::initTestCase()
+INFO   : TestBenchmark::indexed_run_lookup_latency() entering
+QINFO  : TestBenchmark::indexed_run_lookup_latency() X04 5,000-run lookup pair 0 scan_ns/query 27677.6 indexed_ns/query 561.25
+QINFO  : TestBenchmark::indexed_run_lookup_latency() X04 5,000-run lookup pair 1 scan_ns/query 28556.8 indexed_ns/query 430.824
+QINFO  : TestBenchmark::indexed_run_lookup_latency() X04 5,000-run lookup pair 2 scan_ns/query 27913.1 indexed_ns/query 540.52
+QINFO  : TestBenchmark::indexed_run_lookup_latency() X04 5,000-run lookup pair 3 scan_ns/query 28196.8 indexed_ns/query 429.922
+QINFO  : TestBenchmark::indexed_run_lookup_latency() X04 5,000-run lookup pair 4 scan_ns/query 27340.3 indexed_ns/query 538.428
+QINFO  : TestBenchmark::indexed_run_lookup_latency() X04 5,000-run lookup median speedup: 51.8418 x; scan/indexed ns per query: 27913.1 / 538.428
+PASS   : TestBenchmark::indexed_run_lookup_latency()
+INFO   : TestBenchmark::cleanupTestCase() entering
+PASS   : TestBenchmark::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 725ms
+********* Finished testing of TestBenchmark *********
