@@ -32,7 +32,7 @@ namespace CollabText::Crdt {
 /// associative, and the byte counts are commutative. See tst_summary_laws.cpp,
 /// which checks them against randomized splice patterns.
 struct FragmentSummary {
-    uint32_t visible_bytes = 0;    ///< Visible bytes modulo 2^32; exact total lives on Buffer
+    uint64_t visible_bytes = 0;    ///< Total visible bytes in subtree (overflow checked at API boundary)
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
     // All public text coordinates are int/uint32 byte offsets, so the usable
     // visible UTF-16 range also fits this width.
@@ -47,10 +47,6 @@ struct FragmentSummary {
         visible_utf16 += other.visible_utf16;
     }
 };
-
-inline bool visible_byte_offset_overflow(uint64_t exact_total) noexcept {
-    return exact_total > UINT32_MAX;
-}
 
 // ============================================================================
 // Dimensions — different ways to seek through a SumTree<Fragment>
@@ -341,11 +337,5 @@ struct Fragment {
     }
 };
 
-inline uint64_t exact_visible_byte_total(const std::vector<Fragment>& fragments) noexcept {
-    uint64_t total = 0;
-    for (const auto& fragment : fragments)
-        if (fragment.visible) total += fragment.byte_length;
-    return total;
-}
 
 } // namespace CollabText::Crdt

@@ -117,17 +117,14 @@ std::vector<Fragment> Buffer::get_fragments() const {
 void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     Diagnostics::record(Diagnostics::Counter::fragment_tree_rebuild_items,
                         frags.size());
-    uint64_t exact_visible_bytes = 0;
     for (auto& f : frags) {
         f.visible = f.compute_visible(m_undo_map);
         assert(f.byte_length == f.text.size());
         if (!f.utf16_index_ready) f.rebuild_utf16_index();
-        if (f.visible) exact_visible_bytes += f.byte_length;
     }
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
     m_fragment_tree = std::move(tree);
-    m_exact_visible_byte_total = exact_visible_bytes;
 }
 
 std::vector<Fragment> Buffer::fragments() const {
@@ -627,17 +624,14 @@ Result<size_t> Buffer::collect_garbage(
         return restored.error();
 
     FragmentTree rebuilt_tree;
-    uint64_t exact_visible_bytes = 0;
     for (size_t i = 0; i < fragments.size(); ++i) {
         if (remove[i]) continue;
         auto &fragment = fragments[i];
         fragment.visible = fragment.compute_visible(rebuilt_undo);
-        if (fragment.visible) exact_visible_bytes += fragment.byte_length;
         rebuilt_tree.push_item(std::move(fragment));
     }
     m_undo_map = std::move(rebuilt_undo);
     m_fragment_tree = std::move(rebuilt_tree);
-    m_exact_visible_byte_total = exact_visible_bytes;
     return reclaimed_items;
 }
 
@@ -1189,7 +1183,7 @@ Result<std::pair<uint32_t,uint32_t>> Buffer::utf16_range(int position, int lengt
     if (position < 0 || length < 0) return Error(ErrorCode::malformed, "negative text range");
     const uint64_t start = static_cast<uint64_t>(position), end = start + static_cast<uint64_t>(length);
     const auto total = m_fragment_tree.summary();
-    if (visible_byte_offset_overflow(m_exact_visible_byte_total))
+    if (total.visible_bytes > UINT32_MAX)
         return Error(ErrorCode::malformed, "document byte length exceeds the operation offset range");
     if (end > total.visible_utf16)
         return Error(ErrorCode::malformed, "text range is outside the document");
