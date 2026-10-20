@@ -558,6 +558,17 @@ pair. After that measured candidate, a remote deletion-free single-run tail
 path was added. It shares the checked incremental publisher and has
 work-count/peer-replay coverage, but its latency has not yet been measured.
 
+Local deletion now has an incremental path when the requested text range exactly
+covers complete visible runs. It seeks the range in the summary tree, validates
+each run through OriginIndex/RunDirectory, stages deletion incidences, then
+path-copies only the affected retained ranks and publishes their visibility
+summaries. Its operation descriptors match the general identity-order packing;
+overlapping actor intervals or partial-run boundaries use the reference path.
+Remote replay has the corresponding single-whole-run text-delete path. Debug
+diagnostics verify zero fragment snapshots/rebuilds and peer replay/undo; the
+full Buffer route passed 31/31. This latest code has not yet been included in
+paired latency evidence.
+
 **Acceptance:**
 
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
