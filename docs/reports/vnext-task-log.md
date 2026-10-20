@@ -3455,3 +3455,15 @@ deleting operation contributes one incidence per covered item. This avoids
 invalid duplicate reverse-index entries while preserving the prior visibility
 result. The final affected Debug suite passed 15/15 with this regression
 included; verifier unit tests passed 16/16.
+
+## 2026-10-20 — X04 implementation slice 2
+
+Local undo/redo and remote undo now use the origin and deletion indexes to find
+which fragments can change visibility. The SumTree still needs a full mutable
+traversal to propagate summaries, but `Fragment::compute_visible` runs only on
+the affected fragments. The diagnostics regression checks both inserted-item
+undo and deletion undo on a three-run tree: each recomputes one run, where the
+prior implementation recomputed all three. Opt-in Release `tst_perf_diagnostics`
+passed 1/1. The final affected Debug suite passed 15/15, and
+`test_verify_changed.py` passed 16/16. No end-to-end latency claim is made
+because mutable tree traversal and summary propagation remain O(F).

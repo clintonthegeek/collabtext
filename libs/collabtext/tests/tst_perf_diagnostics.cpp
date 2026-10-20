@@ -155,6 +155,42 @@ private slots:
         QCOMPARE(unicode_counts.get(Diagnostics::Counter::utf16_index_builds), uint64_t{1});
         QVERIFY(unicode_counts.get(Diagnostics::Counter::utf16_checkpoint_entries_built) > 0);
     }
+
+    void undo_recomputes_visibility_only_for_indexed_runs() {
+        Buffer seed(CollabText::Test::test_counter(21));
+        Buffer inserted(CollabText::Test::test_counter(22));
+        auto initial = seed.try_apply_local_edit({{0, 0}}, {"abcdef"});
+        QVERIFY(initial);
+        inserted.apply_ops({initial.value()});
+        QVERIFY(inserted.try_apply_local_edit({{3, 3}}, {"X"}));
+        QVERIFY(inserted.fragments().size() >= size_t{3});
+        QCOMPARE(inserted.text(), std::string("abcXdef"));
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto inserted_undo = inserted.try_undo();
+        Diagnostics::end_sample();
+        QVERIFY(inserted_undo);
+        QVERIFY(inserted_undo.value().has_value());
+        QCOMPARE(inserted.text(), std::string("abcdef"));
+        QCOMPARE(Diagnostics::snapshot().get(
+                     Diagnostics::Counter::visibility_recomputations), uint64_t{1});
+
+        Buffer deleted(CollabText::Test::test_counter(23));
+        deleted.apply_ops({initial.value()});
+        QVERIFY(deleted.try_apply_local_edit({{2, 4}}, {""}));
+        QVERIFY(deleted.fragments().size() >= size_t{3});
+        QCOMPARE(deleted.text(), std::string("abef"));
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto deletion_undo = deleted.try_undo();
+        Diagnostics::end_sample();
+        QVERIFY(deletion_undo);
+        QVERIFY(deletion_undo.value().has_value());
+        QCOMPARE(deleted.text(), std::string("abcdef"));
+        QCOMPARE(Diagnostics::snapshot().get(
+                     Diagnostics::Counter::visibility_recomputations), uint64_t{1});
+    }
 };
 
 QTEST_MAIN(TestPerfDiagnostics)

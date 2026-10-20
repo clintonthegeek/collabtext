@@ -155,6 +155,71 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     m_fragment_indexes_valid = origins_valid && deletions_valid;
 }
 
+void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
+    if (!m_fragment_indexes_valid) {
+        m_fragment_tree.for_each_mut([this](Fragment& fragment) {
+            fragment.visible = fragment.compute_visible(m_undo_map);
+        });
+        return;
+    }
+    std::set<RunId> affected;
+    for (size_t first_index = 0; first_index < identities.size();) {
+        const auto& first_identity = identities[first_index];
+        size_t end_index = first_index + 1;
+        uint64_t end_counter = first_identity.counter;
+        const bool can_range = end_counter != UINT64_MAX;
+        if (can_range) ++end_counter;
+        while (can_range && end_index < identities.size() &&
+               identities[end_index].actor == first_identity.actor &&
+               identities[end_index].counter == end_counter &&
+               end_counter != UINT64_MAX) {
+            ++end_counter;
+            ++end_index;
+        }
+        if (!can_range) end_counter = first_identity.counter;
+
+        bool fully_covered = can_range;
+        uint64_t covered = first_identity.counter;
+        if (can_range) {
+            for (const auto& interval : m_origin_index.overlapping(
+                     first_identity.actor, first_identity.counter, end_counter)) {
+                const uint64_t start = std::max(first_identity.counter, interval.first);
+                const uint64_t end = std::min(end_counter, interval.end);
+                if (start > covered) break;
+                if (end > covered) {
+                    covered = end;
+                    affected.insert(interval.run);
+                }
+                if (covered == end_counter) break;
+            }
+            fully_covered = covered == end_counter;
+        }
+
+        // Long local insert undo groups are contiguous item identities and are
+        // handled in O(log F + K) interval queries, rather than one map lookup
+        // per scalar. Mixed or sparse remote targets use exact identity checks.
+        if (!fully_covered) {
+            for (size_t i = first_index; i < end_index; ++i) {
+                const auto& identity = identities[i];
+                if (const auto origin = m_origin_index.locate(identity)) {
+                    affected.insert(origin->run);
+                    continue;
+                }
+                for (const auto& incidence : m_deletion_index.incidences(identity))
+                    affected.insert(incidence.run);
+            }
+        }
+        first_index = end_index;
+    }
+    if (affected.empty()) return;
+    size_t run = 0;
+    m_fragment_tree.for_each_mut([&](Fragment& fragment) {
+        ++run;
+        if (affected.contains(static_cast<RunId>(run)))
+            fragment.visible = fragment.compute_visible(m_undo_map);
+    });
+}
+
 std::vector<Fragment> Buffer::fragments() const {
     return get_fragments();
 }
@@ -1582,9 +1647,10 @@ Buffer::ApplyStep Buffer::apply_remote_undo(const UndoOperation &op) {
     m_version.observe(op.timestamp);
     m_version.join(op.version);
 
-    m_fragment_tree.for_each_mut([this](Fragment& f) {
-        f.visible = f.compute_visible(m_undo_map);
-    });
+    std::vector<Identity> targets;
+    targets.reserve(op.counts.size());
+    for (const auto& [identity, _] : op.counts) targets.push_back(identity);
+    recompute_visibility_for(targets);
     return ApplyStep::applied;
 }
 
@@ -2030,9 +2096,10 @@ Result<std::optional<Operation>> Buffer::try_undo_group(const Identity &group_id
         op.counts.push_back({deletion_id, current + 1});
     }
 
-    m_fragment_tree.for_each_mut([this](Fragment& f) {
-        f.visible = f.compute_visible(m_undo_map);
-    });
+    std::vector<Identity> targets;
+    targets.reserve(op.counts.size());
+    for (const auto& [identity, _] : op.counts) targets.push_back(identity);
+    recompute_visibility_for(targets);
 
     m_version.observe(op.timestamp);
     return std::optional<Operation>(std::move(op));
@@ -2094,9 +2161,10 @@ Result<std::optional<Operation>> Buffer::try_redo_group(const Identity &group_id
         op.counts.push_back({deletion_id, current + 1});
     }
 
-    m_fragment_tree.for_each_mut([this](Fragment& f) {
-        f.visible = f.compute_visible(m_undo_map);
-    });
+    std::vector<Identity> targets;
+    targets.reserve(op.counts.size());
+    for (const auto& [identity, _] : op.counts) targets.push_back(identity);
+    recompute_visibility_for(targets);
 
     m_version.observe(op.timestamp);
     return std::optional<Operation>(std::move(op));

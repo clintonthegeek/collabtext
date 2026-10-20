@@ -385,8 +385,11 @@ origin/deletion interval indexes now rebuild and validate alongside the
 existing fragment-tree publication. Remote deletion resolves matching retained
 intervals from the origin index and applies splits right-to-left. Per-snapshot
 ordinal handles are temporary and are rebuilt after each whole-tree mutation;
-stable tree/run handles and incremental mutation maintenance remain open. No
-performance claim is made yet. See the current X04 entry in TASKS.json.
+stable tree/run handles and incremental mutation maintenance remain open.
+Local undo/redo and remote undo now use origin/deletion incidences to limit
+visibility recomputation to affected runs, while the current tree still has to
+be traversed to update summaries. No end-to-end performance claim is made yet.
+See the current X04 entry in TASKS.json.
 
 ## X05 — Replace whole-fragment text rebuilds with transactional splices
 

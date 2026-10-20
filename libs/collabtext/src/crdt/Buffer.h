@@ -305,6 +305,7 @@ private:
 
     /// Rebuild the fragment tree from a vector of fragments (preserves order).
     void set_fragments(std::vector<Fragment>&& frags);
+    void recompute_visibility_for(const std::vector<Identity>& identities);
 
     /// Find the fragment index and byte offset within that fragment for a
     /// given visible byte offset. Returns (fragment_index, offset_within_fragment).
