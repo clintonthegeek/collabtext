@@ -57,23 +57,36 @@ def validate_trace(trace_data):
     return dimensions
 
 
+def valid_revision(value):
+    return re.fullmatch(r"[0-9a-f]{40}", value) is not None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-root", type=Path, required=True,
-                        help="source snapshot of the pinned baseline commit")
-    parser.add_argument("--baseline-sha", default=BASELINE)
+                        help="source snapshot matching --baseline-sha")
+    parser.add_argument("--baseline-sha", default=BASELINE,
+                        help="40-character revision for the baseline source (default: X01 baseline)")
     parser.add_argument("--candidate-root", type=Path, default=ROOT)
     parser.add_argument("--output", type=Path, required=True,
                         help="new directory for builds, raw runs and aggregates")
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--smoke", action="store_true",
                         help="one quick public harness run per build; not evidence of a win")
+    parser.add_argument("--public-only", action="store_true",
+                        help="run the full public profile without native/recovery side benchmarks")
+    parser.add_argument("--pin-cpu", type=int,
+                        help="pin only public benchmark processes to this CPU")
     args = parser.parse_args()
     baseline_root = args.baseline_root.resolve()
     candidate_root = args.candidate_root.resolve()
     output = args.output.resolve()
     if args.repeats < 1:
         parser.error("--repeats must be positive")
+    if not valid_revision(args.baseline_sha):
+        parser.error("--baseline-sha must be a full lowercase 40-character commit id")
+    if args.pin_cpu is not None and args.pin_cpu not in os.sched_getaffinity(0):
+        parser.error(f"CPU {args.pin_cpu} is outside the current process affinity")
     if baseline_root == candidate_root or not (baseline_root / "CMakeLists.txt").is_file():
         parser.error("--baseline-root must be an extracted source snapshot")
     if not (candidate_root / "benchmarks/BenchmarkRunner.cpp").is_file():
@@ -115,7 +128,9 @@ def main():
                           if p.is_file()), None),
         "cpu_affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
         "build_flags": "-O3 -DNDEBUG; C++20; COLLABTEXT_ENABLE_SANITIZERS=OFF",
-        "profile": "quick-smoke" if args.smoke else "full-paired-matrix",
+        "profile": ("quick-smoke" if args.smoke else
+                    "full-public-paired" if args.public_only else "full-paired-matrix"),
+        "benchmark_pin_cpu": args.pin_cpu,
         "repeats": 1 if args.smoke else args.repeats,
         "native_methods": [] if args.smoke else METHODS,
         "commands": [],
@@ -127,10 +142,14 @@ def main():
         log_path = log_path or (output / (label + ".log"))
         status = None
         timed_out = False
+        preexec = None
+        if args.pin_cpu is not None and "-public-" in label:
+            preexec = lambda: os.sched_setaffinity(0, {args.pin_cpu})
         with log_path.open("w") as log:
             try:
                 result = subprocess.run(command, cwd=ROOT, env=env, stdout=log,
-                                        stderr=subprocess.STDOUT, timeout=timeout)
+                                        stderr=subprocess.STDOUT, timeout=timeout,
+                                        preexec_fn=preexec)
                 status = result.returncode
             except subprocess.TimeoutExpired:
                 timed_out = True
@@ -284,8 +303,6 @@ def main():
         return parsed
 
     try:
-        if args.baseline_sha != BASELINE:
-            raise RuntimeError(f"baseline must remain pinned to {BASELINE}")
         baseline_build = configure_and_build("baseline", baseline_root)
         candidate_build = configure_and_build("candidate", candidate_root)
         baseline_bin = compile_baseline_harness(baseline_build)
@@ -302,7 +319,7 @@ def main():
                 run(f"{label}-public-{suffix}", [binary, *(["--quick"] if args.smoke else [])],
                     timeout=300, log_path=public_log)
                 datasets[label].setdefault("public", []).append(read_public(public_log))
-                if args.smoke:
+                if args.smoke or args.public_only:
                     continue
                 native_log = output / f"{label}-native-{suffix}.log"
                 run(f"{label}-native-{suffix}",
@@ -327,7 +344,7 @@ def main():
                 if (left["result_fnv1a64"], left["operation_fnv1a64"]) != (
                         right["result_fnv1a64"], right["operation_fnv1a64"]):
                     raise RuntimeError(f"public result or encoded operation differs: {name}")
-            if not args.smoke:
+            if not args.smoke and not args.public_only:
                 left, right = datasets["baseline"]["native"][repeat], datasets["candidate"]["native"][repeat]
                 if set(left) != set(right):
                     raise RuntimeError("baseline/candidate native cases differ")
@@ -361,7 +378,7 @@ def main():
             }
             aggregate["cases"][name] = entry
 
-        if not args.smoke:
+        if not args.smoke and not args.public_only:
             for group in ("native", "recovery-512", "recovery-2048"):
                 aggregate["cases"][group] = {}
                 case_names = (datasets["baseline"][group][0].keys()
@@ -390,7 +407,9 @@ def main():
                                 "candidate_over_baseline": [c / b for b, c in zip(base_values, cand_values)],
                             }
         (output / "aggregate.json").write_text(json.dumps(aggregate, indent=2) + "\n")
-        meta["matrix_status"] = "smoke_pass" if args.smoke else "paired_measurements_complete"
+        meta["matrix_status"] = ("smoke_pass" if args.smoke else
+                                  "public_measurements_complete" if args.public_only else
+                                  "paired_measurements_complete")
         (output / "environment.json").write_text(json.dumps(meta, indent=2) + "\n")
         print(json.dumps({"status": meta["matrix_status"], "output": str(output),
                           "cases": len(public_names), "paired_runs": run_count}, indent=2))

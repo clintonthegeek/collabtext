@@ -34,6 +34,12 @@ class TraceValidationTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     matrix.validate_trace(trace)
 
+    def test_baseline_revision_accepts_full_commit_ids_only(self):
+        self.assertTrue(matrix.valid_revision(matrix.BASELINE))
+        self.assertTrue(matrix.valid_revision("eefcf9d" + "0" * 33))
+        self.assertFalse(matrix.valid_revision("eefcf9d"))
+        self.assertFalse(matrix.valid_revision("g" * 40))
+
     def test_archived_x01_matrix_is_complete_and_correct(self):
         environment = json.loads((RAW / "environment.json").read_text())
         aggregate = json.loads((RAW / "aggregate.json").read_text())
