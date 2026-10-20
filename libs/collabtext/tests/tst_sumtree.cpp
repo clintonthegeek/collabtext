@@ -144,6 +144,7 @@ private slots:
         QVERIFY(visited > 1);
 
         using Node = StableTree::Node;
+        using NodePtr = StableTree::NodePtr;
         NodeDirectory<Node> directory;
         std::vector<std::pair<NodeId, NodeLocation<Node>>> entries;
         spliced->for_each_node([&](const auto& node, NodeId id,
@@ -154,14 +155,39 @@ private slots:
         });
         QVERIFY(directory.rebuild(std::move(entries)));
         QCOMPARE(directory.size(), visited);
+        NodePtr root;
         spliced->for_each_node([&](const auto& node, NodeId id,
                                    std::optional<NodeId> parent, uint16_t slot) {
+            if (!root) root = node;
             const auto location = directory.locate(id);
             QVERIFY(location.has_value());
             QCOMPARE(location->node.lock().get(), node.get());
             QCOMPARE(location->parent, parent);
             QCOMPARE(location->child_slot, slot);
         });
+
+        uint64_t expected_rank = 0;
+        std::optional<NodeId> first_leaf_id;
+        spliced->for_each_node([&](const auto& node, NodeId id,
+                                   std::optional<NodeId>, uint16_t) {
+            if (!node->is_leaf()) return;
+            if (!first_leaf_id) first_leaf_id = id;
+            for (uint16_t slot = 0; slot < node->leaf().count; ++slot) {
+                const auto rank = directory.rank_of_item<ItemCount>(root, id, slot);
+                QVERIFY(rank.has_value());
+                QCOMPARE(static_cast<uint64_t>(rank->value), expected_rank);
+                expected_rank += node->leaf().item_summaries[slot].count;
+            }
+        });
+        QCOMPARE(expected_rank, spliced->summary().count);
+
+        NodePtr fork_root;
+        fork.for_each_node([&](const auto& node, NodeId, std::optional<NodeId>, uint16_t) {
+            if (!fork_root) fork_root = node;
+        });
+        QVERIFY(first_leaf_id.has_value());
+        QVERIFY(!directory.rank_of_item<ItemCount>(
+            fork_root, *first_leaf_id, 0).has_value());
     }
 
     void push_single_item() {

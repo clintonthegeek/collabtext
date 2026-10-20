@@ -582,6 +582,16 @@ directional. Keep the exact covered fast paths, but X05 remains in progress:
 stable Buffer-owned locators and common middle replacements are still needed,
 and both aged-edit and mixed-tombstone thresholds remain unmet.
 
+The next locator primitive is now available in `NodeDirectory`: given a stable
+leaf `NodeId` and item slot, it composes preceding leaf-item and ancestor-child
+summaries to return retained rank. It validates weak-node identity, every
+parent/slot edge, and that the directory root belongs to the queried tree; a
+stale directory returns no rank. The `tst_sumtree` case checks every item rank
+in a spliced stable-ID tree and rejects a source directory used against its
+COW fork. Focused Debug and Release checks pass. Buffer does not yet use stable
+node IDs or this locator, so this is infrastructure only and makes no latency
+claim.
+
 **Acceptance:**
 
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.

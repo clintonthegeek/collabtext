@@ -39,6 +39,56 @@ public:
         return *entry;
     }
 
+    // Return the retained-sequence position of an item in a leaf by walking
+    // this tree version's parent directory and composing sibling summaries.
+    // The weak references are checked against every recorded edge so a stale
+    // directory cannot turn into a plausible but incorrect rank.
+    template<class Dimension>
+    std::optional<Dimension> rank_of_item(
+        const std::shared_ptr<Node>& root, NodeId leaf_id,
+        uint16_t item_slot) const {
+        if (!root || !leaf_id.valid()) return std::nullopt;
+        auto leaf_location = locate(leaf_id);
+        if (!leaf_location) return std::nullopt;
+        auto node = leaf_location->node.lock();
+        if (!node || node->node_id != leaf_id || !node->is_leaf() ||
+            item_slot >= node->leaf().count)
+            return std::nullopt;
+
+        Dimension rank = Dimension::zero();
+        const auto& leaf = node->leaf();
+        for (uint16_t slot = 0; slot < item_slot; ++slot)
+            rank.add_summary(leaf.item_summaries[slot]);
+
+        size_t climbed = 0;
+        while (true) {
+            if (++climbed > m_entries.size()) return std::nullopt;
+            const auto current_location = locate(node->node_id);
+            if (!current_location || current_location->node.lock().get() != node.get())
+                return std::nullopt;
+            if (!current_location->parent) {
+                if (node.get() != root.get() || current_location->child_slot != 0)
+                    return std::nullopt;
+                return rank;
+            }
+
+            const NodeId parent_id = *current_location->parent;
+            const auto parent_location = locate(parent_id);
+            if (!parent_location) return std::nullopt;
+            auto parent = parent_location->node.lock();
+            if (!parent || parent->node_id != parent_id || parent->is_leaf())
+                return std::nullopt;
+            const auto& children = parent->internal();
+            const uint16_t child_slot = current_location->child_slot;
+            if (child_slot >= children.count ||
+                children.children[child_slot].get() != node.get())
+                return std::nullopt;
+            for (uint16_t slot = 0; slot < child_slot; ++slot)
+                rank.add_summary(children.child_summaries[slot]);
+            node = std::move(parent);
+        }
+    }
+
     bool insert_or_assign(NodeId id, Entry entry) {
         if (!id.valid()) return false;
         m_entries = m_entries.insert_or_assign(id, std::move(entry));
