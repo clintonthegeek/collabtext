@@ -200,7 +200,7 @@ private slots:
         // Identity, associativity, and commutativity of the cached aggregate.
         const FragmentSummary empty = FragmentSummary::zero();
 
-        auto summary_for = [](uint64_t visible, uint32_t deleted, uint32_t utf16) {
+        auto summary_for = [](uint32_t visible, uint32_t deleted, uint32_t utf16) {
             FragmentSummary s;
             s.visible_bytes = visible;
             s.deleted_bytes = deleted;
@@ -218,6 +218,7 @@ private slots:
         QCOMPARE(with_empty.visible_bytes, a.visible_bytes);
         QCOMPARE(with_empty.deleted_bytes, a.deleted_bytes);
         QCOMPARE(with_empty.visible_utf16, a.visible_utf16);
+        QCOMPARE(with_empty.visible_bytes_overflow, a.visible_bytes_overflow);
 
         // Commutative
         FragmentSummary ab = a; ab.add_summary(b);
@@ -225,6 +226,7 @@ private slots:
         QCOMPARE(ab.visible_bytes, ba.visible_bytes);
         QCOMPARE(ab.deleted_bytes, ba.deleted_bytes);
         QCOMPARE(ab.visible_utf16, ba.visible_utf16);
+        QCOMPARE(ab.visible_bytes_overflow, ba.visible_bytes_overflow);
 
         // Associative
         FragmentSummary left = ab; left.add_summary(c);
@@ -234,6 +236,7 @@ private slots:
         QCOMPARE(left.visible_bytes, right.visible_bytes);
         QCOMPARE(left.deleted_bytes, right.deleted_bytes);
         QCOMPARE(left.visible_utf16, right.visible_utf16);
+        QCOMPARE(left.visible_bytes_overflow, right.visible_bytes_overflow);
     }
 
     void visible_byte_overflow_is_observable_to_range_validation() {
@@ -242,7 +245,8 @@ private slots:
         FragmentSummary next;
         next.visible_bytes = 1;
         sum.add_summary(next);
-        QCOMPARE(sum.visible_bytes, uint64_t{UINT32_MAX} + 1);
+        QCOMPARE(sum.visible_bytes, uint32_t{0});
+        QVERIFY(sum.visible_bytes_overflow);
     }
 
     void idlist_summary_is_a_monoid() {

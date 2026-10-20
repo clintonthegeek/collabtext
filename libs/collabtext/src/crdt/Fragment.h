@@ -32,15 +32,18 @@ namespace CollabText::Crdt {
 /// associative, and the byte counts are commutative. See tst_summary_laws.cpp,
 /// which checks them against randomized splice patterns.
 struct FragmentSummary {
-    uint64_t visible_bytes = 0;    ///< Total visible bytes in subtree (overflow checked at API boundary)
+    uint32_t visible_bytes = 0;    ///< Total visible bytes in subtree, modulo 2^32
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
     // All public text coordinates are int/uint32 byte offsets, so the usable
     // visible UTF-16 range also fits this width.
     uint32_t visible_utf16 = 0;    ///< Visible UTF-16 code units
+    bool visible_bytes_overflow = false; ///< Exact byte total exceeded the offset range
 
     static FragmentSummary zero() { return {}; }
 
     void add_summary(const FragmentSummary& other) {
+        visible_bytes_overflow = visible_bytes_overflow || other.visible_bytes_overflow ||
+            other.visible_bytes > UINT32_MAX - visible_bytes;
         visible_bytes += other.visible_bytes;
         deleted_bytes += other.deleted_bytes;
         visible_utf16 += other.visible_utf16;
@@ -56,7 +59,7 @@ struct VisibleOffset {
     uint32_t value = 0;
 
     static VisibleOffset zero() { return {0}; }
-    void add_summary(const FragmentSummary& s) { value += static_cast<uint32_t>(s.visible_bytes); }
+    void add_summary(const FragmentSummary& s) { value += s.visible_bytes; }
 
     auto operator<=>(const VisibleOffset&) const = default;
     bool operator==(const VisibleOffset&) const = default;
@@ -68,7 +71,7 @@ struct FullOffset {
 
     static FullOffset zero() { return {0}; }
     void add_summary(const FragmentSummary& s) {
-        value += static_cast<uint32_t>(s.visible_bytes) + s.deleted_bytes;
+        value += s.visible_bytes + s.deleted_bytes;
     }
 
     auto operator<=>(const FullOffset&) const = default;

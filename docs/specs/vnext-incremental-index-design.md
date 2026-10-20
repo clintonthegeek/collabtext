@@ -217,8 +217,9 @@ preceding checkpoint and scans at most 128 scalars. Fragment splits partition
 derived widths and checkpoints from both resulting strings; checkpoint restore
 rebuilds them from authoritative text. No cache value is durable. The summary does not contain
 line/layout data. Origin lookup uses the identity map, not actor maxima in an
-aggregate. The visible-byte aggregate is 64-bit so `utf16_range` can still refuse
-documents outside its 32-bit byte-offset result range; visible UTF-16 units use
+aggregate. Visible bytes stay 32-bit in the hot summary and carry a composable
+overflow bit, so `utf16_range` can still refuse documents outside its byte-offset
+result range without widening each summary addition. Visible UTF-16 units use
 the 32-bit public coordinate width. The aggregate remains 16 bytes on this ABI.
 
 ## 4. Tree operations and index updates
