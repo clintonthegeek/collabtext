@@ -1424,14 +1424,26 @@ void Buffer::apply_deletion_runs(
     }
 
     std::sort(targets.begin(), targets.end(), [](const Target& a, const Target& b) {
+        if (a.fragment != b.fragment) return a.fragment < b.fragment;
+        return a.offset < b.offset;
+    });
+    std::vector<Target> merged;
+    merged.reserve(targets.size());
+    for (const auto& target : targets) {
+        if (!merged.empty() && merged.back().fragment == target.fragment &&
+            target.offset <= merged.back().offset + merged.back().count) {
+            const uint32_t end = std::max(merged.back().offset + merged.back().count,
+                                          target.offset + target.count);
+            merged.back().count = end - merged.back().offset;
+        } else {
+            merged.push_back(target);
+        }
+    }
+    std::sort(merged.begin(), merged.end(), [](const Target& a, const Target& b) {
         if (a.fragment != b.fragment) return a.fragment > b.fragment;
         return a.offset > b.offset;
     });
-    targets.erase(std::unique(targets.begin(), targets.end(), [](const Target& a,
-                                                                 const Target& b) {
-        return a.fragment == b.fragment && a.offset == b.offset && a.count == b.count;
-    }), targets.end());
-    for (const auto& target : targets) {
+    for (const auto& target : merged) {
         if (target.fragment >= frags.size()) continue;
         size_t fi = target.fragment;
         if (target.offset > frags[fi].length ||

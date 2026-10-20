@@ -3448,3 +3448,10 @@ that registry/phase mismatch is corrected in this update. Stable state-local
 RunIds/NodeIds, incremental updates instead of rebuilds, production deletion
 incidence queries for compensation, memory accounting, and paired performance
 measurements remain outstanding. This slice does not establish a speedup.
+
+X04 slice 1 follow-up: the Buffer regression suite now includes overlapping
+wire deletion ranges. The interval targets are unioned before splitting, so one
+deleting operation contributes one incidence per covered item. This avoids
+invalid duplicate reverse-index entries while preserving the prior visibility
+result. The final affected Debug suite passed 15/15 with this regression
+included; verifier unit tests passed 16/16.

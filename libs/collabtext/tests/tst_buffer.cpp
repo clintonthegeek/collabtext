@@ -1,5 +1,6 @@
 #include <QTest>
 #include "crdt/Buffer.h"
+#include "crdt/OperationPayload.h"
 #include "TestActor.h"
 
 using CollabText::Test::actor;
@@ -911,6 +912,29 @@ private slots:
         QVERIFY(undoB.has_value());
         bufC.apply_ops({*undoB});
         QCOMPARE(bufC.text(), std::string("hello"));
+    }
+
+    void overlapping_deletion_runs_share_one_incidence() {
+        Buffer source(CollabText::Test::test_counter(11));
+        Buffer receiver(CollabText::Test::test_counter(12));
+        auto insert = source.try_apply_local_edit({{0, 0}}, {"abcdefgh"});
+        QVERIFY(insert);
+        receiver.apply_ops({insert.value()});
+
+        auto deletion = source.try_apply_local_edit({{0, 8}}, {""});
+        QVERIFY(deletion);
+        auto edit = std::get<EditOperation>(
+            detail::OperationAccess::payload(deletion.value()));
+        QVERIFY(edit.deletion_runs.size() == 1);
+        const Identity first = edit.deletion_runs.front().first;
+        const Identity deletion_id = edit.deletion_id;
+        edit.deletion_runs.push_back({Identity(first.actor, first.counter + 3), 5});
+        receiver.apply_ops({detail::OperationAccess::make_text(std::move(edit))});
+        QCOMPARE(receiver.text(), std::string(""));
+        for (const auto& fragment : receiver.fragments()) {
+            QCOMPARE(std::count(fragment.deletions.begin(), fragment.deletions.end(),
+                                deletion_id), 1);
+        }
     }
 
     void deletion_undo_roundtrip() {
