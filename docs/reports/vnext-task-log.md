@@ -3375,3 +3375,55 @@ split, visibility, marker and restore path that must maintain summaries. The
 1-MB public replacement and byte-control baselines remain the performance gate.
 No production summary change is made until the summary representation and local
 Unicode-checkpoint cost are understood.
+
+## 2026-10-20 — X07 complete with byte-control follow-up queued
+
+X07 adds maintained visible UTF-16 summaries, one-cursor rank/seek, and sparse
+scalar-boundary checkpoints for long non-ASCII fragments. It preserves exact
+byte-offset overflow refusal with a 64-bit byte total. The summary/checkpoint
+implementation is committed in the X07 series; final source restoration is
+`eefcf9d`. Focused Unicode, summary-law, SumTree, position, engine-operation and
+diagnostic checks passed. The short diagnostic query visited two endpoints;
+long-run conversion decoded at most 258 scalars for two endpoints.
+
+Five paired Release runs against d04f151 matched all 54 public results,
+operation fingerprints and work counts. Median mean ratios were 0.322 for
+public 1-MB replacement (3.11× faster), 1.165 for matched 100-KB byte
+replacement, and 1.101 for matched 1-MB byte replacement; 70-KB Unicode append
+was 0.373. Thus the main target passed, but the byte-control threshold missed.
+The exact ratios, per-pair spread, host load, memory overhead and raw artifacts
+are recorded in `docs/reports/2026-10-20-x07/README.md`. A 32-bit sum plus
+overflow-flag variant performed worse and was rejected. Keep the 64-bit exact
+aggregate and run X07b before X04 to investigate the added per-fragment and
+summary cost without weakening overflow or Unicode semantics.
+
+## 2026-10-20 — X07b started; initial cost attribution
+
+X07b is active before X04. The new opt-in diagnostics counters (schema 4)
+measure summary compositions, UTF-16 index builds, ASCII-probe bytes and
+checkpoint entries. A quick diagnostics-enabled run reports 84 summary
+compositions and five one-byte index probes/builds across five timed 1-MB
+public or byte replacement calls; it reports no decoder steps or checkpoints
+for these ASCII workloads. This points away from cache construction and toward
+summary/fragment storage footprint. On the current 64-bit ABI, X07's Fragment,
+leaf, internal and node sizes are 200/2600/392/2632 bytes; the compact-summary
+prototype measures 200/2552/344/2576 bytes. The prototype keeps exact visible
+byte totals in Buffer state while the tree summary stores a 32-bit modulo total.
+Focused Debug summary/Unicode/SumTree/position tests and diagnostics tests pass;
+paired Release validation remains outstanding.
+
+## 2026-10-20 — X07b complete; X04 next
+
+X07b is complete with a measured no-change production disposition. The compact
+summary prototype reduced `FragmentSummary` from 16 to 12 bytes and measured
+SumTree nodes from 2,632 to 2,576 bytes, while preserving exact overflow
+refusal and all 54 public results, operation fingerprints and work counts in
+paired comparisons. Against d04f151, its matched byte-control ratios were 1.138
+at 100 KB and 1.112 at 1 MB, missing the 1.10 guard. Against X07, the ratios
+were 1.031 at both sizes, too small to justify separate exact-total state. The
+prototype was reverted and X07's exact-width summary retained. Opt-in
+schema-4 counters and corrected, pinned public-only comparison tooling remain.
+Focused Debug summary/Unicode/SumTree/position tests passed 4/4, diagnostics
+passed 7/7, runner tests 4/4, changed-path verifier 16/16, and plan/scope
+validation passed. Full paired data, load caveats and artifact inventory are in
+`docs/reports/2026-10-20-x07b/README.md`. X04 is now the next task.

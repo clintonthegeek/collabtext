@@ -6,16 +6,21 @@ The user selected this lane on 2026-10-19. Read [DIRECTION.md](DIRECTION.md),
 The [October 19 evaluation](../../reports/2026-10-19-performance-evaluation.md)
 and its immutable artifacts are the evidence, not unmeasured expectations.
 [TASKS.json](TASKS.json) owns statuses/dependencies; the blocks below mirror it.
-All these revised tasks are **not started**. The evaluation alone completes none.
+Completed tasks and dispositions are recorded in TASKS.json and the linked
+reports; the evaluation alone completes none.
 
 ## Start here
 
-One executor; the active entry point is **X01**. Follow this serial order:
+One executor; the active entry point is **X04**. Follow this serial order:
 
-`X01 → X02 → X07a → X04a → X07 → X04 → X05 → X06 → X08 → X03 → X11 → X12 → X10`.
+`X01 → X02 → X07a → X04a → X07 → X07b → X04 → X05 → X06 → X08 → X03 → X11 → X12 → X10`.
 
 The IDs retain existing ownership where possible; numeric order is not execution
-order. X07a is the early read optimization, X04a the mutation design/model gate.
+order. X07a is the early read optimization, X04a the mutation design/model gate,
+and X07b followed up on X07's measured byte-control miss before X04. X07b's
+compact-summary prototype did not meet the cumulative byte-control thresholds;
+the exact-width X07 representation remains in production. See the
+[X07b report](../../reports/2026-10-20-x07b/README.md).
 X03 is now a conditional layout investigation after the larger algorithmic cuts.
 X11 is byte-preserving codec work; X12 installed/durable measurement. X09 stays
 a separate transport lane behind G07. Core optimization/reporting does not wait
@@ -210,7 +215,6 @@ installed-Core package gates passed Debug, Release and ASan/UBSan (5/5 consumer
 tests in each mode, Wave 16/16 strict cases, Markdown 4/4). Evidence paths and
 environment limitations are recorded in the report and TASKS.json. The roadmap
 validator and strict scope checker pass.
-
 ## X04a — Specify and model incremental tree and index transactions
 
 **Status:** complete; design and independent model gate passed (see TASKS.json).
@@ -248,10 +252,9 @@ validator and strict scope checker pass.
 Build/run tst_incremental_model in Debug and -DNDEBUG Release, replay fixed seeds twice, and run plan/scope/verifier checks. Review the model against the existing independent sequence and boundary models.
 
 **Design/decision gate:** Complete the written algorithms and independent transaction/index model before dependent summary, index or mutation implementation.
-
 ## X07 — Seek UTF-16 ranges using maintained tree summaries
 
-**Status:** in progress; source/measurement audit is active (see TASKS.json).
+**Status:** complete with a measured byte-control miss; X07b completed the follow-up, and X04 is next (see TASKS.json).
 **Depends on:** X04a, P03
 **Coverage:** F7, R6, R8
 
@@ -266,6 +269,9 @@ Build/run tst_incremental_model in Debug and -DNDEBUG Release, replay fixed seed
 - `tools/verify_changed.py`
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
+- `docs/reports/2026-10-20-x07/README.md`
+- `docs/reports/vnext-task-log.md`
+
 
 **Steps:**
 
@@ -283,10 +289,66 @@ Build/run tst_incremental_model in Debug and -DNDEBUG Release, replay fixed seed
 
 Run tst_unicode_seek, tst_summary_laws, tst_sumtree, tst_positions, tst_crdtengine_op_api and Unicode/marker/restore routed checks; run five paired size/conversion workloads, then arc B gates after X08.
 
+**Completion (2026-10-20):** The implementation and paired evidence are recorded
+in [`2026-10-20-x07/`](../../reports/2026-10-20-x07/README.md). The 1-MB
+public replacement median mean ratio is 0.322 (3.11× faster) and all 54 public
+results/fingerprints/work counts match. The matched byte controls are 1.165 at
+100 KB and 1.101 at 1 MB, exceeding the 1.10 guard; retain the useful UTF-16
+seek and exact 64-bit overflow accounting, and resolve the representation cost
+through X07b before X04. Memory is +8 bytes per FragmentSummary and +24 bytes
+per Fragment on the measured 64-bit build, plus sparse checkpoint payload and
+allocation overhead for long non-ASCII runs. Focused correctness and diagnostic
+results, load caveats and raw samples are in the report.
+## X07b — Reduce UTF-16 summary overhead in matched byte workloads
+
+**Status:** complete; keep X07's exact-width summary after the compact prototype missed the cumulative byte-control thresholds (see TASKS.json and the [measured report](../../reports/2026-10-20-x07b/README.md)).
+**Depends on:** X07, P03
+**Coverage:** F7, R6, R8
+
+**Files / scope:**
+
+- `libs/collabtext/src/crdt/Fragment.h`
+- `libs/collabtext/src/crdt/SumTree.h`
+- `libs/collabtext/src/crdt/Buffer.h`
+- `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/src/crdt/Diagnostics.h`
+- `libs/collabtext/tests/tst_summary_laws.cpp`
+- `libs/collabtext/tests/tst_unicode_seek.cpp`
+- `libs/collabtext/tests/tst_perf_diagnostics.cpp`
+- `docs/reports/2026-10-20-x07b/README.md`
+- `docs/specs/vnext-performance-targets.md`
+- `docs/roadmap/2026-10-reliability/07-performance.md`
+- `docs/roadmap/2026-10-reliability/TASKS.json`
+- `tools/run_performance_matrix.py`
+- `tools/test_run_performance_matrix.py`
+
+**Steps:**
+
+1. Start from X07 commit eefcf9d and its paired evidence. Attribute the 100-KB (+16.5%) and 1-MB (+10.1%) matched byte-control costs using diagnostics-disabled Release runs and work counters; distinguish per-fragment footprint, tree-summary composition, and cache/index construction.
+2. Prototype the smallest representation/update change that preserves exact visible-byte overflow refusal, UTF-16 rank/seek, summary associativity, checkpoint restore and split behavior. Keep public APIs and byte coordinates unchanged. Do not remove the independent oracle or use diagnostic builds for latency claims.
+3. Run the affected summary, Unicode, SumTree, position, marker and restore checks. Compare five paired runs against both d04f151 and the X07 candidate, keeping all 54 public fingerprints and work counts exact. Preserve raw data and host-load records.
+4. If a candidate cannot reduce the byte-control regression without weakening correctness or losing the large-Unicode benefit, retain X07 and record a measured no-change disposition rather than broadening scope.
+
+**Acceptance:**
+
+- Exact overflow refusal and UTF-16 boundary/model outcomes remain unchanged across all existing mutators, split, undo and restore.
+- On the X07 paired workload, median mean ratios for matched byte controls at 100 KB and 1 MB are each <=1.10, and public 1-MB replacement remains at least 2x faster than d04f151. If this cannot be achieved, provide a measured keep/no-change disposition and identify any remaining material overhead.
+
+**Verification:** Run tst_summary_laws, tst_unicode_seek, tst_sumtree, tst_positions, tst_text_markers, tst_perf_diagnostics and routed restore checks; run five paired Release comparisons against d04f151 and X07, then plan/scope/tooling validation.
+
+**Completion:** The compact prototype reduced `FragmentSummary` from 16 to 12
+bytes and measured SumTree nodes from 2,632 to 2,576 bytes. Five pinned public
+comparison pairs preserved all 54 result/fingerprint/work-count records, but
+the candidate's matched byte ratios versus d04f151 were 1.138 at 100 KB and
+1.112 at 1 MB, both above the 1.10 guard. Against X07, its byte-control ratios
+were 1.031 at both sizes. The prototype was reverted; X07 remains the selected
+representation. Diagnostics and runner improvements are retained. X04 is next.
+Detailed ratios, load caveats, and raw artifacts are in the linked report.
+
 ## X04 — Maintain origin and deletion indexes with checked updates
 
 **Status:** see TASKS.json (not started)
-**Depends on:** X07, S05
+**Depends on:** X07b, S05
 **Coverage:** R6, R7, R10
 
 **Files / scope:**

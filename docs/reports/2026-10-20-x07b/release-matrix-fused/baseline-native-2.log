@@ -1,0 +1,28 @@
+********* Start testing of TestBenchmark *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestBenchmark::initTestCase()
+QDEBUG : TestBenchmark::single_replica_throughput() 
+=== Single-Replica Throughput ===
+  1K doc, random edit: wall=43.3273 ms (43327253 ns), work=200 local edits, 216636 ns/local edits, 4616.03 local edits/s, source_edits=200, remote_applications=0, fragments=438, tombstones=201, visible_bytes=922, process_rss=19952 KB
+{"name":"1K doc, random edit","wall_ns":43327253,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":216636,"work_per_sec":4616.03,"process_rss_kb":19952,"fragments":438,"tombstones":201,"visible_bytes":922,"deleted_bytes":465}
+  10K doc, random edit: wall=63.8347 ms (63834718 ns), work=200 local edits, 319174 ns/local edits, 3133.09 local edits/s, source_edits=200, remote_applications=0, fragments=576, tombstones=168, visible_bytes=9878, process_rss=20532 KB
+{"name":"10K doc, random edit","wall_ns":63834718,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":319174,"work_per_sec":3133.09,"process_rss_kb":20532,"fragments":576,"tombstones":168,"visible_bytes":9878,"deleted_bytes":511}
+  100K doc, random edit: wall=310.208 ms (310207854 ns), work=200 local edits, 1.55104e+06 ns/local edits, 644.729 local edits/s, source_edits=200, remote_applications=0, fragments=1488, tombstones=181, visible_bytes=99848, process_rss=24420 KB
+{"name":"100K doc, random edit","wall_ns":310207854,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":1.55104e+06,"work_per_sec":644.729,"process_rss_kb":24420,"fragments":1488,"tombstones":181,"visible_bytes":99848,"deleted_bytes":552}
+PASS   : TestBenchmark::single_replica_throughput()
+QDEBUG : TestBenchmark::single_replica_large_doc() 
+=== Single-Replica Large Doc (1M) ===
+  1M doc, random edit: wall=163.762 ms (163761561 ns), work=100 local edits, 1.63762e+06 ns/local edits, 610.644 local edits/s, source_edits=100, remote_applications=0, fragments=1244, tombstones=82, visible_bytes=999979, process_rss=46824 KB
+{"name":"1M doc, random edit","wall_ns":163761561,"work_label":"local edits","work_items":100,"source_edits":100,"remote_applications":0,"ns_per_work_item":1.63762e+06,"work_per_sec":610.644,"process_rss_kb":46824,"fragments":1244,"tombstones":82,"visible_bytes":999979,"deleted_bytes":214}
+PASS   : TestBenchmark::single_replica_large_doc()
+QDEBUG : TestBenchmark::edit_patterns() 
+=== Edit Patterns (100K doc) ===
+  sequential (append): wall=196.406 ms (196405860 ns), work=200 local edits, 982029 ns/local edits, 1018.3 local edits/s, source_edits=200, remote_applications=0, fragments=1200, tombstones=0, visible_bytes=100596, process_rss=46824 KB
+{"name":"sequential (append)","wall_ns":196405860,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":982029,"work_per_sec":1018.3,"process_rss_kb":46824,"fragments":1200,"tombstones":0,"visible_bytes":100596,"deleted_bytes":0}
+  random position: wall=227.229 ms (227229004 ns), work=200 local edits, 1.13615e+06 ns/local edits, 880.169 local edits/s, source_edits=200, remote_applications=0, fragments=1488, tombstones=181, visible_bytes=99848, process_rss=46824 KB
+{"name":"random position","wall_ns":227229004,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":1.13615e+06,"work_per_sec":880.169,"process_rss_kb":46824,"fragments":1488,"tombstones":181,"visible_bytes":99848,"deleted_bytes":552}
+  hotspot [5000, 5100]: wall=193.117 ms (193117018 ns), work=200 local edits, 965585 ns/local edits, 1035.64 local edits/s, source_edits=200, remote_applications=0, fragments=1322, tombstones=273, visible_bytes=99808, process_rss=46824 KB
+{"name":"hotspot [5000, 5100]","wall_ns":193117018,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":965585,"work_per_sec":1035.64,"process_rss_kb":46824,"fragments":1322,"tombstones":273,"visible_bytes":99808,"deleted_bytes":383}
+PASS   : TestBenchmark::edit_patterns()
+QDEBUG : TestBenchmark::edit_sizes() 
+=== Edit Sizes (100K doc) ===

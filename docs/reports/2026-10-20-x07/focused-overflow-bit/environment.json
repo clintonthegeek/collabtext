@@ -1,0 +1,96 @@
+{
+  "schema": "collabtext-focused-performance/1",
+  "baseline_sha": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
+  "candidate_sha": "6726127f2f03b688df68871f430a2238072a0f87",
+  "baseline_binary_sha256": "60c81d25aa518bca6952bb80bd06412dab5ab108881dd3f3c8de3b08e59ff046",
+  "candidate_binary_sha256": "30da71eefcfdf3f79701b005d9de22df5f414b493184db9fa9a6dbf48844333a",
+  "host": "Linux-6.18.49-1-MANJARO-x86_64-with-glibc2.44",
+  "cpu_affinity": [
+    2
+  ],
+  "governor": "powersave",
+  "build_flags": "-O3 -DNDEBUG; C++20; diagnostics off",
+  "paired_runs": 5,
+  "commands": [
+    {
+      "label": "baseline-public-1",
+      "exit_status": 0,
+      "wall_seconds": 35.39790368080139,
+      "load_before": "7.89 8.31 9.02 5/2322 13",
+      "load_after": "7.04 8.07 8.91 6/2352 14",
+      "log": "baseline-public-1.jsonl"
+    },
+    {
+      "label": "candidate-public-1",
+      "exit_status": 0,
+      "wall_seconds": 32.99396824836731,
+      "load_before": "7.04 8.07 8.91 7/2352 14",
+      "load_after": "6.89 7.93 8.83 10/2360 15",
+      "log": "candidate-public-1.jsonl"
+    },
+    {
+      "label": "candidate-public-2",
+      "exit_status": 0,
+      "wall_seconds": 32.32711744308472,
+      "load_before": "6.89 7.93 8.83 5/2360 15",
+      "load_after": "6.37 7.70 8.72 4/2305 16",
+      "log": "candidate-public-2.jsonl"
+    },
+    {
+      "label": "baseline-public-2",
+      "exit_status": 0,
+      "wall_seconds": 32.96687865257263,
+      "load_before": "6.37 7.70 8.72 2/2305 16",
+      "load_after": "6.58 7.59 8.65 10/2333 17",
+      "log": "baseline-public-2.jsonl"
+    },
+    {
+      "label": "baseline-public-3",
+      "exit_status": 0,
+      "wall_seconds": 41.63462948799133,
+      "load_before": "6.58 7.59 8.65 9/2333 17",
+      "load_after": "9.74 8.18 8.80 19/2375 18",
+      "log": "baseline-public-3.jsonl"
+    },
+    {
+      "label": "candidate-public-3",
+      "exit_status": 0,
+      "wall_seconds": 55.46427345275879,
+      "load_before": "9.74 8.18 8.80 17/2375 18",
+      "load_after": "14.21 9.72 9.29 2/2311 19",
+      "log": "candidate-public-3.jsonl"
+    },
+    {
+      "label": "candidate-public-4",
+      "exit_status": 0,
+      "wall_seconds": 19.016169786453247,
+      "load_before": "14.21 9.72 9.29 1/2311 19",
+      "load_after": "10.54 9.18 9.12 3/2329 20",
+      "log": "candidate-public-4.jsonl"
+    },
+    {
+      "label": "baseline-public-4",
+      "exit_status": 0,
+      "wall_seconds": 19.013417720794678,
+      "load_before": "10.54 9.18 9.12 1/2329 20",
+      "load_after": "8.32 8.76 8.98 4/2363 21",
+      "log": "baseline-public-4.jsonl"
+    },
+    {
+      "label": "baseline-public-5",
+      "exit_status": 0,
+      "wall_seconds": 19.546361923217773,
+      "load_before": "8.32 8.76 8.98 3/2349 21",
+      "load_after": "6.74 8.37 8.85 3/2307 22",
+      "log": "baseline-public-5.jsonl"
+    },
+    {
+      "label": "candidate-public-5",
+      "exit_status": 0,
+      "wall_seconds": 18.741156339645386,
+      "load_before": "6.74 8.37 8.85 2/2308 22",
+      "load_after": "5.47 7.97 8.71 2/2300 23",
+      "log": "candidate-public-5.jsonl"
+    }
+  ]
+}

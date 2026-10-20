@@ -33,8 +33,9 @@ recovery, semantic/pin work and early installed-package gates are complete.
 G03/G06 have unfinished broader certification work. Remaining reclamation,
 packaging, performance and release tasks retain their exact registry status.
 The active user-directed lane is [07 — measured performance](07-performance.md);
-X01/X02/X07a/X04a are complete; X07 is the next performance task under the
-summary-guided UTF-16 lookup strategy.
+X01/X02/X07a/X04a/X07/X07b are complete; X07b retained X07's exact-width
+summary after the compact prototype missed cumulative byte-control thresholds.
+X04 is next.
 [09 — Wave Core](09-wave-core.md) and [10 — Markoff Core](10-markoff-core.md)
 record completed upstream work and remaining external acceptance. Do not repeat
 completed implementation or treat external acceptance as an optimization prerequisite.

@@ -1,0 +1,104 @@
+[  0%] Built target collabtext_core_autogen_timestamp_deps
+[  2%] Automatic MOC and UIC for target collabtext_core
+[  2%] Built target collabtext_core_autogen
+[  4%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/collabtext_core_autogen/mocs_compilation.cpp.o
+[  6%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/AnchorPins.cpp.o
+[  8%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/CrdtEngine.cpp.o
+[ 10%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/MembershipCoordinator.cpp.o
+[ 12%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/Projection.cpp.o
+[ 14%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/core/Sha256.cpp.o
+[ 16%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/IdListEngine.cpp.o
+[ 18%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/codec/JsonReader.cpp.o
+[ 22%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/codec/Utf.cpp.o
+[ 22%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/Clock.cpp.o
+[ 25%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/IdList.cpp.o
+[ 27%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/Buffer.cpp.o
+[ 29%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/UndoMap.cpp.o
+[ 31%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/codec/OperationCodec.cpp.o
+[ 33%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/PositionTraversal.cpp.o
+[ 35%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/OperationValues.cpp.o
+[ 37%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/ApplyOutcome.cpp.o
+[ 39%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/codec/AnchorCodec.cpp.o
+[ 41%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/ChatMessage.cpp.o
+[ 43%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/identity/Identity.cpp.o
+[ 45%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/OperationValidation.cpp.o
+[ 47%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/SequenceOrder.cpp.o
+[ 50%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/StreamSerialization.cpp.o
+[ 52%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/Comment.cpp.o
+[ 54%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/crdt/SeedOp.cpp.o
+[ 56%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/identity/IdentityStore.cpp.o
+[ 58%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/identity/ReplicaAllocator.cpp.o
+[ 60%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/identity/IdentityProjector.cpp.o
+[ 62%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/identity/Signing.cpp.o
+[ 64%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/identity/PresenceManager.cpp.o
+[ 66%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/identity/ReplicaState.cpp.o
+[ 68%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/DurableFile.cpp.o
+[ 70%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CheckpointCodec.cpp.o
+[ 72%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CheckpointCoverageCodec.cpp.o
+[ 75%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CheckpointDeferredCodec.cpp.o
+[ 77%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CheckpointLocalCodec.cpp.o
+[ 79%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CheckpointStore.cpp.o
+[ 81%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CheckpointPinsCodec.cpp.o
+[ 83%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CheckpointMembershipCodec.cpp.o
+[ 85%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CheckpointEngineCodec.cpp.o
+[ 87%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CoverageStore.cpp.o
+[ 89%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/GcCertificate.cpp.o
+[ 91%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/CheckpointTranslationCodec.cpp.o
+[ 93%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/LocalHistoryLog.cpp.o
+[ 95%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/MembershipStore.cpp.o
+[ 97%] Building CXX object libs/collabtext/CMakeFiles/collabtext_core.dir/src/storage/RetentionState.cpp.o
+[100%] Linking CXX static library libcollabtext_core.a
+[100%] Built target collabtext_core
+[  0%] Built target collabtext_core_autogen_timestamp_deps
+[  1%] Built target collabtext_core_autogen
+[ 81%] Built target collabtext_core
+[ 81%] Built target collabtext_filetransport_autogen_timestamp_deps
+[ 83%] Automatic MOC and UIC for target collabtext_filetransport
+[ 83%] Built target collabtext_filetransport_autogen
+[ 84%] Building CXX object libs/collabtext/CMakeFiles/collabtext_filetransport.dir/collabtext_filetransport_autogen/mocs_compilation.cpp.o
+[ 86%] Building CXX object libs/collabtext/CMakeFiles/collabtext_filetransport.dir/src/crdt/SegmentFormat.cpp.o
+[ 88%] Building CXX object libs/collabtext/CMakeFiles/collabtext_filetransport.dir/src/crdt/ZstdUtil.cpp.o
+[ 89%] Building CXX object libs/collabtext/CMakeFiles/collabtext_filetransport.dir/src/crdt/StreamSync.cpp.o
+[ 91%] Building CXX object libs/collabtext/CMakeFiles/collabtext_filetransport.dir/src/crdt/SegmentWriter.cpp.o
+[ 93%] Building CXX object libs/collabtext/CMakeFiles/collabtext_filetransport.dir/src/crdt/FileSync.cpp.o
+[ 94%] Building CXX object libs/collabtext/CMakeFiles/collabtext_filetransport.dir/src/crdt/SegmentReader.cpp.o
+[ 96%] Building CXX object libs/collabtext/CMakeFiles/collabtext_filetransport.dir/src/crdt/SidecarManifest.cpp.o
+[ 98%] Building CXX object libs/collabtext/CMakeFiles/collabtext_filetransport.dir/src/DocumentSession.cpp.o
+[100%] Linking CXX static library libcollabtext_filetransport.a
+[100%] Built target collabtext_filetransport
+[  0%] Built target collabtext_testsupport_autogen_timestamp_deps
+[  0%] Built target collabtext_core_autogen_timestamp_deps
+[  2%] Built target collabtext_core_autogen
+[  2%] Automatic MOC and UIC for target collabtext_testsupport
+[ 73%] Built target collabtext_core
+[ 73%] Built target collabtext_testsupport_autogen
+[ 73%] Built target collabtext_filetransport_autogen_timestamp_deps
+[ 74%] Built target collabtext_filetransport_autogen
+[ 89%] Built target collabtext_filetransport
+[ 91%] Building CXX object libs/collabtext/CMakeFiles/collabtext_testsupport.dir/src/crdt/NetworkSim.cpp.o
+[ 92%] Building CXX object libs/collabtext/CMakeFiles/collabtext_testsupport.dir/collabtext_testsupport_autogen/mocs_compilation.cpp.o
+[ 94%] Linking CXX static library libcollabtext_testsupport.a
+[ 94%] Built target collabtext_testsupport
+[ 94%] Built target tst_benchmark_autogen_timestamp_deps
+[ 95%] Automatic MOC and UIC for target tst_benchmark
+[ 95%] Built target tst_benchmark_autogen
+[ 97%] Building CXX object libs/collabtext/CMakeFiles/tst_benchmark.dir/tst_benchmark_autogen/mocs_compilation.cpp.o
+[ 98%] Building CXX object libs/collabtext/CMakeFiles/tst_benchmark.dir/tests/tst_benchmark.cpp.o
+[100%] Linking CXX executable tst_benchmark
+[100%] Built target tst_benchmark
+[  0%] Built target collabtext_core_autogen_timestamp_deps
+[  0%] Built target collabtext_testsupport_autogen_timestamp_deps
+[  2%] Built target collabtext_testsupport_autogen
+[  2%] Built target collabtext_core_autogen
+[ 73%] Built target collabtext_core
+[ 73%] Built target collabtext_filetransport_autogen_timestamp_deps
+[ 74%] Built target collabtext_filetransport_autogen
+[ 89%] Built target collabtext_filetransport
+[ 94%] Built target collabtext_testsupport
+[ 94%] Built target tst_checkpoint_recovery_benchmark_autogen_timestamp_deps
+[ 95%] Automatic MOC and UIC for target tst_checkpoint_recovery_benchmark
+[ 95%] Built target tst_checkpoint_recovery_benchmark_autogen
+[ 97%] Building CXX object libs/collabtext/CMakeFiles/tst_checkpoint_recovery_benchmark.dir/tst_checkpoint_recovery_benchmark_autogen/mocs_compilation.cpp.o
+[ 98%] Building CXX object libs/collabtext/CMakeFiles/tst_checkpoint_recovery_benchmark.dir/tests/tst_checkpoint_recovery_benchmark.cpp.o
+[100%] Linking CXX executable tst_checkpoint_recovery_benchmark
+[100%] Built target tst_checkpoint_recovery_benchmark

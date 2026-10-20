@@ -4,7 +4,11 @@ Plan date: 2026-10-19. This is an implementation/evaluation contract, not a clai
 that the targets are achieved or a promise of latency on every machine.
 Authoritative tasks: [07-performance.md](../roadmap/2026-10-reliability/07-performance.md)
 and [TASKS.json](../roadmap/2026-10-reliability/TASKS.json).
-X01, X02, X07a and X04a are complete; X07 is active. The complete serial order is in the phase file and registry.
+X01, X02, X07a, X04a, X07 and X07b are complete; X04 is next. X07b retained
+X07's exact-width summary after the compact prototype missed cumulative
+byte-control thresholds; see the [X07b report](../reports/2026-10-20-x07b/README.md).
+The complete serial
+order is in the phase file and registry.
 
 ## Baseline that must remain reproducible
 
@@ -40,6 +44,7 @@ same workload/state and statistic; never compare a mean to a p99.
 | X07a, arc A | Run-aware boundary mint/resolve, no scalar expansion | 100-KB history 0: 2.391/2.370 ms mean; history 1,000: 2.896/2.945 ms | At least 10× lower mean on all four cases: roughly 0.24–0.30 ms; verify changing offsets/tokens too |
 | X04a | Specify/model transactions, stable handles and rebuild rules | Existing scalar boundary/sequence models | Complete independent design gate; no promised speedup |
 | X07 | Summary-guided UTF-16 rank/seek, bounded local conversion | 1-MB public mean 0.978 ms; byte control 0.238 ms | At least 2× lower public mean: roughly 0.49 ms, without slowing byte control >10% |
+| X07b | Reduce X07 summary overhead in matched byte workloads | X07 ratios: 100-KB byte 1.165; 1-MB byte 1.101 | Bring both ratios to ≤1.10 while preserving ≥2× public 1-MB improvement, or record measured keep/no-change disposition |
 | X04 | Origin/deletion interval indexes | Whole-run lookups; no isolated count baseline | At least 90% fewer lookup run visits for a one-run target among 5,000 runs; separate mutation cost |
 | X05 | Transactional tree splice / affected visibility, not vector rebuild | 10-KB after 3,000 replacements: mean 4.551 ms / p99 9.643 ms | At least 5× lower mean, roughly 0.91 ms; aim for p99 ≤2 ms on comparable hardware; ≥2× lower mixed 5-KB/50%-deletion mean (1.831 →0.916 ms) |
 | X06 | Internal interval undo/deletion bookkeeping | Bulk allocation case not measured historically | Establish in X01, then ≥50% fewer temporary allocated bytes on 1-MB bulk delete/undo; unchanged parity/history/limits |

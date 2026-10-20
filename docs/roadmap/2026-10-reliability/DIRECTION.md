@@ -6,9 +6,14 @@ As of 2026-10-20. Performance work is executing in the isolated
 completed phase procedures are history, not work to repeat.
 
 The selected local lane is **[07 — measured performance](07-performance.md)**.
-X01, X02, X07a, and the X04a design/model gate are complete. The next
-performance task is **X07**, summary-guided UTF-16 rank/seek. Its implementation
-uses the X04a contract and must preserve the independent model gates. The user requested an implementable optimization plan after
+X01, X02, X07a, X04a, X07, and X07b are complete. X07 delivered a 3.11× median
+improvement on public 1-MB replacement, with a measured byte-control regression
+above the 10% guard at 100 KB and narrowly at 1 MB. X07b's compact-summary
+prototype missed the cumulative 1.10 byte-control thresholds and was reverted;
+the exact-width X07 representation remains. See the
+[X07b report](../../reports/2026-10-20-x07b/README.md). The next task is **X04**:
+implement the modeled origin and deletion indexes with checked updates.
+The user requested an implementable optimization plan after
 [the new evaluation](../../reports/2026-10-19-performance-evaluation.md).
 The frozen source baseline is `d04f151b3a70b161b72c33a8de6895efbd1c13e2`.
 Follow the exact serial order and measurement/disposition rules in

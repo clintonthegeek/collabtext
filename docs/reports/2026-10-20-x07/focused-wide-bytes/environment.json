@@ -1,0 +1,96 @@
+{
+  "schema": "collabtext-focused-performance/1",
+  "baseline_sha": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
+  "candidate_sha": "8d7870992f1ed63793650f029b308aa9faae6d65",
+  "baseline_binary_sha256": "60c81d25aa518bca6952bb80bd06412dab5ab108881dd3f3c8de3b08e59ff046",
+  "candidate_binary_sha256": "b65c71ae99187f0d21edd6967703c24dfe19d7c301945d88d7597ce968abfef1",
+  "host": "Linux-6.18.49-1-MANJARO-x86_64-with-glibc2.44",
+  "cpu_affinity": [
+    2
+  ],
+  "governor": "powersave",
+  "build_flags": "-O3 -DNDEBUG; C++20; diagnostics off",
+  "paired_runs": 5,
+  "commands": [
+    {
+      "label": "baseline-public-1",
+      "exit_status": 0,
+      "wall_seconds": 42.80296802520752,
+      "load_before": "12.46 8.51 9.12 20/2384 13",
+      "load_after": "13.59 9.38 9.39 15/2382 14",
+      "log": "baseline-public-1.jsonl"
+    },
+    {
+      "label": "candidate-public-1",
+      "exit_status": 0,
+      "wall_seconds": 45.176393032073975,
+      "load_before": "13.59 9.38 9.39 11/2382 14",
+      "load_after": "13.83 10.00 9.59 15/2343 15",
+      "log": "candidate-public-1.jsonl"
+    },
+    {
+      "label": "candidate-public-2",
+      "exit_status": 0,
+      "wall_seconds": 45.16382718086243,
+      "load_before": "13.83 10.00 9.59 14/2343 15",
+      "load_after": "16.26 11.18 10.01 18/2355 16",
+      "log": "candidate-public-2.jsonl"
+    },
+    {
+      "label": "baseline-public-2",
+      "exit_status": 0,
+      "wall_seconds": 37.26882719993591,
+      "load_before": "16.26 11.18 10.01 18/2355 16",
+      "load_after": "13.34 11.14 10.05 3/2340 17",
+      "log": "baseline-public-2.jsonl"
+    },
+    {
+      "label": "baseline-public-3",
+      "exit_status": 0,
+      "wall_seconds": 18.500338792800903,
+      "load_before": "13.34 11.14 10.05 2/2340 17",
+      "load_after": "10.83 10.69 9.92 2/2366 18",
+      "log": "baseline-public-3.jsonl"
+    },
+    {
+      "label": "candidate-public-3",
+      "exit_status": 0,
+      "wall_seconds": 17.654231309890747,
+      "load_before": "10.83 10.69 9.92 1/2366 18",
+      "load_after": "8.65 10.21 9.78 2/2351 19",
+      "log": "candidate-public-3.jsonl"
+    },
+    {
+      "label": "candidate-public-4",
+      "exit_status": 0,
+      "wall_seconds": 19.45476531982422,
+      "load_before": "8.65 10.21 9.78 1/2351 19",
+      "load_after": "7.13 9.75 9.64 5/2347 20",
+      "log": "candidate-public-4.jsonl"
+    },
+    {
+      "label": "baseline-public-4",
+      "exit_status": 0,
+      "wall_seconds": 19.907516956329346,
+      "load_before": "7.13 9.75 9.64 3/2347 20",
+      "load_after": "5.87 9.30 9.49 2/2338 21",
+      "log": "baseline-public-4.jsonl"
+    },
+    {
+      "label": "baseline-public-5",
+      "exit_status": 0,
+      "wall_seconds": 22.272499322891235,
+      "load_before": "5.87 9.30 9.49 1/2338 21",
+      "load_after": "5.23 8.92 9.36 4/2347 22",
+      "log": "baseline-public-5.jsonl"
+    },
+    {
+      "label": "candidate-public-5",
+      "exit_status": 0,
+      "wall_seconds": 25.815675258636475,
+      "load_before": "5.23 8.92 9.36 6/2347 22",
+      "load_after": "4.82 8.54 9.22 6/2348 23",
+      "log": "candidate-public-5.jsonl"
+    }
+  ]
+}

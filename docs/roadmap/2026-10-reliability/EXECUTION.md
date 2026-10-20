@@ -1,8 +1,9 @@
 # Selected performance lane — 2026-10-20
 
-X01, X02, X07a and X04a are complete. X07 is now in progress: audit the
-UTF-16 summary path and benchmark first, then follow the accepted X04a design
-and its independent-model invariants.
+X01, X02, X07a, X04a, X07 and X07b are complete. X07b retained X07's exact-width
+summary after its compact prototype missed cumulative byte-control thresholds.
+X04 is next: implement modeled origin and deletion indexes with checked updates,
+preserving the accepted X04a design and independent-model invariants.
 Use
 [the target contract](../../specs/vnext-performance-targets.md) for paired
 measurement, expected improvements, design gates, miss dispositions and arc A/B/C
@@ -55,7 +56,7 @@ settles affinity, scope, collapse, strict referent restoration and codec rules.
 P06b codecs, S04b native live positions, W02 baseline probes, the W03 strict live
 gate, S02/S03 ordering and E07a/E07b preparation are complete. Their steps are
 history, not instructions to run again. A model/fixture pass is not a production
-capability pass. The selected local next task is X01.
+capability pass. The selected local next task is X04.
 Read [current handoff](../../handoff/2026-10-05-state-at-handoff.md),
 [boundary contract](../../specs/vnext-boundary-semantics.md) and
 [external requirements](../../specs/vnext-external-position-contract.md).
