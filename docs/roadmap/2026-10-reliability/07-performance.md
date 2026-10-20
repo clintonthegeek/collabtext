@@ -213,7 +213,7 @@ validator and strict scope checker pass.
 
 ## X04a — Specify and model incremental tree and index transactions
 
-**Status:** see TASKS.json (not started)
+**Status:** in progress; source audit and design/model gate are active (see TASKS.json).
 **Depends on:** X07a, S03, S07, P03
 **Coverage:** R6, R7, R8, R10
 

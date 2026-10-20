@@ -3311,3 +3311,14 @@ fragment runs directly and preserve the scalar traversal for differential
 checking until model, marker, attachment and history outcomes are verified.
 No public API or token format change is planned. Initial implementation and
 verification results will be appended here as they are committed.
+
+
+## 2026-10-20 — X07a complete; X04a started
+
+X07a's direct retained-run position reads, full paired measurements, report, raw
+artifacts, roadmap synchronization and Arc A gates are committed at
+`624cd9d`. X04a is now in progress. The next work is a code-level source audit
+and a written design/model for tree/index ownership, transactional mutation,
+summary invalidation, and explicit fallback behavior. No production index or
+mutation changes are permitted until the written design and independent model
+pass.
