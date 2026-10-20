@@ -347,7 +347,7 @@ Detailed ratios, load caveats, and raw artifacts are in the linked report.
 
 ## X04 — Maintain origin and deletion indexes with checked updates
 
-**Status:** see TASKS.json (not started)
+**Status:** in progress; see TASKS.json for baseline and current implementation slice.
 **Depends on:** X07b, S05
 **Coverage:** R6, R7, R10
 

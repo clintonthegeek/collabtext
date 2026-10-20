@@ -4542,8 +4542,10 @@
         "R10"
       ],
       "gate": null,
-      "status": "not_started",
-      "baseline_revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2"
+      "status": "in_progress",
+      "baseline_revision": "dce790a",
+      "work_started_revision": "dce790a",
+      "progress_2026_10_20": "Started on the measured X07 state at dce790a after X07b completed with a keep/no-change disposition. X04a independent design/model gate is complete. First implementation slice: build scan-validated origin/deletion index value types and integrate/rebuild checks before routing hot lookups; preserve whole-vector mutation paths until each mapping is validated. No performance claim yet."
     },
     {
       "id": "X05",
