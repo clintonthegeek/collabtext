@@ -1,5 +1,6 @@
 #include "crdt/DeletionIndex.h"
 #include "crdt/OriginIndex.h"
+#include "crdt/RunDirectory.h"
 
 #include <QtTest>
 #include <array>
@@ -15,6 +16,7 @@ private slots:
     void originIntervalsAreCheckedAndPersistent();
     void deletionQueriesReturnOnlyMatchingIncidences();
     void originLookupMatchesFlatScanAcrossManyIntervals();
+    void stableRunHandlesResolveNewOrdinalsWithoutChangingOldSnapshot();
 };
 
 static ActorId actor(uint8_t value) {
@@ -38,6 +40,8 @@ void CrdtIndexesTest::originIntervalsAreCheckedAndPersistent() {
     const auto hit = first.locate(Identity(actor(1), 9));
     QVERIFY(hit.has_value());
     QCOMPARE(hit->run, RunId(11));
+    QCOMPARE(first.find_interval_start(actor(1), 8).value(), RunId(11));
+    QVERIFY(!first.find_interval_start(actor(1), 9).has_value());
     QVERIFY(!first.locate(Identity(actor(1), 12)).has_value());
     QVERIFY(!first.locate(Identity(actor(3), 1)).has_value());
     const auto crossing = first.overlapping(actor(1), 6, 10);
@@ -49,6 +53,19 @@ void CrdtIndexesTest::originIntervalsAreCheckedAndPersistent() {
     QVERIFY(second.erase(actor(1), 1));
     QVERIFY(!second.locate(Identity(actor(1), 1)).has_value());
     QVERIFY(first.locate(Identity(actor(1), 1)).has_value());
+}
+
+void CrdtIndexesTest::stableRunHandlesResolveNewOrdinalsWithoutChangingOldSnapshot() {
+    RunDirectory old_state;
+    QVERIFY(old_state.rebuild({{101, 0}, {303, 1}}));
+    QCOMPARE(old_state.ordinal(303).value(), uint64_t{1});
+
+    RunDirectory next_state;
+    QVERIFY(next_state.rebuild({{101, 0}, {707, 1}, {303, 2}}));
+    QCOMPARE(next_state.ordinal(303).value(), uint64_t{2});
+    QCOMPARE(old_state.ordinal(303).value(), uint64_t{1});
+    QVERIFY(!next_state.ordinal(999).has_value());
+    QVERIFY(!next_state.rebuild({{101, 0}, {101, 1}}));
 }
 
 void CrdtIndexesTest::deletionQueriesReturnOnlyMatchingIncidences() {

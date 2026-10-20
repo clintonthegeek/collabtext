@@ -128,31 +128,57 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     std::vector<std::tuple<ActorId, uint64_t, OriginInterval>> origin_rows;
     std::vector<std::pair<std::tuple<Identity, ActorId, uint64_t>,
                           DeletionIncidence>> deletion_rows;
+    std::vector<std::pair<RunId, uint64_t>> run_directory_rows;
     origin_rows.reserve(frags.size());
+    run_directory_rows.reserve(frags.size());
+    RunId next_run_id = m_next_run_id;
+    bool run_ids_valid = true;
     for (size_t i = 0; i < frags.size(); ++i) {
         const auto& fragment = frags[i];
-        const RunId run = static_cast<RunId>(i) + 1;
+        RunId run = 0;
+        if (m_fragment_indexes_valid) {
+            if (const auto prior = m_origin_index.find_interval_start(
+                    fragment.origin.actor, fragment.origin.counter))
+                run = *prior;
+        }
+        if (!run) {
+            if (!next_run_id) {
+                run_ids_valid = false;
+            } else {
+                run = next_run_id;
+                next_run_id = next_run_id == UINT64_MAX ? 0 : next_run_id + 1;
+            }
+        }
+        if (run) run_directory_rows.emplace_back(run, i);
         if (fragment.length) {
             const uint64_t end = fragment.origin.counter + fragment.length;
-            origin_rows.emplace_back(fragment.origin.actor, fragment.origin.counter,
-                                      OriginInterval{end, run});
+            if (run)
+                origin_rows.emplace_back(fragment.origin.actor, fragment.origin.counter,
+                                          OriginInterval{end, run});
             for (const auto& deletion : fragment.deletions) {
-                deletion_rows.emplace_back(
-                    std::tuple{deletion, fragment.origin.actor,
-                               fragment.origin.counter},
-                    DeletionIncidence{fragment.origin.actor,
-                                      fragment.origin.counter, end, run});
+                if (run)
+                    deletion_rows.emplace_back(
+                        std::tuple{deletion, fragment.origin.actor,
+                                   fragment.origin.counter},
+                        DeletionIncidence{fragment.origin.actor,
+                                          fragment.origin.counter, end, run});
             }
         }
     }
     const bool origins_valid = origins.rebuild(std::move(origin_rows));
     const bool deletions_valid = deletions.rebuild(std::move(deletion_rows));
+    RunDirectory run_directory;
+    const bool run_directory_valid = run_directory.rebuild(
+        std::move(run_directory_rows));
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
     m_fragment_tree = std::move(tree);
     m_origin_index = std::move(origins);
     m_deletion_index = std::move(deletions);
-    m_fragment_indexes_valid = origins_valid && deletions_valid;
+    m_run_directory = std::move(run_directory);
+    m_next_run_id = next_run_id;
+    m_fragment_indexes_valid = origins_valid && deletions_valid &&
+                               run_directory_valid && run_ids_valid;
 }
 
 void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
@@ -214,11 +240,12 @@ void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
     if (affected.empty()) return;
     bool stale_run_index = false;
     for (const RunId run : affected) {
-        if (run == 0) {
+        const auto ordinal = m_run_directory.ordinal(run);
+        if (!ordinal) {
             stale_run_index = true;
             break;
         }
-        const RetainedRunOffset offset{run - 1};
+        const RetainedRunOffset offset{*ordinal};
         const bool edited = m_fragment_tree.edit_item<RetainedRunOffset>(
             offset, [this](Fragment& fragment) {
                 fragment.visible = fragment.compute_visible(m_undo_map);
@@ -1493,9 +1520,15 @@ void Buffer::apply_deletion_runs(
             // hole for this deletion run.
             if (first > covered) break;
             if (last <= covered) continue;
-            if (last <= first || interval.run == 0 || interval.run > frags.size()) continue;
+            const auto ordinal = m_run_directory.ordinal(interval.run);
+            if (!ordinal) {
+                m_fragment_indexes_valid = false;
+                apply_deletion_runs(frags, runs, deletion_id);
+                return;
+            }
+            if (last <= first || *ordinal >= frags.size()) continue;
             const uint64_t clipped_first = std::max(first, covered);
-            targets.push_back({static_cast<size_t>(interval.run - 1),
+            targets.push_back({static_cast<size_t>(*ordinal),
                                static_cast<uint32_t>(clipped_first - interval.first),
                                static_cast<uint32_t>(last - clipped_first)});
             covered = last;

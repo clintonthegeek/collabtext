@@ -85,6 +85,13 @@ public:
         return entry->second;
     }
 
+    std::optional<RunId> find_interval_start(const ActorId& actor,
+                                             uint64_t first) const {
+        const auto entry = m_entries.find({actor, first});
+        if (!entry) return std::nullopt;
+        return entry->run;
+    }
+
     std::vector<OriginIntervalEntry> overlapping(
         const ActorId& actor, uint64_t first, uint64_t end) const {
         std::vector<OriginIntervalEntry> result;

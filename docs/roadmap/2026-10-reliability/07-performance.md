@@ -356,8 +356,10 @@ Detailed ratios, load caveats, and raw artifacts are in the linked report.
 
 - `libs/collabtext/src/crdt/OriginIndex.h`
 - `libs/collabtext/src/crdt/DeletionIndex.h`
+- `libs/collabtext/src/crdt/RunDirectory.h`
 - `libs/collabtext/src/crdt/PersistentAvlMap.h`
 - `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/src/crdt/Buffer.h`
 - `libs/collabtext/src/crdt/Fragment.h`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/tests/tst_crdt_indexes.cpp`
@@ -388,8 +390,10 @@ Run tst_crdt_indexes, tst_incremental_model, sequence/undo/IdList/anchor/GC/gap/
 origin/deletion interval indexes now rebuild and validate alongside the
 existing fragment-tree publication. Remote deletion resolves matching retained
 intervals from the origin index and applies splits right-to-left. Per-snapshot
-ordinal handles are temporary and are rebuilt after each whole-tree mutation;
-stable tree/run handles and incremental mutation maintenance remain open.
+ordinals are rebuilt after each whole-tree mutation. Index values now use
+monotonic state-local RunIds, preserved when the run's exact start identity
+survives; a RunDirectory resolves each ID to its current ordinal. SumTree
+NodeIds/parent directories and incremental mutation maintenance remain open.
 Local undo/redo and remote undo use origin/deletion incidences to identify the
 affected ordinals, then seek by the retained-run SumTree summary and edit only
 those paths. A stale ordinal falls back to full visibility recomputation. The

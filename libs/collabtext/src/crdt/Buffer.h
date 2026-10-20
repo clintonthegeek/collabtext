@@ -13,6 +13,7 @@
 #include "crdt/Operations.h"
 #include "crdt/OriginIndex.h"
 #include "crdt/DeletionIndex.h"
+#include "crdt/RunDirectory.h"
 #include "crdt/SumTree.h"
 #include "crdt/UndoMap.h"
 
@@ -401,10 +402,12 @@ private:
     /// not by a key stored on each fragment.
     FragmentTree m_fragment_tree;
     // Rebuilt derived lookups, sharing persistent AVL pages across Buffer
-    // copies. RunIds are assigned in retained sequence order until X05 adds
-    // stable tree handles.
+    // copies. RunIds survive rebuilds while their start identity survives;
+    // RunDirectory ordinals are temporary until X05 adds stable tree nodes.
     OriginIndex m_origin_index;
     DeletionIndex m_deletion_index;
+    RunDirectory m_run_directory;
+    RunId m_next_run_id = 1;
     bool m_fragment_indexes_valid = true;
 
     /// Trim the undo stack to m_max_undo_depth entries.

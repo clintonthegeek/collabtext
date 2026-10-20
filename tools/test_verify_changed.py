@@ -70,6 +70,24 @@ class VerificationTests(unittest.TestCase):
             self.assertRegex(test, '^' + regex + '$')
         self.assertFalse(package)
 
+    def test_crdt_index_headers_route_index_and_buffer_regressions(self):
+        cases = {
+            'libs/collabtext/src/crdt/PersistentAvlMap.h': ('tst_crdt_indexes',),
+            'libs/collabtext/src/crdt/OriginIndex.h':
+                ('tst_crdt_indexes', 'tst_buffer', 'tst_sequence_semantics', 'tst_gc'),
+            'libs/collabtext/src/crdt/DeletionIndex.h':
+                ('tst_crdt_indexes', 'tst_buffer', 'tst_sequence_semantics', 'tst_gc'),
+            'libs/collabtext/src/crdt/RunDirectory.h':
+                ('tst_crdt_indexes', 'tst_buffer', 'tst_sequence_semantics', 'tst_gc'),
+        }
+        for path, expected in cases.items():
+            routes, package = verify.route([path])
+            regex = next(iter(routes.values()))
+            import re
+            for test in expected:
+                self.assertRegex(test, '^' + regex + '$')
+            self.assertFalse(package)
+
     def test_idlist_routes_whole_family(self):
         routes, _ = verify.route(['libs/collabtext/src/crdt/IdList.cpp'])
         for test in ('tst_idlist', 'tst_idlist_undo', 'tst_idlist_anchor',
