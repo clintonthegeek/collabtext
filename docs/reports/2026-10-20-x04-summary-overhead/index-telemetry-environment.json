@@ -1,6 +1,6 @@
 {
   "purpose": "work-count/fallback-frequency only; latency rows are not accepted because host was loaded",
-  "source_head": "4f5aa8a76cf2e4ec43317f1be15671eaba9c11b6",
+  "source_head": "251543a",
   "source_tree_diff_sha256": "dcdc6213f9c1764f12579cf78c4c15733e38818d450615201acca0cc49e315ff",
   "baseline_for_code_delta": "pre-delta X04 at eef0d15f6759aa7ac753a07e6f489cf4052b586a (not used for this diagnostic run)",
   "profile": "quick",
