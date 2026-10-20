@@ -34,7 +34,9 @@ namespace CollabText::Crdt {
 struct FragmentSummary {
     uint32_t visible_bytes = 0;    ///< Total visible bytes in subtree
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
-    uint64_t visible_utf16 = 0;    ///< Visible UTF-16 code units
+    // All public text coordinates are int/uint32 byte offsets, so the usable
+    // visible UTF-16 range also fits this width.
+    uint32_t visible_utf16 = 0;    ///< Visible UTF-16 code units
 
     static FragmentSummary zero() { return {}; }
 
