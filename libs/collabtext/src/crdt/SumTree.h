@@ -565,6 +565,7 @@ public:
         D total = D::zero();
         if (m_root) total.add_summary(m_root->summary);
         if (total < end) return std::nullopt;
+        if (begin == end && replacement.empty()) return *this;
 
         RangeParts parts;
         if (m_root)

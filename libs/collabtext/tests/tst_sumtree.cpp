@@ -1036,6 +1036,21 @@ private slots:
             QCOMPARE(original[size_t(i)].value, i + 1);
     }
 
+    void splice_range_empty_insertion_is_a_shared_noop() {
+        TestTree source;
+        for (int i = 0; i < 50; ++i) source.push_item({i + 1});
+        TestTree empty;
+
+        const auto candidate = source.splice_range<ItemCount>(
+            ItemCount{23}, ItemCount{23}, std::move(empty));
+        QVERIFY(candidate.has_value());
+        QCOMPARE(candidate->summary(), source.summary());
+        const auto actual = candidate->items();
+        QCOMPARE(actual.size(), size_t{50});
+        for (size_t i = 0; i < actual.size(); ++i)
+            QCOMPARE(actual[i].value, int(i + 1));
+    }
+
     void splice_range_checks_order_bounds_and_item_alignment() {
         TestTree source;
         for (int i = 1; i <= 5; ++i) source.push_item({i});

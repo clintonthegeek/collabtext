@@ -479,8 +479,9 @@ lookup and paired results are in
 
 **Progress (2026-10-20):** A generic, checked `SumTree::splice_range` primitive
 now shares fully covered unaffected subtrees, validates dimension-aligned cuts,
-and leaves the source tree untouched. Boundary leaves are copied in bounded
-leaf-sized groups. Its exhaustive small-tree vector-oracle test and the focused
+and leaves the source tree untouched; an empty-to-empty splice returns the
+existing root directly. Boundary leaves are copied in bounded leaf-sized
+groups. Its exhaustive small-tree vector-oracle test and the focused
 Debug `tst_sumtree` suite pass. This is only a primitive: it does not yet enforce
 the X04a FragmentTree occupancy rules, carry stable NodeIds/RunIds, update the
 X04 indexes incrementally, or replace a Buffer mutation path. Do not use this
