@@ -3364,3 +3364,14 @@ and Release, with relocated Core package gates passing 3/3 in each mode.
 `test_verify_changed.py` passes 16/16, `test_run_performance_matrix.py` 3/3,
 and plan/scope validators pass. Full evidence paths are recorded in TASKS.json.
 No production index or tree mutation was implemented in X04a. X07 is now next.
+
+
+## 2026-10-20 — X07 started
+
+X04a's design/model gate is committed at `87d8a55`. X07 is now in progress.
+The first step is a code and measurement audit of `FragmentSummary`,
+`Buffer::utf16_length`/`utf16_range`, UTF-8 run conversion, and every tree rebuild,
+split, visibility, marker and restore path that must maintain summaries. The
+1-MB public replacement and byte-control baselines remain the performance gate.
+No production summary change is made until the summary representation and local
+Unicode-checkpoint cost are understood.

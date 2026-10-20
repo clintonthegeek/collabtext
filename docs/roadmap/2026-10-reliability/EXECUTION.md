@@ -1,8 +1,8 @@
 # Selected performance lane — 2026-10-20
 
-X01, X02, X07a and X04a are complete. Continue with X07 in
-[07-performance.md](07-performance.md), following the accepted X04a design and
-its independent-model invariants.
+X01, X02, X07a and X04a are complete. X07 is now in progress: audit the
+UTF-16 summary path and benchmark first, then follow the accepted X04a design
+and its independent-model invariants.
 Use
 [the target contract](../../specs/vnext-performance-targets.md) for paired
 measurement, expected improvements, design gates, miss dispositions and arc A/B/C

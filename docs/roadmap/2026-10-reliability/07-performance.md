@@ -251,7 +251,7 @@ Build/run tst_incremental_model in Debug and -DNDEBUG Release, replay fixed seed
 
 ## X07 — Seek UTF-16 ranges using maintained tree summaries
 
-**Status:** see TASKS.json (not started)
+**Status:** in progress; source/measurement audit is active (see TASKS.json).
 **Depends on:** X04a, P03
 **Coverage:** F7, R6, R8
 
