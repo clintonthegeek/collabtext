@@ -543,8 +543,20 @@ sequence differential/model, convergence, undo, marker, checkpoint, GC, Buffer,
 index, and verification-tool coverage. The focused Release route passed 4/4;
 the leak-enabled ASan/UBSan Buffer/convergence/sequence route passed 3/3 outside
 the sandbox after the sandboxed run hit its ptrace restriction. The diagnostics
-target is not built in the ASan configuration. No paired latency measurement
-has been run, so this remains a work-count claim only.
+target is not built in the ASan configuration.
+
+The five-pair initial X05 matrix is recorded in
+[`2026-10-20-x05-initial-paired`](../../reports/2026-10-20-x05-initial-paired/README.md).
+All public workload fingerprints match. The local append case's median paired
+mean ratio is 0.009, while public 10-KB replacement after 3,000 prior edits is
+0.893 for mean and 1.017 for p99; its median per-run p99 is 16.62 ms. Native
+5-KB/50%-tombstone edits have a 1.097 median paired mean ratio. The local
+append result supports keeping that narrow path, but X05's aged-edit, p99, and
+mixed-deletion acceptance targets remain unmet. Host load varied during the
+batch, so the report treats ratios as directional evidence and retains every
+pair. After that measured candidate, a remote deletion-free single-run tail
+path was added. It shares the checked incremental publisher and has
+work-count/peer-replay coverage, but its latency has not yet been measured.
 
 **Acceptance:**
 

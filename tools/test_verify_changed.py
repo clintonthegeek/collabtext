@@ -37,6 +37,10 @@ class VerificationTests(unittest.TestCase):
             'docs/reports/2026-10-19-x02-profile/raw/diagnostics-overhead.json'])[0][
                 'docs/reports/2026-10-19-x02-profile/raw/diagnostics-overhead.json'],
             'tst_verification_tools')
+        self.assertEqual(verify.route([
+            'docs/reports/2026-10-20-x05-initial-paired/raw/aggregate.json'])[0][
+                'docs/reports/2026-10-20-x05-initial-paired/raw/aggregate.json'],
+            'tst_verification_tools')
 
     def test_frozen_performance_archive_does_not_allow_unknown_code(self):
         paths = ['docs/reports/2026-10-19-performance/' + name
