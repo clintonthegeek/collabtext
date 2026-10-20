@@ -950,6 +950,7 @@ private:
         if (node->is_leaf()) {
             auto& lf = node->leaf();
             for (uint16_t i = 0; i < lf.count; ++i) {
+                Diagnostics::record(Diagnostics::Counter::sumtree_items_visited);
                 D item_end = cumulative;
                 item_end.add_summary(lf.item_summaries[i]);
                 bool past = (bias == Bias::Left)

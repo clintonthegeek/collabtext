@@ -70,6 +70,7 @@ ROUTES = [
     ('libs/collabtext/src/crdt/OriginIndex.h', r'tst_(buffer|convergence|sequence_.*|gc.*|undo.*|anchor.*|text_markers|checkpoint_.*|counter_gap_model|crdt_indexes)'),
     ('libs/collabtext/src/crdt/DeletionIndex.h', r'tst_(buffer|convergence|sequence_.*|gc.*|undo.*|anchor.*|text_markers|checkpoint_.*|counter_gap_model|crdt_indexes)'),
     ('libs/collabtext/src/crdt/RunDirectory.h', r'tst_(buffer|convergence|sequence_.*|gc.*|undo.*|anchor.*|text_markers|checkpoint_.*|counter_gap_model|crdt_indexes)'),
+    ('libs/collabtext/src/crdt/SumTree.h', r'tst_(sumtree|buffer|idlist.*|undomap|persistent_undo|sequence_.*|boundary_.*|anchor.*|positions|unicode_seek|summary_laws|crdt_indexes|convergence|gc.*|undo.*|checkpoint_.*|counter_gap_model|text_markers|opqueue|rope.*|filesync|stream_sync|opstream_.*)'),
     ('libs/collabtext/src/crdt/Buffer*', r'tst_(buffer|anchor.*|sequence_.*|boundary_.*|edits_since|gc|undomap|convergence|serialization.*|decode_validation|operation_validation|fuzz|evaluation_regressions|behavior_fixtures|unicode_seek|crdt_indexes)'),
     ('libs/collabtext/src/identity/*', r'tst_(actor_identity|identity.*|presence_manager|sha256|clock|operation_validation)'),
     ('libs/collabtext/src/codec/*', r'tst_(utf8|decode_validation|serialization.*|operation_validation|anchor.*)'),

@@ -88,6 +88,16 @@ class VerificationTests(unittest.TestCase):
                 self.assertRegex(test, '^' + regex + '$')
             self.assertFalse(package)
 
+    def test_sumtree_route_covers_all_engine_tree_users(self):
+        routes, package = verify.route(['libs/collabtext/src/crdt/SumTree.h'])
+        regex = next(iter(routes.values()))
+        import re
+        for test in ('tst_sumtree', 'tst_buffer', 'tst_idlist', 'tst_undomap',
+                     'tst_persistent_undo', 'tst_opqueue', 'tst_rope_integration',
+                     'tst_sequence_semantics'):
+            self.assertRegex(test, '^' + regex + '$')
+        self.assertFalse(package)
+
     def test_idlist_routes_whole_family(self):
         routes, _ = verify.route(['libs/collabtext/src/crdt/IdList.cpp'])
         for test in ('tst_idlist', 'tst_idlist_undo', 'tst_idlist_anchor',

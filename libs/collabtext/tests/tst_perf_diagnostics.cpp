@@ -176,7 +176,7 @@ private slots:
         QCOMPARE(Diagnostics::snapshot().get(
                      Diagnostics::Counter::visibility_recomputations), uint64_t{1});
         QCOMPARE(Diagnostics::snapshot().get(
-                     Diagnostics::Counter::sumtree_items_visited), uint64_t{0});
+                     Diagnostics::Counter::sumtree_items_visited), uint64_t{2});
 
         Buffer deleted(CollabText::Test::test_counter(23));
         deleted.apply_ops({initial.value()});
@@ -193,7 +193,65 @@ private slots:
         QCOMPARE(Diagnostics::snapshot().get(
                      Diagnostics::Counter::visibility_recomputations), uint64_t{1});
         QCOMPARE(Diagnostics::snapshot().get(
-                     Diagnostics::Counter::sumtree_items_visited), uint64_t{0});
+                     Diagnostics::Counter::sumtree_items_visited), uint64_t{2});
+    }
+
+    void indexed_run_edit_visits_far_fewer_items_than_full_scan() {
+        constexpr uint64_t run_count = 5000;
+        FragmentTree tree;
+        OriginIndex origins;
+        DeletionIndex deletions;
+        std::vector<std::pair<RunId, uint64_t>> run_rows;
+        run_rows.reserve(run_count);
+        for (uint64_t i = 0; i < run_count; ++i) {
+            Fragment fragment;
+            fragment.marker = true;
+            fragment.length = 1;
+            tree.push_item(std::move(fragment));
+            const uint64_t counter = i + 1;
+            const RunId run = i + 1;
+            QVERIFY(origins.insert(CollabText::Test::actor(40), counter,
+                                   counter + 1, run));
+            QVERIFY(deletions.insert(
+                Identity(CollabText::Test::actor(41), counter),
+                CollabText::Test::actor(40), counter, counter + 1, run));
+            run_rows.emplace_back(run, i);
+        }
+        RunDirectory directory;
+        QVERIFY(directory.rebuild(std::move(run_rows)));
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        tree.for_each([](const Fragment&) {});
+        Diagnostics::end_sample();
+        const auto full_scan_visits = Diagnostics::snapshot().get(
+            Diagnostics::Counter::sumtree_items_visited);
+        QCOMPARE(full_scan_visits, run_count);
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        const Identity target_id(CollabText::Test::actor(40), run_count);
+        const auto origin = origins.locate(target_id);
+        const auto incidences = deletions.incidences(
+            Identity(CollabText::Test::actor(41), run_count));
+        QVERIFY(origin.has_value());
+        QCOMPARE(incidences.size(), size_t{1});
+        QCOMPARE(incidences.front().run, origin->run);
+        const auto ordinal = directory.ordinal(origin->run);
+        QVERIFY(ordinal.has_value());
+        const bool edited = tree.edit_item<RetainedRunOffset>(
+            RetainedRunOffset{*ordinal}, [](Fragment& fragment) {
+                fragment.visible = false;
+            });
+        Diagnostics::end_sample();
+        QVERIFY(edited);
+        const auto indexed_visits = Diagnostics::snapshot().get(
+            Diagnostics::Counter::sumtree_items_visited);
+        qInfo() << "X04 indexed/full run visits:" << indexed_visits << "/"
+                << full_scan_visits;
+        QVERIFY(indexed_visits > 0);
+        QVERIFY(indexed_visits <= FragmentTree::MaxChildren);
+        QVERIFY(indexed_visits * 10 < full_scan_visits);
     }
 };
 

@@ -360,6 +360,7 @@ Detailed ratios, load caveats, and raw artifacts are in the linked report.
 - `libs/collabtext/src/crdt/PersistentAvlMap.h`
 - `libs/collabtext/src/crdt/Buffer.cpp`
 - `libs/collabtext/src/crdt/Buffer.h`
+- `libs/collabtext/src/crdt/SumTree.h`
 - `libs/collabtext/src/crdt/Fragment.h`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/tests/tst_crdt_indexes.cpp`
@@ -397,12 +398,16 @@ NodeIds/parent directories and incremental mutation maintenance remain open.
 Local undo/redo and remote undo use origin/deletion incidences to identify the
 affected ordinals, then seek by the retained-run SumTree summary and edit only
 those paths. A stale ordinal falls back to full visibility recomputation. The
+opt-in diagnostics count SumTree leaf items inspected: a fixed 5,000-run case
+compares the full scan against one ordinal edit and enforces the 90% work
+reduction target. One-run undo diagnostics visit two leaf items in a three-run
+tree. The
 summary adds one `uint64_t` per aggregate; its memory and byte-control cost have
 been measured at 24 bytes per FragmentSummary and 2,736 bytes per tree node,
 versus 16 bytes and 2,632 bytes for the exact-width X07 baseline (+104 bytes per
 node, about 4%). Paired byte-control timing remains open. Structural edits still
-flatten/rebuild the tree and both indexes, and stable NodeId/RunId directories
-and incremental maintenance remain open. No end-to-end performance claim is
+flatten/rebuild the tree and both indexes, and stable NodeId directories and
+incremental maintenance remain open. No end-to-end performance claim is
 made yet.
 See the current X04 entry in TASKS.json.
 
