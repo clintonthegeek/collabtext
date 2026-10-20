@@ -462,10 +462,12 @@ lookup and paired results are in
 
 - `libs/collabtext/src/crdt/Buffer.cpp`
 - `libs/collabtext/src/crdt/SumTree.h`
+- `libs/collabtext/src/crdt/TreeNodeId.h`
 - `libs/collabtext/src/crdt/SequenceOrder.cpp`
 - `libs/collabtext/tests/tst_sequence_fast_paths.cpp`
 - `libs/collabtext/tests/tst_sequence_differential.cpp`
 - `libs/collabtext/tests/tst_sumtree.cpp`
+- `tools/verify_changed.py`
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
 
@@ -490,6 +492,12 @@ changed-path Debug route also passes. This is still only a generic primitive:
 stable NodeIds/RunIds, incremental X04 index updates, and Buffer mutation
 routing remain unimplemented. Do not use this as evidence that X05's algorithm
 or performance acceptance is complete.
+
+**Progress (2026-10-20):** `TreeNodeId.h` now defines checked tree namespaces
+and copyable state-local node-ID counters, with exhaustion and divergent-copy
+semantics covered in `tst_sumtree`. The allocator is not yet wired into SumTree
+nodes or Buffer state; it establishes the identity primitive for the next
+slice, not stable node lookup or an edit speedup.
 
 **Acceptance:**
 

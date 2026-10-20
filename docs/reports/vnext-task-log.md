@@ -3518,3 +3518,13 @@ Buffer, IdList, undo, sequence ordering, anchors, markers, GC and recovery. No
 Buffer path uses the primitive yet, so it has no end-to-end performance claim.
 Stable node/run locators and transactional X04 index maintenance remain the
 next integration gates.
+
+## 2026-10-20 — X05 NodeId allocator groundwork
+
+Added `TreeNodeId.h` with a checked process-wide tree namespace allocator and
+copyable state-local monotonic node counters. Tests verify distinct fresh
+namespaces, deterministic counter forks on copied candidate state, and the
+last representable counter followed by checked exhaustion. `verify_changed.py`
+routes this header to the focused SumTree test. This is not yet attached to
+SumTree nodes or Buffer state and has no performance effect; NodeDirectory and
+RunDirectory integration remain open.

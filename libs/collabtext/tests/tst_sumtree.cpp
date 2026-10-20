@@ -1,5 +1,6 @@
 #include <QTest>
 #include "crdt/SumTree.h"
+#include "crdt/TreeNodeId.h"
 #include <numeric>
 #include <string>
 
@@ -66,6 +67,38 @@ private slots:
         QVERIFY(tree.empty());
         QCOMPARE(tree.summary().count, 0);
         QCOMPARE(tree.summary().sum, 0);
+    }
+
+    void tree_node_ids_are_scoped_copyable_and_checked() {
+        auto fresh = NodeIdAllocator::create();
+        QVERIFY(fresh.has_value());
+        auto first_id = fresh->allocate();
+        QVERIFY(first_id.has_value());
+        QCOMPARE(first_id->tree, fresh->tree_namespace());
+        QCOMPARE(first_id->local, uint64_t{1});
+
+        auto fork = *fresh;
+        const auto left_id = fresh->allocate();
+        const auto right_id = fork.allocate();
+        QVERIFY(left_id.has_value());
+        QVERIFY(right_id.has_value());
+        QCOMPARE(*left_id, *right_id);
+        QCOMPARE(left_id->local, uint64_t{2});
+
+        auto other_lineage = NodeIdAllocator::create();
+        QVERIFY(other_lineage.has_value());
+        auto other_id = other_lineage->allocate();
+        QVERIFY(other_id.has_value());
+        QVERIFY(other_id->tree != first_id->tree);
+
+        NodeIdAllocator at_limit{TreeNamespace{99}, UINT64_MAX};
+        auto final_id = at_limit.allocate();
+        QVERIFY(final_id.has_value());
+        QCOMPARE(final_id->local, UINT64_MAX);
+        QVERIFY(at_limit.exhausted());
+        QVERIFY(!at_limit.allocate().has_value());
+        NodeIdAllocator invalid_namespace{TreeNamespace{}, 1};
+        QVERIFY(!invalid_namespace.allocate().has_value());
     }
 
     void push_single_item() {
