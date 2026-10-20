@@ -109,6 +109,104 @@ private slots:
                  uint64_t{0});
     }
 
+    void local_exact_run_delete_edits_only_the_tree_path() {
+        Buffer buffer(CollabText::Test::test_counter(34));
+        std::vector<Operation> seed;
+        seed.reserve(128);
+        for (uint32_t i = 0; i < 128; ++i) {
+            auto appended = buffer.try_apply_local_edit({{i, i}}, {"x"});
+            QVERIFY(appended);
+            seed.push_back(std::move(appended).value());
+        }
+        QCOMPARE(buffer.fragment_count(), size_t{128});
+
+        Buffer peer(CollabText::Test::test_counter(35));
+        QCOMPARE(peer.apply_ops(seed).size(), seed.size());
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto deleted = buffer.try_apply_local_edit({{127, 128}}, {""});
+        Diagnostics::end_sample();
+        QVERIFY(deleted);
+        QCOMPARE(buffer.text(), std::string(127, 'x'));
+        QCOMPARE(buffer.fragment_count(), size_t{128});
+
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::placement_index_builds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_publications),
+                 uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::deletion_index_rows_inserted),
+                 uint64_t{1});
+        QVERIFY(counts.get(Diagnostics::Counter::sumtree_items_visited) < uint64_t{20});
+
+        QCOMPARE(peer.apply_ops({deleted.value()}).size(), size_t{1});
+        QCOMPARE(peer.text(), buffer.text());
+        const auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string(128, 'x'));
+
+        Buffer range_buffer(CollabText::Test::test_counter(36));
+        QCOMPARE(range_buffer.apply_ops(seed).size(), seed.size());
+        Buffer range_peer(CollabText::Test::test_counter(37));
+        QCOMPARE(range_peer.apply_ops(seed).size(), seed.size());
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto range_deleted = range_buffer.try_apply_local_edit({{0, 128}}, {""});
+        Diagnostics::end_sample();
+        QVERIFY(range_deleted);
+        QCOMPARE(range_buffer.text(), std::string{});
+        const auto range_counts = Diagnostics::snapshot();
+        QCOMPARE(range_counts.get(Diagnostics::Counter::fragment_snapshots),
+                 uint64_t{0});
+        QCOMPARE(range_counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(range_counts.get(Diagnostics::Counter::placement_index_builds),
+                 uint64_t{0});
+        QCOMPARE(range_counts.get(Diagnostics::Counter::deletion_index_rows_inserted),
+                 uint64_t{128});
+        QCOMPARE(range_peer.apply_ops({range_deleted.value()}).size(), size_t{1});
+        QCOMPARE(range_peer.text(), range_buffer.text());
+        const auto range_undo = range_buffer.try_undo();
+        QVERIFY(range_undo);
+        QVERIFY(range_undo.value().has_value());
+        QCOMPARE(range_buffer.text(), std::string(128, 'x'));
+
+        Buffer deletion_sender(CollabText::Test::test_counter(38));
+        auto inserted = deletion_sender.try_apply_local_edit({{0, 0}}, {"hello"});
+        QVERIFY(inserted);
+        Buffer deletion_receiver(CollabText::Test::test_counter(39));
+        QCOMPARE(deletion_receiver.apply_ops({inserted.value()}).size(), size_t{1});
+        auto whole_run_delete = deletion_sender.try_apply_local_edit({{0, 5}}, {""});
+        QVERIFY(whole_run_delete);
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        QCOMPARE(deletion_receiver.apply_ops({whole_run_delete.value()}).size(),
+                 size_t{1});
+        Diagnostics::end_sample();
+        QCOMPARE(deletion_receiver.text(), std::string{});
+        const auto remote_delete_counts = Diagnostics::snapshot();
+        QCOMPARE(remote_delete_counts.get(Diagnostics::Counter::fragment_snapshots),
+                 uint64_t{0});
+        QCOMPARE(remote_delete_counts.get(
+                     Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(remote_delete_counts.get(Diagnostics::Counter::placement_index_builds),
+                 uint64_t{0});
+        QCOMPARE(remote_delete_counts.get(
+                     Diagnostics::Counter::fragment_index_publications),
+                 uint64_t{1});
+        QCOMPARE(remote_delete_counts.get(
+                     Diagnostics::Counter::deletion_index_rows_inserted),
+                 uint64_t{1});
+    }
+
     void fragment_mutation_updates_only_changed_index_rows() {
         Buffer buffer(CollabText::Test::test_counter(20));
         QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {"abcdef"}));

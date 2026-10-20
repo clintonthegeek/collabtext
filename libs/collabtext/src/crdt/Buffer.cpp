@@ -333,6 +333,111 @@ bool Buffer::try_append_fragment(Fragment fragment) {
     return true;
 }
 
+std::optional<std::vector<EditOperation::DeletionRun>>
+Buffer::try_delete_exact_visible_runs(uint32_t start, uint32_t end,
+                                      const Identity& deletion_id) {
+    if (!m_fragment_indexes_valid || start >= end) return std::nullopt;
+
+    auto cursor = m_fragment_tree.cursor<VisibleOffset>();
+    if (!cursor.seek({start}, Bias::Left)) return std::nullopt;
+
+    struct TargetRun {
+        Identity origin;
+        uint32_t length = 0;
+        uint64_t ordinal = 0;
+        RunId run = 0;
+    };
+    std::vector<TargetRun> targets;
+    uint32_t covered = start;
+    while (covered < end) {
+        const Fragment* fragment = cursor.item();
+        if (!fragment) return std::nullopt;
+        const uint32_t position = cursor.position().value;
+        if (fragment->visible && !fragment->marker && fragment->byte_length) {
+            if (position != covered || fragment->byte_length > end - covered ||
+                fragment->byte_length != fragment->text.size() ||
+                !fragment->length ||
+                fragment->length > UINT64_MAX - fragment->origin.counter)
+                return std::nullopt;
+
+            const auto interval = m_origin_index.locate(fragment->origin);
+            const auto run = m_origin_index.find_interval_start(
+                fragment->origin.actor, fragment->origin.counter);
+            if (!interval || !run || interval->run != *run ||
+                interval->end != fragment->origin.counter + fragment->length)
+                return std::nullopt;
+            const auto ordinal = m_run_directory.ordinal(*run);
+            if (!ordinal) return std::nullopt;
+            targets.push_back({fragment->origin, fragment->length, *ordinal, *run});
+            covered += fragment->byte_length;
+        }
+        if (covered < end && !cursor.next()) return std::nullopt;
+    }
+    if (covered != end || targets.empty()) return std::nullopt;
+
+    // Preserve the general path's identity-order sort-and-pack output without
+    // expanding every scalar. When different actors' counter intervals overlap,
+    // their identities interleave and this interval shortcut cannot reproduce
+    // that exact packing, so leave the edit to the general reference path.
+    auto ordered = targets;
+    std::sort(ordered.begin(), ordered.end(), [](const TargetRun& a,
+                                                  const TargetRun& b) {
+        if (a.origin.counter != b.origin.counter)
+            return a.origin.counter < b.origin.counter;
+        return a.origin.actor.compare(b.origin.actor) < 0;
+    });
+    std::vector<EditOperation::DeletionRun> result;
+    result.reserve(ordered.size());
+    uint64_t previous_end = 0;
+    bool have_previous_interval = false;
+    for (const auto& target : ordered) {
+        if (have_previous_interval && target.origin.counter < previous_end)
+            return std::nullopt;
+        previous_end = target.origin.counter + target.length;
+        have_previous_interval = true;
+        if (!result.empty() && result.back().first.actor == target.origin.actor &&
+            result.back().first.counter + result.back().count == target.origin.counter) {
+            if (target.length > UINT32_MAX - result.back().count)
+                return std::nullopt;
+            result.back().count += target.length;
+        } else {
+            result.push_back({target.origin, target.length});
+        }
+    }
+
+    auto tree = m_fragment_tree;
+    auto deletions = m_deletion_index;
+    for (const auto& target : targets) {
+        const auto interval = m_origin_index.locate(target.origin);
+        if (!interval || interval->run != target.run ||
+            !deletions.insert(deletion_id, target.origin.actor,
+                              target.origin.counter, interval->end, target.run))
+            return std::nullopt;
+    }
+
+    for (const auto& target : targets) {
+        bool changed = false;
+        const bool edited = tree.edit_item<RetainedRunOffset>(
+            RetainedRunOffset{target.ordinal}, [&](Fragment& fragment) {
+                if (fragment.origin != target.origin ||
+                    fragment.length != target.length || !fragment.visible ||
+                    fragment.marker)
+                    return;
+                fragment.deletions.push_back(deletion_id);
+                fragment.visible = fragment.compute_visible(m_undo_map);
+                changed = !fragment.visible;
+            });
+        if (!edited || !changed) return std::nullopt;
+    }
+
+    Diagnostics::record(Diagnostics::Counter::fragment_index_publications);
+    Diagnostics::record(Diagnostics::Counter::deletion_index_rows_inserted,
+                        targets.size());
+    m_fragment_tree = std::move(tree);
+    m_deletion_index = std::move(deletions);
+    return result;
+}
+
 void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
     if (!m_fragment_indexes_valid) {
         m_fragment_tree.for_each_mut([this](Fragment& fragment) {
@@ -1361,6 +1466,25 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
         }
     }
 
+    // Deleting one complete visible run changes no retained sequence
+    // boundaries. Update only its COW tree path and deletion-incidence row;
+    // partial-run deletes still use the ordered reconstruction path until X05
+    // can splice their split boundaries and directories transactionally.
+    if (ranges.size() == 1 && new_text[0].empty() &&
+        ranges[0].first < ranges[0].second) {
+        if (const auto deleted = try_delete_exact_visible_runs(
+                ranges[0].first, ranges[0].second, op_identity)) {
+            op.timestamp = op_identity;
+            op.deletion_id = op_identity;
+            op.deletion_runs = *deleted;
+            undo_entry.deletion_ids.push_back(op_identity);
+            m_version.observe(op_identity);
+            commit_local_history(std::move(undo_entry));
+            if (m_on_change) m_on_change();
+            return Operation(std::move(op));
+        }
+    }
+
     // Track actually-deleted character timestamps for building deletion_runs.
     std::vector<Identity> deleted_timestamps;
 
@@ -1853,6 +1977,62 @@ Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
             m_version.observe(last_timestamp);
             m_version.join(op.version);
             return ApplyStep::applied;
+        }
+    }
+
+    // A remote operation with no inserted fragments that names exactly one
+    // whole retained text run can update that run by identity and retained rank. Its
+    // deletion incidence and visibility summary publish together, avoiding a
+    // fragment snapshot and rebuild. Marker, partial-run, missing-history, and
+    // multi-interval operations continue through the general validator below.
+    if (op.inserted_fragments.empty() && op.deletion_runs.size() == 1 &&
+        !op.marker_edit && m_fragment_indexes_valid) {
+        const auto& deletion = op.deletion_runs.front();
+        const auto interval = m_origin_index.locate(deletion.first);
+        if (interval && deletion.count &&
+            deletion.count <= UINT64_MAX - deletion.first.counter &&
+            interval->end == deletion.first.counter + deletion.count) {
+            const auto ordinal = m_run_directory.ordinal(interval->run);
+            if (ordinal) {
+                auto cursor = m_fragment_tree.cursor<RetainedRunOffset>();
+                if (cursor.seek({*ordinal}, Bias::Left) && cursor.item()) {
+                    const Fragment& target = *cursor.item();
+                    if (target.origin == deletion.first &&
+                        target.length == deletion.count && !target.marker) {
+                        auto tree = m_fragment_tree;
+                        auto deletions = m_deletion_index;
+                        if (deletions.insert(op.deletion_id, target.origin.actor,
+                                             target.origin.counter, interval->end,
+                                             interval->run)) {
+                            bool updated = false;
+                            const bool edited = tree.edit_item<RetainedRunOffset>(
+                                RetainedRunOffset{*ordinal}, [&](Fragment& fragment) {
+                                    if (fragment.origin != target.origin ||
+                                        fragment.length != target.length ||
+                                        fragment.marker)
+                                        return;
+                                    fragment.deletions.push_back(op.deletion_id);
+                                    fragment.visible =
+                                        fragment.compute_visible(m_undo_map);
+                                    updated = true;
+                                });
+                            if (edited && updated) {
+                                Diagnostics::record(
+                                    Diagnostics::Counter::fragment_index_publications);
+                                Diagnostics::record(
+                                    Diagnostics::Counter::deletion_index_rows_inserted);
+                                m_fragment_tree = std::move(tree);
+                                m_deletion_index = std::move(deletions);
+                                observe_remote(op.timestamp);
+                                m_version.observe(op.timestamp);
+                                m_version.observe(op.deletion_id);
+                                m_version.join(op.version);
+                                return ApplyStep::applied;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

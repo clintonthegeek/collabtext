@@ -297,6 +297,9 @@ private:
     Result<Operation> try_insert_item(std::optional<Identity> left,
                                       const std::string& text, bool marker);
     void commit_local_history(UndoEntry&&);
+    std::optional<std::vector<EditOperation::DeletionRun>>
+    try_delete_exact_visible_runs(
+        uint32_t start, uint32_t end, const Identity& deletion_id);
 
     // ---- Fragment vector helpers ----
     // Operations modify fragments via a temporary vector, then rebuild the tree.
