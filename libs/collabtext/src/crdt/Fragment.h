@@ -33,8 +33,8 @@ namespace CollabText::Crdt {
 /// which checks them against randomized splice patterns.
 struct FragmentSummary {
     uint64_t visible_bytes = 0;    ///< Total visible bytes in subtree (overflow checked at API boundary)
-    uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
     uint64_t retained_runs = 0;    ///< Number of retained Fragment items in subtree
+    uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
     // All public text coordinates are int/uint32 byte offsets, so the usable
     // visible UTF-16 range also fits this width.
     uint32_t visible_utf16 = 0;    ///< Visible UTF-16 code units

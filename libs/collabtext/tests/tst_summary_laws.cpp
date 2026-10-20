@@ -242,6 +242,32 @@ private slots:
         QCOMPARE(left.retained_runs, right.retained_runs);
     }
 
+    void fragment_summaries_count_markers_and_hidden_runs() {
+        Fragment visible;
+        visible.visible = true;
+        visible.text = "a";
+        visible.byte_length = 1;
+        visible.length = 1;
+        visible.utf16_units_cached = 1;
+        visible.utf16_index_ready = true;
+
+        Fragment marker;
+        marker.visible = true;
+        marker.marker = true;
+
+        Fragment hidden;
+        hidden.visible = false;
+        hidden.text = "b";
+        hidden.byte_length = 1;
+        hidden.length = 1;
+        hidden.utf16_units_cached = 1;
+        hidden.utf16_index_ready = true;
+
+        QCOMPARE(visible.summary().retained_runs, uint64_t{1});
+        QCOMPARE(marker.summary().retained_runs, uint64_t{1});
+        QCOMPARE(hidden.summary().retained_runs, uint64_t{1});
+    }
+
     void visible_byte_overflow_is_observable_to_range_validation() {
         FragmentSummary sum;
         sum.visible_bytes = UINT32_MAX;

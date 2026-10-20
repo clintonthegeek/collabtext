@@ -394,9 +394,12 @@ Local undo/redo and remote undo use origin/deletion incidences to identify the
 affected ordinals, then seek by the retained-run SumTree summary and edit only
 those paths. A stale ordinal falls back to full visibility recomputation. The
 summary adds one `uint64_t` per aggregate; its memory and byte-control cost have
-not been measured yet. Structural edits still flatten/rebuild the tree and both
-indexes, and stable NodeId/RunId directories and incremental maintenance remain
-open. No end-to-end performance claim is made yet.
+been measured at 24 bytes per FragmentSummary and 2,736 bytes per tree node,
+versus 16 bytes and 2,632 bytes for the exact-width X07 baseline (+104 bytes per
+node, about 4%). Paired byte-control timing remains open. Structural edits still
+flatten/rebuild the tree and both indexes, and stable NodeId/RunId directories
+and incremental maintenance remain open. No end-to-end performance claim is
+made yet.
 See the current X04 entry in TASKS.json.
 
 ## X05 — Replace whole-fragment text rebuilds with transactional splices
