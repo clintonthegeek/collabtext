@@ -30,7 +30,11 @@ class OriginIndex {
     using Key = std::pair<ActorId, uint64_t>;
     using Map = PersistentAvlMap<Key, OriginInterval>;
 public:
+    static constexpr size_t node_payload_bytes() noexcept {
+        return Map::node_payload_bytes();
+    }
     size_t size() const noexcept { return m_entries.size(); }
+    size_t payload_bytes() const noexcept { return size() * node_payload_bytes(); }
     bool empty() const noexcept { return m_entries.empty(); }
 
     // Insert a non-empty half-open interval. Overlap or invalid run/range

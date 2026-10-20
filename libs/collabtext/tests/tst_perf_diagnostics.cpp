@@ -25,6 +25,8 @@ private slots:
         const auto counts = Diagnostics::snapshot();
         QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds),
                  uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_publications),
+                 uint64_t{1});
         QCOMPARE(counts.get(Diagnostics::Counter::origin_index_rows_erased),
                  uint64_t{1});
         QCOMPARE(counts.get(Diagnostics::Counter::origin_index_rows_inserted),
@@ -49,6 +51,9 @@ private slots:
         QCOMPARE(deletion_counts.get(
                      Diagnostics::Counter::fragment_index_full_rebuilds),
                  uint64_t{0});
+        QCOMPARE(deletion_counts.get(
+                     Diagnostics::Counter::fragment_index_publications),
+                 uint64_t{1});
         QCOMPARE(deletion_counts.get(
                      Diagnostics::Counter::origin_index_rows_erased),
                  uint64_t{1});
@@ -304,6 +309,14 @@ private slots:
             Diagnostics::Counter::sumtree_items_visited);
         qInfo() << "X04 indexed/full run visits:" << indexed_visits << "/"
                 << full_scan_visits;
+        qInfo() << "X04 index node payload bytes (origin/deletion/directory):"
+                << OriginIndex::node_payload_bytes() << "/"
+                << DeletionIndex::node_payload_bytes() << "/"
+                << RunDirectory::node_payload_bytes()
+                << "total at 5000 runs:"
+                << origins.payload_bytes() + deletions.payload_bytes() +
+                       directory.payload_bytes()
+                << "(excludes shared_ptr control blocks and allocator overhead)";
         QVERIFY(indexed_visits > 0);
         QVERIFY(indexed_visits <= FragmentTree::MaxChildren);
         QVERIFY(indexed_visits * 10 < full_scan_visits);

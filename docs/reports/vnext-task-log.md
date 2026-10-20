@@ -3456,6 +3456,23 @@ invalid duplicate reverse-index entries while preserving the prior visibility
 result. The final affected Debug suite passed 15/15 with this regression
 included; verifier unit tests passed 16/16.
 
+## 2026-10-20 — X04 implementation slice 4
+
+Diagnostics schema 6 now records each index publication as well as full index
+rebuild fallbacks, and reports AVL node payload sizes. A Release quick telemetry
+run emitted 54 cases and measured 0 full origin/deletion rebuilds across 74
+sampled publications. The 5,000-entry-per-map payload is 1,440,000 bytes total
+(88/136/64 bytes per origin/deletion/directory node), excluding shared-pointer
+control blocks and allocator overhead. On the 10-KB/3,000-edit byte control, all
+five sampled index updates avoided fallback; they still snapshotted 37,521
+fragment items and rebuilt 37,532 tree items, so X05 remains the structural
+performance target. Host load was 13.60/12.38 on an 8-logical-CPU machine; the
+run is work/memory evidence only and its latency rows are excluded. The
+current-source 21-suite Release and leak-enabled ASan/UBSan model-sensitive
+routes passed, and the current-source focused Debug route passed 5/5. The
+low-load paired comparison remains outstanding; loaded-host latency rows remain
+excluded.
+
 ## 2026-10-20 — X04 implementation slice 2
 
 Local undo/redo and remote undo now use the origin and deletion indexes to find
@@ -3476,11 +3493,12 @@ runs insert candidate rows; unaffected AVL pages are shared. Full row-vector
 materialization and sorted map rebuild occur only when the prior derived indexes
 are invalid or delta validation fails. RunDirectory and SumTree still rebuild,
 and the candidate identification pass still scans the old tree and staged
-vector, so no whole-edit latency claim is made. Diagnostics schema 5 records
-changed index rows and full index rebuild fallbacks. Focused insertion/deletion
-tests each prove no full index rebuild; changed-path Debug passed 104/104,
-final-source focused Debug passed 5/5, and Release focused tests passed 4/4.
-ASan/UBSan test bodies passed, but LeakSanitizer exits fatally under this
-runner's ptrace environment; that required gate remains unresolved and was not
-disabled. The paired X07 byte-control comparison is recorded as noisy
-diagnostic evidence in `docs/reports/2026-10-20-x04-summary-overhead/`.
+vector, so no whole-edit latency claim is made. Diagnostics schema 6 records
+changed index rows, index publication attempts, full index rebuild fallbacks,
+and node payload sizes. Focused insertion/deletion tests each prove no full
+index rebuild; changed-path Debug passed 104/104, current-source focused Debug
+passed 5/5, and Release focused tests passed 4/4. The current-source
+21-suite model-sensitive set passed Release and leak-enabled ASan/UBSan outside
+the sandbox. The low-load paired comparison remains outstanding. The paired X07
+byte-control comparison is recorded as noisy diagnostic evidence in
+`docs/reports/2026-10-20-x04-summary-overhead/`.

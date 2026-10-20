@@ -16,7 +16,11 @@ class RunDirectory {
     using Map = PersistentAvlMap<RunId, uint64_t>;
 
 public:
+    static constexpr size_t node_payload_bytes() noexcept {
+        return Map::node_payload_bytes();
+    }
     size_t size() const noexcept { return m_entries.size(); }
+    size_t payload_bytes() const noexcept { return size() * node_payload_bytes(); }
 
     std::optional<uint64_t> ordinal(RunId run) const {
         const auto entry = m_entries.find(run);

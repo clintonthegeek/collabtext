@@ -33,6 +33,8 @@ class PersistentAvlMap {
     };
 
 public:
+    static constexpr size_t node_payload_bytes() noexcept { return sizeof(Node); }
+
     PersistentAvlMap() = default;
     size_t size() const noexcept { return Node::node_count(m_root); }
     bool empty() const noexcept { return !m_root; }

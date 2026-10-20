@@ -118,6 +118,7 @@ std::vector<Fragment> Buffer::get_fragments() const {
 }
 
 void Buffer::set_fragments(std::vector<Fragment>&& frags) {
+    Diagnostics::record(Diagnostics::Counter::fragment_index_publications);
     Diagnostics::record(Diagnostics::Counter::fragment_tree_rebuild_items,
                         frags.size());
     for (auto& f : frags) {

@@ -407,11 +407,16 @@ tree. `set_fragments` now copies the persistent index roots, erases rows for
 changed/removed runs, and inserts rows for changed/new/split runs. Untouched AVL
 pages are shared. Full origin/deletion row vectors and sorted rebuilds are now
 created only when the old index is invalid or a delta check fails. The opt-in
-diagnostics schema 5 counts row edits and full-rebuild fallbacks; focused insert
+diagnostics schema 6 counts row edits, publication attempts, and full-rebuild
+fallbacks; focused insert
 and deletion cases each update only the affected run rows and assert zero full
 index rebuilds. `RunDirectory` and `SumTree` are still rebuilt after every
 structural mutation, and `set_fragments` still scans the old tree and staged
-fragment vector to identify changes. The
+fragment vector to identify changes. A Release schema-6 telemetry run recorded
+0 full index rebuild fallbacks across 74 sampled publications in 54 cases. At
+5,000 entries each, origin/deletion/directory node payload totaled 1,440,000
+bytes, excluding `shared_ptr` control blocks and allocator overhead. See the
+report for raw counters and the explicit high-load latency exclusion. The
 summary adds one `uint64_t` per aggregate; its memory and byte-control cost have
 been measured at 24 bytes per FragmentSummary and 2,736 bytes per tree node,
 versus 16 bytes and 2,632 bytes for the exact-width X07 baseline (+104 bytes per
@@ -424,11 +429,12 @@ See [the report](../../reports/2026-10-20-x04-summary-overhead/README.md) and
 raw run metadata. Structural edits still flatten/rebuild the tree and
 RunDirectory, and stable NodeId directories and incremental tree maintenance
 remain open.
-No end-to-end performance claim is made yet. Debug verification passed 104/104
-on the index-delta implementation; final-source focused Debug and Release suites
-passed 5/5 and 4/4. Leak-enabled ASan/UBSan cases completed with all test cases
-passing, but CTest exits nonzero because LeakSanitizer cannot operate under this
-runner's ptrace environment; that gate remains open.
+No end-to-end performance claim is made yet. The changed-path Debug route passed
+104/104 before the schema-6 telemetry additions; current-source focused Debug
+verification passed 5/5, including diagnostics (10/10 direct and 1/1 in Release).
+The current-source 21-suite model-sensitive set passed Release and leak-enabled
+ASan/UBSan outside the sandbox. The low-load paired timing comparison against
+the pre-delta X04 implementation remains outstanding.
 See the current X04 entry in TASKS.json.
 
 ## X05 — Replace whole-fragment text rebuilds with transactional splices
