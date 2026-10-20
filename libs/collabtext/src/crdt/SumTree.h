@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <variant>
 #include <vector>
@@ -549,6 +550,36 @@ public:
         }
     }
 
+    /// Return a copy-on-write tree with the item-aligned range [begin, end)
+    /// replaced by `replacement`. Whole unaffected subtrees are shared from
+    /// this tree; only the boundary paths and joins are rebuilt. `D` must be a
+    /// strictly advancing rank dimension (each item contributes a positive
+    /// amount), so item boundaries are unambiguous. A dimension target inside
+    /// an item, an inverted range, or a range past the end is a checked failure
+    /// and leaves this tree untouched.
+    template<typename D>
+        requires DimensionOf<D, Summary>
+    std::optional<SumTree> splice_range(const D& begin, const D& end,
+                                        SumTree replacement) const {
+        if (end < begin) return std::nullopt;
+        D total = D::zero();
+        if (m_root) total.add_summary(m_root->summary);
+        if (total < end) return std::nullopt;
+
+        RangeParts parts;
+        if (m_root)
+            split_range_node<D>(m_root, begin, end, D::zero(), parts);
+        if (!parts.valid) return std::nullopt;
+
+        SumTree result;
+        for (const auto& root : parts.prefix)
+            result.push_tree(SumTree(NodePtr(root)));
+        result.push_tree(std::move(replacement));
+        for (const auto& root : parts.suffix)
+            result.push_tree(SumTree(NodePtr(root)));
+        return result;
+    }
+
     /// Extend with items from a vector.
     void extend(const std::vector<Item>& items) {
         for (auto& item : items) push_item(Item(item));
@@ -622,6 +653,96 @@ public:
 
 private:
     NodePtr m_root;
+
+    struct RangeParts {
+        std::vector<NodePtr> prefix;
+        std::vector<NodePtr> suffix;
+        bool valid = true;
+    };
+
+    static void append_tree(std::vector<NodePtr>& destination,
+                            const NodePtr& node) {
+        if (node) destination.push_back(node);
+    }
+
+    static void append_leaf_items(std::vector<NodePtr>& destination,
+                                  const Leaf& source,
+                                  const std::vector<uint16_t>& indices) {
+        if (indices.empty()) return;
+        auto leaf = make_leaf();
+        auto& output = leaf->leaf();
+        for (const uint16_t index : indices) {
+            output.items[output.count] = Item(source.items[index]);
+            output.item_summaries[output.count] = source.item_summaries[index];
+            ++output.count;
+        }
+        recompute_summary(*leaf);
+        destination.push_back(std::move(leaf));
+    }
+
+    template<typename D>
+        requires DimensionOf<D, Summary>
+    static void split_range_node(const NodePtr& node, const D& begin,
+                                 const D& end, const D& base,
+                                 RangeParts& parts) {
+        D node_end = base;
+        node_end.add_summary(node->summary);
+        if (node_end <= begin) {
+            append_tree(parts.prefix, node);
+            return;
+        }
+        if (base >= end) {
+            append_tree(parts.suffix, node);
+            return;
+        }
+        if (begin <= base && node_end <= end) {
+            return;
+        }
+
+        if (node->is_leaf()) {
+            const auto& leaf = node->leaf();
+            D item_start = base;
+            std::vector<uint16_t> prefix_items;
+            std::vector<uint16_t> suffix_items;
+            for (uint16_t i = 0; i < leaf.count; ++i) {
+                D item_end = item_start;
+                item_end.add_summary(leaf.item_summaries[i]);
+                if (item_end <= begin) {
+                    prefix_items.push_back(i);
+                } else if (item_start >= end) {
+                    suffix_items.push_back(i);
+                } else if (begin <= item_start && item_end <= end) {
+                    // The item is inside the removed interval.
+                } else {
+                    parts.valid = false; // a splice boundary cuts through an item
+                    return;
+                }
+                item_start = item_end;
+            }
+            append_leaf_items(parts.prefix, leaf, prefix_items);
+            append_leaf_items(parts.suffix, leaf, suffix_items);
+            return;
+        }
+
+        const auto& internal = node->internal();
+        D child_start = base;
+        for (uint16_t i = 0; i < internal.count; ++i) {
+            const auto& child = internal.children[i];
+            D child_end = child_start;
+            child_end.add_summary(internal.child_summaries[i]);
+            if (child_end <= begin) {
+                append_tree(parts.prefix, child);
+            } else if (child_start >= end) {
+                append_tree(parts.suffix, child);
+            } else if (begin <= child_start && child_end <= end) {
+                // The entire subtree is removed; do not enumerate it.
+            } else {
+                split_range_node<D>(child, begin, end, child_start, parts);
+                if (!parts.valid) return;
+            }
+            child_start = child_end;
+        }
+    }
 
     // ---- Node creation helpers ----
 

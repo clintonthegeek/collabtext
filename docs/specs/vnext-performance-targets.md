@@ -4,7 +4,7 @@ Plan date: 2026-10-19. This is an implementation/evaluation contract, not a clai
 that the targets are achieved or a promise of latency on every machine.
 Authoritative tasks: [07-performance.md](../roadmap/2026-10-reliability/07-performance.md)
 and [TASKS.json](../roadmap/2026-10-reliability/TASKS.json).
-X01, X02, X07a, X04a, X07 and X07b are complete; X04 is next. X07b retained
+X01, X02, X07a, X04a, X07, X07b and X04 are complete; X05 is active. X07b retained
 X07's exact-width summary after the compact prototype missed cumulative
 byte-control thresholds; see the [X07b report](../reports/2026-10-20-x07b/README.md).
 The complete serial

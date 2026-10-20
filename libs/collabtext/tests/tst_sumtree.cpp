@@ -1001,6 +1001,106 @@ private slots:
         }
         QVERIFY(tree.empty());
     }
+
+    void splice_range_preserves_source_and_sequence() {
+        TestTree source;
+        int source_sum = 0;
+        for (int i = 0; i < 100; ++i) {
+            source.push_item({i + 1});
+            source_sum += i + 1;
+        }
+        TestTree replacement;
+        replacement.push_item({900});
+        replacement.push_item({901});
+
+        auto candidate = source.splice_range<ItemCount>(ItemCount{17},
+                                                        ItemCount{83},
+                                                        std::move(replacement));
+        QVERIFY(candidate.has_value());
+        QCOMPARE(candidate->summary().count, 36);
+        const int removed_sum = (18 + 83) * 66 / 2;
+        QCOMPARE(candidate->summary().sum, source_sum - removed_sum + 1801);
+
+        const auto values = candidate->items();
+        QCOMPARE(values.size(), size_t{36});
+        for (int i = 0; i < 17; ++i) QCOMPARE(values[size_t(i)].value, i + 1);
+        QCOMPARE(values[17].value, 900);
+        QCOMPARE(values[18].value, 901);
+        for (int i = 19; i < 36; ++i)
+            QCOMPARE(values[size_t(i)].value, i + 65);
+
+        QCOMPARE(source.summary().count, 100);
+        QCOMPARE(source.summary().sum, source_sum);
+        const auto original = source.items();
+        for (int i = 0; i < 100; ++i)
+            QCOMPARE(original[size_t(i)].value, i + 1);
+    }
+
+    void splice_range_checks_order_bounds_and_item_alignment() {
+        TestTree source;
+        for (int i = 1; i <= 5; ++i) source.push_item({i});
+        TestTree replacement;
+        replacement.push_item({99});
+
+        QVERIFY(!source.splice_range<ItemCount>(ItemCount{4}, ItemCount{2},
+                                                replacement));
+        QVERIFY(!source.splice_range<ItemCount>(ItemCount{2}, ItemCount{6},
+                                                replacement));
+        TestTree weighted;
+        weighted.push_item({3});
+        weighted.push_item({5});
+        weighted.push_item({2});
+        QVERIFY(!weighted.splice_range<ItemSum>(ItemSum{1}, ItemSum{4},
+                                                replacement));
+        QCOMPARE(source.items().size(), size_t{5});
+        QCOMPARE(source.summary().sum, 15);
+    }
+
+    void splice_range_matches_vector_oracle_for_every_small_boundary_pair() {
+        constexpr int source_size = 80;
+        TestTree source;
+        std::vector<int> expected_source;
+        for (int i = 0; i < source_size; ++i) {
+            source.push_item({i + 1});
+            expected_source.push_back(i + 1);
+        }
+
+        for (int begin = 0; begin <= source_size; ++begin) {
+            for (int end = begin; end <= source_size; ++end) {
+                TestTree replacement;
+                std::vector<int> expected = expected_source;
+                if ((begin + end) % 3 != 0) {
+                    replacement.push_item({1001});
+                    expected.insert(expected.begin() + begin, 1001);
+                }
+                if ((begin + end) % 5 == 0) {
+                    replacement.push_item({1002});
+                    expected.insert(expected.begin() + begin +
+                                        ((begin + end) % 3 != 0 ? 1 : 0),
+                                    1002);
+                }
+                expected.erase(expected.begin() + begin +
+                                   ((begin + end) % 3 != 0 ? 1 : 0) +
+                                   ((begin + end) % 5 == 0 ? 1 : 0),
+                               expected.begin() + end +
+                                   ((begin + end) % 3 != 0 ? 1 : 0) +
+                                   ((begin + end) % 5 == 0 ? 1 : 0));
+
+                auto candidate = source.splice_range<ItemCount>(
+                    ItemCount{begin}, ItemCount{end}, std::move(replacement));
+                QVERIFY2(candidate.has_value(), "valid item boundary was refused");
+                QCOMPARE(candidate->summary().count, int(expected.size()));
+                int expected_sum = std::accumulate(expected.begin(), expected.end(), 0);
+                QCOMPARE(candidate->summary().sum, expected_sum);
+                const auto actual = candidate->items();
+                QCOMPARE(actual.size(), expected.size());
+                for (size_t i = 0; i < expected.size(); ++i)
+                    QCOMPARE(actual[i].value, expected[i]);
+            }
+        }
+        QCOMPARE(source.summary().count, source_size);
+        QCOMPARE(source.summary().sum, source_size * (source_size + 1) / 2);
+    }
 };
 
 QTEST_MAIN(tst_sumtree)

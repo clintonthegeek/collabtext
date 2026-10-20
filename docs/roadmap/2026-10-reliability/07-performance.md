@@ -477,6 +477,15 @@ lookup and paired results are in
 4. Test concurrency, adversarial origins, Unicode splits, marker order, checkpoint recovery, gaps and undo/redo under allocation failure and seeded model traces. Assert common one-run edits do not enumerate/copy/rebuild the full fragment collection.
 5. Measure fresh bulk-seeded, chunk-seeded, 500/3000-prior-edit, tombstone-rich, undo and catch-up cases. Publish fallback frequency and work counts; an optimization that merely shifts an O(history) rebuild into index maintenance does not satisfy acceptance.
 
+**Progress (2026-10-20):** A generic, checked `SumTree::splice_range` primitive
+now shares fully covered unaffected subtrees, validates dimension-aligned cuts,
+and leaves the source tree untouched. Boundary leaves are copied in bounded
+leaf-sized groups. Its exhaustive small-tree vector-oracle test and the focused
+Debug `tst_sumtree` suite pass. This is only a primitive: it does not yet enforce
+the X04a FragmentTree occupancy rules, carry stable NodeIds/RunIds, update the
+X04 indexes incrementally, or replace a Buffer mutation path. Do not use this
+as evidence that X05's algorithm or performance acceptance is complete.
+
 **Acceptance:**
 
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
