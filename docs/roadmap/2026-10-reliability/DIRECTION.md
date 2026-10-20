@@ -11,8 +11,9 @@ improvement on public 1-MB replacement, with a measured byte-control regression
 above the 10% guard at 100 KB and narrowly at 1 MB. X07b's compact-summary
 prototype missed the cumulative 1.10 byte-control thresholds and was reverted;
 the exact-width X07 representation remains. See the
-[X07b report](../../reports/2026-10-20-x07b/README.md). The next task is **X04**:
-implement the modeled origin and deletion indexes with checked updates.
+[X07b report](../../reports/2026-10-20-x07b/README.md). X04 completed at
+`0fbd15b` with measured lookup/work-count gains and mixed edit-latency results.
+X05 is now active and uses that result as its paired baseline.
 The user requested an implementable optimization plan after
 [the new evaluation](../../reports/2026-10-19-performance-evaluation.md).
 The frozen source baseline is `d04f151b3a70b161b72c33a8de6895efbd1c13e2`.

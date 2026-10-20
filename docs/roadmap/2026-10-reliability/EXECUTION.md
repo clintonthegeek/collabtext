@@ -2,8 +2,10 @@
 
 X01, X02, X07a, X04a, X07 and X07b are complete. X07b retained X07's exact-width
 summary after its compact prototype missed cumulative byte-control thresholds.
-X04 is next: implement modeled origin and deletion indexes with checked updates,
-preserving the accepted X04a design and independent-model invariants.
+X04 is complete (`0fbd15b`): the modeled origin/deletion indexes and direct
+lookup/work-count gates passed; paired end-to-end evidence is mixed and is
+recorded as X05's baseline. X05 is active: replace whole-fragment edit rebuilds
+with transactional tree splices under the accepted X04a model and invariants.
 Use
 [the target contract](../../specs/vnext-performance-targets.md) for paired
 measurement, expected improvements, design gates, miss dispositions and arc A/B/C

@@ -454,7 +454,7 @@ lookup and paired results are in
 
 ## X05 — Replace whole-fragment text rebuilds with transactional splices
 
-**Status:** see TASKS.json (not started)
+**Status:** in progress; `0fbd15b` is the paired baseline.
 **Depends on:** X04, S07
 **Coverage:** R6, R7
 
