@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 import re
 import statistics
+import shutil
 import subprocess
 import sys
 import time
@@ -174,14 +175,22 @@ def main():
     def compile_baseline_harness(build):
         binary = output / "benchmark-baseline"
         source = baseline_root / "libs/collabtext"
+        diagnostics_overlay = output / "baseline-header-overlay/crdt/Diagnostics.h"
+        diagnostics_overlay.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(candidate_root / "libs/collabtext/src/crdt/Diagnostics.h",
+                        diagnostics_overlay)
         run("baseline-harness-compile", [
             "ccache", "c++", "-std=c++20", "-O3", "-DNDEBUG",
             "-I", source / "include",
-            # The checked harness may depend on post-baseline, header-only
-            # diagnostics. Their disabled inline implementation lets the same
-            # harness compile against the pinned baseline without copying new
-            # engine code or changing its library binary.
-            "-I", candidate_root / "libs/collabtext/src", "-I", source / "src",
+            # Buffer and Fragment are value types used directly by the
+            # harness. Candidate private headers can change their layout and
+            # mismatch the pinned baseline binary, so compile against the
+            # baseline's private headers too.
+            # Diagnostics is header-only and may postdate the baseline. Put
+            # only that header in an overlay; all layout-bearing Buffer,
+            # Fragment and SumTree headers still come from the baseline.
+            "-I", diagnostics_overlay.parent.parent,
+            "-I", source / "src",
             harness, build / "libs/collabtext/libcollabtext_core.a",
             "-pthread", "-o", binary,
         ], timeout=180)

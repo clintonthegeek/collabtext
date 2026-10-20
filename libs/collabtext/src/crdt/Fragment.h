@@ -32,7 +32,7 @@ namespace CollabText::Crdt {
 /// associative, and the byte counts are commutative. See tst_summary_laws.cpp,
 /// which checks them against randomized splice patterns.
 struct FragmentSummary {
-    uint64_t visible_bytes = 0;    ///< Total visible bytes in subtree (overflow checked at API boundary)
+    uint32_t visible_bytes = 0;    ///< Visible bytes modulo 2^32; exact total lives on Buffer
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
     // All public text coordinates are int/uint32 byte offsets, so the usable
     // visible UTF-16 range also fits this width.
@@ -41,11 +41,16 @@ struct FragmentSummary {
     static FragmentSummary zero() { return {}; }
 
     void add_summary(const FragmentSummary& other) {
+        Diagnostics::record(Diagnostics::Counter::fragment_summary_compositions);
         visible_bytes += other.visible_bytes;
         deleted_bytes += other.deleted_bytes;
         visible_utf16 += other.visible_utf16;
     }
 };
+
+inline bool visible_byte_offset_overflow(uint64_t exact_total) noexcept {
+    return exact_total > UINT32_MAX;
+}
 
 // ============================================================================
 // Dimensions — different ways to seek through a SumTree<Fragment>
@@ -124,11 +129,15 @@ struct Fragment {
     bool utf16_index_ready = false;
 
     void rebuild_utf16_index() {
+        Diagnostics::record(Diagnostics::Counter::utf16_index_builds);
         utf16_index.reset();
         utf16_index_ready = false;
         const auto non_ascii = std::find_if(text.begin(), text.end(), [](unsigned char byte) {
             return byte >= 0x80;
         });
+        Diagnostics::record(Diagnostics::Counter::utf16_index_ascii_probe_bytes,
+                            static_cast<uint64_t>(std::distance(text.begin(), non_ascii)) +
+                                (non_ascii != text.end() ? 1 : 0));
         if (non_ascii == text.end()) {
             utf16_units_cached = static_cast<uint32_t>(text.size());
             utf16_index_ready = true;
@@ -153,6 +162,7 @@ struct Fragment {
             }
         }
         utf16_units_cached = units;
+        Diagnostics::record(Diagnostics::Counter::utf16_checkpoint_entries_built, points.size());
         if (points.size() > 1) {
             auto index = std::make_shared<Utf16Index>();
             index->checkpoints = std::move(points);
@@ -330,5 +340,12 @@ struct Fragment {
         return s;
     }
 };
+
+inline uint64_t exact_visible_byte_total(const std::vector<Fragment>& fragments) noexcept {
+    uint64_t total = 0;
+    for (const auto& fragment : fragments)
+        if (fragment.visible) total += fragment.byte_length;
+    return total;
+}
 
 } // namespace CollabText::Crdt

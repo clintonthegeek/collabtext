@@ -397,6 +397,7 @@ private:
     /// tree IS the list order: placement is decided by SequenceOrder::integrate,
     /// not by a key stored on each fragment.
     FragmentTree m_fragment_tree;
+    uint64_t m_exact_visible_byte_total = 0;
 
     /// Trim the undo stack to m_max_undo_depth entries.
     void trim_undo_stack();

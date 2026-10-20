@@ -7,7 +7,7 @@
 
 namespace CollabText::Crdt::Diagnostics {
 
-inline constexpr std::string_view schema = "collabtext-perf-diagnostics/3";
+inline constexpr std::string_view schema = "collabtext-perf-diagnostics/4";
 
 enum class Counter : size_t {
     sumtree_items_visited,
@@ -27,6 +27,10 @@ enum class Counter : size_t {
     utf16_range_calls,
     utf16_range_fragments_visited,
     utf16_decoder_steps,
+    utf16_index_builds,
+    utf16_index_ascii_probe_bytes,
+    utf16_checkpoint_entries_built,
+    fragment_summary_compositions,
     fragment_splits,
     fragment_split_bytes_copied,
     visibility_recomputations,
@@ -81,6 +85,10 @@ inline constexpr std::array<std::string_view, counter_count> counter_names{
     "utf16_range_calls",
     "utf16_range_fragments_visited",
     "utf16_decoder_steps",
+    "utf16_index_builds",
+    "utf16_index_ascii_probe_bytes",
+    "utf16_checkpoint_entries_built",
+    "fragment_summary_compositions",
     "fragment_splits",
     "fragment_split_bytes_copied",
     "visibility_recomputations",

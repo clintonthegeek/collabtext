@@ -120,6 +120,41 @@ private slots:
         QCOMPARE(counts.get(Diagnostics::Counter::utf16_range_fragments_visited), uint64_t{2});
         QVERIFY(counts.get(Diagnostics::Counter::utf16_decoder_steps) <= uint64_t{258});
     }
+
+    void utf16_index_and_summary_build_work_is_counted() {
+        Buffer ascii(CollabText::Test::test_counter(7));
+        const std::string ascii_text(4096, 'a');
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        QVERIFY(ascii.try_apply_local_edit({{0, 0}}, {ascii_text}));
+        Diagnostics::end_sample();
+        const auto ascii_counts = Diagnostics::snapshot();
+        qInfo() << "X07b ASCII build counters: summaries="
+                << ascii_counts.get(Diagnostics::Counter::fragment_summary_compositions)
+                << "index_builds=" << ascii_counts.get(Diagnostics::Counter::utf16_index_builds)
+                << "probe_bytes=" << ascii_counts.get(Diagnostics::Counter::utf16_index_ascii_probe_bytes);
+        QCOMPARE(ascii_counts.get(Diagnostics::Counter::utf16_index_builds), uint64_t{1});
+        QCOMPARE(ascii_counts.get(Diagnostics::Counter::utf16_index_ascii_probe_bytes), uint64_t{4096});
+        QVERIFY(ascii_counts.get(Diagnostics::Counter::fragment_summary_compositions) > 0);
+        QCOMPARE(ascii_counts.get(Diagnostics::Counter::utf16_checkpoint_entries_built), uint64_t{0});
+
+        Buffer unicode(CollabText::Test::test_counter(8));
+        std::string unicode_text;
+        for (int i = 0; i < 1024; ++i) unicode_text += "a\xf0\x9f\x99\x82";
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        QVERIFY(unicode.try_apply_local_edit({{0, 0}}, {unicode_text}));
+        Diagnostics::end_sample();
+        const auto unicode_counts = Diagnostics::snapshot();
+        qInfo() << "X07b Unicode build counters: summaries="
+                << unicode_counts.get(Diagnostics::Counter::fragment_summary_compositions)
+                << "index_builds=" << unicode_counts.get(Diagnostics::Counter::utf16_index_builds)
+                << "probe_bytes=" << unicode_counts.get(Diagnostics::Counter::utf16_index_ascii_probe_bytes)
+                << "decoder_steps=" << unicode_counts.get(Diagnostics::Counter::utf16_decoder_steps)
+                << "checkpoint_entries=" << unicode_counts.get(Diagnostics::Counter::utf16_checkpoint_entries_built);
+        QCOMPARE(unicode_counts.get(Diagnostics::Counter::utf16_index_builds), uint64_t{1});
+        QVERIFY(unicode_counts.get(Diagnostics::Counter::utf16_checkpoint_entries_built) > 0);
+    }
 };
 
 QTEST_MAIN(TestPerfDiagnostics)

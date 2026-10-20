@@ -200,7 +200,7 @@ private slots:
         // Identity, associativity, and commutativity of the cached aggregate.
         const FragmentSummary empty = FragmentSummary::zero();
 
-        auto summary_for = [](uint64_t visible, uint32_t deleted, uint32_t utf16) {
+        auto summary_for = [](uint32_t visible, uint32_t deleted, uint32_t utf16) {
             FragmentSummary s;
             s.visible_bytes = visible;
             s.deleted_bytes = deleted;
@@ -242,7 +242,18 @@ private slots:
         FragmentSummary next;
         next.visible_bytes = 1;
         sum.add_summary(next);
-        QCOMPARE(sum.visible_bytes, uint64_t{UINT32_MAX} + 1);
+        QCOMPARE(sum.visible_bytes, uint32_t{0});
+
+        Fragment first;
+        first.visible = true;
+        first.byte_length = UINT32_MAX;
+        Fragment second;
+        second.visible = true;
+        second.byte_length = 1;
+        const std::vector<Fragment> fragments{first, second};
+        QCOMPARE(exact_visible_byte_total(fragments), uint64_t{UINT32_MAX} + 1);
+        QVERIFY(visible_byte_offset_overflow(exact_visible_byte_total(fragments)));
+        QVERIFY(!visible_byte_offset_overflow(UINT32_MAX));
     }
 
     void idlist_summary_is_a_monoid() {
