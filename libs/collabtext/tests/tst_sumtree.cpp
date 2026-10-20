@@ -56,6 +56,8 @@ struct ItemSum {
 
 // Use B=2 for testing to exercise splitting more aggressively
 using TestTree = SumTree<IntItem, 2>;
+static_assert(sizeof(TestTree) == sizeof(std::shared_ptr<TestTree::Node>),
+              "the default no-ID policy must add no per-tree storage");
 
 class tst_sumtree : public QObject {
     Q_OBJECT
