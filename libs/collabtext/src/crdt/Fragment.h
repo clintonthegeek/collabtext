@@ -32,7 +32,7 @@ namespace CollabText::Crdt {
 /// associative, and the byte counts are commutative. See tst_summary_laws.cpp,
 /// which checks them against randomized splice patterns.
 struct FragmentSummary {
-    uint32_t visible_bytes = 0;    ///< Total visible bytes in subtree
+    uint64_t visible_bytes = 0;    ///< Total visible bytes in subtree (overflow checked at API boundary)
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
     // All public text coordinates are int/uint32 byte offsets, so the usable
     // visible UTF-16 range also fits this width.
@@ -56,7 +56,7 @@ struct VisibleOffset {
     uint32_t value = 0;
 
     static VisibleOffset zero() { return {0}; }
-    void add_summary(const FragmentSummary& s) { value += s.visible_bytes; }
+    void add_summary(const FragmentSummary& s) { value += static_cast<uint32_t>(s.visible_bytes); }
 
     auto operator<=>(const VisibleOffset&) const = default;
     bool operator==(const VisibleOffset&) const = default;
@@ -68,7 +68,7 @@ struct FullOffset {
 
     static FullOffset zero() { return {0}; }
     void add_summary(const FragmentSummary& s) {
-        value += s.visible_bytes + s.deleted_bytes;
+        value += static_cast<uint32_t>(s.visible_bytes) + s.deleted_bytes;
     }
 
     auto operator<=>(const FullOffset&) const = default;
@@ -124,27 +124,36 @@ struct Fragment {
     bool utf16_index_ready = false;
 
     void rebuild_utf16_index() {
+        utf16_index.reset();
+        utf16_index_ready = false;
+        const auto non_ascii = std::find_if(text.begin(), text.end(), [](unsigned char byte) {
+            return byte >= 0x80;
+        });
+        if (non_ascii == text.end()) {
+            utf16_units_cached = static_cast<uint32_t>(text.size());
+            utf16_index_ready = true;
+            return;
+        }
+
         uint32_t byte = 0, units = 0, since_checkpoint = 0;
-        bool non_ascii = false;
-        std::vector<Utf16Checkpoint> points{{0, 0}};
+        std::vector<Utf16Checkpoint> points;
+        if (text.size() > 128) points.push_back({0, 0});
         while (byte < text.size()) {
             Diagnostics::record(Diagnostics::Counter::utf16_decoder_steps);
             const auto lead = static_cast<unsigned char>(text[byte]);
-            non_ascii |= lead >= 0x80;
             const uint32_t byte_width = lead < 0x80 ? 1 : (lead & 0xe0) == 0xc0 ? 2 :
                                        (lead & 0xf0) == 0xe0 ? 3 : 4;
             const uint32_t unit_width = byte_width == 4 ? 2 : 1;
             byte += byte_width;
             units += unit_width;
             since_checkpoint += unit_width;
-            if (since_checkpoint >= 128 && byte < text.size()) {
+            if (!points.empty() && since_checkpoint >= 128 && byte < text.size()) {
                 points.push_back({byte, units});
                 since_checkpoint = 0;
             }
         }
         utf16_units_cached = units;
-        utf16_index.reset();
-        if (non_ascii && !points.empty() && points.size() > 1) {
+        if (points.size() > 1) {
             auto index = std::make_shared<Utf16Index>();
             index->checkpoints = std::move(points);
             utf16_index = std::move(index);

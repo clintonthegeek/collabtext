@@ -323,11 +323,11 @@ std::string Buffer::text() const {
 }
 
 uint32_t Buffer::visible_length() const {
-    return m_fragment_tree.summary().visible_bytes;
+    return static_cast<uint32_t>(m_fragment_tree.summary().visible_bytes);
 }
 
 uint32_t Buffer::visible_rope_len() const {
-    return m_fragment_tree.summary().visible_bytes;
+    return static_cast<uint32_t>(m_fragment_tree.summary().visible_bytes);
 }
 
 uint32_t Buffer::deleted_rope_len() const {

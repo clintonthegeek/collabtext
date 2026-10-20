@@ -102,6 +102,24 @@ private slots:
         QVERIFY(list_counts.get(Diagnostics::Counter::undo_active_budget_bytes_observed) > 0);
         QVERIFY(list_counts.get(Diagnostics::Counter::undo_retired_budget_bytes_observed) > 0);
     }
+
+    void utf16_lookup_bounds_local_unicode_scans() {
+        Buffer buffer(CollabText::Test::test_counter(6));
+        std::string text;
+        for (int i = 0; i < 4096; ++i) text += "a\xf0\x9f\x99\x82";
+        QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {text}));
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        const auto range = buffer.utf16_range(6144, 3);
+        Diagnostics::end_sample();
+        QVERIFY(range);
+        QCOMPARE(range.value().first, uint32_t{10240});
+        QCOMPARE(range.value().second, uint32_t{10245});
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::utf16_range_fragments_visited), uint64_t{2});
+        QVERIFY(counts.get(Diagnostics::Counter::utf16_decoder_steps) <= uint64_t{258});
+    }
 };
 
 QTEST_MAIN(TestPerfDiagnostics)

@@ -211,13 +211,15 @@ tests:
 Summary-guided UTF-16 lookup descends by visible UTF-16 units while carrying the
 visible byte prefix through the same SumTree cursor. Each fragment caches its
 UTF-16 width. Long non-ASCII fragments keep shared scalar-boundary checkpoints
-at 128-unit intervals; ASCII fragments and short fragments allocate no
-checkpoint storage. Local conversion starts at the nearest preceding checkpoint
-and scans no more than one interval. Fragment splits rebuild derived widths and
-checkpoints from both resulting strings, and checkpoint restore rebuilds them
-from authoritative text. No cache value is durable. The summary does not contain
+after each 128 UTF-16 units at a scalar boundary; ASCII fragments and short
+fragments allocate no checkpoint storage. Local conversion starts at the nearest
+preceding checkpoint and scans at most 128 scalars. Fragment splits partition
+derived widths and checkpoints from both resulting strings; checkpoint restore
+rebuilds them from authoritative text. No cache value is durable. The summary does not contain
 line/layout data. Origin lookup uses the identity map, not actor maxima in an
-aggregate.
+aggregate. The visible-byte aggregate is 64-bit so `utf16_range` can still refuse
+documents outside its 32-bit byte-offset result range; visible UTF-16 units use
+the 32-bit public coordinate width. The aggregate remains 16 bytes on this ABI.
 
 ## 4. Tree operations and index updates
 
