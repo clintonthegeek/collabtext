@@ -5,7 +5,10 @@
 #include "crdt/Placement.h"
 #include "crdt/UndoMap.h"
 #include <cstdint>
+#include <algorithm>
+#include <algorithm>
 #include <optional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,8 +20,8 @@ namespace CollabText::Crdt {
 
 /// The aggregate SumTree nodes cache, and nothing else.
 ///
-/// It holds only the two quantities a seek actually reads: the visible and
-/// deleted byte counts. P03 removed three version-vector fields that were written
+/// It holds only the quantities a seek actually reads: visible and deleted byte
+/// counts plus visible UTF-16 units. P03 removed three version-vector fields that were written
 /// here and read by nobody, and their removal is not only cheaper -- one of them
 /// aggregated with Global::meet(), which is a nonzero-minimum fold and *not*
 /// coverage intersection (finding F3). S03 removed the (locator, origin) maximum
@@ -31,12 +34,14 @@ namespace CollabText::Crdt {
 struct FragmentSummary {
     uint32_t visible_bytes = 0;    ///< Total visible bytes in subtree
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
+    uint64_t visible_utf16 = 0;    ///< Visible UTF-16 code units
 
     static FragmentSummary zero() { return {}; }
 
     void add_summary(const FragmentSummary& other) {
         visible_bytes += other.visible_bytes;
         deleted_bytes += other.deleted_bytes;
+        visible_utf16 += other.visible_utf16;
     }
 };
 
@@ -68,6 +73,19 @@ struct FullOffset {
     bool operator==(const FullOffset&) const = default;
 };
 
+/// Seek by visible UTF-16 offset while carrying the corresponding byte prefix.
+struct VisibleUtf16Offset {
+    uint64_t units = 0;
+    uint64_t bytes = 0;
+    static VisibleUtf16Offset zero() { return {}; }
+    void add_summary(const FragmentSummary& s) {
+        units += s.visible_utf16;
+        bytes += s.visible_bytes;
+    }
+    auto operator<=>(const VisibleUtf16Offset& other) const { return units <=> other.units; }
+    bool operator==(const VisibleUtf16Offset& other) const { return units == other.units; }
+};
+
 // ============================================================================
 // Fragment
 // ============================================================================
@@ -95,13 +113,81 @@ struct Fragment {
 
     bool marker = false;    ///< One zero-width ordered item; text remains empty.
 
+    struct Utf16Checkpoint { uint32_t byte = 0; uint32_t units = 0; };
+    struct Utf16Index {
+        std::vector<Utf16Checkpoint> checkpoints;
+    };
+    std::shared_ptr<const Utf16Index> utf16_index;
+    uint32_t utf16_units_cached = 0;
+
+    void rebuild_utf16_index() {
+        uint32_t byte = 0, units = 0, since_checkpoint = 0;
+        bool non_ascii = false;
+        std::vector<Utf16Checkpoint> points{{0, 0}};
+        while (byte < text.size()) {
+            Diagnostics::record(Diagnostics::Counter::utf16_decoder_steps);
+            const auto lead = static_cast<unsigned char>(text[byte]);
+            non_ascii |= lead >= 0x80;
+            const uint32_t byte_width = lead < 0x80 ? 1 : (lead & 0xe0) == 0xc0 ? 2 :
+                                       (lead & 0xf0) == 0xe0 ? 3 : 4;
+            const uint32_t unit_width = byte_width == 4 ? 2 : 1;
+            byte += byte_width;
+            units += unit_width;
+            since_checkpoint += unit_width;
+            if (since_checkpoint >= 128 && byte < text.size()) {
+                points.push_back({byte, units});
+                since_checkpoint = 0;
+            }
+        }
+        utf16_units_cached = units;
+        utf16_index.reset();
+        if (non_ascii && !points.empty() && points.size() > 1) {
+            auto index = std::make_shared<Utf16Index>();
+            index->checkpoints = std::move(points);
+            utf16_index = std::move(index);
+        }
+    }
+
+    uint64_t utf16_length() const {
+        return utf16_units_cached;
+    }
+
+    /// Map a local UTF-16 boundary to UTF-8 bytes. `exact` is false only when
+    /// the requested offset falls between the two units of a surrogate pair.
+    uint32_t utf16_byte_offset(uint64_t target, bool& exact) const {
+        exact = true;
+        if (target == 0 || text.empty()) return 0;
+        if (target > utf16_units_cached) { exact = false; return 0; }
+        if (utf16_units_cached == byte_length) return static_cast<uint32_t>(target);
+        uint32_t byte = 0, units = 0;
+        if (utf16_index) {
+            const auto& points = utf16_index->checkpoints;
+            auto it = std::upper_bound(points.begin(), points.end(), target,
+                [](uint64_t value, const Utf16Checkpoint& p) { return value < p.units; });
+            if (it != points.begin()) --it;
+            byte = it->byte;
+            units = it->units;
+        }
+        while (byte < text.size() && units < target) {
+            Diagnostics::record(Diagnostics::Counter::utf16_decoder_steps);
+            const auto lead = static_cast<unsigned char>(text[byte]);
+            const uint32_t width = lead < 0x80 ? 1 : (lead & 0xe0) == 0xc0 ? 2 :
+                                   (lead & 0xf0) == 0xe0 ? 3 : 4;
+            if (width == 4 && units + 1 == target) { exact = false; return byte; }
+            byte += width;
+            units += width == 4 ? 2 : 1;
+        }
+        if (units != target) exact = false;
+        return byte;
+    }
+
     Fragment() = default;
     Fragment(Identity orig, Link l, uint32_t byte_len, uint32_t char_len)
         : origin(std::move(orig)), link(std::move(l)), byte_length(byte_len), length(char_len) {}
     Fragment(Identity orig, Link l, uint32_t byte_len, uint32_t char_len,
              std::string txt)
         : origin(orig), link(std::move(l)), byte_length(byte_len), length(char_len),
-          text(std::move(txt)) {}
+          text(std::move(txt)) { rebuild_utf16_index(); }
 
     /// Identity of the item at `offset` within this fragment.
     ///
@@ -145,6 +231,8 @@ struct Fragment {
         text.resize(byte);
         byte_length = byte;
         length = k;
+        rebuild_utf16_index();
+        tail.rebuild_utf16_index();
         return tail;
     }
 
@@ -194,6 +282,7 @@ struct Fragment {
         uint32_t bytes = byte_length;
         if (visible) {
             s.visible_bytes = bytes;
+            s.visible_utf16 = utf16_length();
         } else {
             s.deleted_bytes = bytes;
         }

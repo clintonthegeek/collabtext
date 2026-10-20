@@ -120,6 +120,7 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     for (auto& f : frags) {
         f.visible = f.compute_visible(m_undo_map);
         assert(f.byte_length == f.text.size());
+        f.rebuild_utf16_index();
     }
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));
@@ -1174,41 +1175,39 @@ Result<uint32_t> Buffer::marker_offset(Identity marker) const {
 }
 
 size_t Buffer::utf16_length() const {
-    size_t length = 0;
-    m_fragment_tree.for_each([&](const Fragment& f) { if (f.visible) length += Crdt::utf16_length(f.text); });
-    return length;
+    return static_cast<size_t>(m_fragment_tree.summary().visible_utf16);
 }
 
 Result<std::pair<uint32_t,uint32_t>> Buffer::utf16_range(int position, int length) const {
     Diagnostics::record(Diagnostics::Counter::utf16_range_calls);
     if (position < 0 || length < 0) return Error(ErrorCode::malformed, "negative text range");
     const uint64_t start = static_cast<uint64_t>(position), end = start + static_cast<uint64_t>(length);
-    uint64_t units = 0, bytes = 0;
-    std::optional<uint32_t> first, last;
-    bool split = false;
-    m_fragment_tree.for_each([&](const Fragment& f) {
-        if (!f.visible || f.marker) return;
-        Diagnostics::record(Diagnostics::Counter::utf16_range_fragments_visited);
-        const auto width = Crdt::utf16_length(f.text);
-        const auto convert = [&](uint64_t target, std::optional<uint32_t>& out) {
-            if (out || target < units || target > units + width) return;
-            const auto local = static_cast<size_t>(target - units);
-            const auto byte = Crdt::utf16_to_byte_offset(f.text, local);
-            if (Crdt::byte_to_utf16_offset(f.text, byte) != local) { split = true; return; }
-            out = static_cast<uint32_t>(bytes + byte);
-        };
-        convert(start, first); convert(end, last);
-        units += width; bytes += f.byte_length;
-    });
-    if (bytes > UINT32_MAX)
+    const auto total = m_fragment_tree.summary();
+    if (total.visible_bytes > UINT32_MAX)
         return Error(ErrorCode::malformed, "document byte length exceeds the operation offset range");
-    if (split) return Error(ErrorCode::malformed, "text range splits a UTF-16 surrogate pair");
-    if (end > units) return Error(ErrorCode::malformed, "text range is outside the document");
-    // Empty text, including a sequence containing only markers.
-    if (start == units && !first) first = static_cast<uint32_t>(bytes);
-    if (end == units && !last) last = static_cast<uint32_t>(bytes);
-    if (!first || !last) return Error(ErrorCode::history_unavailable, "text range is unavailable");
-    return std::pair{*first, *last};
+    if (end > total.visible_utf16)
+        return Error(ErrorCode::malformed, "text range is outside the document");
+    const auto resolve = [&](uint64_t target) -> Result<uint32_t> {
+        if (target == total.visible_utf16)
+            return static_cast<uint32_t>(total.visible_bytes);
+        auto cursor = m_fragment_tree.cursor<VisibleUtf16Offset>();
+        if (!cursor.seek(VisibleUtf16Offset{target, 0}, Bias::Left))
+            return Error(ErrorCode::history_unavailable, "text range is unavailable");
+        const auto* fragment = cursor.item();
+        if (!fragment || !fragment->visible || fragment->marker)
+            return Error(ErrorCode::history_unavailable, "text range is unavailable");
+        Diagnostics::record(Diagnostics::Counter::utf16_range_fragments_visited);
+        bool exact = true;
+        const auto local = fragment->utf16_byte_offset(target - cursor.position().units, exact);
+        if (!exact)
+            return Error(ErrorCode::malformed, "text range splits a UTF-16 surrogate pair");
+        return static_cast<uint32_t>(cursor.position().bytes + local);
+    };
+    auto first = resolve(start);
+    if (!first) return first.error();
+    auto last = resolve(end);
+    if (!last) return last.error();
+    return std::pair{first.value(), last.value()};
 }
 
 void Buffer::commit_local_history(UndoEntry&& entry) {

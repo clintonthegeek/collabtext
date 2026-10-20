@@ -34,6 +34,7 @@ ROUTES = [
     ('docs/reports/2026-10-19-x07a/raw/*', 'tst_verification_tools'),
     ('tests/performance-model/incremental-model.*', 'tst_incremental_model'),
     ('libs/collabtext/tests/tst_incremental_model.cpp', 'tst_incremental_model'),
+    ('libs/collabtext/tests/tst_unicode_seek.cpp', 'tst_unicode_seek'),
     *[(f'docs/reports/2026-10-19-performance/{name}', 'tst_verification_tools')
       for name in PERFORMANCE_EVIDENCE],
     ('.gitignore', ''), ('*.md', ''), ('docs/*.json', ''),
@@ -64,7 +65,7 @@ ROUTES = [
     ('libs/collabtext/include/*', PACKAGING),
     ('libs/collabtext/src/crdt/IdList*', r'tst_(idlist.*|anchor.*|sequence_.*|boundary_.*|operation_validation|evaluation_regressions)'),
     ('libs/collabtext/src/IdListEngine.cpp', r'(tst_idlist.*|collabtext_alpha_consumer)'),
-    ('libs/collabtext/src/crdt/Buffer*', r'tst_(buffer|anchor.*|sequence_.*|boundary_.*|edits_since|gc|undomap|convergence|serialization.*|decode_validation|operation_validation|fuzz|evaluation_regressions|behavior_fixtures)'),
+    ('libs/collabtext/src/crdt/Buffer*', r'tst_(buffer|anchor.*|sequence_.*|boundary_.*|edits_since|gc|undomap|convergence|serialization.*|decode_validation|operation_validation|fuzz|evaluation_regressions|behavior_fixtures|unicode_seek)'),
     ('libs/collabtext/src/identity/*', r'tst_(actor_identity|identity.*|presence_manager|sha256|clock|operation_validation)'),
     ('libs/collabtext/src/codec/*', r'tst_(utf8|decode_validation|serialization.*|operation_validation|anchor.*)'),
     ('libs/collabtext/src/storage/*', r'tst_(durable_file|store_fault_harness|actor_identity|segment.*|opstream.*)'),

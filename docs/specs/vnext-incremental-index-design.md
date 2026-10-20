@@ -208,10 +208,16 @@ tests:
 6. No subtree summary or identity interval is trusted after a failed candidate
    update. The published root and indexes stay the previous consistent value.
 
-Summary-guided UTF-16 lookup descends by `visible_utf16_units`; local conversion
-within one UTF-8 run uses a boundary table or bounded scan selected and measured
-by X07. The summary does not contain line/layout data. Origin lookup uses the
-identity map, not actor maxima in an aggregate.
+Summary-guided UTF-16 lookup descends by visible UTF-16 units while carrying the
+visible byte prefix through the same SumTree cursor. Each fragment caches its
+UTF-16 width. Long non-ASCII fragments keep shared scalar-boundary checkpoints
+at 128-unit intervals; ASCII fragments and short fragments allocate no
+checkpoint storage. Local conversion starts at the nearest preceding checkpoint
+and scans no more than one interval. Fragment splits rebuild derived widths and
+checkpoints from both resulting strings, and checkpoint restore rebuilds them
+from authoritative text. No cache value is durable. The summary does not contain
+line/layout data. Origin lookup uses the identity map, not actor maxima in an
+aggregate.
 
 ## 4. Tree operations and index updates
 

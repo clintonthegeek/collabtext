@@ -59,7 +59,7 @@ private slots:
         auto counts = Diagnostics::snapshot();
         QCOMPARE(counts.get(Diagnostics::Counter::utf16_range_calls), uint64_t{1});
         QCOMPARE(counts.get(Diagnostics::Counter::utf16_range_fragments_visited), uint64_t{1});
-        QCOMPARE(counts.get(Diagnostics::Counter::utf16_decoder_steps), uint64_t{13});
+        QCOMPARE(counts.get(Diagnostics::Counter::utf16_decoder_steps), uint64_t{2});
 
         auto engine = CollabText::CrdtEngine::create(
             CollabText::Test::test_counter(4),
