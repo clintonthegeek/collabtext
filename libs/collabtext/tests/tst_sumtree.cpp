@@ -101,6 +101,46 @@ private slots:
         QVERIFY(!invalid_namespace.allocate().has_value());
     }
 
+    void stable_sumtree_ids_survive_copy_on_write_and_splice() {
+        using StableTree = SumTree<IntItem, 2, StableNodeIds>;
+        auto policy = StableNodeIds::create();
+        QVERIFY(policy.has_value());
+        StableTree source(*policy);
+        for (int i = 0; i < 40; ++i) source.push_item({i});
+        QVERIFY(source.has_valid_node_ids());
+        QVERIFY(source.has_unique_node_ids());
+
+        StableTree fork = source;
+        fork.insert_item<ItemCount>({7}, {-1});
+        QVERIFY(fork.has_valid_node_ids());
+        QVERIFY(fork.has_unique_node_ids());
+        QVERIFY(source.has_unique_node_ids());
+        QCOMPARE(source.summary().count, 40);
+        QCOMPARE(fork.summary().count, 41);
+
+        auto replacement_policy = StableNodeIds::create();
+        QVERIFY(replacement_policy.has_value());
+        StableTree replacement(*replacement_policy);
+        replacement.push_item({100});
+        replacement.push_item({101});
+        const auto spliced = source.splice_range<ItemCount>(
+            {10}, {30}, std::move(replacement));
+        QVERIFY(spliced.has_value());
+        QVERIFY(spliced->has_valid_node_ids());
+        QVERIFY(spliced->has_unique_node_ids());
+        QCOMPARE(spliced->summary().count, 22);
+
+        size_t visited = 0;
+        spliced->for_each_node([&](const auto&, NodeId id,
+                                   std::optional<NodeId> parent, uint16_t) {
+            QVERIFY(id.valid());
+            QVERIFY(id.tree.valid());
+            if (visited++ == 0) QVERIFY(!parent.has_value());
+            else QVERIFY(parent.has_value());
+        });
+        QVERIFY(visited > 1);
+    }
+
     void push_single_item() {
         TestTree tree;
         tree.push_item({42});

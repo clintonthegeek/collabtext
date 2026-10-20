@@ -1,6 +1,7 @@
 #pragma once
 
 #include "crdt/Diagnostics.h"
+#include "crdt/TreeNodeId.h"
 
 #include <collabtext/Engine.h> // Bias
 
@@ -48,7 +49,7 @@ concept DimensionOf = std::totally_ordered<D> && requires(D d, const S& summary)
 // SumTree
 // ============================================================================
 
-template<Summarizable Item, std::size_t B = 6>
+template<Summarizable Item, std::size_t B = 6, class NodeIdPolicy = NoNodeIds>
 class SumTree {
 public:
     using Summary = typename Item::Summary;
@@ -72,6 +73,7 @@ public:
     };
 
     struct Node {
+        [[no_unique_address]] typename NodeIdPolicy::Id node_id{};
         uint8_t height = 0; // 0 = leaf
         Summary summary = Summary::zero();
         std::variant<Leaf, Internal> data;
@@ -109,7 +111,7 @@ public:
         /// Extract all items from current position to target as a new SumTree.
         /// Advances the cursor past the extracted items.
         SumTree slice(const D& target) {
-            SumTree result;
+            SumTree result(m_tree->m_node_ids);
 
             if (!m_did_seek) {
                 // Position at start
@@ -147,7 +149,8 @@ public:
                         child_end.add_summary(in.child_summaries[level.index]);
                         if (child_end <= target) {
                             // Whole subtree fits — push by shared_ptr
-                            result.push_tree(SumTree(in.children[level.index]));
+                            result.push_tree(SumTree(in.children[level.index],
+                                                     m_tree->m_node_ids));
                             m_position = child_end;
                             level.index++;
                         } else {
@@ -175,7 +178,7 @@ public:
 
         /// Extract all remaining items from cursor to end as a new SumTree.
         SumTree suffix() {
-            SumTree result;
+            SumTree result(m_tree->m_node_ids);
 
             if (!m_did_seek) {
                 if (m_tree->m_root) {
@@ -202,7 +205,8 @@ public:
                     while (level.index < in.count) {
                         D child_end = m_position;
                         child_end.add_summary(in.child_summaries[level.index]);
-                        result.push_tree(SumTree(in.children[level.index]));
+                        result.push_tree(SumTree(in.children[level.index],
+                                                 m_tree->m_node_ids));
                         m_position = child_end;
                         level.index++;
                     }
@@ -416,8 +420,12 @@ public:
 
     SumTree() = default;
 
-    /// Construct a tree wrapping a single node (for slice/push_tree).
-    explicit SumTree(NodePtr root) : m_root(std::move(root)) {}
+    explicit SumTree(NodeIdPolicy node_ids)
+        : m_node_ids(std::move(node_ids)) {}
+
+    /// Construct a subtree while retaining the allocator lineage for new nodes.
+    SumTree(NodePtr root, NodeIdPolicy node_ids)
+        : m_root(std::move(root)), m_node_ids(std::move(node_ids)) {}
 
     // ---- Queries ----
 
@@ -445,6 +453,30 @@ public:
         requires std::equality_comparable<Summary>
     {
         return !m_root || validate_summaries(m_root);
+    }
+
+    bool has_valid_node_ids() const {
+        return m_node_ids.valid() && (!m_root || node_ids_valid(m_root));
+    }
+
+    bool has_unique_node_ids() const
+        requires std::same_as<typename NodeIdPolicy::Id, NodeId>
+    {
+        if (!has_valid_node_ids()) return false;
+        std::vector<NodeId> ids;
+        for_each_node([&](const NodePtr&, NodeId id,
+                          std::optional<NodeId>, uint16_t) {
+            ids.push_back(id);
+        });
+        std::sort(ids.begin(), ids.end());
+        return std::adjacent_find(ids.begin(), ids.end()) == ids.end();
+    }
+
+    template<class Fn>
+    void for_each_node(Fn&& fn) const {
+        if (!m_root) return;
+        auto visitor = std::forward<Fn>(fn);
+        visit_nodes_recursive(m_root, std::nullopt, 0, visitor);
     }
 
     /// Create a cursor for seeking by dimension D.
@@ -503,14 +535,16 @@ public:
         Summary item_sum = item.summary();
 
         if (!m_root) {
-            m_root = make_leaf();
+            m_root = make_leaf(m_node_ids);
         }
 
         // Push into the rightmost leaf. If it overflows, split upward.
-        auto overflow = push_item_recursive(ensure_mutable(m_root), std::move(item), item_sum);
+        auto overflow = push_item_recursive(ensure_mutable(m_root),
+                                            std::move(item), item_sum,
+                                            m_node_ids);
         if (overflow) {
             // Root split — create new root
-            auto new_root = make_internal(m_root->height + 1);
+            auto new_root = make_internal(m_root->height + 1, m_node_ids);
             auto& in = new_root->internal();
             in.children[0] = std::move(m_root);
             in.child_summaries[0] = in.children[0]->summary;
@@ -534,12 +568,14 @@ public:
         uint8_t other_h = other.m_root->height;
 
         if (self_h == other_h) {
-            merge_same_height(std::move(other.m_root));
+            merge_same_height(std::move(other.m_root), m_node_ids);
         } else if (self_h > other_h) {
             // Push other into our rightmost path
-            auto overflow = push_tree_right(ensure_mutable(m_root), std::move(other.m_root));
+            auto overflow = push_tree_right(ensure_mutable(m_root),
+                                            std::move(other.m_root),
+                                            m_node_ids);
             if (overflow) {
-                auto new_root = make_internal(m_root->height + 1);
+                auto new_root = make_internal(m_root->height + 1, m_node_ids);
                 auto& in = new_root->internal();
                 in.children[0] = std::move(m_root);
                 in.child_summaries[0] = in.children[0]->summary;
@@ -553,9 +589,10 @@ public:
             // Other is taller. Insert down its left spine instead of wrapping
             // this root in one-child nodes, which would violate B+ occupancy.
             NodePtr taller = std::move(other.m_root);
-            auto overflow = push_tree_left(taller, std::move(m_root));
+            auto overflow = push_tree_left(taller, std::move(m_root),
+                                           m_node_ids);
             if (overflow) {
-                auto new_root = make_internal(taller->height + 1);
+                auto new_root = make_internal(taller->height + 1, m_node_ids);
                 auto& in = new_root->internal();
                 in.children[0] = std::move(overflow);
                 in.child_summaries[0] = in.children[0]->summary;
@@ -588,16 +625,17 @@ public:
         if (begin == end && replacement.empty()) return *this;
 
         RangeParts parts;
+        SumTree result(m_node_ids);
         if (m_root)
-            split_range_node<D>(m_root, begin, end, D::zero(), parts);
+            split_range_node<D>(m_root, begin, end, D::zero(), parts,
+                                result.m_node_ids);
         if (!parts.valid) return std::nullopt;
 
-        SumTree result;
         for (const auto& root : parts.prefix)
-            result.push_tree(SumTree(NodePtr(root)));
+            result.push_tree(SumTree(NodePtr(root), result.m_node_ids));
         result.push_tree(std::move(replacement));
         for (const auto& root : parts.suffix)
-            result.push_tree(SumTree(NodePtr(root)));
+            result.push_tree(SumTree(NodePtr(root), result.m_node_ids));
         return result;
     }
 
@@ -634,11 +672,13 @@ public:
         requires DimensionOf<D, Summary>
     void insert_item(const D& target, Item item, Bias bias = Bias::Left) {
         if (!m_root) {
-            m_root = make_leaf();
+            m_root = make_leaf(m_node_ids);
         }
-        auto overflow = insert_item_recursive<D>(ensure_mutable(m_root), target, std::move(item), bias, D::zero());
+        auto overflow = insert_item_recursive<D>(ensure_mutable(m_root), target,
+                                                 std::move(item), bias,
+                                                 D::zero(), m_node_ids);
         if (overflow) {
-            auto new_root = make_internal(m_root->height + 1);
+            auto new_root = make_internal(m_root->height + 1, m_node_ids);
             auto& in = new_root->internal();
             in.children[0] = std::move(m_root);
             in.child_summaries[0] = in.children[0]->summary;
@@ -673,6 +713,7 @@ public:
     }
 
 private:
+    [[no_unique_address]] NodeIdPolicy m_node_ids{};
     NodePtr m_root;
 
     struct RangeParts {
@@ -688,9 +729,10 @@ private:
 
     static void append_leaf_items(std::vector<NodePtr>& destination,
                                   const Leaf& source,
-                                  const std::vector<uint16_t>& indices) {
+                                  const std::vector<uint16_t>& indices,
+                                  NodeIdPolicy& node_ids) {
         if (indices.empty()) return;
-        auto leaf = make_leaf();
+        auto leaf = make_leaf(node_ids);
         auto& output = leaf->leaf();
         for (const uint16_t index : indices) {
             output.items[output.count] = Item(source.items[index]);
@@ -705,7 +747,8 @@ private:
         requires DimensionOf<D, Summary>
     static void split_range_node(const NodePtr& node, const D& begin,
                                  const D& end, const D& base,
-                                 RangeParts& parts) {
+                                 RangeParts& parts,
+                                 NodeIdPolicy& node_ids) {
         D node_end = base;
         node_end.add_summary(node->summary);
         if (node_end <= begin) {
@@ -740,8 +783,8 @@ private:
                 }
                 item_start = item_end;
             }
-            append_leaf_items(parts.prefix, leaf, prefix_items);
-            append_leaf_items(parts.suffix, leaf, suffix_items);
+            append_leaf_items(parts.prefix, leaf, prefix_items, node_ids);
+            append_leaf_items(parts.suffix, leaf, suffix_items, node_ids);
             return;
         }
 
@@ -758,7 +801,8 @@ private:
             } else if (begin <= child_start && child_end <= end) {
                 // The entire subtree is removed; do not enumerate it.
             } else {
-                split_range_node<D>(child, begin, end, child_start, parts);
+                split_range_node<D>(child, begin, end, child_start, parts,
+                                    node_ids);
                 if (!parts.valid) return;
             }
             child_start = child_end;
@@ -767,19 +811,43 @@ private:
 
     // ---- Node creation helpers ----
 
-    static NodePtr make_leaf() {
+    static NodePtr make_leaf(NodeIdPolicy& node_ids) {
         auto node = std::make_shared<Node>();
+        node->node_id = node_ids.allocate();
         node->height = 0;
         node->data = Leaf{};
         return node;
     }
 
-    static NodePtr make_internal(uint8_t height) {
+    static NodePtr make_internal(uint8_t height, NodeIdPolicy& node_ids) {
         assert(height > 0);
         auto node = std::make_shared<Node>();
+        node->node_id = node_ids.allocate();
         node->height = height;
         node->data = Internal{};
         return node;
+    }
+
+    static bool node_ids_valid(const NodePtr& node) {
+        if (!node->node_id.valid()) return false;
+        if (node->is_leaf()) return true;
+        const auto& internal = node->internal();
+        for (uint16_t i = 0; i < internal.count; ++i)
+            if (!internal.children[i] || !node_ids_valid(internal.children[i]))
+                return false;
+        return true;
+    }
+
+    template<class Fn>
+    static void visit_nodes_recursive(
+        const NodePtr& node,
+        std::optional<typename NodeIdPolicy::Id> parent_id,
+        uint16_t child_slot, Fn& fn) {
+        fn(node, node->node_id, parent_id, child_slot);
+        if (node->is_leaf()) return;
+        const auto& internal = node->internal();
+        for (uint16_t i = 0; i < internal.count; ++i)
+            visit_nodes_recursive(internal.children[i], node->node_id, i, fn);
     }
 
     /// Ensure we have a mutable (unshared) node. Clone if shared.
@@ -931,7 +999,9 @@ private:
     // ---- push_item internals ----
 
     /// Push item into rightmost leaf. Returns overflow node if split needed.
-    static NodePtr push_item_recursive(NodePtr& node, Item item, const Summary& item_sum) {
+    static NodePtr push_item_recursive(NodePtr& node, Item item,
+                                       const Summary& item_sum,
+                                       NodeIdPolicy& node_ids) {
         ensure_mutable(node);
 
         if (node->is_leaf()) {
@@ -944,7 +1014,8 @@ private:
                 return nullptr;
             }
             // Leaf is full — split
-            return split_leaf_and_push(node, std::move(item), item_sum);
+            return split_leaf_and_push(node, std::move(item), item_sum,
+                                       node_ids);
         }
 
         // Internal node — recurse into rightmost child
@@ -952,7 +1023,7 @@ private:
         assert(in.count > 0);
         auto overflow = push_item_recursive(
             ensure_mutable(in.children[in.count - 1]),
-            std::move(item), item_sum);
+            std::move(item), item_sum, node_ids);
 
         // Update child summary
         in.child_summaries[in.count - 1] = in.children[in.count - 1]->summary;
@@ -970,16 +1041,18 @@ private:
         }
 
         // Internal node is full — split
-        return split_internal_and_add(node, std::move(overflow));
+        return split_internal_and_add(node, std::move(overflow), node_ids);
     }
 
     /// Split a full leaf, push item into the appropriate half, return right half.
-    static NodePtr split_leaf_and_push(NodePtr& node, Item item, const Summary& item_sum) {
+    static NodePtr split_leaf_and_push(NodePtr& node, Item item,
+                                       const Summary& item_sum,
+                                       NodeIdPolicy& node_ids) {
         auto& lf = node->leaf();
         assert(lf.count == MaxChildren);
 
         uint16_t mid = static_cast<uint16_t>(MaxChildren / 2);
-        auto right = make_leaf();
+        auto right = make_leaf(node_ids);
         auto& rlf = right->leaf();
 
         // Move right half to new node
@@ -1001,12 +1074,13 @@ private:
     }
 
     /// Split a full internal node, add overflow child to right half.
-    static NodePtr split_internal_and_add(NodePtr& node, NodePtr overflow) {
+    static NodePtr split_internal_and_add(NodePtr& node, NodePtr overflow,
+                                          NodeIdPolicy& node_ids) {
         auto& in = node->internal();
         assert(in.count == MaxChildren);
 
         uint16_t mid = static_cast<uint16_t>(MaxChildren / 2);
-        auto right = make_internal(node->height);
+        auto right = make_internal(node->height, node_ids);
         auto& rin = right->internal();
 
         // Move right half to new node
@@ -1031,11 +1105,14 @@ private:
     /// Split a full internal node after adding a child at the front. The
     /// original node remains the right half and the new left sibling is
     /// returned to its parent.
-    static NodePtr split_internal_and_prepend(NodePtr& node, NodePtr overflow) {
+    static NodePtr split_internal_and_prepend(NodePtr& node, NodePtr overflow,
+                                              NodeIdPolicy& node_ids) {
         auto& in = node->internal();
         assert(in.count == MaxChildren);
         const uint16_t mid = static_cast<uint16_t>(MaxChildren / 2);
-        auto left = make_internal(node->height);
+        auto left = make_internal(node->height, node_ids);
+        left->node_id = node->node_id; // preserve the original ID on the left
+        node->node_id = node_ids.allocate();
         auto& lin = left->internal();
 
         lin.children[0] = std::move(overflow);
@@ -1065,11 +1142,11 @@ private:
 
     // ---- push_tree internals ----
 
-    void merge_same_height(NodePtr other) {
+    void merge_same_height(NodePtr other, NodeIdPolicy& node_ids) {
         // Same height: coalesce or evenly redistribute the boundary arrays
         // before making them children of a new root.
         if (combine_adjacent(m_root, other) == 1) return;
-        auto new_root = make_internal(m_root->height + 1);
+        auto new_root = make_internal(m_root->height + 1, node_ids);
         auto& in = new_root->internal();
         in.children[0] = std::move(m_root);
         in.child_summaries[0] = in.children[0]->summary;
@@ -1081,7 +1158,8 @@ private:
     }
 
     /// Push a shorter tree into the rightmost path. Returns overflow if split.
-    static NodePtr push_tree_right(NodePtr& node, NodePtr other) {
+    static NodePtr push_tree_right(NodePtr& node, NodePtr other,
+                                   NodeIdPolicy& node_ids) {
         ensure_mutable(node);
         assert(node->height > other->height);
 
@@ -1110,13 +1188,13 @@ private:
             }
 
             // Node is full — split and return overflow
-            return split_internal_and_add(node, std::move(other));
+            return split_internal_and_add(node, std::move(other), node_ids);
         }
 
         // Recurse deeper
         auto overflow = push_tree_right(
             ensure_mutable(in.children[in.count - 1]),
-            std::move(other));
+            std::move(other), node_ids);
 
         in.child_summaries[in.count - 1] = in.children[in.count - 1]->summary;
         recompute_summary(*node);
@@ -1131,12 +1209,13 @@ private:
             return nullptr;
         }
 
-        return split_internal_and_add(node, std::move(overflow));
+        return split_internal_and_add(node, std::move(overflow), node_ids);
     }
 
     /// Push a shorter tree into the leftmost path. Returns an overflow sibling
     /// when the current node must split.
-    static NodePtr push_tree_left(NodePtr& node, NodePtr other) {
+    static NodePtr push_tree_left(NodePtr& node, NodePtr other,
+                                  NodeIdPolicy& node_ids) {
         ensure_mutable(node);
         assert(node->height > other->height);
         auto& in = node->internal();
@@ -1164,11 +1243,11 @@ private:
                 recompute_summary(*node);
                 return nullptr;
             }
-            return split_internal_and_prepend(node, std::move(other));
+            return split_internal_and_prepend(node, std::move(other), node_ids);
         }
 
         auto overflow = push_tree_left(ensure_mutable(in.children[0]),
-                                       std::move(other));
+                                       std::move(other), node_ids);
         in.child_summaries[0] = in.children[0]->summary;
         recompute_summary(*node);
         if (!overflow) return nullptr;
@@ -1183,7 +1262,7 @@ private:
             recompute_summary(*node);
             return nullptr;
         }
-        return split_internal_and_prepend(node, std::move(overflow));
+        return split_internal_and_prepend(node, std::move(overflow), node_ids);
     }
 
     // ---- Iteration ----
@@ -1297,7 +1376,8 @@ private:
     /// Insert item at sought position. Returns overflow node if leaf/internal splits.
     template<typename D>
     static NodePtr insert_item_recursive(NodePtr& node, const D& target,
-                                         Item item, Bias bias, D cumulative) {
+                                         Item item, Bias bias, D cumulative,
+                                         NodeIdPolicy& node_ids) {
         ensure_mutable(node);
         if (node->is_leaf()) {
             auto& lf = node->leaf();
@@ -1338,7 +1418,7 @@ private:
             uint16_t total = static_cast<uint16_t>(MaxChildren + 1);
             uint16_t mid = total / 2;
 
-            auto right = make_leaf();
+            auto right = make_leaf(node_ids);
             auto& rlf = right->leaf();
 
             // We need to distribute items [0..insert_idx) + new_item + [insert_idx..MaxChildren)
@@ -1416,7 +1496,8 @@ private:
         }
 
         auto overflow = insert_item_recursive<D>(
-            ensure_mutable(in.children[child_idx]), target, std::move(item), bias, child_start);
+            ensure_mutable(in.children[child_idx]), target, std::move(item), bias,
+            child_start, node_ids);
 
         in.child_summaries[child_idx] = in.children[child_idx]->summary;
         recompute_summary(*node);
@@ -1457,7 +1538,7 @@ private:
             tmp_summaries[i + 1] = in.child_summaries[i];
         }
 
-        auto right = make_internal(node->height);
+        auto right = make_internal(node->height, node_ids);
         auto& rin = right->internal();
 
         uint16_t left_count = mid;

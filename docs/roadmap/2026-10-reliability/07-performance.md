@@ -495,9 +495,22 @@ or performance acceptance is complete.
 
 **Progress (2026-10-20):** `TreeNodeId.h` now defines checked tree namespaces
 and copyable state-local node-ID counters, with exhaustion and divergent-copy
-semantics covered in `tst_sumtree`. The allocator is not yet wired into SumTree
-nodes or Buffer state; it establishes the identity primitive for the next
-slice, not stable node lookup or an edit speedup.
+semantics covered in `tst_sumtree`. This is allocator groundwork only.
+
+**Progress (2026-10-20):** `SumTree` now accepts a third, defaulted node-ID
+policy. The default `NoNodeIds` policy keeps ordinary trees such as UndoMap
+free of stored IDs; `StableNodeIds` assigns IDs to new nodes while COW clones
+retain their existing ID. Push, insert, slice, and splice operations carry the
+state-local allocator, including root growth and split paths. Public invariant
+inspection checks ID validity, uniqueness, and parent/child slots. Focused
+Debug `tst_sumtree` coverage passes for COW insert, deep split paths, and a
+splice combining shared source subtrees with an independently namespaced
+replacement. The registered changed-path Debug route passed 47/47 before this
+test was added; the focused updated suite passes. This still does not provide
+the `NodeDirectory`, `RunDirectory`, transactional Buffer state, or production
+edit routing, and no edit-speed claim is made. Next implement the directories
+and integrate `FragmentState`, preserving the old reconstruction path as the
+counted fallback and test oracle.
 
 **Acceptance:**
 

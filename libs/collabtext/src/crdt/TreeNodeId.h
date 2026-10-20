@@ -4,6 +4,7 @@
 #include <compare>
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 namespace CollabText::Crdt {
 
@@ -60,6 +61,54 @@ private:
     TreeNamespace m_tree;
     uint64_t m_next_local = 1;
     bool m_exhausted = false;
+};
+
+struct NoNodeId {
+    constexpr bool valid() const noexcept { return true; }
+};
+
+/// Empty policy used by ordinary SumTrees. Its [[no_unique_address]] ID and
+/// allocator members add no per-node or per-tree state.
+struct NoNodeIds {
+    using Id = NoNodeId;
+    constexpr Id allocate() noexcept { return {}; }
+    constexpr bool valid() const noexcept { return true; }
+};
+
+/// Stable node-ID policy for a FragmentState lineage.
+class StableNodeIds {
+public:
+    using Id = NodeId;
+
+    static std::optional<StableNodeIds> create() noexcept {
+        auto allocator = NodeIdAllocator::create();
+        if (!allocator) return std::nullopt;
+        return StableNodeIds{*allocator};
+    }
+
+    constexpr StableNodeIds() = default;
+    explicit constexpr StableNodeIds(NodeIdAllocator allocator) noexcept
+        : m_allocator(std::move(allocator)) {}
+
+    Id allocate() noexcept {
+        const auto next = m_allocator.allocate();
+        if (!next) {
+            m_failed = true;
+            return {};
+        }
+        return *next;
+    }
+
+    bool valid() const noexcept {
+        return !m_failed && m_allocator.tree_namespace().valid();
+    }
+    TreeNamespace tree_namespace() const noexcept {
+        return m_allocator.tree_namespace();
+    }
+
+private:
+    NodeIdAllocator m_allocator;
+    bool m_failed = false;
 };
 
 } // namespace CollabText::Crdt
