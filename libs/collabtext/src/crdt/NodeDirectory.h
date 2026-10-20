@@ -101,6 +101,30 @@ public:
         return true;
     }
 
+    // Refresh the nodes whose ownership or parent/slot edge can change after
+    // a path-copy mutation. A path node's direct children are included because
+    // a split can insert a sibling or move a bounded set of children. This is
+    // O(B log N) map work per tree level and leaves unrelated subtrees alone.
+    // It does not remove IDs for nodes deleted by a structural edit; callers
+    // must erase those entries or rebuild the directory for that candidate.
+    template<class Tree, class Dimension>
+    bool refresh_path(const Tree& tree, const Dimension& target) {
+        bool updated = true;
+        bool complete = tree.template for_each_node_on_path<Dimension>(target,
+            [&](const typename Tree::NodePtr& node, NodeId id,
+                std::optional<NodeId> parent, uint16_t slot) {
+                updated = insert_or_assign(id, Entry{node, parent, slot}) && updated;
+                if (node->is_leaf()) return;
+                const auto& children = node->internal();
+                for (uint16_t child = 0; child < children.count; ++child) {
+                    const auto& child_node = children.children[child];
+                    updated = insert_or_assign(child_node->node_id,
+                        Entry{child_node, id, child}) && updated;
+                }
+            });
+        return complete && updated;
+    }
+
     bool rebuild(std::vector<std::pair<NodeId, Entry>> entries) {
         std::sort(entries.begin(), entries.end(),
                   [](const auto& a, const auto& b) { return a.first < b.first; });

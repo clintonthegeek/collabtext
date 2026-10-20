@@ -434,6 +434,26 @@ public:
         return m_root ? m_root->summary : s_zero;
     }
 
+    /// The current root owner, for state-local weak directories. Keep this
+    /// read-only handle out of scope before mutating the tree so it does not
+    /// affect copy-on-write uniqueness.
+    const NodePtr& root_node() const noexcept { return m_root; }
+
+    /// Visit only the root-to-item path selected by a summary coordinate. The
+    /// target must fall inside a positive-width item; zero-width spans at that
+    /// coordinate are skipped. Each callback receives the owning node and its
+    /// parent ID/slot (the root has no parent).
+    template<class D, class Fn>
+        requires DimensionOf<D, Summary>
+    bool for_each_node_on_path(const D& target, Fn&& fn) const {
+        if (!m_root) return false;
+        D start = D::zero();
+        if (!node_path_exists(m_root, target, start)) return false;
+        start = D::zero();
+        auto visitor = std::forward<Fn>(fn);
+        return visit_node_path(m_root, std::nullopt, 0, target, start, visitor);
+    }
+
     bool empty() const {
         if (!m_root) return true;
         if (m_root->is_leaf()) return m_root->leaf().count == 0;
@@ -715,6 +735,71 @@ public:
 private:
     [[no_unique_address]] NodeIdPolicy m_node_ids{};
     NodePtr m_root;
+
+    template<class D>
+    static bool node_path_exists(const NodePtr& node, const D& target,
+                                 D& start) {
+        if (node->is_leaf()) {
+            const auto& leaf = node->leaf();
+            D position = start;
+            for (uint16_t slot = 0; slot < leaf.count; ++slot) {
+                D end = position;
+                end.add_summary(leaf.item_summaries[slot]);
+                if (position <= target && target < end) {
+                    start = position;
+                    return true;
+                }
+                position = end;
+            }
+            return false;
+        }
+
+        const auto& internal = node->internal();
+        D position = start;
+        for (uint16_t slot = 0; slot < internal.count; ++slot) {
+            D end = position;
+            end.add_summary(internal.child_summaries[slot]);
+            if (position <= target && target < end) {
+                start = position;
+                return node_path_exists(internal.children[slot], target, start);
+            }
+            position = end;
+        }
+        return false;
+    }
+
+    template<class D, class Fn>
+    static bool visit_node_path(const NodePtr& node,
+                                std::optional<typename NodeIdPolicy::Id> parent,
+                                uint16_t child_slot, const D& target,
+                                D& start, Fn& fn) {
+        fn(node, node->node_id, parent, child_slot);
+        if (node->is_leaf()) {
+            const auto& leaf = node->leaf();
+            D position = start;
+            for (uint16_t slot = 0; slot < leaf.count; ++slot) {
+                D end = position;
+                end.add_summary(leaf.item_summaries[slot]);
+                if (position <= target && target < end) return true;
+                position = end;
+            }
+            return false;
+        }
+
+        const auto& internal = node->internal();
+        D position = start;
+        for (uint16_t slot = 0; slot < internal.count; ++slot) {
+            D end = position;
+            end.add_summary(internal.child_summaries[slot]);
+            if (position <= target && target < end) {
+                start = position;
+                return visit_node_path(internal.children[slot], node->node_id,
+                                       slot, target, start, fn);
+            }
+            position = end;
+        }
+        return false;
+    }
 
     struct RangeParts {
         std::vector<NodePtr> prefix;

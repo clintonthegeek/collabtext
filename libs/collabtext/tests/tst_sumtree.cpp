@@ -181,6 +181,57 @@ private slots:
         });
         QCOMPARE(expected_rank, spliced->summary().count);
 
+        QCOMPARE(spliced->root_node().get(), root.get());
+        for (int item = 0; item < spliced->summary().count; ++item) {
+            std::vector<NodeId> path;
+            const bool found = spliced->for_each_node_on_path<ItemCount>(
+                ItemCount{item}, [&](const NodePtr& node, NodeId id,
+                                     std::optional<NodeId>, uint16_t) {
+                    QVERIFY(node);
+                    path.push_back(id);
+                });
+            QVERIFY(found);
+            QVERIFY(!path.empty());
+            const auto leaf = directory.locate(path.back());
+            QVERIFY(leaf.has_value());
+            auto leaf_node = leaf->node.lock();
+            QVERIFY(leaf_node);
+            QVERIFY(leaf_node->is_leaf());
+            bool item_rank_found = false;
+            for (uint16_t slot = 0; slot < leaf_node->leaf().count; ++slot) {
+                const auto rank = directory.rank_of_item<ItemCount>(
+                    root, path.back(), slot);
+                QVERIFY(rank.has_value());
+                if (rank->value == item) item_rank_found = true;
+            }
+            QVERIFY(item_rank_found);
+        }
+        size_t invalid_path_callbacks = 0;
+        QVERIFY(!spliced->for_each_node_on_path<ItemCount>(
+            ItemCount{spliced->summary().count}, [&](const auto&, auto, auto, auto) {
+                ++invalid_path_callbacks;
+            }));
+        QCOMPARE(invalid_path_callbacks, size_t{0});
+
+        StableTree appended = *spliced;
+        appended.push_item({200});
+        QVERIFY(directory.refresh_path(
+            appended, ItemCount{spliced->summary().count}));
+        uint64_t appended_rank = 0;
+        appended.for_each_node([&](const NodePtr& node, NodeId id,
+                                   std::optional<NodeId>, uint16_t) {
+            if (!node->is_leaf()) return;
+            for (uint16_t slot = 0; slot < node->leaf().count; ++slot) {
+                const auto rank = directory.rank_of_item<ItemCount>(
+                    appended.root_node(), id, slot);
+                QVERIFY(rank.has_value());
+                QCOMPARE(static_cast<uint64_t>(rank->value), appended_rank);
+                ++appended_rank;
+            }
+        });
+        QCOMPARE(appended_rank, static_cast<uint64_t>(appended.summary().count));
+        QCOMPARE(spliced->summary().count, 22);
+
         NodePtr fork_root;
         fork.for_each_node([&](const auto& node, NodeId, std::optional<NodeId>, uint16_t) {
             if (!fork_root) fork_root = node;

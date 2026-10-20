@@ -827,3 +827,12 @@ Run the complete paired Release matrix, artifact/schema/table validation, valida
 **Verification:**
 
 Run tst_poll_budget, transport/session recovery and Qt adapter tests; establish and compare event-loop/idle baselines separately from engine timings. Never register timing benchmarks in CTest.
+
+**Progress (2026-10-20):** `SumTree::for_each_node_on_path<D>` now exposes only
+the summary-coordinate path to an item, along with its owning nodes and parent
+slots. `NodeDirectory::refresh_path` updates that path and the bounded direct
+children whose parent-slot entries may move during a split. Stable-tree tests
+exercise all item coordinates after a splice and then append through a COW fork,
+refresh the path, and verify every retained rank against the new root. Focused
+Debug `tst_sumtree` passes 64/64. This enables incremental directory maintenance
+but Buffer does not call it yet; no latency claim is made.
