@@ -61,6 +61,19 @@ private slots:
         QCOMPARE(range.value().second, uint32_t{10245});
     }
 
+    void split_partitions_long_run_checkpoints() {
+        Buffer buffer(CollabText::Test::test_counter(105));
+        std::string text;
+        for (int i = 0; i < 1000; ++i) text += "a\xf0\x9f\x99\x82";
+        QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {text}));
+        QVERIFY(buffer.try_apply_local_edit({{2500, 2500}}, {"x"}));
+        QCOMPARE(buffer.utf16_length(), size_t{3001});
+        const auto range = buffer.utf16_range(1498, 3);
+        QVERIFY(range);
+        QCOMPARE(range.value().first, uint32_t{2496});
+        QCOMPARE(range.value().second, uint32_t{2501});
+    }
+
     void summary_survives_split_delete_undo_and_restore() {
         Buffer buffer(CollabText::Test::test_counter(103));
         QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {"a\xf0\x9f\x99\x82" "bc"}));

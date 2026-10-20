@@ -120,7 +120,7 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     for (auto& f : frags) {
         f.visible = f.compute_visible(m_undo_map);
         assert(f.byte_length == f.text.size());
-        f.rebuild_utf16_index();
+        if (!f.utf16_index_ready) f.rebuild_utf16_index();
     }
     FragmentTree tree;
     for (auto& f : frags) tree.push_item(std::move(f));

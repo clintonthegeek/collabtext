@@ -119,6 +119,7 @@ struct Fragment {
     };
     std::shared_ptr<const Utf16Index> utf16_index;
     uint32_t utf16_units_cached = 0;
+    bool utf16_index_ready = false;
 
     void rebuild_utf16_index() {
         uint32_t byte = 0, units = 0, since_checkpoint = 0;
@@ -146,6 +147,7 @@ struct Fragment {
             index->checkpoints = std::move(points);
             utf16_index = std::move(index);
         }
+        utf16_index_ready = true;
     }
 
     uint64_t utf16_length() const {
@@ -213,10 +215,15 @@ struct Fragment {
     /// `link_at(k)`, which is what it already was, so no tree relation changes.
     Fragment split_off(uint32_t k) {
         uint32_t byte = 0;
+        uint32_t prefix_units = 0;
         for (uint32_t c = 0; c < k; ++c) {
             const auto lead = static_cast<unsigned char>(text[byte]);
-            byte += lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : 4;
+            const uint32_t width = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : 4;
+            byte += width;
+            prefix_units += width == 4 ? 2 : 1;
         }
+        const auto old_index = utf16_index;
+        const uint32_t old_units = utf16_units_cached;
         Fragment tail;
         tail.origin = item_at(k);
         tail.link = link_at(k);
@@ -231,8 +238,31 @@ struct Fragment {
         text.resize(byte);
         byte_length = byte;
         length = k;
-        rebuild_utf16_index();
-        tail.rebuild_utf16_index();
+        if (old_index) {
+            auto prefix_index = std::make_shared<Utf16Index>();
+            auto tail_index = std::make_shared<Utf16Index>();
+            prefix_index->checkpoints.push_back({0, 0});
+            tail_index->checkpoints.push_back({0, 0});
+            for (const auto& point : old_index->checkpoints) {
+                if (point.byte && point.byte < byte)
+                    prefix_index->checkpoints.push_back(point);
+                else if (point.byte > byte)
+                    tail_index->checkpoints.push_back({point.byte - byte, point.units - prefix_units});
+            }
+            utf16_units_cached = prefix_units;
+            tail.utf16_units_cached = old_units - prefix_units;
+            utf16_index = prefix_index->checkpoints.size() > 1 ? prefix_index : nullptr;
+            tail.utf16_index = tail_index->checkpoints.size() > 1 ? tail_index : nullptr;
+            utf16_index_ready = true;
+            tail.utf16_index_ready = true;
+        } else {
+            // No source checkpoints means both sides are ASCII or short enough
+            // for the bounded local scan; do not rescan either copied string.
+            utf16_units_cached = prefix_units;
+            tail.utf16_units_cached = old_units - prefix_units;
+            utf16_index_ready = true;
+            tail.utf16_index_ready = true;
+        }
         return tail;
     }
 
