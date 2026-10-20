@@ -405,10 +405,15 @@ tree. The
 summary adds one `uint64_t` per aggregate; its memory and byte-control cost have
 been measured at 24 bytes per FragmentSummary and 2,736 bytes per tree node,
 versus 16 bytes and 2,632 bytes for the exact-width X07 baseline (+104 bytes per
-node, about 4%). Paired byte-control timing remains open. Structural edits still
-flatten/rebuild the tree and both indexes, and stable NodeId directories and
-incremental maintenance remain open. No end-to-end performance claim is
-made yet.
+node, about 4%). A five-pair comparison against X07 matched all 54 public
+fingerprints and work counts. Its median paired mean ratio for matched byte
+replacement was 2.054 at 100 KB and 1.531 at 1 MB. The host load reached 17.57
+on an 8-logical-CPU machine and used the `powersave` governor, so these figures
+are a diagnostic warning only, not an acceptance claim or causal attribution.
+See [the report](../../reports/2026-10-20-x04-summary-overhead/README.md) and
+raw run metadata. Structural edits still flatten/rebuild the tree and both
+indexes, and stable NodeId directories and incremental maintenance remain open.
+No end-to-end performance claim is made yet.
 See the current X04 entry in TASKS.json.
 
 ## X05 — Replace whole-fragment text rebuilds with transactional splices
