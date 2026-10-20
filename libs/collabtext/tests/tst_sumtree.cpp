@@ -651,9 +651,44 @@ private slots:
         }
 
         QCOMPARE(result.summary().count, 100);
+        QVERIFY(result.has_valid_occupancy());
+        QVERIFY(result.has_valid_summaries());
         auto items = result.items();
         for (int i = 0; i < 100; ++i)
             QCOMPARE(items[i].value, i);
+    }
+
+    void push_tree_keeps_balanced_occupancy_for_boundary_heights() {
+        const std::vector<int> sizes{
+            1, 5, 6, 7, 11, 12, 13, 17, 18, 19, 24, 25,
+            71, 72, 73, 143, 144, 145, 173, 300};
+        for (const int left_size : sizes) {
+            for (const int right_size : sizes) {
+                TestTree left;
+                TestTree right;
+                int expected_sum = 0;
+                for (int i = 0; i < left_size; ++i) {
+                    left.push_item({i + 1});
+                    expected_sum += i + 1;
+                }
+                for (int i = 0; i < right_size; ++i) {
+                    right.push_item({left_size + i + 1});
+                    expected_sum += left_size + i + 1;
+                }
+                left.push_tree(std::move(right));
+
+                QVERIFY2(left.has_valid_occupancy(),
+                         qPrintable(QString("invalid join shape: %1 + %2")
+                                        .arg(left_size).arg(right_size)));
+                QVERIFY(left.has_valid_summaries());
+                QCOMPARE(left.summary().count, left_size + right_size);
+                QCOMPARE(left.summary().sum, expected_sum);
+                const auto actual = left.items();
+                QCOMPARE(actual.size(), size_t(left_size + right_size));
+                for (int i = 0; i < left_size + right_size; ++i)
+                    QCOMPARE(actual[size_t(i)].value, i + 1);
+            }
+        }
     }
 
     // ---- In-place mutation tests ----
@@ -1017,6 +1052,7 @@ private slots:
                                                         ItemCount{83},
                                                         std::move(replacement));
         QVERIFY(candidate.has_value());
+        QVERIFY(candidate->has_valid_occupancy());
         QCOMPARE(candidate->summary().count, 36);
         const int removed_sum = (18 + 83) * 66 / 2;
         QCOMPARE(candidate->summary().sum, source_sum - removed_sum + 1801);
@@ -1104,10 +1140,20 @@ private slots:
                 auto candidate = source.splice_range<ItemCount>(
                     ItemCount{begin}, ItemCount{end}, std::move(replacement));
                 QVERIFY2(candidate.has_value(), "valid item boundary was refused");
-                QCOMPARE(candidate->summary().count, int(expected.size()));
+                QVERIFY2(candidate->has_valid_occupancy(),
+                         qPrintable(QString("splice produced an underfilled or uneven tree: [%1,%2)")
+                                        .arg(begin).arg(end)));
+                QVERIFY2(candidate->has_valid_summaries(),
+                         qPrintable(QString("splice produced a stale subtree summary: [%1,%2)")
+                                        .arg(begin).arg(end)));
+                const auto actual = candidate->items();
+                QVERIFY2(candidate->summary().count == int(expected.size()),
+                         qPrintable(QString("splice count mismatch for [%1,%2): got %3 expected %4, actual items %5")
+                                        .arg(begin).arg(end)
+                                        .arg(candidate->summary().count)
+                                        .arg(expected.size()).arg(actual.size())));
                 int expected_sum = std::accumulate(expected.begin(), expected.end(), 0);
                 QCOMPARE(candidate->summary().sum, expected_sum);
-                const auto actual = candidate->items();
                 QCOMPARE(actual.size(), expected.size());
                 for (size_t i = 0; i < expected.size(); ++i)
                     QCOMPARE(actual[i].value, expected[i]);
@@ -1115,6 +1161,45 @@ private slots:
         }
         QCOMPARE(source.summary().count, source_size);
         QCOMPARE(source.summary().sum, source_size * (source_size + 1) / 2);
+    }
+
+    void splice_range_preserves_deep_tree_occupancy_and_summaries() {
+        constexpr int source_size = 5000;
+        TestTree source;
+        std::vector<int> original;
+        original.reserve(source_size);
+        for (int i = 0; i < source_size; ++i) {
+            source.push_item({i + 1});
+            original.push_back(i + 1);
+        }
+
+        for (int sample = 0; sample < 200; ++sample) {
+            const int begin = (sample * 7919) % (source_size + 1);
+            const int end = begin +
+                ((sample * 53) % (source_size - begin + 1));
+            const int inserted = sample % 4;
+            TestTree replacement;
+            std::vector<int> expected(original.begin(), original.begin() + begin);
+            for (int i = 0; i < inserted; ++i) {
+                const int value = 100001 + sample * 4 + i;
+                replacement.push_item({value});
+                expected.push_back(value);
+            }
+            expected.insert(expected.end(), original.begin() + end, original.end());
+
+            auto candidate = source.splice_range<ItemCount>(
+                ItemCount{begin}, ItemCount{end}, std::move(replacement));
+            QVERIFY(candidate.has_value());
+            QVERIFY(candidate->has_valid_occupancy());
+            QVERIFY(candidate->has_valid_summaries());
+            QCOMPARE(candidate->summary().count, int(expected.size()));
+            QCOMPARE(candidate->summary().sum,
+                     std::accumulate(expected.begin(), expected.end(), 0));
+            const auto actual = candidate->items();
+            QCOMPARE(actual.size(), expected.size());
+            for (size_t i = 0; i < expected.size(); ++i)
+                QCOMPARE(actual[i].value, expected[i]);
+        }
     }
 };
 

@@ -54,7 +54,6 @@ public:
     using Summary = typename Item::Summary;
     static_assert(B >= 2, "Branching factor must be at least 2");
     static constexpr std::size_t MaxChildren = 2 * B;
-
     // ---- Node types (public for Cursor access) ----
 
     struct Node;
@@ -433,6 +432,21 @@ public:
         return false;
     }
 
+    /// Verify the B+ shape used by the path-copy splice implementation. This
+    /// is an explicit O(number of nodes) diagnostic and is never called by
+    /// mutation paths.
+    bool has_valid_occupancy() const {
+        if (!m_root) return true;
+        std::optional<uint8_t> leaf_height;
+        return validate_occupancy(m_root, true, leaf_height);
+    }
+
+    bool has_valid_summaries() const
+        requires std::equality_comparable<Summary>
+    {
+        return !m_root || validate_summaries(m_root);
+    }
+
     /// Create a cursor for seeking by dimension D.
     template<typename D>
         requires DimensionOf<D, Summary>
@@ -536,17 +550,23 @@ public:
                 m_root = std::move(new_root);
             }
         } else {
-            // Other is taller — grow self to match, then merge
-            while (m_root->height < other_h) {
-                auto wrapper = make_internal(m_root->height + 1);
-                auto& in = wrapper->internal();
-                in.children[0] = std::move(m_root);
+            // Other is taller. Insert down its left spine instead of wrapping
+            // this root in one-child nodes, which would violate B+ occupancy.
+            NodePtr taller = std::move(other.m_root);
+            auto overflow = push_tree_left(taller, std::move(m_root));
+            if (overflow) {
+                auto new_root = make_internal(taller->height + 1);
+                auto& in = new_root->internal();
+                in.children[0] = std::move(overflow);
                 in.child_summaries[0] = in.children[0]->summary;
-                in.count = 1;
-                recompute_summary(*wrapper);
-                m_root = std::move(wrapper);
+                in.children[1] = std::move(taller);
+                in.child_summaries[1] = in.children[1]->summary;
+                in.count = 2;
+                recompute_summary(*new_root);
+                m_root = std::move(new_root);
+            } else {
+                m_root = std::move(taller);
             }
-            merge_same_height(std::move(other.m_root));
         }
     }
 
@@ -785,6 +805,129 @@ private:
         }
     }
 
+    /// Combine adjacent nodes at the same height, redistributing their
+    /// bounded contents so every returned non-root node has B..2B entries.
+    /// Returns one when the pair coalesced and two when it remains split.
+    static uint16_t combine_adjacent(NodePtr& left, NodePtr& right) {
+        assert(left && right && left->height == right->height);
+        ensure_mutable(left);
+        ensure_mutable(right);
+        if (left->is_leaf()) {
+            auto& left_leaf = left->leaf();
+            const auto& right_leaf = right->leaf();
+            const uint16_t total = left_leaf.count + right_leaf.count;
+            assert(total <= 2 * MaxChildren);
+            std::array<Item, 2 * MaxChildren> items{};
+            std::array<Summary, 2 * MaxChildren> summaries{};
+            uint16_t at = 0;
+            for (uint16_t i = 0; i < left_leaf.count; ++i, ++at) {
+                items[at] = left_leaf.items[i];
+                summaries[at] = left_leaf.item_summaries[i];
+            }
+            for (uint16_t i = 0; i < right_leaf.count; ++i, ++at) {
+                items[at] = right_leaf.items[i];
+                summaries[at] = right_leaf.item_summaries[i];
+            }
+            const uint16_t left_count = total <= MaxChildren
+                ? total : static_cast<uint16_t>(total / 2);
+            const uint16_t right_count = total - left_count;
+            left_leaf.count = left_count;
+            for (uint16_t i = 0; i < left_count; ++i) {
+                left_leaf.items[i] = std::move(items[i]);
+                left_leaf.item_summaries[i] = summaries[i];
+            }
+            if (right_count) {
+                auto& output = right->leaf();
+                output.count = right_count;
+                for (uint16_t i = 0; i < right_count; ++i) {
+                    output.items[i] = std::move(items[left_count + i]);
+                    output.item_summaries[i] = summaries[left_count + i];
+                }
+            }
+            recompute_summary(*left);
+            if (right_count) recompute_summary(*right);
+            return right_count ? 2 : 1;
+        }
+
+        auto& left_internal = left->internal();
+        const auto& right_internal = right->internal();
+        const uint16_t total = left_internal.count + right_internal.count;
+        assert(total <= 2 * MaxChildren);
+        std::array<NodePtr, 2 * MaxChildren> children{};
+        std::array<Summary, 2 * MaxChildren> summaries{};
+        uint16_t at = 0;
+        for (uint16_t i = 0; i < left_internal.count; ++i, ++at) {
+            children[at] = left_internal.children[i];
+            summaries[at] = left_internal.child_summaries[i];
+        }
+        for (uint16_t i = 0; i < right_internal.count; ++i, ++at) {
+            children[at] = right_internal.children[i];
+            summaries[at] = right_internal.child_summaries[i];
+        }
+        const uint16_t left_count = total <= MaxChildren
+            ? total : static_cast<uint16_t>(total / 2);
+        const uint16_t right_count = total - left_count;
+        left_internal.count = left_count;
+        for (uint16_t i = 0; i < left_count; ++i) {
+            left_internal.children[i] = std::move(children[i]);
+            left_internal.child_summaries[i] = summaries[i];
+        }
+        if (right_count) {
+            auto& output = right->internal();
+            output.count = right_count;
+            for (uint16_t i = 0; i < right_count; ++i) {
+                output.children[i] = std::move(children[left_count + i]);
+                output.child_summaries[i] = summaries[left_count + i];
+            }
+        }
+        recompute_summary(*left);
+        if (right_count) recompute_summary(*right);
+        return right_count ? 2 : 1;
+    }
+
+    bool validate_occupancy(const NodePtr& node, bool is_root,
+                            std::optional<uint8_t>& leaf_height) const {
+        const uint16_t count = node->is_leaf() ? node->leaf().count
+                                                : node->internal().count;
+        if (!count || count > MaxChildren || (!is_root && count < B)) return false;
+        if (node->is_leaf()) {
+            if (!leaf_height) leaf_height = node->height;
+            return *leaf_height == node->height;
+        }
+        const auto& internal = node->internal();
+        for (uint16_t i = 0; i < internal.count; ++i) {
+            if (!internal.children[i] ||
+                internal.children[i]->height + 1 != node->height ||
+                !validate_occupancy(internal.children[i], false, leaf_height))
+                return false;
+        }
+        return true;
+    }
+
+    static bool validate_summaries(const NodePtr& node)
+        requires std::equality_comparable<Summary>
+    {
+        Summary expected = Summary::zero();
+        if (node->is_leaf()) {
+            const auto& leaf = node->leaf();
+            for (uint16_t i = 0; i < leaf.count; ++i) {
+                const Summary item_summary = leaf.items[i].summary();
+                if (leaf.item_summaries[i] != item_summary) return false;
+                expected.add_summary(item_summary);
+            }
+        } else {
+            const auto& internal = node->internal();
+            for (uint16_t i = 0; i < internal.count; ++i) {
+                if (!internal.children[i] ||
+                    internal.child_summaries[i] != internal.children[i]->summary ||
+                    !validate_summaries(internal.children[i]))
+                    return false;
+                expected.add_summary(internal.children[i]->summary);
+            }
+        }
+        return node->summary == expected;
+    }
+
     // ---- push_item internals ----
 
     /// Push item into rightmost leaf. Returns overflow node if split needed.
@@ -885,37 +1028,47 @@ private:
         return right;
     }
 
+    /// Split a full internal node after adding a child at the front. The
+    /// original node remains the right half and the new left sibling is
+    /// returned to its parent.
+    static NodePtr split_internal_and_prepend(NodePtr& node, NodePtr overflow) {
+        auto& in = node->internal();
+        assert(in.count == MaxChildren);
+        const uint16_t mid = static_cast<uint16_t>(MaxChildren / 2);
+        auto left = make_internal(node->height);
+        auto& lin = left->internal();
+
+        lin.children[0] = std::move(overflow);
+        lin.child_summaries[0] = lin.children[0]->summary;
+        lin.count = 1;
+        for (uint16_t i = 0; i < mid - 1; ++i) {
+            lin.children[lin.count] = std::move(in.children[i]);
+            lin.child_summaries[lin.count] = in.child_summaries[i];
+            ++lin.count;
+        }
+
+        const uint16_t right_count = static_cast<uint16_t>(MaxChildren - (mid - 1));
+        for (uint16_t i = 0; i < right_count; ++i) {
+            const uint16_t old_index = static_cast<uint16_t>(mid - 1 + i);
+            if (old_index != i) {
+                in.children[i] = std::move(in.children[old_index]);
+                in.child_summaries[i] = in.child_summaries[old_index];
+            }
+        }
+        for (uint16_t i = right_count; i < MaxChildren; ++i)
+            in.children[i] = nullptr;
+        in.count = right_count;
+        recompute_summary(*left);
+        recompute_summary(*node);
+        return left;
+    }
+
     // ---- push_tree internals ----
 
     void merge_same_height(NodePtr other) {
-        // Same height — try to merge children, else create new root
-        if (m_root->is_leaf()) {
-            auto& lf = ensure_mutable(m_root)->leaf();
-            auto& olf = other->leaf();
-            if (lf.count + olf.count <= MaxChildren) {
-                for (uint16_t i = 0; i < olf.count; ++i) {
-                    lf.items[lf.count] = Item(olf.items[i]);
-                    lf.item_summaries[lf.count] = olf.item_summaries[i];
-                    lf.count++;
-                }
-                recompute_summary(*m_root);
-                return;
-            }
-        } else {
-            auto& in = ensure_mutable(m_root)->internal();
-            auto& oin = other->internal();
-            if (in.count + oin.count <= MaxChildren) {
-                for (uint16_t i = 0; i < oin.count; ++i) {
-                    in.children[in.count] = oin.children[i];
-                    in.child_summaries[in.count] = oin.child_summaries[i];
-                    in.count++;
-                }
-                recompute_summary(*m_root);
-                return;
-            }
-        }
-
-        // Can't merge — create new root
+        // Same height: coalesce or evenly redistribute the boundary arrays
+        // before making them children of a new root.
+        if (combine_adjacent(m_root, other) == 1) return;
         auto new_root = make_internal(m_root->height + 1);
         auto& in = new_root->internal();
         in.children[0] = std::move(m_root);
@@ -939,35 +1092,12 @@ private:
             // other should become a child or merge with rightmost child
             auto& rightmost = in.children[in.count - 1];
 
-            // Try to merge rightmost child with other
-            if (rightmost->is_leaf() && other->is_leaf()) {
-                auto& rlf = ensure_mutable(rightmost)->leaf();
-                auto& olf = other->leaf();
-                if (rlf.count + olf.count <= MaxChildren) {
-                    for (uint16_t i = 0; i < olf.count; ++i) {
-                        rlf.items[rlf.count] = Item(olf.items[i]);
-                        rlf.item_summaries[rlf.count] = olf.item_summaries[i];
-                        rlf.count++;
-                    }
-                    recompute_summary(*rightmost);
-                    in.child_summaries[in.count - 1] = rightmost->summary;
-                    recompute_summary(*node);
-                    return nullptr;
-                }
-            } else if (!rightmost->is_leaf() && !other->is_leaf()) {
-                auto& rin = ensure_mutable(rightmost)->internal();
-                auto& oin = other->internal();
-                if (rin.count + oin.count <= MaxChildren) {
-                    for (uint16_t i = 0; i < oin.count; ++i) {
-                        rin.children[rin.count] = oin.children[i];
-                        rin.child_summaries[rin.count] = oin.child_summaries[i];
-                        rin.count++;
-                    }
-                    recompute_summary(*rightmost);
-                    in.child_summaries[in.count - 1] = rightmost->summary;
-                    recompute_summary(*node);
-                    return nullptr;
-                }
+            assert(rightmost->height == other->height);
+            const uint16_t combined = combine_adjacent(rightmost, other);
+            in.child_summaries[in.count - 1] = rightmost->summary;
+            if (combined == 1) {
+                recompute_summary(*node);
+                return nullptr;
             }
 
             // Can't merge — add other as new child
@@ -1002,6 +1132,58 @@ private:
         }
 
         return split_internal_and_add(node, std::move(overflow));
+    }
+
+    /// Push a shorter tree into the leftmost path. Returns an overflow sibling
+    /// when the current node must split.
+    static NodePtr push_tree_left(NodePtr& node, NodePtr other) {
+        ensure_mutable(node);
+        assert(node->height > other->height);
+        auto& in = node->internal();
+        assert(in.count > 0);
+
+        if (node->height == other->height + 1) {
+            auto& leftmost = in.children[0];
+            assert(leftmost->height == other->height);
+            const uint16_t combined = combine_adjacent(other, leftmost);
+            if (combined == 1) {
+                in.children[0] = std::move(other);
+                in.child_summaries[0] = in.children[0]->summary;
+                recompute_summary(*node);
+                return nullptr;
+            }
+            in.child_summaries[0] = leftmost->summary;
+            if (in.count < MaxChildren) {
+                for (uint16_t i = in.count; i > 0; --i) {
+                    in.children[i] = std::move(in.children[i - 1]);
+                    in.child_summaries[i] = in.child_summaries[i - 1];
+                }
+                in.children[0] = std::move(other);
+                in.child_summaries[0] = in.children[0]->summary;
+                ++in.count;
+                recompute_summary(*node);
+                return nullptr;
+            }
+            return split_internal_and_prepend(node, std::move(other));
+        }
+
+        auto overflow = push_tree_left(ensure_mutable(in.children[0]),
+                                       std::move(other));
+        in.child_summaries[0] = in.children[0]->summary;
+        recompute_summary(*node);
+        if (!overflow) return nullptr;
+        if (in.count < MaxChildren) {
+            for (uint16_t i = in.count; i > 0; --i) {
+                in.children[i] = std::move(in.children[i - 1]);
+                in.child_summaries[i] = in.child_summaries[i - 1];
+            }
+            in.children[0] = std::move(overflow);
+            in.child_summaries[0] = in.children[0]->summary;
+            ++in.count;
+            recompute_summary(*node);
+            return nullptr;
+        }
+        return split_internal_and_prepend(node, std::move(overflow));
     }
 
     // ---- Iteration ----

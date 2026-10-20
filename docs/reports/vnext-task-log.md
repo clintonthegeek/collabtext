@@ -3502,3 +3502,19 @@ passed 5/5, and Release focused tests passed 4/4. The current-source
 the sandbox. The low-load paired comparison remains outstanding. The paired X07
 byte-control comparison is recorded as noisy diagnostic evidence in
 `docs/reports/2026-10-20-x04-summary-overhead/`.
+
+## 2026-10-20 — X05 tree splice foundation
+
+`SumTree::splice_range` now shares unaffected subtrees and rebuilds only
+boundary paths/leaves. Its join path redistributes bounded node arrays to keep
+non-root occupancy within B..2B and inserts shorter trees down the taller
+tree's boundary spine rather than creating one-child wrappers. The empty
+range/empty replacement case returns the existing COW root. Focused Debug
+`tst_sumtree` passed exhaustive small-tree cuts, 200 vector-oracle edits on a
+5,000-item deep tree, and 400 boundary-height tree joins; all check item order,
+summaries and occupancy. Slice reassembly also retains the invariant. A
+registered changed-path Debug run passed 47/47, covering SumTree users in
+Buffer, IdList, undo, sequence ordering, anchors, markers, GC and recovery. No
+Buffer path uses the primitive yet, so it has no end-to-end performance claim.
+Stable node/run locators and transactional X04 index maintenance remain the
+next integration gates.

@@ -478,14 +478,18 @@ lookup and paired results are in
 5. Measure fresh bulk-seeded, chunk-seeded, 500/3000-prior-edit, tombstone-rich, undo and catch-up cases. Publish fallback frequency and work counts; an optimization that merely shifts an O(history) rebuild into index maintenance does not satisfy acceptance.
 
 **Progress (2026-10-20):** A generic, checked `SumTree::splice_range` primitive
-now shares fully covered unaffected subtrees, validates dimension-aligned cuts,
+shares fully covered unaffected subtrees, validates dimension-aligned cuts,
 and leaves the source tree untouched; an empty-to-empty splice returns the
 existing root directly. Boundary leaves are copied in bounded leaf-sized
-groups. Its exhaustive small-tree vector-oracle test and the focused
-Debug `tst_sumtree` suite pass. This is only a primitive: it does not yet enforce
-the X04a FragmentTree occupancy rules, carry stable NodeIds/RunIds, update the
-X04 indexes incrementally, or replace a Buffer mutation path. Do not use this
-as evidence that X05's algorithm or performance acceptance is complete.
+groups. Concatenation now redistributes boundary nodes to retain B..2B
+non-root occupancy and avoids one-child wrapper chains. The focused Debug
+`tst_sumtree` suite passes: every boundary pair of an 80-item tree, 200 vector-
+oracle splices over a 5,000-item/deep tree, and 20x20 boundary-height tree-join
+combinations check ordering, summaries, and occupancy. A registered 47-suite
+changed-path Debug route also passes. This is still only a generic primitive:
+stable NodeIds/RunIds, incremental X04 index updates, and Buffer mutation
+routing remain unimplemented. Do not use this as evidence that X05's algorithm
+or performance acceptance is complete.
 
 **Acceptance:**
 
