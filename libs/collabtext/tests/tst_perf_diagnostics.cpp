@@ -12,6 +12,61 @@ using namespace CollabText::Crdt;
 class TestPerfDiagnostics : public QObject {
     Q_OBJECT
 private slots:
+    void fragment_mutation_updates_only_changed_index_rows() {
+        Buffer buffer(CollabText::Test::test_counter(20));
+        QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {"abcdef"}));
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        const auto inserted = buffer.try_apply_local_edit({{3, 3}}, {"X"});
+        Diagnostics::end_sample();
+        QVERIFY(inserted);
+        QCOMPARE(buffer.text(), std::string("abcXdef"));
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::origin_index_rows_erased),
+                 uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::origin_index_rows_inserted),
+                 uint64_t{3});
+        QCOMPARE(counts.get(Diagnostics::Counter::deletion_index_rows_erased),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::deletion_index_rows_inserted),
+                 uint64_t{0});
+
+        const auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("abcdef"));
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        const auto deleted = buffer.try_apply_local_edit({{1, 2}}, {""});
+        Diagnostics::end_sample();
+        QVERIFY(deleted);
+        QCOMPARE(buffer.text(), std::string("acdef"));
+        const auto deletion_counts = Diagnostics::snapshot();
+        QCOMPARE(deletion_counts.get(
+                     Diagnostics::Counter::fragment_index_full_rebuilds),
+                 uint64_t{0});
+        QCOMPARE(deletion_counts.get(
+                     Diagnostics::Counter::origin_index_rows_erased),
+                 uint64_t{1});
+        QCOMPARE(deletion_counts.get(
+                     Diagnostics::Counter::origin_index_rows_inserted),
+                 uint64_t{3});
+        QCOMPARE(deletion_counts.get(
+                     Diagnostics::Counter::deletion_index_rows_erased),
+                 uint64_t{0});
+        QCOMPARE(deletion_counts.get(
+                     Diagnostics::Counter::deletion_index_rows_inserted),
+                 uint64_t{1});
+        const auto deletion_undo = buffer.try_undo();
+        QVERIFY(deletion_undo);
+        QVERIFY(deletion_undo.value().has_value());
+        QCOMPARE(buffer.text(), std::string("abcdef"));
+    }
+
     void fragment_snapshot_counts_only_inside_sample() {
         Buffer buffer(CollabText::Test::test_counter(1));
         QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {"abc"}));

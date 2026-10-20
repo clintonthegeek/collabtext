@@ -3467,3 +3467,20 @@ prior implementation recomputed all three. Opt-in Release `tst_perf_diagnostics`
 passed 1/1. The final affected Debug suite passed 15/15, and
 `test_verify_changed.py` passed 16/16. No end-to-end latency claim is made
 because mutable tree traversal and summary propagation remain O(F).
+
+## 2026-10-20 — X04 implementation slice 3
+
+`Buffer::set_fragments` now stages persistent OriginIndex and DeletionIndex
+deltas. Changed and removed runs erase their prior rows; changed, new, and split
+runs insert candidate rows; unaffected AVL pages are shared. Full row-vector
+materialization and sorted map rebuild occur only when the prior derived indexes
+are invalid or delta validation fails. RunDirectory and SumTree still rebuild,
+and the candidate identification pass still scans the old tree and staged
+vector, so no whole-edit latency claim is made. Diagnostics schema 5 records
+changed index rows and full index rebuild fallbacks. Focused insertion/deletion
+tests each prove no full index rebuild; changed-path Debug passed 104/104,
+final-source focused Debug passed 5/5, and Release focused tests passed 4/4.
+ASan/UBSan test bodies passed, but LeakSanitizer exits fatally under this
+runner's ptrace environment; that required gate remains unresolved and was not
+disabled. The paired X07 byte-control comparison is recorded as noisy
+diagnostic evidence in `docs/reports/2026-10-20-x04-summary-overhead/`.

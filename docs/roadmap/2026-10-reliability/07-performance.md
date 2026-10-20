@@ -388,20 +388,30 @@ Detailed ratios, load caveats, and raw artifacts are in the linked report.
 Run tst_crdt_indexes, tst_incremental_model, sequence/undo/IdList/anchor/GC/gap/restore routed suites and sanitizer fault injection; compare fixed-size targeted lookup visit counts and latency.
 
 **Current implementation slice:** Immutable path-copied AVL map storage and
-origin/deletion interval indexes now rebuild and validate alongside the
-existing fragment-tree publication. Remote deletion resolves matching retained
-intervals from the origin index and applies splits right-to-left. Per-snapshot
-ordinals are rebuilt after each whole-tree mutation. Index values now use
-monotonic state-local RunIds, preserved when the run's exact start identity
-survives; a RunDirectory resolves each ID to its current ordinal. SumTree
-NodeIds/parent directories and incremental mutation maintenance remain open.
+origin/deletion interval indexes now update by changed-run deltas on ordinary
+mutations; full sorted row rebuild remains a counted fallback when prior
+indexes are invalid or a candidate delta fails validation. Remote deletion
+resolves matching retained intervals from the origin index and applies splits
+right-to-left. RunIds are monotonic and state-local, preserved when the run's
+exact start identity survives; a RunDirectory resolves each ID to its current
+ordinal. RunDirectory and SumTree are still rebuilt after structural mutations.
+Stable SumTree NodeIds/parent directories, incremental RunDirectory maintenance,
+and tree splices remain open.
 Local undo/redo and remote undo use origin/deletion incidences to identify the
 affected ordinals, then seek by the retained-run SumTree summary and edit only
 those paths. A stale ordinal falls back to full visibility recomputation. The
 opt-in diagnostics count SumTree leaf items inspected: a fixed 5,000-run case
 compares the full scan against one ordinal edit and enforces the 90% work
 reduction target. One-run undo diagnostics visit two leaf items in a three-run
-tree. The
+tree. `set_fragments` now copies the persistent index roots, erases rows for
+changed/removed runs, and inserts rows for changed/new/split runs. Untouched AVL
+pages are shared. Full origin/deletion row vectors and sorted rebuilds are now
+created only when the old index is invalid or a delta check fails. The opt-in
+diagnostics schema 5 counts row edits and full-rebuild fallbacks; focused insert
+and deletion cases each update only the affected run rows and assert zero full
+index rebuilds. `RunDirectory` and `SumTree` are still rebuilt after every
+structural mutation, and `set_fragments` still scans the old tree and staged
+fragment vector to identify changes. The
 summary adds one `uint64_t` per aggregate; its memory and byte-control cost have
 been measured at 24 bytes per FragmentSummary and 2,736 bytes per tree node,
 versus 16 bytes and 2,632 bytes for the exact-width X07 baseline (+104 bytes per
@@ -411,9 +421,14 @@ replacement was 2.054 at 100 KB and 1.531 at 1 MB. The host load reached 17.57
 on an 8-logical-CPU machine and used the `powersave` governor, so these figures
 are a diagnostic warning only, not an acceptance claim or causal attribution.
 See [the report](../../reports/2026-10-20-x04-summary-overhead/README.md) and
-raw run metadata. Structural edits still flatten/rebuild the tree and both
-indexes, and stable NodeId directories and incremental maintenance remain open.
-No end-to-end performance claim is made yet.
+raw run metadata. Structural edits still flatten/rebuild the tree and
+RunDirectory, and stable NodeId directories and incremental tree maintenance
+remain open.
+No end-to-end performance claim is made yet. Debug verification passed 104/104
+on the index-delta implementation; final-source focused Debug and Release suites
+passed 5/5 and 4/4. Leak-enabled ASan/UBSan cases completed with all test cases
+passing, but CTest exits nonzero because LeakSanitizer cannot operate under this
+runner's ptrace environment; that gate remains open.
 See the current X04 entry in TASKS.json.
 
 ## X05 — Replace whole-fragment text rebuilds with transactional splices

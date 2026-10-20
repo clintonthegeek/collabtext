@@ -9,6 +9,8 @@
 #include <cassert>
 #include <numeric>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace CollabText::Crdt {
 
@@ -129,8 +131,11 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     std::vector<std::pair<std::tuple<Identity, ActorId, uint64_t>,
                           DeletionIncidence>> deletion_rows;
     std::vector<std::pair<RunId, uint64_t>> run_directory_rows;
-    origin_rows.reserve(frags.size());
+    std::vector<RunId> run_ids;
     run_directory_rows.reserve(frags.size());
+    run_ids.reserve(frags.size());
+    std::unordered_map<RunId, const Fragment*> new_fragments_by_run;
+    new_fragments_by_run.reserve(frags.size());
     RunId next_run_id = m_next_run_id;
     bool run_ids_valid = true;
     for (size_t i = 0; i < frags.size(); ++i) {
@@ -149,24 +154,119 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
                 next_run_id = next_run_id == UINT64_MAX ? 0 : next_run_id + 1;
             }
         }
+        run_ids.push_back(run);
         if (run) run_directory_rows.emplace_back(run, i);
-        if (fragment.length) {
-            const uint64_t end = fragment.origin.counter + fragment.length;
-            if (run)
-                origin_rows.emplace_back(fragment.origin.actor, fragment.origin.counter,
-                                          OriginInterval{end, run});
-            for (const auto& deletion : fragment.deletions) {
-                if (run)
-                    deletion_rows.emplace_back(
-                        std::tuple{deletion, fragment.origin.actor,
-                                   fragment.origin.counter},
-                        DeletionIncidence{fragment.origin.actor,
-                                          fragment.origin.counter, end, run});
+        if (run && !new_fragments_by_run.emplace(run, &fragment).second)
+            run_ids_valid = false;
+    }
+
+    // Persistent maps let a structural mutation publish only the rows whose
+    // retained runs changed. The fragment sequence is still staged and scanned
+    // here; X05 replaces that whole-sequence path with tree splices. If the
+    // previous indexes cannot account for every old run, or a delta violates
+    // an index invariant, discard the candidate roots and rebuild from the
+    // authoritative candidate fragments before publishing anything.
+    bool origins_valid = false;
+    bool deletions_valid = false;
+    bool use_delta = m_fragment_indexes_valid && run_ids_valid;
+    if (use_delta) {
+        origins = m_origin_index;
+        deletions = m_deletion_index;
+        std::unordered_set<RunId> changed_runs;
+        changed_runs.reserve(frags.size());
+        bool old_rows_valid = true;
+        m_fragment_tree.for_each([&](const Fragment& old_fragment) {
+            if (!old_rows_valid) return;
+            const auto old_run = m_origin_index.find_interval_start(
+                old_fragment.origin.actor, old_fragment.origin.counter);
+            if (!old_run) {
+                old_rows_valid = false;
+                return;
+            }
+            const auto next = new_fragments_by_run.find(*old_run);
+            const bool unchanged = next != new_fragments_by_run.end() &&
+                next->second->origin.actor == old_fragment.origin.actor &&
+                next->second->origin.counter == old_fragment.origin.counter &&
+                next->second->length == old_fragment.length &&
+                next->second->deletions == old_fragment.deletions;
+            if (unchanged) return;
+
+            if (!origins.erase(old_fragment.origin.actor,
+                               old_fragment.origin.counter)) {
+                old_rows_valid = false;
+                return;
+            }
+            Diagnostics::record(Diagnostics::Counter::origin_index_rows_erased);
+            for (const auto& deletion : old_fragment.deletions) {
+                if (!deletions.erase(deletion, old_fragment.origin.actor,
+                                     old_fragment.origin.counter)) {
+                    old_rows_valid = false;
+                    return;
+                }
+                Diagnostics::record(Diagnostics::Counter::deletion_index_rows_erased);
+            }
+            if (next != new_fragments_by_run.end())
+                changed_runs.insert(*old_run);
+        });
+
+        if (old_rows_valid) {
+            for (size_t i = 0; i < frags.size(); ++i) {
+                const auto& fragment = frags[i];
+                const RunId run = run_ids[i];
+                if (!run || !fragment.length) continue;
+                const bool existed = m_origin_index.find_interval_start(
+                    fragment.origin.actor, fragment.origin.counter).has_value();
+                if (existed && !changed_runs.contains(run)) continue;
+                const uint64_t end = fragment.origin.counter + fragment.length;
+                if (!origins.insert(fragment.origin.actor,
+                                    fragment.origin.counter, end, run)) {
+                    old_rows_valid = false;
+                    break;
+                }
+                Diagnostics::record(Diagnostics::Counter::origin_index_rows_inserted);
+                for (const auto& deletion : fragment.deletions) {
+                    if (!deletions.insert(deletion, fragment.origin.actor,
+                                          fragment.origin.counter, end, run)) {
+                        old_rows_valid = false;
+                        break;
+                    }
+                    Diagnostics::record(Diagnostics::Counter::deletion_index_rows_inserted);
+                }
+                if (!old_rows_valid) break;
             }
         }
+        if (old_rows_valid) {
+            origins_valid = true;
+            deletions_valid = true;
+        } else {
+            use_delta = false;
+        }
     }
-    const bool origins_valid = origins.rebuild(std::move(origin_rows));
-    const bool deletions_valid = deletions.rebuild(std::move(deletion_rows));
+    if (!use_delta) {
+        origins = OriginIndex{};
+        deletions = DeletionIndex{};
+        origin_rows.reserve(frags.size());
+        deletion_rows.reserve(frags.size());
+        for (size_t i = 0; i < frags.size(); ++i) {
+            const auto& fragment = frags[i];
+            const RunId run = run_ids[i];
+            if (!run || !fragment.length) continue;
+            const uint64_t end = fragment.origin.counter + fragment.length;
+            origin_rows.emplace_back(fragment.origin.actor,
+                                     fragment.origin.counter,
+                                     OriginInterval{end, run});
+            for (const auto& deletion : fragment.deletions) {
+                deletion_rows.emplace_back(
+                    std::tuple{deletion, fragment.origin.actor,
+                               fragment.origin.counter},
+                    DeletionIncidence{fragment.origin.actor,
+                                      fragment.origin.counter, end, run});
+            }
+        }
+        Diagnostics::record(Diagnostics::Counter::fragment_index_full_rebuilds);
+        origins_valid = origins.rebuild(std::move(origin_rows));
+        deletions_valid = deletions.rebuild(std::move(deletion_rows));
+    }
     RunDirectory run_directory;
     const bool run_directory_valid = run_directory.rebuild(
         std::move(run_directory_rows));
