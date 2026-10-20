@@ -33,6 +33,7 @@ ROUTES = [
     ('docs/reports/2026-10-19-x02-profile/raw/*', 'tst_verification_tools'),
     ('docs/reports/2026-10-19-x07a/raw/*', 'tst_verification_tools'),
     ('docs/reports/2026-10-20-x05-initial-paired/raw/*', 'tst_verification_tools'),
+    ('docs/reports/2026-10-20-x05-exact-run-paired/raw/*', 'tst_verification_tools'),
     ('tests/performance-model/incremental-model.*', 'tst_incremental_model'),
     ('libs/collabtext/tests/tst_incremental_model.cpp', 'tst_incremental_model'),
     ('libs/collabtext/tests/tst_unicode_seek.cpp', 'tst_unicode_seek'),

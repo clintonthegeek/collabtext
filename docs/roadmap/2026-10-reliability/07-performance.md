@@ -566,8 +566,21 @@ summaries. Its operation descriptors match the general identity-order packing;
 overlapping actor intervals or partial-run boundaries use the reference path.
 Remote replay has the corresponding single-whole-run text-delete path. Debug
 diagnostics verify zero fragment snapshots/rebuilds and peer replay/undo; the
-full Buffer route passed 31/31. This latest code has not yet been included in
-paired latency evidence.
+full Buffer route passed 31/31.
+
+The exact-run paths now have paired evidence in
+[`2026-10-20-x05-exact-run-paired`](../../reports/2026-10-20-x05-exact-run-paired/README.md).
+All 57 public workload fingerprints matched across five pairs from the X04
+baseline to candidate `5c28746`. Whole-run bulk deletion was about 217x faster
+at 100 KB and 307x at 1 MB. Sequential append remained about 111x faster, and
+public 70-KB Unicode append about 26x faster. The 10-KB/3,000-edit replacement
+improved only 4.3% in mean; median per-run p99 fell from 15.57 to 14.42 ms,
+still far above the 2-ms target. Native 5-KB/50%-tombstone edits improved 3.5%,
+short of the 2x target; 90%-tombstone edits improved 17.8%. The powersave host
+had one-minute load from 2.86 to 16.04, so the report treats timings as
+directional. Keep the exact covered fast paths, but X05 remains in progress:
+stable Buffer-owned locators and common middle replacements are still needed,
+and both aged-edit and mixed-tombstone thresholds remain unmet.
 
 **Acceptance:**
 

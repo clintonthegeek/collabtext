@@ -1,0 +1,789 @@
+{
+  "schema": "collabtext-performance-matrix/1",
+  "baseline_sha": "0fbd15bbad5a8488e78cce56fa0ddb133f225b35",
+  "baseline_source": "/tmp/collabtext-x05-baseline",
+  "candidate_sha": "5c28746a3ee507a9d0b4a06f4c6ab7699dc84808",
+  "candidate_status": "?? docs/reports/2026-10-20-x05-exact-run-paired-mixed-interrupted/\n?? docs/reports/2026-10-20-x05-exact-run-paired-original-interrupted/",
+  "candidate_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "trace_sha256": "75deec6b0dbc221d03031c1c5d816e90d3eb1ef045a6a6f8f723b0e02c4c28ea",
+  "harness_sha256": "d8638bfb48929603a8aca9d3c8a3e636eb86e97725e20123f20198157276b3e9",
+  "matrix_runner_sha256": "a51692a68d35e7b78c5592960bdb366d4a807e7a01cc83840d6ac72c2db66cda",
+  "candidate_input_sha256": {
+    "superproject_cmake": "ad3fd31c8a8e594939cd601bccd1249c5b40e7c601cdc29faf7d26d81d9ba8c7",
+    "library_cmake": "fd4fdb163154f40a83ccfa1a23ddf7504f24c9d3bace11490e14c06c8b42f276",
+    "harness": "d8638bfb48929603a8aca9d3c8a3e636eb86e97725e20123f20198157276b3e9",
+    "trace": "75deec6b0dbc221d03031c1c5d816e90d3eb1ef045a6a6f8f723b0e02c4c28ea"
+  },
+  "host": "Linux-6.18.49-1-MANJARO-x86_64-with-glibc2.44",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  8\nOn-line CPU(s) list:                     0-7\nVendor ID:                               GenuineIntel\nModel name:                              11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz\nCPU family:                              6\nModel:                                   140\nThread(s) per core:                      2\nCore(s) per socket:                      4\nSocket(s):                               1\nStepping:                                1\nMicrocode version:                       0xbe\nCPU(s) scaling MHz:                      77%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5990.40\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l2 cdp_l2 ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid movdiri movdir64b fsrm avx512_vp2intersect md_clear ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               192 KiB (4 instances)\nL1i cache:                               128 KiB (4 instances)\nL2 cache:                                5 MiB (4 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-7\nVulnerability Gather data sampling:      Mitigation; Microcode\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Mitigation; Aligned branch/return thunks\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI SW loop, KVM SW loop\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected",
+  "compiler": "c++ (GCC) 16.2.1 20260810\nCopyright (C) 2026 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+  "filesystem": "btrfs",
+  "governor": "powersave",
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "build_flags": "-O3 -DNDEBUG; C++20; COLLABTEXT_ENABLE_SANITIZERS=OFF",
+  "profile": "full-paired-matrix",
+  "benchmark_pin_cpu": null,
+  "repeats": 5,
+  "native_methods": [
+    "single_replica_throughput",
+    "single_replica_large_doc",
+    "edit_patterns",
+    "edit_sizes",
+    "tombstone_degradation",
+    "tombstone_degradation_large",
+    "multi_replica_convergence",
+    "undo_redo_cycle",
+    "undo_stack_depth",
+    "fragment_proliferation",
+    "memory_growth",
+    "reconnect_sync_cost"
+  ],
+  "commands": [
+    {
+      "label": "baseline-configure",
+      "command": [
+        "cmake",
+        "-S",
+        "/tmp/collabtext-x05-baseline",
+        "-B",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCOLLABTEXT_BUILD_TESTS=OFF",
+        "-DCOLLABTEXT_BUILD_BENCHMARKS=ON",
+        "-DCOLLABTEXT_BUILD_QT=OFF",
+        "-DCOLLABTEXT_BUILD_APPS=OFF",
+        "-DCOLLABTEXT_BUILD_FILE_TRANSPORT=ON",
+        "-DCOLLABTEXT_ENABLE_SANITIZERS=OFF",
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.7653205394744873,
+      "load_before": "3.99 4.76 5.86 2/1978 24",
+      "load_after": "3.99 4.76 5.86 2/1983 76",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-configure.log"
+    },
+    {
+      "label": "baseline-build",
+      "command": [
+        "cmake",
+        "--build",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline",
+        "--target",
+        "collabtext_core",
+        "collabtext_filetransport",
+        "tst_benchmark",
+        "tst_checkpoint_recovery_benchmark",
+        "-j16"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 14.430827379226685,
+      "load_before": "3.99 4.76 5.86 4/1983 76",
+      "load_after": "3.93 4.71 5.82 4/1976 564",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-build.log"
+    },
+    {
+      "label": "candidate-configure",
+      "command": [
+        "cmake",
+        "-S",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2",
+        "-B",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCOLLABTEXT_BUILD_TESTS=OFF",
+        "-DCOLLABTEXT_BUILD_BENCHMARKS=ON",
+        "-DCOLLABTEXT_BUILD_QT=OFF",
+        "-DCOLLABTEXT_BUILD_APPS=OFF",
+        "-DCOLLABTEXT_BUILD_FILE_TRANSPORT=ON",
+        "-DCOLLABTEXT_ENABLE_SANITIZERS=OFF",
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.9172306060791016,
+      "load_before": "3.93 4.71 5.82 5/1976 564",
+      "load_after": "3.93 4.71 5.82 3/1959 616",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-configure.log"
+    },
+    {
+      "label": "candidate-build",
+      "command": [
+        "cmake",
+        "--build",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate",
+        "--target",
+        "collabtext_core",
+        "collabtext_filetransport",
+        "tst_benchmark",
+        "tst_checkpoint_recovery_benchmark",
+        "collabtext_performance_benchmark",
+        "-j16"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 14.171080589294434,
+      "load_before": "3.93 4.71 5.82 4/1959 616",
+      "load_after": "4.54 4.82 5.84 2/1943 1158",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-build.log"
+    },
+    {
+      "label": "baseline-harness-compile",
+      "command": [
+        "ccache",
+        "c++",
+        "-std=c++20",
+        "-O3",
+        "-DNDEBUG",
+        "-I",
+        "/tmp/collabtext-x05-baseline/libs/collabtext/include",
+        "-I",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-header-overlay",
+        "-I",
+        "/tmp/collabtext-x05-baseline/libs/collabtext/src",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/benchmarks/BenchmarkRunner.cpp",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/libcollabtext_core.a",
+        "-pthread",
+        "-o",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 4.123243093490601,
+      "load_before": "4.54 4.82 5.84 5/1943 1158",
+      "load_after": "4.34 4.77 5.82 3/1946 1163",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-harness-compile.log"
+    },
+    {
+      "label": "baseline-public-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 46.93986940383911,
+      "load_before": "4.34 4.77 5.82 3/1946 1163",
+      "load_after": "4.61 4.76 5.77 4/1988 1164",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-public-1.jsonl"
+    },
+    {
+      "label": "baseline-native-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 89.32568359375,
+      "load_before": "4.61 4.76 5.77 2/1988 1164",
+      "load_after": "3.32 4.30 5.51 2/1957 1166",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-native-1.log"
+    },
+    {
+      "label": "baseline-recovery-512-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.8155512809753418,
+      "load_before": "3.32 4.30 5.51 2/1957 1166",
+      "load_after": "3.32 4.30 5.51 2/1957 1167",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-512-1.log"
+    },
+    {
+      "label": "baseline-recovery-2048-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 13.194116115570068,
+      "load_before": "3.32 4.30 5.51 2/1957 1167",
+      "load_after": "3.10 4.20 5.45 3/1952 1168",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-2048-1.log"
+    },
+    {
+      "label": "candidate-public-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 43.564207553863525,
+      "load_before": "3.10 4.20 5.45 3/1952 1168",
+      "load_after": "2.86 4.00 5.33 4/1963 1169",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-public-1.jsonl"
+    },
+    {
+      "label": "candidate-native-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 73.85448098182678,
+      "load_before": "2.86 4.00 5.33 2/1963 1169",
+      "load_after": "3.57 3.96 5.21 3/1955 1171",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-native-1.log"
+    },
+    {
+      "label": "candidate-recovery-512-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.31459951400756836,
+      "load_before": "3.57 3.96 5.21 3/1955 1171",
+      "load_after": "3.57 3.96 5.21 3/1955 1172",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-512-1.log"
+    },
+    {
+      "label": "candidate-recovery-2048-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 2.7694528102874756,
+      "load_before": "3.57 3.96 5.21 4/1955 1172",
+      "load_after": "3.53 3.94 5.20 3/1950 1173",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-2048-1.log"
+    },
+    {
+      "label": "candidate-public-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 44.98036980628967,
+      "load_before": "3.53 3.94 5.20 3/1950 1173",
+      "load_after": "3.38 3.85 5.11 2/1964 1174",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-public-2.jsonl"
+    },
+    {
+      "label": "candidate-native-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 76.37932324409485,
+      "load_before": "3.38 3.85 5.11 2/1964 1174",
+      "load_after": "4.99 4.17 5.12 3/1983 1176",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-native-2.log"
+    },
+    {
+      "label": "candidate-recovery-512-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.31441283226013184,
+      "load_before": "4.99 4.17 5.12 4/1983 1176",
+      "load_after": "4.99 4.17 5.12 3/1977 1177",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-512-2.log"
+    },
+    {
+      "label": "candidate-recovery-2048-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 3.070634365081787,
+      "load_before": "4.99 4.17 5.12 3/1977 1177",
+      "load_after": "4.91 4.17 5.11 3/1968 1178",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-2048-2.log"
+    },
+    {
+      "label": "baseline-public-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 43.46761965751648,
+      "load_before": "4.91 4.17 5.11 8/1968 1178",
+      "load_after": "4.08 4.05 5.03 3/1906 1179",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-public-2.jsonl"
+    },
+    {
+      "label": "baseline-native-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 93.8844952583313,
+      "load_before": "4.08 4.05 5.03 2/1906 1179",
+      "load_after": "5.10 4.23 4.99 4/1923 1181",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-native-2.log"
+    },
+    {
+      "label": "baseline-recovery-512-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.8662080764770508,
+      "load_before": "5.10 4.23 4.99 4/1923 1181",
+      "load_after": "5.10 4.23 4.99 4/1923 1182",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-512-2.log"
+    },
+    {
+      "label": "baseline-recovery-2048-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 16.703328371047974,
+      "load_before": "5.10 4.23 4.99 3/1923 1182",
+      "load_after": "5.64 4.42 5.03 4/1913 1183",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-2048-2.log"
+    },
+    {
+      "label": "baseline-public-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 59.826321601867676,
+      "load_before": "5.64 4.42 5.03 4/1913 1183",
+      "load_after": "6.89 4.93 5.16 7/1913 1184",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-public-3.jsonl"
+    },
+    {
+      "label": "baseline-native-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 90.82455682754517,
+      "load_before": "6.89 4.93 5.16 7/1913 1184",
+      "load_after": "3.86 4.44 4.97 2/1903 1186",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-native-3.log"
+    },
+    {
+      "label": "baseline-recovery-512-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.8155772686004639,
+      "load_before": "3.86 4.44 4.97 2/1903 1186",
+      "load_after": "3.86 4.44 4.97 2/1910 1187",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-512-3.log"
+    },
+    {
+      "label": "baseline-recovery-2048-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 13.044204235076904,
+      "load_before": "3.86 4.44 4.97 2/1910 1187",
+      "load_after": "3.83 4.40 4.95 5/1906 1188",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-2048-3.log"
+    },
+    {
+      "label": "candidate-public-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 43.32131004333496,
+      "load_before": "3.83 4.40 4.95 2/1906 1188",
+      "load_after": "3.28 4.19 4.85 3/1908 1189",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-public-3.jsonl"
+    },
+    {
+      "label": "candidate-native-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 73.95465302467346,
+      "load_before": "3.28 4.19 4.85 2/1908 1189",
+      "load_after": "3.80 4.13 4.78 4/1898 1191",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-native-3.log"
+    },
+    {
+      "label": "candidate-recovery-512-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.314561128616333,
+      "load_before": "3.80 4.13 4.78 4/1898 1191",
+      "load_after": "3.80 4.13 4.78 2/1896 1192",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-512-3.log"
+    },
+    {
+      "label": "candidate-recovery-2048-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 2.8214070796966553,
+      "load_before": "3.80 4.13 4.78 2/1896 1192",
+      "load_after": "3.82 4.13 4.77 3/1904 1193",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-2048-3.log"
+    },
+    {
+      "label": "candidate-public-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 45.9777307510376,
+      "load_before": "3.82 4.13 4.77 5/1904 1193",
+      "load_after": "3.66 4.04 4.71 2/1909 1194",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-public-4.jsonl"
+    },
+    {
+      "label": "candidate-native-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 71.22867965698242,
+      "load_before": "3.66 4.04 4.71 3/1909 1194",
+      "load_after": "3.76 4.03 4.66 5/1895 1196",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-native-4.log"
+    },
+    {
+      "label": "candidate-recovery-512-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.31468725204467773,
+      "load_before": "3.76 4.03 4.66 4/1895 1196",
+      "load_after": "3.76 4.03 4.66 3/1892 1197",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-512-4.log"
+    },
+    {
+      "label": "candidate-recovery-2048-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 2.6695492267608643,
+      "load_before": "3.76 4.03 4.66 6/1892 1197",
+      "load_after": "3.78 4.03 4.66 2/1898 1198",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-2048-4.log"
+    },
+    {
+      "label": "baseline-public-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 42.70704221725464,
+      "load_before": "3.78 4.03 4.66 2/1898 1198",
+      "load_after": "3.21 3.84 4.57 3/1907 1199",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-public-4.jsonl"
+    },
+    {
+      "label": "baseline-native-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 90.82422590255737,
+      "load_before": "3.21 3.84 4.57 8/1907 1199",
+      "load_after": "4.37 3.99 4.55 2/1932 1201",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-native-4.log"
+    },
+    {
+      "label": "baseline-recovery-512-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.8153562545776367,
+      "load_before": "4.37 3.99 4.55 3/1932 1201",
+      "load_after": "4.82 4.09 4.58 3/1932 1202",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-512-4.log"
+    },
+    {
+      "label": "baseline-recovery-2048-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 14.267542362213135,
+      "load_before": "4.82 4.09 4.58 3/1932 1202",
+      "load_after": "4.69 4.08 4.57 2/1912 1203",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-2048-4.log"
+    },
+    {
+      "label": "baseline-public-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 45.62325644493103,
+      "load_before": "4.69 4.08 4.57 2/1912 1203",
+      "load_after": "3.93 3.97 4.50 3/1980 1204",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-public-5.jsonl"
+    },
+    {
+      "label": "baseline-native-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 89.9839837551117,
+      "load_before": "3.93 3.97 4.50 3/1980 1204",
+      "load_after": "4.14 3.91 4.42 2/1943 1206",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-native-5.log"
+    },
+    {
+      "label": "baseline-recovery-512-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.7655861377716064,
+      "load_before": "4.14 3.91 4.42 2/1943 1206",
+      "load_after": "4.14 3.91 4.42 2/1943 1207",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-512-5.log"
+    },
+    {
+      "label": "baseline-recovery-2048-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-baseline/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 12.74168062210083,
+      "load_before": "4.14 3.91 4.42 3/1943 1207",
+      "load_after": "4.04 3.90 4.41 6/1934 1208",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/baseline-recovery-2048-5.log"
+    },
+    {
+      "label": "candidate-public-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 44.2920606136322,
+      "load_before": "4.04 3.90 4.41 5/1934 1208",
+      "load_after": "4.53 4.00 4.42 6/1994 1209",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-public-5.jsonl"
+    },
+    {
+      "label": "candidate-native-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_benchmark",
+        "single_replica_throughput",
+        "single_replica_large_doc",
+        "edit_patterns",
+        "edit_sizes",
+        "tombstone_degradation",
+        "tombstone_degradation_large",
+        "multi_replica_convergence",
+        "undo_redo_cycle",
+        "undo_stack_depth",
+        "fragment_proliferation",
+        "memory_growth",
+        "reconnect_sync_cost"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 167.6842873096466,
+      "load_before": "4.53 4.00 4.42 8/1967 1209",
+      "load_after": "16.04 9.66 6.55 22/2227 1211",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-native-5.log"
+    },
+    {
+      "label": "candidate-recovery-512-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "512"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.674048662185669,
+      "load_before": "16.04 9.66 6.55 23/2227 1211",
+      "load_after": "16.04 9.66 6.55 20/2221 1212",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-512-5.log"
+    },
+    {
+      "label": "candidate-recovery-2048-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/build-candidate/libs/collabtext/tst_checkpoint_recovery_benchmark",
+        "2048"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 6.972866058349609,
+      "load_before": "16.04 9.66 6.55 22/2221 1212",
+      "load_after": "16.35 9.83 6.62 22/2220 1213",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-20-x05-exact-run-paired-retry-20261020/candidate-recovery-2048-5.log"
+    }
+  ],
+  "matrix_status": "paired_measurements_complete"
+}
