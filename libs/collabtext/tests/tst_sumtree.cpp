@@ -1,4 +1,5 @@
 #include <QTest>
+#include "crdt/NodeDirectory.h"
 #include "crdt/SumTree.h"
 #include "crdt/TreeNodeId.h"
 #include <numeric>
@@ -139,6 +140,26 @@ private slots:
             else QVERIFY(parent.has_value());
         });
         QVERIFY(visited > 1);
+
+        using Node = StableTree::Node;
+        NodeDirectory<Node> directory;
+        std::vector<std::pair<NodeId, NodeLocation<Node>>> entries;
+        spliced->for_each_node([&](const auto& node, NodeId id,
+                                   std::optional<NodeId> parent, uint16_t slot) {
+            const auto owners_before = node.use_count();
+            entries.emplace_back(id, NodeLocation<Node>{node, parent, slot});
+            QCOMPARE(node.use_count(), owners_before);
+        });
+        QVERIFY(directory.rebuild(std::move(entries)));
+        QCOMPARE(directory.size(), visited);
+        spliced->for_each_node([&](const auto& node, NodeId id,
+                                   std::optional<NodeId> parent, uint16_t slot) {
+            const auto location = directory.locate(id);
+            QVERIFY(location.has_value());
+            QCOMPARE(location->node.lock().get(), node.get());
+            QCOMPARE(location->parent, parent);
+            QCOMPARE(location->child_slot, slot);
+        });
     }
 
     void push_single_item() {

@@ -512,6 +512,14 @@ edit routing, and no edit-speed claim is made. Next implement the directories
 and integrate `FragmentState`, preserving the old reconstruction path as the
 counted fallback and test oracle.
 
+**Progress (2026-10-20):** Added a persistent `NodeDirectory<Node>` primitive
+that stores weak node references and parent/slot metadata keyed by `NodeId`.
+Tests verify rebuild uniqueness, lookup topology, and that indexing does not
+increase node ownership (so the directory cannot trigger COW). It is currently
+tested with a stable-ID SumTree and is not yet owned by Buffer state. The
+changed-path route passed the focused `tst_sumtree` suite; the new header path
+is registered in `tools/verify_changed.py`.
+
 **Acceptance:**
 
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
