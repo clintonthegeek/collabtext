@@ -1212,6 +1212,30 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
         inserted_scalars += scalar_counts[i];
     }
 
+    // A single pure insertion at the retained tail has a fully determined
+    // FugueMax link: it is a right child of the last item with END as its right
+    // origin. Keep this common append case on the path-copied tree and update
+    // only the two persistent indexes instead of flattening/rebuilding every
+    // retained fragment. Any tombstone or marker after the visible tail falls
+    // back to the general placement algorithm below.
+    bool append_candidate = false;
+    std::optional<Identity> append_parent;
+    if (ranges.size() == 1 && ranges[0].first == ranges[0].second &&
+        ranges[0].first == visible_length() && scalar_counts[0] > 0 &&
+        m_fragment_indexes_valid && m_next_run_id != 0) {
+        if (m_fragment_tree.empty()) {
+            append_candidate = true;
+        } else {
+            const Fragment& tail = m_fragment_tree.last();
+            if (tail.visible && !tail.marker && tail.length > 0) {
+                // The tree tail check proves no retained item follows the
+                // minting parent, so no identity lookup is required.
+                append_candidate = true;
+                append_parent = tail.item_at(tail.length - 1);
+            }
+        }
+    }
+
     size_t retained_bytes = 0;
     auto add_retained = [&](size_t amount) {
         if (amount > SIZE_MAX - retained_bytes) return false;
@@ -1263,6 +1287,43 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
     undo_entry.operation_ids.push_back(op_identity);
     undo_entry.retained_bytes = retained_bytes;
     bool had_deletions = false;
+
+    if (append_candidate) {
+        const Link link{append_parent, Side::Right, std::nullopt};
+        const Identity origin(m_allocator->actor(), reserved.value());
+        op.timestamp = op_identity;
+        op.deletion_id = op_identity;
+        Fragment fragment(origin, link,
+                          static_cast<uint32_t>(new_text[0].size()),
+                          scalar_counts[0], new_text[0]);
+        fragment.visible = true;
+
+        auto tree = m_fragment_tree;
+        const uint64_t ordinal = tree.summary().retained_runs;
+        tree.push_item(std::move(fragment));
+        auto origins = m_origin_index;
+        auto runs = m_run_directory;
+        const uint64_t end = origin.counter + scalar_counts[0];
+        const RunId run = m_next_run_id;
+        if (origins.insert(origin.actor, origin.counter, end, run) &&
+            runs.insert(run, ordinal)) {
+            for (uint32_t i = 0; i < scalar_counts[0]; ++i)
+                undo_entry.inserted_keys.emplace_back(
+                    Identity(origin.actor, origin.counter + i));
+            op.inserted_fragments.push_back(
+                {origin, link, new_text[0], scalar_counts[0], false});
+            Diagnostics::record(Diagnostics::Counter::fragment_index_publications);
+            Diagnostics::record(Diagnostics::Counter::origin_index_rows_inserted);
+            m_fragment_tree = std::move(tree);
+            m_origin_index = std::move(origins);
+            m_run_directory = std::move(runs);
+            m_next_run_id = run == UINT64_MAX ? 0 : run + 1;
+            m_version.observe(op_identity);
+            commit_local_history(std::move(undo_entry));
+            if (m_on_change) m_on_change();
+            return Operation(std::move(op));
+        }
+    }
 
     // Track actually-deleted character timestamps for building deletion_runs.
     std::vector<Identity> deleted_timestamps;

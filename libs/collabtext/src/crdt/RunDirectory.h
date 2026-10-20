@@ -28,6 +28,18 @@ public:
         return *entry;
     }
 
+    bool insert(RunId run, uint64_t ordinal) {
+        if (!run || m_entries.find(run)) return false;
+        m_entries = m_entries.insert_or_assign(run, ordinal);
+        return true;
+    }
+
+    bool erase(RunId run) {
+        if (!m_entries.find(run)) return false;
+        m_entries = m_entries.erase(run);
+        return true;
+    }
+
     bool rebuild(std::vector<std::pair<RunId, uint64_t>> entries) {
         std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) {
             return a.first < b.first;

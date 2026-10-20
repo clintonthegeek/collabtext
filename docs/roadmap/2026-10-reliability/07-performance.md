@@ -520,6 +520,26 @@ tested with a stable-ID SumTree and is not yet owned by Buffer state. The
 changed-path route passed the focused `tst_sumtree` suite; the new header path
 is registered in `tools/verify_changed.py`.
 
+**Progress (2026-10-20):** The first Buffer path now bypasses reconstruction
+for a single pure local insertion at the retained tail when the tail item is
+also the visible end. Its link is provably a right child of the final item
+with END as the right origin. The candidate tree is path-copied, and only the
+new origin and run-directory rows are published. Diagnostic coverage over an
+aged 128-run state asserts zero fragment snapshots, zero tree rebuild items,
+zero placement-index builds, and one tree push/index publication; peer replay
+preserves the text. Intervening retained tombstones/markers and every other
+shape still use the general path. This is a proven work-count reduction for
+that exact case, not a latency claim; the paired performance workload remains
+required. After this change, the registered 33-suite Debug changed-path route
+passed 33/33, including sequence differential/model, convergence, undo,
+markers, checkpoints, GC, Buffer, index, and verification-tool coverage. The
+new branch's explicit work-count test is in `tst_perf_diagnostics`. Release and
+ASan checks also passed: the focused Release route passed 4/4; the leak-enabled
+ASan/UBSan route passed 3/3 outside the sandbox after the sandboxed run hit its
+ptrace restriction. The diagnostics target is not built in the ASan
+configuration. No paired latency measurement has been run, so this remains a
+work-count claim only.
+
 **Acceptance:**
 
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.

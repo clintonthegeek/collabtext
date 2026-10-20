@@ -12,6 +12,51 @@ using namespace CollabText::Crdt;
 class TestPerfDiagnostics : public QObject {
     Q_OBJECT
 private slots:
+    void local_tail_insert_skips_fragment_flatten_and_rebuild() {
+        Buffer buffer(CollabText::Test::test_counter(29));
+        std::vector<Operation> seed;
+        seed.reserve(128);
+        for (uint32_t i = 0; i < 128; ++i) {
+            auto appended = buffer.try_apply_local_edit({{i, i}}, {"x"});
+            QVERIFY(appended);
+            seed.push_back(std::move(appended).value());
+        }
+        QCOMPARE(buffer.fragment_count(), size_t{128});
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto appended = buffer.try_apply_local_edit({{128, 128}}, {"y"});
+        Diagnostics::end_sample();
+        QVERIFY(appended);
+        QCOMPARE(buffer.text(), std::string(128, 'x') + "y");
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshot_items),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::placement_index_builds), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::origin_index_rows_inserted),
+                 uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_publications),
+                 uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::sumtree_items_pushed),
+                 uint64_t{1});
+
+        Buffer peer(CollabText::Test::test_counter(30));
+        const auto seeded = peer.apply_ops(seed);
+        QCOMPARE(seeded.size(), seed.size());
+        const auto delivered = peer.apply_ops({appended.value()});
+        QCOMPARE(delivered.size(), size_t{1});
+        QCOMPARE(peer.text(), buffer.text());
+        const auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string(128, 'x'));
+    }
+
     void fragment_mutation_updates_only_changed_index_rows() {
         Buffer buffer(CollabText::Test::test_counter(20));
         QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {"abcdef"}));

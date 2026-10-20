@@ -60,6 +60,15 @@ void CrdtIndexesTest::stableRunHandlesResolveNewOrdinalsWithoutChangingOldSnapsh
     QVERIFY(old_state.rebuild({{101, 0}, {303, 1}}));
     QCOMPARE(old_state.ordinal(303).value(), uint64_t{1});
 
+    auto appended = old_state;
+    QVERIFY(appended.insert(707, 2));
+    QCOMPARE(appended.ordinal(707).value(), uint64_t{2});
+    QVERIFY(!appended.insert(303, 3));
+    QVERIFY(!appended.insert(0, 3));
+    QVERIFY(appended.erase(707));
+    QVERIFY(!appended.ordinal(707).has_value());
+    QCOMPARE(old_state.ordinal(303).value(), uint64_t{1});
+
     RunDirectory next_state;
     QVERIFY(next_state.rebuild({{101, 0}, {707, 1}, {303, 2}}));
     QCOMPARE(next_state.ordinal(303).value(), uint64_t{2});

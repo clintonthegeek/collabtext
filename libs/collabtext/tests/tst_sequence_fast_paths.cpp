@@ -236,7 +236,9 @@ void SequenceFastPathsTest::retired_local_origin_append_matches_general_placemen
     QVERIFY(same(author.fragments(), slow));
     QCOMPARE(author.text(), std::string("a🙂"));
     const auto counts = SequenceOrder::integration_counters();
-    QCOMPARE(counts.append_fast, uint64_t(2));
+    // Buffer now handles the proven local tail case directly in the tree, so
+    // only the two explicit slow reference integrations are counted here.
+    QCOMPARE(counts.append_fast, uint64_t(0));
     QCOMPARE(counts.general, uint64_t(2)); // the two forced-reference inserts above
 
     const auto fast_items = positions(author.fragments());
