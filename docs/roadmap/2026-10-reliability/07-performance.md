@@ -229,6 +229,7 @@ validator and strict scope checker pass.
 - `libs/collabtext/tests/tst_incremental_model.cpp`
 - `libs/collabtext/CMakeLists.txt`
 - `tools/verify_changed.py`
+- `tools/test_verify_changed.py`
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
 - `docs/roadmap/2026-10-reliability/TASKS.json`
@@ -357,8 +358,11 @@ Detailed ratios, load caveats, and raw artifacts are in the linked report.
 - `libs/collabtext/src/crdt/DeletionIndex.h`
 - `libs/collabtext/src/crdt/PersistentAvlMap.h`
 - `libs/collabtext/src/crdt/Buffer.cpp`
+- `libs/collabtext/src/crdt/Fragment.h`
 - `libs/collabtext/src/crdt/IdList.cpp`
 - `libs/collabtext/tests/tst_crdt_indexes.cpp`
+- `libs/collabtext/tests/tst_summary_laws.cpp`
+- `libs/collabtext/tests/tst_perf_diagnostics.cpp`
 - `libs/collabtext/CMakeLists.txt`
 - `tools/verify_changed.py`
 - `docs/specs/vnext-performance-targets.md`
@@ -386,9 +390,13 @@ existing fragment-tree publication. Remote deletion resolves matching retained
 intervals from the origin index and applies splits right-to-left. Per-snapshot
 ordinal handles are temporary and are rebuilt after each whole-tree mutation;
 stable tree/run handles and incremental mutation maintenance remain open.
-Local undo/redo and remote undo now use origin/deletion incidences to limit
-visibility recomputation to affected runs, while the current tree still has to
-be traversed to update summaries. No end-to-end performance claim is made yet.
+Local undo/redo and remote undo use origin/deletion incidences to identify the
+affected ordinals, then seek by the retained-run SumTree summary and edit only
+those paths. A stale ordinal falls back to full visibility recomputation. The
+summary adds one `uint64_t` per aggregate; its memory and byte-control cost have
+not been measured yet. Structural edits still flatten/rebuild the tree and both
+indexes, and stable NodeId/RunId directories and incremental maintenance remain
+open. No end-to-end performance claim is made yet.
 See the current X04 entry in TASKS.json.
 
 ## X05 — Replace whole-fragment text rebuilds with transactional splices

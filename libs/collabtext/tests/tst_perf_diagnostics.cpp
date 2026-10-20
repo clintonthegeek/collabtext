@@ -175,6 +175,8 @@ private slots:
         QCOMPARE(inserted.text(), std::string("abcdef"));
         QCOMPARE(Diagnostics::snapshot().get(
                      Diagnostics::Counter::visibility_recomputations), uint64_t{1});
+        QCOMPARE(Diagnostics::snapshot().get(
+                     Diagnostics::Counter::sumtree_items_visited), uint64_t{0});
 
         Buffer deleted(CollabText::Test::test_counter(23));
         deleted.apply_ops({initial.value()});
@@ -190,6 +192,8 @@ private slots:
         QCOMPARE(deleted.text(), std::string("abcdef"));
         QCOMPARE(Diagnostics::snapshot().get(
                      Diagnostics::Counter::visibility_recomputations), uint64_t{1});
+        QCOMPARE(Diagnostics::snapshot().get(
+                     Diagnostics::Counter::sumtree_items_visited), uint64_t{0});
     }
 };
 

@@ -212,12 +212,27 @@ void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
         first_index = end_index;
     }
     if (affected.empty()) return;
-    size_t run = 0;
-    m_fragment_tree.for_each_mut([&](Fragment& fragment) {
-        ++run;
-        if (affected.contains(static_cast<RunId>(run)))
+    bool stale_run_index = false;
+    for (const RunId run : affected) {
+        if (run == 0) {
+            stale_run_index = true;
+            break;
+        }
+        const RetainedRunOffset offset{run - 1};
+        const bool edited = m_fragment_tree.edit_item<RetainedRunOffset>(
+            offset, [this](Fragment& fragment) {
+                fragment.visible = fragment.compute_visible(m_undo_map);
+            });
+        if (!edited) {
+            stale_run_index = true;
+            break;
+        }
+    }
+    if (stale_run_index) {
+        m_fragment_tree.for_each_mut([this](Fragment& fragment) {
             fragment.visible = fragment.compute_visible(m_undo_map);
-    });
+        });
+    }
 }
 
 std::vector<Fragment> Buffer::fragments() const {

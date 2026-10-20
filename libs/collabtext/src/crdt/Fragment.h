@@ -34,6 +34,7 @@ namespace CollabText::Crdt {
 struct FragmentSummary {
     uint64_t visible_bytes = 0;    ///< Total visible bytes in subtree (overflow checked at API boundary)
     uint32_t deleted_bytes = 0;    ///< Total deleted (invisible) bytes in subtree
+    uint64_t retained_runs = 0;    ///< Number of retained Fragment items in subtree
     // All public text coordinates are int/uint32 byte offsets, so the usable
     // visible UTF-16 range also fits this width.
     uint32_t visible_utf16 = 0;    ///< Visible UTF-16 code units
@@ -44,6 +45,7 @@ struct FragmentSummary {
         Diagnostics::record(Diagnostics::Counter::fragment_summary_compositions);
         visible_bytes += other.visible_bytes;
         deleted_bytes += other.deleted_bytes;
+        retained_runs += other.retained_runs;
         visible_utf16 += other.visible_utf16;
     }
 };
@@ -87,6 +89,17 @@ struct VisibleUtf16Offset {
     }
     auto operator<=>(const VisibleUtf16Offset& other) const { return units <=> other.units; }
     bool operator==(const VisibleUtf16Offset& other) const { return units == other.units; }
+};
+
+/// Seek by zero-based retained fragment ordinal, including hidden fragments.
+struct RetainedRunOffset {
+    uint64_t value = 0;
+
+    static RetainedRunOffset zero() { return {}; }
+    void add_summary(const FragmentSummary& s) { value += s.retained_runs; }
+
+    auto operator<=>(const RetainedRunOffset&) const = default;
+    bool operator==(const RetainedRunOffset&) const = default;
 };
 
 // ============================================================================
@@ -326,6 +339,7 @@ struct Fragment {
     /// Uses the cached `visible` flag for byte accounting.
     FragmentSummary summary() const {
         FragmentSummary s;
+        s.retained_runs = 1;
         uint32_t bytes = byte_length;
         if (visible) {
             s.visible_bytes = bytes;

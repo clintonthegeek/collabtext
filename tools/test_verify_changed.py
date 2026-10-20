@@ -62,6 +62,14 @@ class VerificationTests(unittest.TestCase):
             self.assertRegex(test, '^' + regex + '$')
         self.assertFalse(package)
 
+    def test_fragment_summary_routes_tree_and_summary_tests(self):
+        routes, package = verify.route(['libs/collabtext/src/crdt/Fragment.h'])
+        regex = next(iter(routes.values()))
+        import re
+        for test in ('tst_buffer', 'tst_summary_laws', 'tst_sumtree', 'tst_positions'):
+            self.assertRegex(test, '^' + regex + '$')
+        self.assertFalse(package)
+
     def test_idlist_routes_whole_family(self):
         routes, _ = verify.route(['libs/collabtext/src/crdt/IdList.cpp'])
         for test in ('tst_idlist', 'tst_idlist_undo', 'tst_idlist_anchor',
@@ -78,7 +86,7 @@ class VerificationTests(unittest.TestCase):
         routes, _ = verify.route(['libs/collabtext/tests/tst_identity_allocation_model.cpp'])
         self.assertEqual(next(iter(routes.values())), 'tst_identity_allocation_model')
         routes, _ = verify.route(['libs/collabtext/tests/tst_perf_diagnostics.cpp'])
-        self.assertEqual(next(iter(routes.values())), 'tst_(buffer|positions)')
+        self.assertEqual(next(iter(routes.values())), 'tst_(buffer|positions|perf_diagnostics)')
 
     def test_boundary_model_change_is_narrow_and_fixture_changes_are_executable(self):
         # BoundaryModel.h is consumed by two independent model tests since S02:

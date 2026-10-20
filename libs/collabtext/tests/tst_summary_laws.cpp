@@ -200,17 +200,19 @@ private slots:
         // Identity, associativity, and commutativity of the cached aggregate.
         const FragmentSummary empty = FragmentSummary::zero();
 
-        auto summary_for = [](uint64_t visible, uint32_t deleted, uint32_t utf16) {
+        auto summary_for = [](uint64_t visible, uint32_t deleted, uint32_t utf16,
+                              uint64_t retained_runs) {
             FragmentSummary s;
             s.visible_bytes = visible;
             s.deleted_bytes = deleted;
             s.visible_utf16 = utf16;
+            s.retained_runs = retained_runs;
             return s;
         };
 
-        const FragmentSummary a = summary_for(10, 1, 8);
-        const FragmentSummary b = summary_for(20, 2, 16);
-        const FragmentSummary c = summary_for(30, 3, 25);
+        const FragmentSummary a = summary_for(10, 1, 8, 1);
+        const FragmentSummary b = summary_for(20, 2, 16, 2);
+        const FragmentSummary c = summary_for(30, 3, 25, 3);
 
         // Identity
         FragmentSummary with_empty = a;
@@ -218,6 +220,7 @@ private slots:
         QCOMPARE(with_empty.visible_bytes, a.visible_bytes);
         QCOMPARE(with_empty.deleted_bytes, a.deleted_bytes);
         QCOMPARE(with_empty.visible_utf16, a.visible_utf16);
+        QCOMPARE(with_empty.retained_runs, a.retained_runs);
 
         // Commutative
         FragmentSummary ab = a; ab.add_summary(b);
@@ -225,6 +228,7 @@ private slots:
         QCOMPARE(ab.visible_bytes, ba.visible_bytes);
         QCOMPARE(ab.deleted_bytes, ba.deleted_bytes);
         QCOMPARE(ab.visible_utf16, ba.visible_utf16);
+        QCOMPARE(ab.retained_runs, ba.retained_runs);
 
         // Associative
         FragmentSummary left = ab; left.add_summary(c);
@@ -234,6 +238,8 @@ private slots:
         QCOMPARE(left.visible_bytes, right.visible_bytes);
         QCOMPARE(left.deleted_bytes, right.deleted_bytes);
         QCOMPARE(left.visible_utf16, right.visible_utf16);
+        QCOMPARE(left.retained_runs, uint64_t{6});
+        QCOMPARE(left.retained_runs, right.retained_runs);
     }
 
     void visible_byte_overflow_is_observable_to_range_validation() {
