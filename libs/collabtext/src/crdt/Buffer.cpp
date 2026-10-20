@@ -282,6 +282,57 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
                                run_directory_valid && run_ids_valid;
 }
 
+bool Buffer::try_append_fragment(Fragment fragment) {
+    if (!m_fragment_indexes_valid || !m_next_run_id || !fragment.length ||
+        !fragment.origin.actor.valid() || !fragment.origin.counter ||
+        fragment.length > UINT64_MAX - fragment.origin.counter ||
+        fragment.link.side != Side::Right || fragment.link.right_origin)
+        return false;
+
+    if (m_fragment_tree.empty()) {
+        if (fragment.link.parent) return false;
+    } else {
+        const Fragment& tail = m_fragment_tree.last();
+        if (tail.length == 0 ||
+            fragment.link.parent !=
+                std::optional<Identity>{tail.item_at(tail.length - 1)})
+            return false;
+    }
+
+    fragment.visible = fragment.compute_visible(m_undo_map);
+    if (!fragment.utf16_index_ready) fragment.rebuild_utf16_index();
+
+    const RunId run = m_next_run_id;
+    const uint64_t ordinal = m_fragment_tree.summary().retained_runs;
+    const uint64_t end = fragment.origin.counter + fragment.length;
+    auto tree = m_fragment_tree;
+    tree.push_item(std::move(fragment));
+    auto origins = m_origin_index;
+    auto deletions = m_deletion_index;
+    auto runs = m_run_directory;
+    const Fragment& appended = tree.last();
+    if (!origins.insert(appended.origin.actor, appended.origin.counter,
+                        end, run) || !runs.insert(run, ordinal))
+        return false;
+    const size_t deletion_rows = appended.deletions.size();
+    for (const auto& deletion : appended.deletions) {
+        if (!deletions.insert(deletion, appended.origin.actor,
+                              appended.origin.counter, end, run))
+            return false;
+    }
+
+    Diagnostics::record(Diagnostics::Counter::fragment_index_publications);
+    Diagnostics::record(Diagnostics::Counter::origin_index_rows_inserted);
+    Diagnostics::record(Diagnostics::Counter::deletion_index_rows_inserted,
+                        deletion_rows);
+    m_fragment_tree = std::move(tree);
+    m_origin_index = std::move(origins);
+    m_deletion_index = std::move(deletions);
+    m_run_directory = std::move(runs);
+    m_next_run_id = run == UINT64_MAX ? 0 : run + 1;
+    return true;
+}
+
 void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
     if (!m_fragment_indexes_valid) {
         m_fragment_tree.for_each_mut([this](Fragment& fragment) {
@@ -1297,27 +1348,12 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
                           static_cast<uint32_t>(new_text[0].size()),
                           scalar_counts[0], new_text[0]);
         fragment.visible = true;
-
-        auto tree = m_fragment_tree;
-        const uint64_t ordinal = tree.summary().retained_runs;
-        tree.push_item(std::move(fragment));
-        auto origins = m_origin_index;
-        auto runs = m_run_directory;
-        const uint64_t end = origin.counter + scalar_counts[0];
-        const RunId run = m_next_run_id;
-        if (origins.insert(origin.actor, origin.counter, end, run) &&
-            runs.insert(run, ordinal)) {
+        if (try_append_fragment(std::move(fragment))) {
             for (uint32_t i = 0; i < scalar_counts[0]; ++i)
                 undo_entry.inserted_keys.emplace_back(
                     Identity(origin.actor, origin.counter + i));
             op.inserted_fragments.push_back(
                 {origin, link, new_text[0], scalar_counts[0], false});
-            Diagnostics::record(Diagnostics::Counter::fragment_index_publications);
-            Diagnostics::record(Diagnostics::Counter::origin_index_rows_inserted);
-            m_fragment_tree = std::move(tree);
-            m_origin_index = std::move(origins);
-            m_run_directory = std::move(runs);
-            m_next_run_id = run == UINT64_MAX ? 0 : run + 1;
             m_version.observe(op_identity);
             commit_local_history(std::move(undo_entry));
             if (m_on_change) m_on_change();

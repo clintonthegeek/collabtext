@@ -306,6 +306,9 @@ private:
 
     /// Rebuild the fragment tree from a vector of fragments (preserves order).
     void set_fragments(std::vector<Fragment>&& frags);
+    /// Publish a proven retained-tail append by path-copying the tree and
+    /// inserting only the new persistent index rows.
+    bool try_append_fragment(Fragment fragment);
     void recompute_visibility_for(const std::vector<Identity>& identities);
 
     /// Find the fragment index and byte offset within that fragment for a
