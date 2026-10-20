@@ -6,9 +6,9 @@ As of 2026-10-20. Performance work is executing in the isolated
 completed phase procedures are history, not work to repeat.
 
 The selected local lane is **[07 — measured performance](07-performance.md)**.
-X01 and X02 established the benchmark and profile; X07a is complete. The next
-eligible performance task is **X04a**, whose independent model/design gate must
-pass before dependent index implementation. The user requested an implementable optimization plan after
+X01, X02, X07a, and the X04a design/model gate are complete. The next
+performance task is **X07**, summary-guided UTF-16 rank/seek. Its implementation
+uses the X04a contract and must preserve the independent model gates. The user requested an implementable optimization plan after
 [the new evaluation](../../reports/2026-10-19-performance-evaluation.md).
 The frozen source baseline is `d04f151b3a70b161b72c33a8de6895efbd1c13e2`.
 Follow the exact serial order and measurement/disposition rules in

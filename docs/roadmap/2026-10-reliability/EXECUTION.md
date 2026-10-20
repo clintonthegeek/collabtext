@@ -1,8 +1,8 @@
 # Selected performance lane — 2026-10-20
 
-X01 and X02 are complete, and X07a has now passed its implementation, model,
-measurement and Arc A acceptance gates. Continue with X04a in
-[07-performance.md](07-performance.md), subject to its independent-model gate.
+X01, X02, X07a and X04a are complete. Continue with X07 in
+[07-performance.md](07-performance.md), following the accepted X04a design and
+its independent-model invariants.
 Use
 [the target contract](../../specs/vnext-performance-targets.md) for paired
 measurement, expected improvements, design gates, miss dispositions and arc A/B/C

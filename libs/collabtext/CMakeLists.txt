@@ -440,6 +440,17 @@ target_include_directories(tst_fuguemax_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR
 target_compile_definitions(tst_fuguemax_model PRIVATE
     COLLABTEXT_SEQUENCE_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/sequence-semantics")
 add_test(NAME tst_fuguemax_model COMMAND tst_fuguemax_model)
+# X04a's independent transaction/index interpreter uses scalar vectors and
+# simple maps only; it has no production Core, SumTree, or placement dependency.
+add_executable(tst_incremental_model
+    tests/tst_incremental_model.cpp
+    ../../tests/performance-model/incremental-model.cpp)
+target_link_libraries(tst_incremental_model PRIVATE Qt6::Test)
+target_include_directories(tst_incremental_model PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/performance-model)
+add_test(NAME tst_incremental_model COMMAND tst_incremental_model)
 # S03 drives the PRODUCTION engines through the same S01 fixtures, against the
 # same exact-content oracle. It is the counterpart to tst_sequence_model, not a
 # variant of it: one runs the reference interpreter, the other runs the engine.

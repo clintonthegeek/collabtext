@@ -10,7 +10,7 @@
     "placement": "FugueMax",
     "spec": "docs/specs/vnext-sequence-algorithm.md#0",
     "next": [
-      "X04a"
+      "X07"
     ],
     "unblocked_not_next": [
       "G03",
@@ -4345,11 +4345,14 @@
       "files": [
         "docs/specs/vnext-incremental-index-design.md",
         "tests/performance-model/incremental-model.cpp",
+        "tests/performance-model/incremental-model.h",
         "libs/collabtext/tests/tst_incremental_model.cpp",
         "libs/collabtext/CMakeLists.txt",
         "tools/verify_changed.py",
         "docs/specs/vnext-performance-targets.md",
-        "docs/roadmap/2026-10-reliability/07-performance.md"
+        "docs/roadmap/2026-10-reliability/07-performance.md",
+        "docs/roadmap/2026-10-reliability/TASKS.json",
+        "docs/reports/vnext-task-log.md"
       ],
       "steps": [
         "Use X02 evidence to write the exact private tree/index design before mutation code: ownership, stable handles, origin intervals, deletion incidence, summaries, split/splice/visibility algorithms, invalidation and complexity. Define how handles survive copy-on-write and node split; raw addresses into movable vector/tree storage are forbidden.",
@@ -4370,10 +4373,18 @@
         "R10"
       ],
       "gate": "Complete the written algorithms and independent transaction/index model before dependent summary, index or mutation implementation.",
-      "status": "in_progress",
+      "status": "complete",
       "baseline_revision": "d04f151b3a70b161b72c33a8de6895efbd1c13e2",
       "work_started_revision": "624cd9d",
-      "progress_2026_10_20": "Started after X07a completion. Beginning source audit and written private tree/index transaction design; no production mutation or index code will be changed before the design and independent model gate passes."
+      "progress_2026_10_20": "Complete. The code audit and candidate private tree/index design are in docs/specs/vnext-incremental-index-design.md. It specifies state-local stable node/run handles, persistent AVL maps, origin/deletion intervals, B+ occupancy/split/join/rebalance rules, summaries, transactional publication, mutator update/refusal tables, rebuild/reconstruction fallbacks and complexity/memory obligations. tst_incremental_model is an independent QtTest-only scalar/map oracle with exhaustive split/splice/delete/undo/marker/collection traces, exact identity-index checks, summary laws and preparation-failure injection. No production mutation/index code changed.",
+      "verification_results": {
+        "model_debug_release": "tst_incremental_model passes in both modes: 2,401 short traces / 9,604 events / 57,624 injected failures; 12 seeded traces x 300 events, repeated twice. Digests match: short 9d75f9d96759adb3; seeded 475a667e6cee8102.",
+        "independent_models": "tst_sequence_model, tst_boundary_model, and tst_incremental_model pass Debug and Release (3/3 each).",
+        "changed_debug": "101/101 selected correctness tests, including tst_incremental_model; verification/20261020T002247Z-changed-1frw1ugc. Debug relocated Core package gate passed 3/3 at build-consumer-verify/debug-package-20261020T002304Z-2135.",
+        "changed_release": "101/101 selected correctness tests, including tst_incremental_model; verification/20261020T002319Z-changed-0d396waq. Release relocated Core package gate passed 3/3 at build-consumer-verify/release-package-20261020T002331Z-2528.",
+        "tooling_plan_scope": "test_verify_changed 16/16; test_run_performance_matrix 3/3; validate-plan.py and check-scope.py --strict pass.",
+        "design_limits": "This is a design/model gate only. No production index/tree mutation, sanitizer, performance, or live consumer acceptance is claimed; those belong to dependent implementation/arc tasks."
+      }
     },
     {
       "id": "X07",

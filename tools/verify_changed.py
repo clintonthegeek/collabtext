@@ -32,6 +32,8 @@ ROUTES = [
     ('docs/reports/2026-10-19-x01-baseline/raw/*', 'tst_verification_tools'),
     ('docs/reports/2026-10-19-x02-profile/raw/*', 'tst_verification_tools'),
     ('docs/reports/2026-10-19-x07a/raw/*', 'tst_verification_tools'),
+    ('tests/performance-model/incremental-model.*', 'tst_incremental_model'),
+    ('libs/collabtext/tests/tst_incremental_model.cpp', 'tst_incremental_model'),
     *[(f'docs/reports/2026-10-19-performance/{name}', 'tst_verification_tools')
       for name in PERFORMANCE_EVIDENCE],
     ('.gitignore', ''), ('*.md', ''), ('docs/*.json', ''),

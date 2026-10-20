@@ -4,7 +4,7 @@ Plan date: 2026-10-19. This is an implementation/evaluation contract, not a clai
 that the targets are achieved or a promise of latency on every machine.
 Authoritative tasks: [07-performance.md](../roadmap/2026-10-reliability/07-performance.md)
 and [TASKS.json](../roadmap/2026-10-reliability/TASKS.json).
-X01, X02 and X07a are complete; X04a is active. The complete serial order is in the phase file and registry.
+X01, X02, X07a and X04a are complete; X07 is active. The complete serial order is in the phase file and registry.
 
 ## Baseline that must remain reproducible
 

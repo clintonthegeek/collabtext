@@ -213,7 +213,7 @@ validator and strict scope checker pass.
 
 ## X04a — Specify and model incremental tree and index transactions
 
-**Status:** in progress; source audit and design/model gate are active (see TASKS.json).
+**Status:** complete; design and independent model gate passed (see TASKS.json).
 **Depends on:** X07a, S03, S07, P03
 **Coverage:** R6, R7, R8, R10
 
@@ -221,11 +221,14 @@ validator and strict scope checker pass.
 
 - `docs/specs/vnext-incremental-index-design.md`
 - `tests/performance-model/incremental-model.cpp`
+- `tests/performance-model/incremental-model.h`
 - `libs/collabtext/tests/tst_incremental_model.cpp`
 - `libs/collabtext/CMakeLists.txt`
 - `tools/verify_changed.py`
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
+- `docs/roadmap/2026-10-reliability/TASKS.json`
+- `docs/reports/vnext-task-log.md`
 
 **Steps:**
 

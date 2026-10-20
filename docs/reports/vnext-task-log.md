@@ -3322,3 +3322,45 @@ and a written design/model for tree/index ownership, transactional mutation,
 summary invalidation, and explicit fallback behavior. No production index or
 mutation changes are permitted until the written design and independent model
 pass.
+
+
+## 2026-10-20 — X04a design/model gate in progress
+
+The code audit found that `Buffer` keeps a canonical retained-order
+`SumTree<Fragment>`, while structural edits still flatten/rebuild a vector;
+`SequenceOrder` builds an actor/counter lookup per integration; remote deletion
+scans runs; undo/redo recomputes all visibility. `SumTree` is COW but exposes no
+stable node IDs, parent directory or run locator. The proposed design records
+state-local stable handles, persistent AVL directory/index maps, exact B+ node
+split/join/rebalance rules, interval origin/deletion indexes, summary laws,
+transaction publication, per-mutator index obligations and counted rebuild
+fallbacks in `docs/specs/vnext-incremental-index-design.md`.
+
+An independent model is registered as `tst_incremental_model`; it links QtTest
+only and uses scalar vectors/simple maps, not production tree, placement or
+index code. Debug and Release each pass 2,401 short traces (9,604 operations),
+57,624 injected preparation failures, and 12 seeded traces × 300 steps replayed
+twice. Digests match: `9d75f9d96759adb3` (short) and `475a667e6cee8102` (seeded).
+Existing independent `tst_sequence_model` and `tst_boundary_model` also pass in
+Debug and Release. Design review, verifier routing and plan/scope closeout remain
+before X04a can complete; no production mutation/index implementation has begun.
+
+
+## 2026-10-20 — X04a design/model gate complete; X07 next
+
+The candidate design is finalized in `docs/specs/vnext-incremental-index-design.md`.
+It resolves stable FragmentSlot/NodeId/RunId ownership, persistent AVL index
+updates, exact B+ split/join/borrow/merge rules, identity-to-rank lookup, deletion
+incidence, summary laws, mutator rebuild rules, typed refusal boundaries,
+transaction publication, and counted fallback behavior. The independent model
+uses scalar vectors and ordinary maps only; it does not call production tree,
+placement, visibility or index code.
+
+`tests/performance-model/incremental-model.cpp` and
+`libs/collabtext/tests/tst_incremental_model.cpp` pass Debug and Release with
+matching deterministic digests. The three independent sequence/boundary/index
+models pass 3/3 in both modes. Changed-path verification passes 101/101 in Debug
+and Release, with relocated Core package gates passing 3/3 in each mode.
+`test_verify_changed.py` passes 16/16, `test_run_performance_matrix.py` 3/3,
+and plan/scope validators pass. Full evidence paths are recorded in TASKS.json.
+No production index or tree mutation was implemented in X04a. X07 is now next.
