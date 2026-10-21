@@ -624,6 +624,19 @@ including model, convergence, recovery, gap, Buffer, and diagnostics suites.
 This replacement slice has not yet been paired-measured and does not meet X05
 acceptance.
 
+The first paired evaluation of that replacement slice is recorded in
+[`2026-10-21-x05-complete-run-replacement-paired`](../../reports/2026-10-21-x05-complete-run-replacement-paired/README.md).
+Across five public Release pairs, all 54 fingerprints matched. The public
+10-KB/3,000-prior-replacement mean improved 23% (median paired ratio 0.771),
+but p50 improved inconsistently (paired ratio 0.907) and p99 did not
+consistently improve (paired ratio 1.020); median per-run p99 remains about
+20 ms. Light-history public mean regressed 5.5%, inside the 10% mean guard, but
+the powersave host was noisy. This is a directional partial gain, not X05
+acceptance: the 5x mean and 2 ms p99 targets remain unmet, and mixed-tombstone
+acceptance was not measured. The narrow complete-run path does not remove the
+dominant cost in the public aged replacement workload; broaden transactional
+splicing and measure fallback/work counts.
+
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
 - Target at least 5x lower aged 10-KB/3000-prior-replacement mean and median per-run p99 at most 2 ms in a comparable paired environment; target at least 2x lower mixed 5-KB/50%-deletion mean, with no more than 10% regression in light-history cases.
 
