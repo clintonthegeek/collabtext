@@ -601,6 +601,21 @@ claim.
 
 Run Buffer/SumTree/sequence/position/undo/GC/recovery/gap/marker routed suites and independent models with fixed replayable seeds; run five paired edit/tombstone/merge workloads. Finish arc B gates after X08.
 
+**Progress (2026-10-21):** A first indexed middle-insert slice now handles a
+single pure insertion at a retained fragment boundary when the predecessor and
+successor prove its exact adjacent FugueMax slot. It resolves identities and
+retained rank through the stable origin/run/node directories, then stages a
+path-copied tree insertion and affected index rows before publishing. Ambiguous
+or interior-run placements keep the reconstruction fallback. A 128-run
+diagnostic verifies local output, peer replay, undo/redo, a subsequent indexed
+delete, and zero fragment snapshots, tree rebuild items, full index rebuilds,
+or placement-index builds. The affected model-sensitive Debug route passes
+31/31; focused Release perf diagnostics pass 1/1; leak-enabled ASan Buffer
+passes 1/1 when run outside the sandbox's ptrace restriction (the sandbox run
+passed all 66 assertions before LeakSanitizer's environment failure). This is
+work-count evidence, not yet paired latency evidence; remote middle edits and
+general replacements remain unimplemented.
+
 ## X06 — Compact in-memory undo and deletion bookkeeping by intervals
 
 **Status:** see TASKS.json (not started)

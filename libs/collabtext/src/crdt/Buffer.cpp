@@ -14,6 +14,8 @@
 
 namespace CollabText::Crdt {
 
+static uint32_t count_utf8_chars(const std::string&, uint32_t);
+
 namespace {
 BufferFragmentTree make_buffer_fragment_tree() {
     auto node_ids = StableNodeIds::create();
@@ -386,6 +388,167 @@ bool Buffer::try_append_fragment(Fragment fragment) {
     Diagnostics::record(Diagnostics::Counter::origin_index_rows_inserted);
     Diagnostics::record(Diagnostics::Counter::deletion_index_rows_inserted,
                         deletion_rows);
+    m_fragment_tree = std::move(tree);
+    m_node_directory = std::move(nodes);
+    m_origin_index = std::move(origins);
+    m_deletion_index = std::move(deletions);
+    m_run_directory = std::move(runs);
+    m_next_run_id = run == UINT64_MAX ? 0 : run + 1;
+    return true;
+}
+
+std::optional<Buffer::LocatedRunItem>
+Buffer::locate_retained_identity(Identity identity) const {
+    if (!m_fragment_indexes_valid) return std::nullopt;
+    const auto interval = m_origin_index.locate(identity);
+    if (!interval) return std::nullopt;
+    const auto location = m_run_directory.locate(interval->run);
+    if (!location) return std::nullopt;
+    const auto node = m_node_directory.locate(location->leaf);
+    if (!node) return std::nullopt;
+    auto leaf = node->node.lock();
+    if (!leaf || leaf->node_id != location->leaf || !leaf->is_leaf() ||
+        location->slot >= leaf->leaf().count)
+        return std::nullopt;
+    const auto& fragment = leaf->leaf().items[location->slot];
+    if (fragment.origin.actor != identity.actor ||
+        identity.counter < fragment.origin.counter ||
+        identity.counter - fragment.origin.counter >= fragment.length ||
+        interval->run != m_origin_index.find_interval_start(
+            fragment.origin.actor, fragment.origin.counter).value_or(0))
+        return std::nullopt;
+    const auto rank = m_node_directory.rank_of_item<RetainedRunOffset>(
+        m_fragment_tree.root_node(), location->leaf, location->slot, leaf);
+    if (!rank) return std::nullopt;
+    return LocatedRunItem{std::move(leaf), &fragment,
+        static_cast<uint32_t>(identity.counter - fragment.origin.counter), rank->value};
+}
+
+bool Buffer::is_descendant_identity(Identity item, Identity ancestor) const {
+    if (item == ancestor) return true;
+    const size_t limit = m_run_directory.size() + 1;
+    for (size_t depth = 0; depth < limit; ++depth) {
+        const auto located = locate_retained_identity(item);
+        if (!located) return false;
+        if (ancestor.actor == located->fragment->origin.actor &&
+            ancestor.counter >= located->fragment->origin.counter &&
+            ancestor.counter - located->fragment->origin.counter <
+                located->fragment->length)
+            return ancestor.counter < item.counter;
+        if (located->offset > 0) {
+            item = located->fragment->origin;
+            continue;
+        }
+        const auto link = located->fragment->link_at(located->offset);
+        if (!link.parent) return false;
+        if (*link.parent == ancestor) return true;
+        item = *link.parent;
+    }
+    return false;
+}
+
+std::optional<Identity> Buffer::visible_element_before_tree(
+    uint32_t byte_offset) const {
+    if (!byte_offset) return std::nullopt;
+    auto cursor = m_fragment_tree.cursor<VisibleOffset>();
+    if (!cursor.seek({byte_offset - 1}, Bias::Left)) return std::nullopt;
+    const auto* fragment = cursor.item();
+    if (!fragment || !fragment->visible || fragment->marker) return std::nullopt;
+    const uint32_t local_byte = byte_offset - 1 - cursor.position().value;
+    if (local_byte >= fragment->text.size()) return std::nullopt;
+    const uint32_t scalar = count_utf8_chars(fragment->text, local_byte + 1);
+    if (!scalar || scalar > fragment->length) return std::nullopt;
+    return fragment->item_at(scalar - 1);
+}
+
+std::optional<std::pair<Link, uint64_t>>
+Buffer::simple_middle_insertion(uint32_t byte_offset) const {
+    if (!m_fragment_indexes_valid || byte_offset >= visible_length())
+        return std::nullopt;
+
+    const auto left = visible_element_before_tree(byte_offset);
+    uint64_t successor_rank = 0;
+    if (left) {
+        const auto located_left = locate_retained_identity(*left);
+        if (!located_left || located_left->offset + 1 != located_left->fragment->length)
+            return std::nullopt; // only splice between retained fragment boundaries
+        successor_rank = located_left->rank + 1;
+    }
+
+    std::optional<Identity> right;
+    auto cursor = m_fragment_tree.cursor<RetainedRunOffset>();
+    if (cursor.seek({successor_rank}, Bias::Left)) {
+        const auto* next = cursor.item();
+        if (!next || !next->length || cursor.position().value != successor_rank)
+            return std::nullopt;
+        right = next->item_at(0);
+    }
+
+    if (!left) {
+        if (!right) return std::nullopt;
+        // At the sequence head there can be no earlier left-child subtree.
+        return std::pair{Link{right, Side::Left, right}, successor_rank};
+    }
+    const auto located_left = locate_retained_identity(*left);
+    if (!located_left) return std::nullopt;
+    if (right && is_descendant_identity(*right, *left)) {
+        // The predecessor belongs to the right item's subtree. This is the
+        // exact adjacent left-child position only when no left sibling subtree
+        // already precedes the parent.
+        if (is_descendant_identity(*left, *right)) return std::nullopt;
+        return std::pair{Link{right, Side::Left, right}, successor_rank};
+    }
+    return std::pair{Link{*left, Side::Right, right},
+                     successor_rank};
+}
+
+bool Buffer::try_insert_fragment_at_rank(Fragment fragment, uint64_t rank) {
+    if (!m_fragment_indexes_valid || !m_next_run_id || !fragment.length ||
+        !fragment.origin.actor.valid() || !fragment.origin.counter ||
+        fragment.length > UINT64_MAX - fragment.origin.counter ||
+        rank > m_fragment_tree.summary().retained_runs)
+        return false;
+    fragment.visible = fragment.compute_visible(m_undo_map);
+    if (!fragment.utf16_index_ready) fragment.rebuild_utf16_index();
+
+    const RunId run = m_next_run_id;
+    const uint64_t end = fragment.origin.counter + fragment.length;
+    auto tree = m_fragment_tree;
+    tree.insert_item<RetainedRunOffset>(RetainedRunOffset{rank},
+                                        std::move(fragment));
+    auto nodes = m_node_directory;
+    if (!nodes.refresh_path(tree, RetainedRunOffset{rank}) ||
+        !tree.has_valid_node_ids()) return false;
+    auto origins = m_origin_index;
+    auto deletions = m_deletion_index;
+    auto runs = m_run_directory;
+    auto cursor = tree.cursor<RetainedRunOffset>();
+    if (!cursor.seek({rank}, Bias::Left) || !cursor.item()) return false;
+    const Fragment& inserted = *cursor.item();
+    if (cursor.position().value != rank ||
+        !origins.insert(inserted.origin.actor, inserted.origin.counter, end, run))
+        return false;
+    bool run_locations_valid = true;
+    const bool located_neighborhood = tree.for_each_leaf_near_path(
+        RetainedRunOffset{rank}, [&](const BufferFragmentTree::NodePtr& leaf) {
+            const auto& items = leaf->leaf();
+            for (uint16_t slot = 0; slot < items.count; ++slot) {
+                const auto item_run = origins.find_interval_start(
+                    items.items[slot].origin.actor, items.items[slot].origin.counter);
+                if (!item_run || !runs.insert_or_assign(
+                        *item_run, RunLocation{leaf->node_id, slot}))
+                    run_locations_valid = false;
+            }
+        });
+    if (!located_neighborhood || !run_locations_valid) return false;
+    for (const auto& deletion : inserted.deletions)
+        if (!deletions.insert(deletion, inserted.origin.actor,
+                              inserted.origin.counter, end, run)) return false;
+
+    Diagnostics::record(Diagnostics::Counter::fragment_index_publications);
+    Diagnostics::record(Diagnostics::Counter::origin_index_rows_inserted);
+    Diagnostics::record(Diagnostics::Counter::deletion_index_rows_inserted,
+                        inserted.deletions.size());
     m_fragment_tree = std::move(tree);
     m_node_directory = std::move(nodes);
     m_origin_index = std::move(origins);
@@ -1528,6 +1691,38 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
                           scalar_counts[0], new_text[0]);
         fragment.visible = true;
         if (try_append_fragment(std::move(fragment))) {
+            for (uint32_t i = 0; i < scalar_counts[0]; ++i)
+                undo_entry.inserted_keys.emplace_back(
+                    Identity(origin.actor, origin.counter + i));
+            op.inserted_fragments.push_back(
+                {origin, link, new_text[0], scalar_counts[0], false});
+            m_version.observe(op_identity);
+            commit_local_history(std::move(undo_entry));
+            if (m_on_change) m_on_change();
+            return Operation(std::move(op));
+        }
+    }
+
+    // A middle insertion at a retained fragment boundary can also be placed
+    // directly when the indexed predecessor/successor prove the exact adjacent
+    // FugueMax slot. More complex sibling runs remain on the model-backed
+    // reconstruction path.
+    const bool pure_single_insert = ranges.size() == 1 &&
+        ranges[0].first == ranges[0].second && scalar_counts[0] > 0 &&
+        !new_text[0].empty();
+    const auto middle = pure_single_insert
+        ? simple_middle_insertion(ranges[0].first)
+        : std::nullopt;
+    if (middle) {
+        const Link& link = middle->first;
+        const Identity origin(m_allocator->actor(), reserved.value());
+        op.timestamp = op_identity;
+        op.deletion_id = op_identity;
+        Fragment fragment(origin, link,
+                          static_cast<uint32_t>(new_text[0].size()),
+                          scalar_counts[0], new_text[0]);
+        fragment.visible = true;
+        if (try_insert_fragment_at_rank(std::move(fragment), middle->second)) {
             for (uint32_t i = 0; i < scalar_counts[0]; ++i)
                 undo_entry.inserted_keys.emplace_back(
                     Identity(origin.actor, origin.counter + i));

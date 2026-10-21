@@ -303,6 +303,19 @@ private:
     try_delete_exact_visible_runs(
         uint32_t start, uint32_t end, const Identity& deletion_id);
 
+    struct LocatedRunItem {
+        BufferFragmentTree::NodePtr leaf;
+        const Fragment* fragment = nullptr;
+        uint32_t offset = 0;
+        uint64_t rank = 0;
+    };
+    std::optional<LocatedRunItem> locate_retained_identity(Identity) const;
+    bool is_descendant_identity(Identity item, Identity ancestor) const;
+    std::optional<Identity> visible_element_before_tree(uint32_t byte_offset) const;
+    std::optional<std::pair<Link, uint64_t>>
+    simple_middle_insertion(uint32_t byte_offset) const;
+    bool try_insert_fragment_at_rank(Fragment fragment, uint64_t rank);
+
     // ---- Fragment vector helpers ----
     // Operations modify fragments via a temporary vector, then rebuild the tree.
 

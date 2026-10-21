@@ -3528,3 +3528,28 @@ last representable counter followed by checked exhaustion. `verify_changed.py`
 routes this header to the focused SumTree test. This is not yet attached to
 SumTree nodes or Buffer state and has no performance effect; NodeDirectory and
 RunDirectory integration remain open.
+
+## 2026-10-21 — X05 indexed middle insertion slice
+
+Added a checked local fast path for a single pure insertion at a retained
+fragment boundary. The stable origin/run/node indexes locate the visible
+predecessor and retained successor; descendant checks establish the exact
+FugueMax side and rank. The path copies the tree and persistent indexes,
+refreshes the changed node path and leaf neighborhood, then publishes the whole
+candidate together. Ambiguous sibling arrangements and insertion inside an
+existing fragment still use the reconstruction oracle.
+
+A 128-run diagnostic checks text, peer replay, local undo/redo and a subsequent
+indexed exact-run deletion. It asserts zero fragment snapshots, tree rebuild
+items, full index rebuilds and placement-index builds. Focused Debug Buffer and
+perf-diagnostics checks passed (2/2); the broader affected Debug route is in
+progress. No paired timing claim is made yet. Remote middle mutation, partial
+replacement and X05 acceptance remain open.
+
+X05 indexed middle insertion verification follow-up: the registered
+model-sensitive Debug route passed 31/31, focused Release perf diagnostics
+passed 1/1, and leak-enabled ASan Buffer passed 1/1 when rerun outside the
+sandbox's ptrace restriction. The sandbox ASan run passed all 66 test
+assertions; LeakSanitizer itself could not inspect processes there. Plan and
+strict-scope validators both pass. The fast path still has only work-count
+proof, not paired timing evidence.

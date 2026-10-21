@@ -12,6 +12,63 @@ using namespace CollabText::Crdt;
 class TestPerfDiagnostics : public QObject {
     Q_OBJECT
 private slots:
+    void local_middle_insert_splices_a_proven_run_boundary() {
+        constexpr uint32_t run_count = 128;
+        Buffer buffer(CollabText::Test::test_counter(44));
+        std::vector<Operation> seed;
+        seed.reserve(run_count);
+        for (uint32_t i = 0; i < run_count; ++i) {
+            auto appended = buffer.try_apply_local_edit({{i, i}}, {"x"});
+            QVERIFY(appended);
+            seed.push_back(std::move(appended).value());
+        }
+        Buffer peer(CollabText::Test::test_counter(45));
+        QCOMPARE(peer.apply_ops(seed).size(), seed.size());
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto inserted = buffer.try_apply_local_edit({{64, 64}}, {"y"});
+        Diagnostics::end_sample();
+        QVERIFY(inserted);
+        QCOMPARE(buffer.text(), std::string(64, 'x') + "y" + std::string(64, 'x'));
+        QCOMPARE(buffer.fragment_count(), static_cast<size_t>(run_count + 1));
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::placement_index_builds), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::origin_index_rows_inserted), uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_publications),
+                 uint64_t{1});
+
+        const auto delivered = peer.apply_ops({inserted.value()});
+        QCOMPARE(delivered.size(), size_t{1});
+        QCOMPARE(peer.text(), buffer.text());
+        auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string(run_count, 'x'));
+        auto redone = buffer.try_redo();
+        QVERIFY(redone);
+        QVERIFY(redone.value().has_value());
+        QCOMPARE(buffer.text(), std::string(64, 'x') + "y" + std::string(64, 'x'));
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto deleted = buffer.try_apply_local_edit({{64, 65}}, {""});
+        Diagnostics::end_sample();
+        QVERIFY(deleted);
+        QCOMPARE(buffer.text(), std::string(run_count, 'x'));
+        const auto delete_counts = Diagnostics::snapshot();
+        QCOMPARE(delete_counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(delete_counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(delete_counts.get(Diagnostics::Counter::placement_index_builds),
+                 uint64_t{0});
+    }
+
     void local_tail_insert_skips_fragment_flatten_and_rebuild() {
         Buffer buffer(CollabText::Test::test_counter(29));
         std::vector<Operation> seed;
