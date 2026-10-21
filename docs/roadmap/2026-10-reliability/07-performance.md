@@ -601,6 +601,17 @@ claim.
 
 **Acceptance:**
 
+The dedicated trace-v2 five-pair Release matrix is recorded in
+[`2026-10-21-x05-middle-insert-v2-paired`](../../reports/2026-10-21-x05-middle-insert-v2-paired/README.md).
+All 56 public state and operation fingerprints matched. It times 200 individual
+random-boundary pure-insert calls after histories of 128 and 3,000 retained
+single-scalar runs. Median per-pair mean latency fell from 204.9 to 76.4 us/call
+at 128 runs (0.316 ratio), and from 3.824 to 1.563 ms/call at 3,000 runs (0.375
+ratio). Median paired p99 was 180 us and 3.149 ms, respectively. This is strong
+evidence for the covered insertion shape, but the 3,000-run p99 remains above
+2 ms, and pure insertions do not satisfy the aged 10-KB/3,000-replacement or
+mixed-tombstone acceptance workloads. X05 remains in progress.
+
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
 - Target at least 5x lower aged 10-KB/3000-prior-replacement mean and median per-run p99 at most 2 ms in a comparable paired environment; target at least 2x lower mixed 5-KB/50%-deletion mean, with no more than 10% regression in light-history cases.
 
