@@ -314,6 +314,7 @@ private:
     /// Publish a proven retained-tail append by path-copying the tree and
     /// inserting only the new persistent index rows.
     bool try_append_fragment(Fragment fragment);
+    std::optional<uint64_t> retained_rank_for_run(RunId run) const;
     void recompute_visibility_for(const std::vector<Identity>& identities);
 
     /// Find the fragment index and byte offset within that fragment for a
@@ -414,8 +415,8 @@ private:
     BufferFragmentTree m_fragment_tree;
     NodeDirectory<BufferFragmentTree::Node> m_node_directory;
     // Rebuilt derived lookups, sharing persistent AVL pages across Buffer
-    // copies. Stable node IDs are tree-local runtime handles; RunDirectory
-    // still maps RunIds to ordinals until its locator migration is complete.
+    // copies. RunDirectory maps RunIds to a leaf NodeId and slot; rank is
+    // resolved through NodeDirectory against this exact tree version.
     OriginIndex m_origin_index;
     DeletionIndex m_deletion_index;
     RunDirectory m_run_directory;

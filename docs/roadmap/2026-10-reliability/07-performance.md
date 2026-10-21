@@ -847,3 +847,38 @@ perf-diagnostics, checkpoint-recovery, and SumTree suites pass 5/5. The
 `RunDirectory` still stores ordinals and Buffer does not yet resolve run IDs
 through node locators, so these updates establish ownership and consistency only;
 no latency claim is made.
+
+**Progress (2026-10-21):** `RunDirectory` now stores `(leaf NodeId, slot)` rather
+than a shifting ordinal. Buffer resolves a run through that handle, validates
+the leaf and interval against `NodeDirectory`/`OriginIndex`, and obtains its
+retained rank from checked sibling summaries. Reconstruction rebuilds locators
+from the canonical tree. Tail append refreshes the leaf neighborhood as well as
+the topology path, because splitting a full leaf can move previously appended
+runs; an aged whole-range deletion diagnostic caught and now covers that case.
+The changed-path Debug route passes 57/57 suites, and the index tests verify
+persistent snapshots with stable node locations.
+
+The opt-in Release lookup microbenchmark now times the full origin/deletion/run
+locator and node-rank chain against the 5,000-item scan oracle. Five pairs gave
+median 3,525.96 ns/query indexed versus 55,028.6 ns/query scanned (15.6x for
+this direct lookup fixture). This is not a before/after Buffer edit comparison
+or evidence that X05's latency targets are met. `tst_benchmark` remains outside
+CTest; the changed-path verifier identifies it as a manual opt-in benchmark.
+
+**Progress (2026-10-21):** Run lookup now uses `OriginIndex::interval_at_start`
+for one exact-start validation, and `NodeDirectory::rank_of_item` accepts an
+already locked leaf so Buffer does not repeat the initial directory lookup.
+The opt-in lookup benchmark now checks that the located slot contains the
+queried identity before resolving rank. Five checked Release pairs measured
+median 3,408.56 ns/query indexed versus 45,191.6 ns/query scanned (13.3x for
+the 5,000-run fixture). This instrumented result supersedes the earlier quick
+measurement, whose indexed path omitted the slot-identity check; neither is a
+Buffer-edit before/after comparison. The 5,000-run diagnostic reports 1,631,664
+bytes of AVL node payload for origin, deletion, run, and topology indexes,
+excluding shared-pointer control blocks and allocator overhead.
+
+**Verification (2026-10-21):** The final locator slice passes the registered
+57-suite changed-path Debug route and focused Release `tst_buffer`, `tst_sumtree`,
+and `tst_crdt_indexes` (3/3). `tst_perf_diagnostics` also passes the
+1,024-run recursive tail-split/delete case with zero fragment snapshots, rebuild
+items, or full index rebuilds.

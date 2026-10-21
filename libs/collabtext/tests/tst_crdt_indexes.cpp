@@ -16,7 +16,7 @@ private slots:
     void originIntervalsAreCheckedAndPersistent();
     void deletionQueriesReturnOnlyMatchingIncidences();
     void originLookupMatchesFlatScanAcrossManyIntervals();
-    void stableRunHandlesResolveNewOrdinalsWithoutChangingOldSnapshot();
+    void stableRunHandlesResolveNodeLocationsWithoutChangingOldSnapshot();
 };
 
 static ActorId actor(uint8_t value) {
@@ -41,6 +41,8 @@ void CrdtIndexesTest::originIntervalsAreCheckedAndPersistent() {
     QVERIFY(hit.has_value());
     QCOMPARE(hit->run, RunId(11));
     QCOMPARE(first.find_interval_start(actor(1), 8).value(), RunId(11));
+    QCOMPARE(first.interval_at_start(actor(1), 8)->end, uint64_t{12});
+    QVERIFY(!first.interval_at_start(actor(1), 9).has_value());
     QVERIFY(!first.find_interval_start(actor(1), 9).has_value());
     QVERIFY(!first.locate(Identity(actor(1), 12)).has_value());
     QVERIFY(!first.locate(Identity(actor(3), 1)).has_value());
@@ -55,26 +57,30 @@ void CrdtIndexesTest::originIntervalsAreCheckedAndPersistent() {
     QVERIFY(first.locate(Identity(actor(1), 1)).has_value());
 }
 
-void CrdtIndexesTest::stableRunHandlesResolveNewOrdinalsWithoutChangingOldSnapshot() {
+void CrdtIndexesTest::stableRunHandlesResolveNodeLocationsWithoutChangingOldSnapshot() {
+    const RunLocation first{{TreeNamespace{7}, 1}, 0};
+    const RunLocation second{{TreeNamespace{7}, 1}, 1};
+    const RunLocation third{{TreeNamespace{7}, 2}, 0};
     RunDirectory old_state;
-    QVERIFY(old_state.rebuild({{101, 0}, {303, 1}}));
-    QCOMPARE(old_state.ordinal(303).value(), uint64_t{1});
+    QVERIFY(old_state.rebuild({{101, first}, {303, second}}));
+    QCOMPARE(old_state.locate(303).value(), second);
 
     auto appended = old_state;
-    QVERIFY(appended.insert(707, 2));
-    QCOMPARE(appended.ordinal(707).value(), uint64_t{2});
-    QVERIFY(!appended.insert(303, 3));
-    QVERIFY(!appended.insert(0, 3));
+    QVERIFY(appended.insert(707, third));
+    QCOMPARE(appended.locate(707).value(), third);
+    QVERIFY(!appended.insert(303, third));
+    QVERIFY(!appended.insert(0, third));
+    QVERIFY(!appended.insert(808, RunLocation{}));
     QVERIFY(appended.erase(707));
-    QVERIFY(!appended.ordinal(707).has_value());
-    QCOMPARE(old_state.ordinal(303).value(), uint64_t{1});
+    QVERIFY(!appended.locate(707).has_value());
+    QCOMPARE(old_state.locate(303).value(), second);
 
     RunDirectory next_state;
-    QVERIFY(next_state.rebuild({{101, 0}, {707, 1}, {303, 2}}));
-    QCOMPARE(next_state.ordinal(303).value(), uint64_t{2});
-    QCOMPARE(old_state.ordinal(303).value(), uint64_t{1});
-    QVERIFY(!next_state.ordinal(999).has_value());
-    QVERIFY(!next_state.rebuild({{101, 0}, {101, 1}}));
+    QVERIFY(next_state.rebuild({{101, first}, {707, third}, {303, second}}));
+    QCOMPARE(next_state.locate(303).value(), second);
+    QCOMPARE(old_state.locate(303).value(), second);
+    QVERIFY(!next_state.locate(999).has_value());
+    QVERIFY(!next_state.rebuild({{101, first}, {101, second}}));
 }
 
 void CrdtIndexesTest::deletionQueriesReturnOnlyMatchingIncidences() {

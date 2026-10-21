@@ -207,6 +207,27 @@ private slots:
                  uint64_t{1});
     }
 
+    void run_locators_survive_recursive_tail_splits() {
+        constexpr uint32_t run_count = 1024;
+        Buffer buffer(CollabText::Test::test_counter(43));
+        for (uint32_t i = 0; i < run_count; ++i)
+            QVERIFY(buffer.try_apply_local_edit({{i, i}}, {"x"}));
+        QCOMPARE(buffer.fragment_count(), static_cast<size_t>(run_count));
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        const auto deleted = buffer.try_apply_local_edit({{0, run_count}}, {""});
+        Diagnostics::end_sample();
+        QVERIFY(deleted);
+        QCOMPARE(buffer.text(), std::string{});
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_tree_rebuild_items), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::deletion_index_rows_inserted),
+                 static_cast<uint64_t>(run_count));
+    }
+
     void fragment_mutation_updates_only_changed_index_rows() {
         Buffer buffer(CollabText::Test::test_counter(20));
         QVERIFY(buffer.try_apply_local_edit({{0, 0}}, {"abcdef"}));
@@ -453,15 +474,19 @@ private slots:
 
     void indexed_run_edit_visits_far_fewer_items_than_full_scan() {
         constexpr uint64_t run_count = 5000;
-        FragmentTree tree;
+        using StableTree = SumTree<Fragment, FRAG_TREE_B, StableNodeIds>;
+        const auto node_ids = StableNodeIds::create();
+        QVERIFY(node_ids.has_value());
+        StableTree tree(*node_ids);
         OriginIndex origins;
         DeletionIndex deletions;
-        std::vector<std::pair<RunId, uint64_t>> run_rows;
+        std::vector<std::pair<RunId, RunLocation>> run_rows;
         run_rows.reserve(run_count);
         for (uint64_t i = 0; i < run_count; ++i) {
             Fragment fragment;
             fragment.marker = true;
             fragment.length = 1;
+            fragment.origin = Identity(CollabText::Test::actor(40), i + 1);
             tree.push_item(std::move(fragment));
             const uint64_t counter = i + 1;
             const RunId run = i + 1;
@@ -470,8 +495,20 @@ private slots:
             QVERIFY(deletions.insert(
                 Identity(CollabText::Test::actor(41), counter),
                 CollabText::Test::actor(40), counter, counter + 1, run));
-            run_rows.emplace_back(run, i);
         }
+        NodeDirectory<StableTree::Node> nodes;
+        QVERIFY(nodes.rebuild_from(tree));
+        tree.for_each_node([&](const StableTree::NodePtr& node, NodeId id,
+                               std::optional<NodeId>, uint16_t) {
+            if (!node->is_leaf()) return;
+            for (uint16_t slot = 0; slot < node->leaf().count; ++slot) {
+                const auto& fragment = node->leaf().items[slot];
+                const auto run = origins.find_interval_start(
+                    fragment.origin.actor, fragment.origin.counter);
+                QVERIFY(run.has_value());
+                run_rows.emplace_back(*run, RunLocation{id, slot});
+            }
+        });
         RunDirectory directory;
         QVERIFY(directory.rebuild(std::move(run_rows)));
 
@@ -492,28 +529,32 @@ private slots:
         QVERIFY(origin.has_value());
         QCOMPARE(incidences.size(), size_t{1});
         QCOMPARE(incidences.front().run, origin->run);
-        const auto ordinal = directory.ordinal(origin->run);
-        QVERIFY(ordinal.has_value());
+        const auto location = directory.locate(origin->run);
+        QVERIFY(location.has_value());
+        const auto rank = nodes.rank_of_item<RetainedRunOffset>(
+            tree.root_node(), location->leaf, location->slot);
+        QVERIFY(rank.has_value());
         const bool edited = tree.edit_item<RetainedRunOffset>(
-            RetainedRunOffset{*ordinal}, [](Fragment& fragment) {
+            *rank, [](Fragment& fragment) {
                 fragment.visible = false;
             });
         Diagnostics::end_sample();
         QVERIFY(edited);
         const auto indexed_visits = Diagnostics::snapshot().get(
             Diagnostics::Counter::sumtree_items_visited);
-        qInfo() << "X04 indexed/full run visits:" << indexed_visits << "/"
+        qInfo() << "X05 indexed/full run visits:" << indexed_visits << "/"
                 << full_scan_visits;
-        qInfo() << "X04 index node payload bytes (origin/deletion/directory):"
+        qInfo() << "X05 index node payload bytes (origin/deletion/run/node):"
                 << OriginIndex::node_payload_bytes() << "/"
                 << DeletionIndex::node_payload_bytes() << "/"
-                << RunDirectory::node_payload_bytes()
+                << RunDirectory::node_payload_bytes() << "/"
+                << NodeDirectory<StableTree::Node>::node_payload_bytes()
                 << "total at 5000 runs:"
                 << origins.payload_bytes() + deletions.payload_bytes() +
-                       directory.payload_bytes()
+                       directory.payload_bytes() + nodes.payload_bytes()
                 << "(excludes shared_ptr control blocks and allocator overhead)";
         QVERIFY(indexed_visits > 0);
-        QVERIFY(indexed_visits <= FragmentTree::MaxChildren);
+        QVERIFY(indexed_visits <= StableTree::MaxChildren);
         QVERIFY(indexed_visits * 10 < full_scan_visits);
     }
 };

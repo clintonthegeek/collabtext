@@ -202,6 +202,10 @@ private slots:
                 const auto rank = directory.rank_of_item<ItemCount>(
                     root, path.back(), slot);
                 QVERIFY(rank.has_value());
+                const auto known_leaf_rank = directory.rank_of_item<ItemCount>(
+                    root, path.back(), slot, leaf_node);
+                QVERIFY(known_leaf_rank.has_value());
+                QCOMPARE(known_leaf_rank->value, rank->value);
                 if (rank->value == item) item_rank_found = true;
             }
             QVERIFY(item_rank_found);

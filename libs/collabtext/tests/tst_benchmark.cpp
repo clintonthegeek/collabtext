@@ -177,7 +177,7 @@ private slots:
 
     // Opt-in direct lookup comparison for X04. Index setup is deliberately
     // outside the timed loops; each path resolves the same origin, deletion
-    // incidence and run ordinal over a fixed 5,000-run fixture.
+    // incidence and leaf locator/rank over a fixed 5,000-run fixture.
     void indexed_run_lookup_latency() {
         constexpr uint64_t run_count = 5000;
         constexpr uint64_t queries = 5000;
@@ -188,7 +188,7 @@ private slots:
         fragments.reserve(run_count);
         OriginIndex origins;
         DeletionIndex deletions;
-        std::vector<std::pair<RunId, uint64_t>> directory_rows;
+        std::vector<std::pair<RunId, RunLocation>> directory_rows;
         directory_rows.reserve(run_count);
         for (uint64_t i = 0; i < run_count; ++i) {
             const uint64_t counter = i + 1;
@@ -204,8 +204,25 @@ private slots:
                 !deletions.insert(deletion_id, origin_actor, counter,
                                   counter + 1, run))
                 QFAIL("failed to build indexed lookup fixture");
-            directory_rows.emplace_back(run, i);
         }
+        using StableTree = SumTree<Fragment, FRAG_TREE_B, StableNodeIds>;
+        const auto node_ids = StableNodeIds::create();
+        QVERIFY(node_ids.has_value());
+        StableTree tree(*node_ids);
+        for (const auto& fragment : fragments) tree.push_item(fragment);
+        NodeDirectory<StableTree::Node> nodes;
+        QVERIFY(nodes.rebuild_from(tree));
+        tree.for_each_node([&](const StableTree::NodePtr& node, NodeId id,
+                               std::optional<NodeId>, uint16_t) {
+            if (!node->is_leaf()) return;
+            for (uint16_t slot = 0; slot < node->leaf().count; ++slot) {
+                const auto& fragment = node->leaf().items[slot];
+                const auto run = origins.find_interval_start(
+                    fragment.origin.actor, fragment.origin.counter);
+                QVERIFY(run.has_value());
+                directory_rows.emplace_back(*run, RunLocation{id, slot});
+            }
+        });
         RunDirectory directory;
         QVERIFY(directory.rebuild(std::move(directory_rows)));
 
@@ -248,9 +265,21 @@ private slots:
                 if (!origin || deletion_runs.size() != 1 ||
                     deletion_runs.front().run != origin->run)
                     return std::pair{checksum, false};
-                const auto ordinal = directory.ordinal(origin->run);
-                if (!ordinal) return std::pair{checksum, false};
-                checksum += *ordinal + 1;
+                const auto location = directory.locate(origin->run);
+                if (!location) return std::pair{checksum, false};
+                const auto node_location = nodes.locate(location->leaf);
+                if (!node_location) return std::pair{checksum, false};
+                const auto leaf = node_location->node.lock();
+                if (!leaf || !leaf->is_leaf() ||
+                    location->slot >= leaf->leaf().count)
+                    return std::pair{checksum, false};
+                const auto& fragment = leaf->leaf().items[location->slot];
+                if (fragment.origin != Identity(origin_actor, offset + 1))
+                    return std::pair{checksum, false};
+                const auto rank = nodes.rank_of_item<RetainedRunOffset>(
+                    tree.root_node(), location->leaf, location->slot, leaf);
+                if (!rank) return std::pair{checksum, false};
+                checksum += rank->value + 1;
             }
             return std::pair{checksum, true};
         };

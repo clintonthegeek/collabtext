@@ -124,6 +124,28 @@ std::vector<Fragment> Buffer::get_fragments() const {
     return fragments;
 }
 
+std::optional<uint64_t> Buffer::retained_rank_for_run(RunId run) const {
+    const auto location = m_run_directory.locate(run);
+    if (!location) return std::nullopt;
+    const auto node_location = m_node_directory.locate(location->leaf);
+    if (!node_location) return std::nullopt;
+    const auto leaf = node_location->node.lock();
+    if (!leaf || leaf->node_id != location->leaf || !leaf->is_leaf() ||
+        location->slot >= leaf->leaf().count)
+        return std::nullopt;
+    const auto& fragment = leaf->leaf().items[location->slot];
+    const auto interval = m_origin_index.interval_at_start(
+        fragment.origin.actor, fragment.origin.counter);
+    if (!interval || interval->run != run ||
+        !fragment.length || fragment.length > UINT64_MAX - fragment.origin.counter ||
+        interval->end != fragment.origin.counter + fragment.length)
+        return std::nullopt;
+    const auto rank = m_node_directory.rank_of_item<RetainedRunOffset>(
+        m_fragment_tree.root_node(), location->leaf, location->slot, leaf);
+    if (!rank) return std::nullopt;
+    return rank->value;
+}
+
 void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     Diagnostics::record(Diagnostics::Counter::fragment_index_publications);
     Diagnostics::record(Diagnostics::Counter::fragment_tree_rebuild_items,
@@ -138,7 +160,7 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     std::vector<std::tuple<ActorId, uint64_t, OriginInterval>> origin_rows;
     std::vector<std::pair<std::tuple<Identity, ActorId, uint64_t>,
                           DeletionIncidence>> deletion_rows;
-    std::vector<std::pair<RunId, uint64_t>> run_directory_rows;
+    std::vector<std::pair<RunId, RunLocation>> run_directory_rows;
     std::vector<RunId> run_ids;
     run_directory_rows.reserve(frags.size());
     run_ids.reserve(frags.size());
@@ -163,7 +185,6 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
             }
         }
         run_ids.push_back(run);
-        if (run) run_directory_rows.emplace_back(run, i);
         if (run && !new_fragments_by_run.emplace(run, &fragment).second)
             run_ids_valid = false;
     }
@@ -275,13 +296,25 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
         origins_valid = origins.rebuild(std::move(origin_rows));
         deletions_valid = deletions.rebuild(std::move(deletion_rows));
     }
-    RunDirectory run_directory;
-    const bool run_directory_valid = run_directory.rebuild(
-        std::move(run_directory_rows));
     BufferFragmentTree tree = m_fragment_tree.empty_like();
     for (auto& f : frags) tree.push_item(std::move(f));
     NodeDirectory<BufferFragmentTree::Node> nodes;
     const bool nodes_valid = nodes.rebuild_from(tree);
+    tree.for_each_node([&](const BufferFragmentTree::NodePtr& node, NodeId id,
+                           std::optional<NodeId>, uint16_t) {
+        if (!node->is_leaf()) return;
+        const auto& leaf = node->leaf();
+        for (uint16_t slot = 0; slot < leaf.count; ++slot) {
+            const auto& fragment = leaf.items[slot];
+            const auto run = origins.find_interval_start(
+                fragment.origin.actor, fragment.origin.counter);
+            if (!run) continue;
+            run_directory_rows.emplace_back(*run, RunLocation{id, slot});
+        }
+    });
+    RunDirectory run_directory;
+    const bool run_directory_valid = run_directory_rows.size() == frags.size() &&
+        run_directory.rebuild(std::move(run_directory_rows));
     m_fragment_tree = std::move(tree);
     m_node_directory = std::move(nodes);
     m_origin_index = std::move(origins);
@@ -326,8 +359,22 @@ bool Buffer::try_append_fragment(Fragment fragment) {
     auto runs = m_run_directory;
     const Fragment& appended = tree.last();
     if (!origins.insert(appended.origin.actor, appended.origin.counter,
-                        end, run) || !runs.insert(run, ordinal))
+                        end, run))
         return false;
+    bool run_locations_valid = true;
+    const bool located_neighborhood = tree.for_each_leaf_near_path(
+        RetainedRunOffset{ordinal}, [&](const BufferFragmentTree::NodePtr& leaf) {
+            const auto& items = leaf->leaf();
+            for (uint16_t slot = 0; slot < items.count; ++slot) {
+                const auto& fragment = items.items[slot];
+                const auto item_run = origins.find_interval_start(
+                    fragment.origin.actor, fragment.origin.counter);
+                if (!item_run || !runs.insert_or_assign(
+                        *item_run, RunLocation{leaf->node_id, slot}))
+                    run_locations_valid = false;
+            }
+        });
+    if (!located_neighborhood || !run_locations_valid) return false;
     const size_t deletion_rows = appended.deletions.size();
     for (const auto& deletion : appended.deletions) {
         if (!deletions.insert(deletion, appended.origin.actor,
@@ -359,7 +406,7 @@ Buffer::try_delete_exact_visible_runs(uint32_t start, uint32_t end,
     struct TargetRun {
         Identity origin;
         uint32_t length = 0;
-        uint64_t ordinal = 0;
+        uint64_t rank = 0;
         RunId run = 0;
     };
     std::vector<TargetRun> targets;
@@ -381,9 +428,9 @@ Buffer::try_delete_exact_visible_runs(uint32_t start, uint32_t end,
             if (!interval || !run || interval->run != *run ||
                 interval->end != fragment->origin.counter + fragment->length)
                 return std::nullopt;
-            const auto ordinal = m_run_directory.ordinal(*run);
-            if (!ordinal) return std::nullopt;
-            targets.push_back({fragment->origin, fragment->length, *ordinal, *run});
+            const auto rank = retained_rank_for_run(*run);
+            if (!rank) return std::nullopt;
+            targets.push_back({fragment->origin, fragment->length, *rank, *run});
             covered += fragment->byte_length;
         }
         if (covered < end && !cursor.next()) return std::nullopt;
@@ -434,7 +481,7 @@ Buffer::try_delete_exact_visible_runs(uint32_t start, uint32_t end,
     for (const auto& target : targets) {
         bool changed = false;
         const bool edited = tree.edit_item<RetainedRunOffset>(
-            RetainedRunOffset{target.ordinal}, [&](Fragment& fragment) {
+            RetainedRunOffset{target.rank}, [&](Fragment& fragment) {
                 if (fragment.origin != target.origin ||
                     fragment.length != target.length || !fragment.visible ||
                     fragment.marker)
@@ -444,7 +491,7 @@ Buffer::try_delete_exact_visible_runs(uint32_t start, uint32_t end,
                 changed = !fragment.visible;
             });
         if (!edited || !changed) return std::nullopt;
-        if (!nodes.refresh_path(tree, RetainedRunOffset{target.ordinal}))
+        if (!nodes.refresh_path(tree, RetainedRunOffset{target.rank}))
             return std::nullopt;
     }
 
@@ -517,7 +564,7 @@ void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
     if (affected.empty()) return;
     bool stale_run_index = false;
     for (const RunId run : affected) {
-        const auto ordinal = m_run_directory.ordinal(run);
+        const auto ordinal = retained_rank_for_run(run);
         if (!ordinal) {
             stale_run_index = true;
             break;
@@ -1921,7 +1968,7 @@ void Buffer::apply_deletion_runs(
             // hole for this deletion run.
             if (first > covered) break;
             if (last <= covered) continue;
-            const auto ordinal = m_run_directory.ordinal(interval.run);
+            const auto ordinal = retained_rank_for_run(interval.run);
             if (!ordinal) {
                 m_fragment_indexes_valid = false;
                 apply_deletion_runs(frags, runs, deletion_id);
@@ -2019,7 +2066,7 @@ Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
         if (interval && deletion.count &&
             deletion.count <= UINT64_MAX - deletion.first.counter &&
             interval->end == deletion.first.counter + deletion.count) {
-            const auto ordinal = m_run_directory.ordinal(interval->run);
+            const auto ordinal = retained_rank_for_run(interval->run);
             if (ordinal) {
                 auto cursor = m_fragment_tree.cursor<RetainedRunOffset>();
                 if (cursor.seek({*ordinal}, Bias::Left) && cursor.item()) {

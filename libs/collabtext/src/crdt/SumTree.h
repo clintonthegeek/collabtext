@@ -457,6 +457,20 @@ public:
         return visit_node_path(m_root, std::nullopt, 0, target, start, visitor);
     }
 
+    /// Visit the leaf containing a summary coordinate and its leaf siblings
+    /// under the same parent. This bounded neighborhood is sufficient to
+    /// refresh item locators after a leaf split or slot shift on the path.
+    template<class D, class Fn>
+        requires DimensionOf<D, Summary>
+    bool for_each_leaf_near_path(const D& target, Fn&& fn) const {
+        if (!m_root) return false;
+        D start = D::zero();
+        if (!node_path_exists(m_root, target, start)) return false;
+        start = D::zero();
+        auto visitor = std::forward<Fn>(fn);
+        return visit_leaf_neighborhood(m_root, target, start, visitor);
+    }
+
     bool empty() const {
         if (!m_root) return true;
         if (m_root->is_leaf()) return m_root->leaf().count == 0;
@@ -798,6 +812,35 @@ private:
                 start = position;
                 return visit_node_path(internal.children[slot], node->node_id,
                                        slot, target, start, fn);
+            }
+            position = end;
+        }
+        return false;
+    }
+
+    template<class D, class Fn>
+    static bool visit_leaf_neighborhood(const NodePtr& node, const D& target,
+                                        D& start, Fn& fn) {
+        if (node->is_leaf()) {
+            fn(node);
+            return true;
+        }
+        const auto& internal = node->internal();
+        D position = D::zero();
+        position = start;
+        for (uint16_t slot = 0; slot < internal.count; ++slot) {
+            D end = position;
+            end.add_summary(internal.child_summaries[slot]);
+            const auto& child = internal.children[slot];
+            if (position <= target && target < end) {
+                if (child->is_leaf()) {
+                    for (uint16_t sibling = 0; sibling < internal.count; ++sibling)
+                        if (internal.children[sibling]->is_leaf())
+                            fn(internal.children[sibling]);
+                    return true;
+                }
+                start = position;
+                return visit_leaf_neighborhood(child, target, start, fn);
             }
             position = end;
         }

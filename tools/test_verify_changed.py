@@ -121,6 +121,11 @@ class VerificationTests(unittest.TestCase):
     def test_changed_test_routes_itself(self):
         routes, _ = verify.route(['libs/collabtext/tests/tst_identity_allocation_model.cpp'])
         self.assertEqual(next(iter(routes.values())), 'tst_identity_allocation_model')
+
+    def test_benchmark_source_is_explicitly_opt_in_and_excluded_from_ctest(self):
+        routes, package = verify.route(['libs/collabtext/tests/tst_benchmark.cpp'])
+        self.assertEqual(routes, {'libs/collabtext/tests/tst_benchmark.cpp': ''})
+        self.assertFalse(package)
         routes, _ = verify.route(['libs/collabtext/tests/tst_perf_diagnostics.cpp'])
         self.assertEqual(next(iter(routes.values())), 'tst_(buffer|positions|perf_diagnostics)')
 

@@ -51,6 +51,15 @@ public:
         auto leaf_location = locate(leaf_id);
         if (!leaf_location) return std::nullopt;
         auto node = leaf_location->node.lock();
+        return rank_of_item<Dimension>(root, leaf_id, item_slot, node);
+    }
+
+    template<class Dimension>
+    std::optional<Dimension> rank_of_item(
+        const std::shared_ptr<Node>& root, NodeId leaf_id, uint16_t item_slot,
+        const std::shared_ptr<Node>& leaf_node) const {
+        if (!root || !leaf_id.valid()) return std::nullopt;
+        auto node = leaf_node;
         if (!node || node->node_id != leaf_id || !node->is_leaf() ||
             item_slot >= node->leaf().count)
             return std::nullopt;

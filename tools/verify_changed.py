@@ -91,6 +91,9 @@ ROUTES = [
     # This test target is only generated in the opt-in diagnostics build; normal
     # changed-path verification runs the always-available Buffer/position suites.
     ('libs/collabtext/tests/tst_perf_diagnostics.cpp', r'tst_(buffer|positions|perf_diagnostics)'),
+    # This executable is intentionally opt-in and never registered with CTest.
+    # A changed-path run records it as an explicit manual Release benchmark.
+    ('libs/collabtext/tests/tst_benchmark.cpp', ''),
     ('libs/collabtext/tests/fixtures/sequence-semantics/*', r'tst_(sequence|fuguemax)_model'),
     ('libs/collabtext/tests/tst_sequence_model.cpp', 'tst_sequence_model'),
     ('libs/collabtext/tests/tst_*.cpp', 'OWN_TEST'),
@@ -204,17 +207,26 @@ def main(argv=None):
         if not paths and not args.all and not args.target:
             raise ValueError('No changes to route; use --all or --target')
         routes, package = ({}, False) if args.all or args.target else route(paths)
+        opt_in_benchmarks = [path for path, expression in routes.items()
+                             if not expression and path.endswith('/tst_benchmark.cpp')]
         regexes = sorted({r for r in routes.values() if r})
         regex = '.' if args.all else args.target if args.target else '^(' + '|'.join(regexes) + ')$'
         result.update(paths=paths, routes=routes, regex=regex, jobs=jobs)
         for path, selected in routes.items():
-            print(f'{path} -> {selected or "documentation (no build)"}')
+            label = ('opt-in benchmark (manual Release run; excluded from CTest)'
+                     if path in opt_in_benchmarks else
+                     selected or 'documentation (no build)')
+            print(f'{path} -> {label}')
+        result['opt_in_benchmarks'] = opt_in_benchmarks
         if args.explain:
             print('Regex:', regex)
             print('Package gate:', package or args.package_gate)
             return 0
         if not regexes and not args.all and not args.target:
-            print('Documentation only; no engine build needed.')
+            if opt_in_benchmarks:
+                print('No CTest target selected. Build and run the opt-in benchmark explicitly.')
+            else:
+                print('Documentation only; no engine build needed.')
             return 0
         build = ROOT / ('build-roadmap-' + args.mode)
         evidence = build / 'verification'
