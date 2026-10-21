@@ -3,6 +3,7 @@
 #include "crdt/Buffer.h"
 #include "crdt/NetworkSim.h"
 #include "crdt/EditStrategy.h"
+#include "crdt/Diagnostics.h"
 #include "crdt/DeletionIndex.h"
 #include "crdt/OriginIndex.h"
 #include "crdt/RunDirectory.h"
@@ -563,16 +564,45 @@ private slots:
 
             uint32_t frags_before = static_cast<uint32_t>(buf.fragments().size());
 
+            Diagnostics::reset();
+            Diagnostics::begin_sample();
             auto t0 = Clock::now();
             for (int i = 0; i < NUM_OPS; ++i)
                 random_edit(buf, rng);
             auto t1 = Clock::now();
+            Diagnostics::end_sample();
 
             int64_t total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
             char label[64];
             std::snprintf(label, sizeof(label), "%uK, 50%% tombstones (%u frags)",
                           doc_size / 1000, frags_before);
                         report(label, total_ns, NUM_OPS, "local edits", NUM_OPS, 0, &buf);
+            if (Diagnostics::enabled()) {
+                const auto work = Diagnostics::snapshot();
+                qDebug().noquote()
+                    << "    diagnostic work: snapshots="
+                    << work.get(Diagnostics::Counter::fragment_snapshots)
+                    << " snapshot_items="
+                    << work.get(Diagnostics::Counter::fragment_snapshot_items)
+                    << " tree_rebuild_items="
+                    << work.get(Diagnostics::Counter::fragment_tree_rebuild_items)
+                    << " placement_index_builds="
+                    << work.get(Diagnostics::Counter::placement_index_builds)
+                    << " partial_replace_attempts="
+                    << work.get(Diagnostics::Counter::partial_replace_attempts)
+                    << " partial_replace_failures="
+                    << work.get(Diagnostics::Counter::partial_replace_failures)
+                    << " failure_stage_1="
+                    << work.get(Diagnostics::Counter::partial_replace_failure_stage_1)
+                    << " failure_stage_2="
+                    << work.get(Diagnostics::Counter::partial_replace_failure_stage_2)
+                    << " failure_stage_3="
+                    << work.get(Diagnostics::Counter::partial_replace_failure_stage_3)
+                    << " failure_stage_4="
+                    << work.get(Diagnostics::Counter::partial_replace_failure_stage_4)
+                    << " failure_stage_5="
+                    << work.get(Diagnostics::Counter::partial_replace_failure_stage_5);
+            }
         }
     }
 

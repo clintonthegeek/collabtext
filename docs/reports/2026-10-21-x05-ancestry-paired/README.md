@@ -8,4 +8,14 @@ The native mixed-deletion goal remains unmet. For the 5-KB/50%-tombstone workloa
 
 The change instruments identity ancestry traversal, rules out impossible same-actor ancestry by counter order, and removes the reverse ancestry walk after the forward ancestry proof. A focused aged diagnostic trace now reports ancestry steps with median 0 and p95 2 over all 200 calls; the exact-run 73-call subset has median 2 and p95 3, versus thousands of steps before the change. Debug and Release model-sensitive routes passed 12/12; serial leak-enabled ASan/UBSan passed 11/11 outside the sandbox; the diagnostics-enabled target passed 20/20. These are local correctness and work-count checks, not consumer acceptance.
 
+An additional diagnostics-enabled run of the native tombstone scaling fixture
+isolated the 5-KB/50%-tombstone edits from fixture construction. In its 50
+timed edits, the engine recorded 32 fragment snapshots, 120,924 snapshot
+items, 120,972 tree rebuild items, and 40 placement-index builds. The partial
+replacement path was attempted 23 times and failed 15 times at stage 2, where
+the requested visible range crosses a retained-fragment boundary. This
+diagnostics run is structural evidence only; its instrumented wall times are
+not comparable with the Release matrix. The manual native output is retained
+in [`raw/candidate-native-tombstone-diagnostics.log`](raw/candidate-native-tombstone-diagnostics.log).
+
 X05 remains in progress. The aged public workload targets now pass for this candidate, but the mixed 5-KB/50%-tombstone 2x target remains open. Full X05 routed Debug/Release and relocated installed-package gates are still required. This report records an interim candidate with uncommitted source at measurement time; it is not a new immutable adoption tag.

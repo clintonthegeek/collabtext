@@ -1,0 +1,19 @@
+********* Start testing of TestBenchmark *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestBenchmark::initTestCase()
+QDEBUG : TestBenchmark::tombstone_degradation_large() 
+=== Tombstone Degradation Scaling ===
+QDEBUG : TestBenchmark::tombstone_degradation_large()   (Measures how doc size amplifies tombstone cost)
+  3K, 50% tombstones (2250 frags): wall=129.293 ms (129292837 ns), work=50 local edits, 2.58586e+06 ns/local edits, 386.719 local edits/s, source_edits=50, remote_applications=0, fragments=2335, tombstones=1583, visible_bytes=1476, process_rss=24124 KB
+{"name":"3K, 50% tombstones (2250 frags)","wall_ns":129292837,"work_label":"local edits","work_items":50,"source_edits":50,"remote_applications":0,"ns_per_work_item":2.58586e+06,"work_per_sec":386.719,"process_rss_kb":24124,"fragments":2335,"tombstones":1583,"visible_bytes":1476,"deleted_bytes":1627}
+QDEBUG : TestBenchmark::tombstone_degradation_large()     diagnostic work: snapshots= 33  snapshot_items= 75655  tree_rebuild_items= 75715  placement_index_builds= 44  partial_replace_attempts= 24  partial_replace_failures= 16  failure_stage_1= 0  failure_stage_2= 16  failure_stage_3= 0  failure_stage_4= 0  failure_stage_5= 0
+  5K, 50% tombstones (3746 frags): wall=179.584 ms (179583786 ns), work=50 local edits, 3.59168e+06 ns/local edits, 278.422 local edits/s, source_edits=50, remote_applications=0, fragments=3819, tombstones=2568, visible_bytes=2510, process_rss=28404 KB
+{"name":"5K, 50% tombstones (3746 frags)","wall_ns":179583786,"work_label":"local edits","work_items":50,"source_edits":50,"remote_applications":0,"ns_per_work_item":3.59168e+06,"work_per_sec":278.422,"process_rss_kb":28404,"fragments":3819,"tombstones":2568,"visible_bytes":2510,"deleted_bytes":2607}
+QDEBUG : TestBenchmark::tombstone_degradation_large()     diagnostic work: snapshots= 32  snapshot_items= 120924  tree_rebuild_items= 120972  placement_index_builds= 40  partial_replace_attempts= 23  partial_replace_failures= 15  failure_stage_1= 0  failure_stage_2= 15  failure_stage_3= 0  failure_stage_4= 0  failure_stage_5= 0
+  8K, 50% tombstones (6005 frags): wall=365.58 ms (365580129 ns), work=50 local edits, 7.3116e+06 ns/local edits, 136.769 local edits/s, source_edits=50, remote_applications=0, fragments=6076, tombstones=4091, visible_bytes=3960, process_rss=33920 KB
+{"name":"8K, 50% tombstones (6005 frags)","wall_ns":365580129,"work_label":"local edits","work_items":50,"source_edits":50,"remote_applications":0,"ns_per_work_item":7.3116e+06,"work_per_sec":136.769,"process_rss_kb":33920,"fragments":6076,"tombstones":4091,"visible_bytes":3960,"deleted_bytes":4146}
+QDEBUG : TestBenchmark::tombstone_degradation_large()     diagnostic work: snapshots= 27  snapshot_items= 163049  tree_rebuild_items= 163101  placement_index_builds= 52  partial_replace_attempts= 28  partial_replace_failures= 22  failure_stage_1= 0  failure_stage_2= 22  failure_stage_3= 0  failure_stage_4= 0  failure_stage_5= 0
+PASS   : TestBenchmark::tombstone_degradation_large()
+PASS   : TestBenchmark::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 27557ms
+********* Finished testing of TestBenchmark *********

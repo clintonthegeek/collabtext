@@ -1075,3 +1075,12 @@ candidate was a dirty worktree at parent HEAD; its diff hash and raw evidence
 are retained in [`the ancestry paired report`](../../reports/2026-10-21-x05-ancestry-paired/README.md).
 X05 remains in progress because mixed-tombstone acceptance and the complete
 routed Release and relocated package gates remain open.
+
+**Tombstone fallback profile (2026-10-21):** The diagnostics-enabled native
+5-KB/50%-tombstone fixture measured only the 50 edits after fixture setup. It
+recorded 32 fragment snapshots, 120,924 snapshot items, 120,972 rebuilt tree
+items, and 40 placement-index builds. Partial replacement was attempted 23
+times; 15 attempts stopped at stage 2 because the visible range crossed a
+retained-fragment boundary. This identifies multi-fragment replacement as the
+next X05 algorithm slice. Diagnostics alter timings, so these counts are not
+latency evidence; the exact manual run is in the ancestry report's raw folder.
