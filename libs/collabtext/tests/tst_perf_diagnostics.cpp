@@ -69,6 +69,48 @@ private slots:
                  uint64_t{0});
     }
 
+    void local_complete_run_replacement_stages_one_tree_path() {
+        constexpr uint32_t run_count = 128;
+        Buffer buffer(CollabText::Test::test_counter(46));
+        std::vector<Operation> seed;
+        seed.reserve(run_count);
+        for (uint32_t i = 0; i < run_count; ++i) {
+            auto appended = buffer.try_apply_local_edit({{i, i}}, {"x"});
+            QVERIFY(appended);
+            seed.push_back(std::move(appended).value());
+        }
+        Buffer peer(CollabText::Test::test_counter(47));
+        QCOMPARE(peer.apply_ops(seed).size(), seed.size());
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto replaced = buffer.try_apply_local_edit({{64, 65}}, {"yz"});
+        Diagnostics::end_sample();
+        QVERIFY(replaced);
+        const std::string expected = std::string(64, 'x') + "yz" +
+                                     std::string(63, 'x');
+        QCOMPARE(buffer.text(), expected);
+        QCOMPARE(buffer.fragment_count(), static_cast<size_t>(run_count + 1));
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_tree_rebuild_items), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::placement_index_builds), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::origin_index_rows_inserted), uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_publications), uint64_t{1});
+        QCOMPARE(peer.apply_ops({replaced.value()}).size(), size_t{1});
+        QCOMPARE(peer.text(), expected);
+
+        auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string(run_count, 'x'));
+        auto redone = buffer.try_redo();
+        QVERIFY(redone);
+        QVERIFY(redone.value().has_value());
+        QCOMPARE(buffer.text(), expected);
+    }
+
     void local_tail_insert_skips_fragment_flatten_and_rebuild() {
         Buffer buffer(CollabText::Test::test_counter(29));
         std::vector<Operation> seed;

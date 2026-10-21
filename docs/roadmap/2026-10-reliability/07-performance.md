@@ -612,6 +612,18 @@ evidence for the covered insertion shape, but the 3,000-run p99 remains above
 2 ms, and pure insertions do not satisfy the aged 10-KB/3,000-replacement or
 mixed-tombstone acceptance workloads. X05 remains in progress.
 
+**Progress (2026-10-21):** A transactional local replacement path now covers
+one complete visible retained run when its start is a proven fragment boundary.
+It stages the old run's tombstone and the replacement fragment in one candidate
+tree, then updates the affected origin, deletion, run, and node indexes before
+publishing. Unsupported partial-run or ambiguous placements still use the
+reconstruction path. A 128-run diagnostic checks output, peer replay, undo/redo,
+and zero fragment snapshots, tree rebuild items, full index rebuilds, or
+placement-index builds. The registered changed-path Debug route passes 31/31,
+including model, convergence, recovery, gap, Buffer, and diagnostics suites.
+This replacement slice has not yet been paired-measured and does not meet X05
+acceptance.
+
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
 - Target at least 5x lower aged 10-KB/3000-prior-replacement mean and median per-run p99 at most 2 ms in a comparable paired environment; target at least 2x lower mixed 5-KB/50%-deletion mean, with no more than 10% regression in light-history cases.
 
