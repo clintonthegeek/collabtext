@@ -1,0 +1,135 @@
+********* Start testing of TestBenchmark *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 16.2.1 20260810), manjaro unknown
+PASS   : TestBenchmark::initTestCase()
+QDEBUG : TestBenchmark::single_replica_throughput() 
+=== Single-Replica Throughput ===
+  1K doc, random edit: wall=50.804 ms (50804010 ns), work=200 local edits, 254020 ns/local edits, 3936.7 local edits/s, source_edits=200, remote_applications=0, fragments=438, tombstones=201, visible_bytes=922, process_rss=20380 KB
+{"name":"1K doc, random edit","wall_ns":50804010,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":254020,"work_per_sec":3936.7,"process_rss_kb":20380,"fragments":438,"tombstones":201,"visible_bytes":922,"deleted_bytes":465}
+  10K doc, random edit: wall=64.2221 ms (64222081 ns), work=200 local edits, 321110 ns/local edits, 3114.19 local edits/s, source_edits=200, remote_applications=0, fragments=576, tombstones=168, visible_bytes=9878, process_rss=21016 KB
+{"name":"10K doc, random edit","wall_ns":64222081,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":321110,"work_per_sec":3114.19,"process_rss_kb":21016,"fragments":576,"tombstones":168,"visible_bytes":9878,"deleted_bytes":511}
+  100K doc, random edit: wall=266.757 ms (266756944 ns), work=200 local edits, 1.33378e+06 ns/local edits, 749.746 local edits/s, source_edits=200, remote_applications=0, fragments=1488, tombstones=181, visible_bytes=99848, process_rss=25240 KB
+{"name":"100K doc, random edit","wall_ns":266756944,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":1.33378e+06,"work_per_sec":749.746,"process_rss_kb":25240,"fragments":1488,"tombstones":181,"visible_bytes":99848,"deleted_bytes":552}
+PASS   : TestBenchmark::single_replica_throughput()
+QDEBUG : TestBenchmark::single_replica_large_doc() 
+=== Single-Replica Large Doc (1M) ===
+  1M doc, random edit: wall=126.146 ms (126146027 ns), work=100 local edits, 1.26146e+06 ns/local edits, 792.732 local edits/s, source_edits=100, remote_applications=0, fragments=1244, tombstones=82, visible_bytes=999979, process_rss=47644 KB
+{"name":"1M doc, random edit","wall_ns":126146027,"work_label":"local edits","work_items":100,"source_edits":100,"remote_applications":0,"ns_per_work_item":1.26146e+06,"work_per_sec":792.732,"process_rss_kb":47644,"fragments":1244,"tombstones":82,"visible_bytes":999979,"deleted_bytes":214}
+PASS   : TestBenchmark::single_replica_large_doc()
+QDEBUG : TestBenchmark::edit_patterns() 
+=== Edit Patterns (100K doc) ===
+  sequential (append): wall=199.246 ms (199245701 ns), work=200 local edits, 996229 ns/local edits, 1003.79 local edits/s, source_edits=200, remote_applications=0, fragments=1200, tombstones=0, visible_bytes=100596, process_rss=47644 KB
+{"name":"sequential (append)","wall_ns":199245701,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":996229,"work_per_sec":1003.79,"process_rss_kb":47644,"fragments":1200,"tombstones":0,"visible_bytes":100596,"deleted_bytes":0}
+  random position: wall=244.151 ms (244151006 ns), work=200 local edits, 1.22076e+06 ns/local edits, 819.165 local edits/s, source_edits=200, remote_applications=0, fragments=1488, tombstones=181, visible_bytes=99848, process_rss=47644 KB
+{"name":"random position","wall_ns":244151006,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":1.22076e+06,"work_per_sec":819.165,"process_rss_kb":47644,"fragments":1488,"tombstones":181,"visible_bytes":99848,"deleted_bytes":552}
+  hotspot [5000, 5100]: wall=218.055 ms (218055459 ns), work=200 local edits, 1.09028e+06 ns/local edits, 917.198 local edits/s, source_edits=200, remote_applications=0, fragments=1322, tombstones=273, visible_bytes=99808, process_rss=47644 KB
+{"name":"hotspot [5000, 5100]","wall_ns":218055459,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":1.09028e+06,"work_per_sec":917.198,"process_rss_kb":47644,"fragments":1322,"tombstones":273,"visible_bytes":99808,"deleted_bytes":383}
+PASS   : TestBenchmark::edit_patterns()
+QDEBUG : TestBenchmark::edit_sizes() 
+=== Edit Sizes (100K doc) ===
+  insert 1 chars: wall=110.677 ms (110677434 ns), work=100 local edits, 1.10677e+06 ns/local edits, 903.527 local edits/s, source_edits=100, remote_applications=0, fragments=1200, tombstones=0, visible_bytes=100100, process_rss=47644 KB
+{"name":"insert 1 chars","wall_ns":110677434,"work_label":"local edits","work_items":100,"source_edits":100,"remote_applications":0,"ns_per_work_item":1.10677e+06,"work_per_sec":903.527,"process_rss_kb":47644,"fragments":1200,"tombstones":0,"visible_bytes":100100,"deleted_bytes":0}
+  insert 10 chars: wall=116.231 ms (116230905 ns), work=100 local edits, 1.16231e+06 ns/local edits, 860.356 local edits/s, source_edits=100, remote_applications=0, fragments=1199, tombstones=0, visible_bytes=101000, process_rss=47644 KB
+{"name":"insert 10 chars","wall_ns":116230905,"work_label":"local edits","work_items":100,"source_edits":100,"remote_applications":0,"ns_per_work_item":1.16231e+06,"work_per_sec":860.356,"process_rss_kb":47644,"fragments":1199,"tombstones":0,"visible_bytes":101000,"deleted_bytes":0}
+  insert 100 chars: wall=175.573 ms (175573471 ns), work=100 local edits, 1.75573e+06 ns/local edits, 569.562 local edits/s, source_edits=100, remote_applications=0, fragments=1200, tombstones=0, visible_bytes=110000, process_rss=47644 KB
+{"name":"insert 100 chars","wall_ns":175573471,"work_label":"local edits","work_items":100,"source_edits":100,"remote_applications":0,"ns_per_work_item":1.75573e+06,"work_per_sec":569.562,"process_rss_kb":47644,"fragments":1200,"tombstones":0,"visible_bytes":110000,"deleted_bytes":0}
+  insert 1000 chars: wall=175.816 ms (175816145 ns), work=100 local edits, 1.75816e+06 ns/local edits, 568.776 local edits/s, source_edits=100, remote_applications=0, fragments=1199, tombstones=0, visible_bytes=200000, process_rss=47644 KB
+{"name":"insert 1000 chars","wall_ns":175816145,"work_label":"local edits","work_items":100,"source_edits":100,"remote_applications":0,"ns_per_work_item":1.75816e+06,"work_per_sec":568.776,"process_rss_kb":47644,"fragments":1199,"tombstones":0,"visible_bytes":200000,"deleted_bytes":0}
+PASS   : TestBenchmark::edit_sizes()
+QDEBUG : TestBenchmark::tombstone_degradation() 
+=== Tombstone Degradation (5K doc) ===
+  0% tombstones: wall=85.4457 ms (85445694 ns), work=200 local edits, 427228 ns/local edits, 2340.67 local edits/s, source_edits=200, remote_applications=0, fragments=518, tombstones=177, visible_bytes=4938, process_rss=47644 KB
+{"name":"0% tombstones","wall_ns":85445694,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":427228,"work_per_sec":2340.67,"process_rss_kb":47644,"fragments":518,"tombstones":177,"visible_bytes":4938,"deleted_bytes":489}
+QDEBUG : TestBenchmark::tombstone_degradation()     frags before edits: 50
+  50% tombstones: wall=1068.01 ms (1068012648 ns), work=200 local edits, 5.34006e+06 ns/local edits, 187.264 local edits/s, source_edits=200, remote_applications=0, fragments=4062, tombstones=2824, visible_bytes=2444, process_rss=47708 KB
+{"name":"50% tombstones","wall_ns":1068012648,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":5.34006e+06,"work_per_sec":187.264,"process_rss_kb":47708,"fragments":4062,"tombstones":2824,"visible_bytes":2444,"deleted_bytes":2992}
+QDEBUG : TestBenchmark::tombstone_degradation()     frags before edits: 3746
+  90% tombstones: wall=1214.36 ms (1214364374 ns), work=200 local edits, 6.07182e+06 ns/local edits, 164.695 local edits/s, source_edits=200, remote_applications=0, fragments=5168, tombstones=4934, visible_bytes=353, process_rss=47708 KB
+{"name":"90% tombstones","wall_ns":1214364374,"work_label":"local edits","work_items":200,"source_edits":200,"remote_applications":0,"ns_per_work_item":6.07182e+06,"work_per_sec":164.695,"process_rss_kb":47708,"fragments":5168,"tombstones":4934,"visible_bytes":353,"deleted_bytes":5013}
+QDEBUG : TestBenchmark::tombstone_degradation()     frags before edits: 4944
+PASS   : TestBenchmark::tombstone_degradation()
+QDEBUG : TestBenchmark::tombstone_degradation_large() 
+=== Tombstone Degradation Scaling ===
+QDEBUG : TestBenchmark::tombstone_degradation_large()   (Measures how doc size amplifies tombstone cost)
+  3K, 50% tombstones (2250 frags): wall=115.875 ms (115875297 ns), work=50 local edits, 2.31751e+06 ns/local edits, 431.498 local edits/s, source_edits=50, remote_applications=0, fragments=2335, tombstones=1583, visible_bytes=1476, process_rss=47708 KB
+{"name":"3K, 50% tombstones (2250 frags)","wall_ns":115875297,"work_label":"local edits","work_items":50,"source_edits":50,"remote_applications":0,"ns_per_work_item":2.31751e+06,"work_per_sec":431.498,"process_rss_kb":47708,"fragments":2335,"tombstones":1583,"visible_bytes":1476,"deleted_bytes":1627}
+  5K, 50% tombstones (3746 frags): wall=208.465 ms (208465213 ns), work=50 local edits, 4.1693e+06 ns/local edits, 239.848 local edits/s, source_edits=50, remote_applications=0, fragments=3819, tombstones=2568, visible_bytes=2510, process_rss=47708 KB
+{"name":"5K, 50% tombstones (3746 frags)","wall_ns":208465213,"work_label":"local edits","work_items":50,"source_edits":50,"remote_applications":0,"ns_per_work_item":4.1693e+06,"work_per_sec":239.848,"process_rss_kb":47708,"fragments":3819,"tombstones":2568,"visible_bytes":2510,"deleted_bytes":2607}
+  8K, 50% tombstones (6005 frags): wall=392.655 ms (392654544 ns), work=50 local edits, 7.85309e+06 ns/local edits, 127.338 local edits/s, source_edits=50, remote_applications=0, fragments=6076, tombstones=4091, visible_bytes=3960, process_rss=47708 KB
+{"name":"8K, 50% tombstones (6005 frags)","wall_ns":392654544,"work_label":"local edits","work_items":50,"source_edits":50,"remote_applications":0,"ns_per_work_item":7.85309e+06,"work_per_sec":127.338,"process_rss_kb":47708,"fragments":6076,"tombstones":4091,"visible_bytes":3960,"deleted_bytes":4146}
+PASS   : TestBenchmark::tombstone_degradation_large()
+QDEBUG : TestBenchmark::multi_replica_convergence() 
+=== Multi-Replica Convergence ===
+  K=2 replicas, 50 edits each: wall=7.21747 ms (7217468 ns), work=100 remote applications, 72174.7 ns/remote applications, 13855.3 remote applications/s, source_edits=100, remote_applications=100, fragments=125, tombstones=117, visible_bytes=14, process_rss=47836 KB
+{"name":"K=2 replicas, 50 edits each","wall_ns":7217468,"work_label":"remote applications","work_items":100,"source_edits":100,"remote_applications":100,"ns_per_work_item":72174.7,"work_per_sec":13855.3,"process_rss_kb":47836,"fragments":125,"tombstones":117,"visible_bytes":14,"deleted_bytes":181}
+  K=5 replicas, 50 edits each: wall=144.683 ms (144682994 ns), work=1000 remote applications, 144683 ns/remote applications, 6911.66 remote applications/s, source_edits=250, remote_applications=1000, fragments=326, tombstones=288, visible_bytes=84, process_rss=47836 KB
+{"name":"K=5 replicas, 50 edits each","wall_ns":144682994,"work_label":"remote applications","work_items":1000,"source_edits":250,"remote_applications":1000,"ns_per_work_item":144683,"work_per_sec":6911.66,"process_rss_kb":47836,"fragments":326,"tombstones":288,"visible_bytes":84,"deleted_bytes":424}
+  K=10 replicas, 50 edits each: wall=1186.83 ms (1186829576 ns), work=4500 remote applications, 263740 ns/remote applications, 3791.61 remote applications/s, source_edits=500, remote_applications=4500, fragments=601, tombstones=543, visible_bytes=116, process_rss=47836 KB
+{"name":"K=10 replicas, 50 edits each","wall_ns":1186829576,"work_label":"remote applications","work_items":4500,"source_edits":500,"remote_applications":4500,"ns_per_work_item":263740,"work_per_sec":3791.61,"process_rss_kb":47836,"fragments":601,"tombstones":543,"visible_bytes":116,"deleted_bytes":795}
+PASS   : TestBenchmark::multi_replica_convergence()
+QDEBUG : TestBenchmark::undo_redo_cycle() 
+=== Undo/Redo Cycle (10K doc) ===
+  edit phase (500 edits): wall=315.676 ms (315675685 ns), work=500 local edits, 631351 ns/local edits, 1583.9 local edits/s, source_edits=500, remote_applications=0, fragments=1275, tombstones=459, visible_bytes=9684, process_rss=47836 KB
+{"name":"edit phase (500 edits)","wall_ns":315675685,"work_label":"local edits","work_items":500,"source_edits":500,"remote_applications":0,"ns_per_work_item":631351,"work_per_sec":1583.9,"process_rss_kb":47836,"fragments":1275,"tombstones":459,"visible_bytes":9684,"deleted_bytes":1281}
+  undo phase (500 undos): wall=4.26084 ms (4260843 ns), work=500 undo operations, 8521.69 ns/undo operations, 117348 undo operations/s, source_edits=500, remote_applications=0, fragments=1275, tombstones=459, visible_bytes=9684, process_rss=47836 KB
+{"name":"undo phase (500 undos)","wall_ns":4260843,"work_label":"undo operations","work_items":500,"source_edits":500,"remote_applications":0,"ns_per_work_item":8521.69,"work_per_sec":117348,"process_rss_kb":47836,"fragments":1275,"tombstones":459,"visible_bytes":9684,"deleted_bytes":1281}
+  redo phase (500 redos): wall=9.37872 ms (9378723 ns), work=500 redo operations, 18757.4 ns/redo operations, 53312.2 redo operations/s, source_edits=500, remote_applications=0, fragments=1275, tombstones=459, visible_bytes=9684, process_rss=47836 KB
+{"name":"redo phase (500 redos)","wall_ns":9378723,"work_label":"redo operations","work_items":500,"source_edits":500,"remote_applications":0,"ns_per_work_item":18757.4,"work_per_sec":53312.2,"process_rss_kb":47836,"fragments":1275,"tombstones":459,"visible_bytes":9684,"deleted_bytes":1281}
+PASS   : TestBenchmark::undo_redo_cycle()
+QDEBUG : TestBenchmark::undo_stack_depth() 
+=== Undo Stack Depth (10K doc) ===
+  undo N=100 edits: wall=0.467756 ms (467756 ns), work=100 undo operations, 4677.56 ns/undo operations, 213787 undo operations/s, source_edits=100, remote_applications=0, fragments=350, tombstones=75, visible_bytes=10000, process_rss=47836 KB
+{"name":"undo N=100 edits","wall_ns":467756,"work_label":"undo operations","work_items":100,"source_edits":100,"remote_applications":0,"ns_per_work_item":4677.56,"work_per_sec":213787,"process_rss_kb":47836,"fragments":350,"tombstones":75,"visible_bytes":10000,"deleted_bytes":221}
+  undo N=500 edits: wall=3.66783 ms (3667828 ns), work=500 undo operations, 7335.66 ns/undo operations, 136320 undo operations/s, source_edits=500, remote_applications=0, fragments=1275, tombstones=358, visible_bytes=10000, process_rss=47836 KB
+{"name":"undo N=500 edits","wall_ns":3667828,"work_label":"undo operations","work_items":500,"source_edits":500,"remote_applications":0,"ns_per_work_item":7335.66,"work_per_sec":136320,"process_rss_kb":47836,"fragments":1275,"tombstones":358,"visible_bytes":10000,"deleted_bytes":965}
+  undo N=1000 edits: wall=11.7342 ms (11734163 ns), work=1000 undo operations, 11734.2 ns/undo operations, 85221.2 undo operations/s, source_edits=1000, remote_applications=0, fragments=2413, tombstones=781, visible_bytes=10000, process_rss=47836 KB
+{"name":"undo N=1000 edits","wall_ns":11734163,"work_label":"undo operations","work_items":1000,"source_edits":1000,"remote_applications":0,"ns_per_work_item":11734.2,"work_per_sec":85221.2,"process_rss_kb":47836,"fragments":2413,"tombstones":781,"visible_bytes":10000,"deleted_bytes":1972}
+PASS   : TestBenchmark::undo_stack_depth()
+QDEBUG : TestBenchmark::fragment_proliferation() 
+=== Fragment Proliferation (10K doc + 2K single-char inserts) ===
+  after 500 inserts: wall=260.916 ms (260916442 ns), work=500 local edits, 521833 ns/local edits, 1916.32 local edits/s, source_edits=500, remote_applications=0, fragments=1073, tombstones=0, visible_bytes=10500, process_rss_delta=0 KB
+{"name":"after 500 inserts","wall_ns":260916442,"work_label":"local edits","work_items":500,"source_edits":500,"remote_applications":0,"ns_per_work_item":521833,"work_per_sec":1916.32,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":1073,"tombstones":0,"visible_bytes":10500,"deleted_bytes":0}
+  after 1000 inserts: wall=1000.53 ms (1000534031 ns), work=1000 local edits, 1.00053e+06 ns/local edits, 999.466 local edits/s, source_edits=1000, remote_applications=0, fragments=1997, tombstones=0, visible_bytes=11000, process_rss_delta=0 KB
+{"name":"after 1000 inserts","wall_ns":1000534031,"work_label":"local edits","work_items":1000,"source_edits":1000,"remote_applications":0,"ns_per_work_item":1.00053e+06,"work_per_sec":999.466,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":1997,"tombstones":0,"visible_bytes":11000,"deleted_bytes":0}
+  after 1500 inserts: wall=2251.64 ms (2251638417 ns), work=1500 local edits, 1.50109e+06 ns/local edits, 666.182 local edits/s, source_edits=1500, remote_applications=0, fragments=2893, tombstones=0, visible_bytes=11500, process_rss_delta=0 KB
+{"name":"after 1500 inserts","wall_ns":2251638417,"work_label":"local edits","work_items":1500,"source_edits":1500,"remote_applications":0,"ns_per_work_item":1.50109e+06,"work_per_sec":666.182,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":2893,"tombstones":0,"visible_bytes":11500,"deleted_bytes":0}
+  after 2000 inserts: wall=4031.28 ms (4031278769 ns), work=2000 local edits, 2.01564e+06 ns/local edits, 496.12 local edits/s, source_edits=2000, remote_applications=0, fragments=3759, tombstones=0, visible_bytes=12000, process_rss_delta=0 KB
+{"name":"after 2000 inserts","wall_ns":4031278769,"work_label":"local edits","work_items":2000,"source_edits":2000,"remote_applications":0,"ns_per_work_item":2.01564e+06,"work_per_sec":496.12,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":3759,"tombstones":0,"visible_bytes":12000,"deleted_bytes":0}
+PASS   : TestBenchmark::fragment_proliferation()
+QDEBUG : TestBenchmark::memory_growth() 
+=== Memory Growth (5000 edits from empty) ===
+  memory growth after 500 edits: wall=128.657 ms (128656856 ns), work=500 local edits, 257314 ns/local edits, 3886.31 local edits/s, source_edits=500, remote_applications=0, fragments=628, tombstones=176, visible_bytes=822, process_rss_delta=0 KB
+{"name":"memory growth after 500 edits","wall_ns":128656856,"work_label":"local edits","work_items":500,"source_edits":500,"remote_applications":0,"ns_per_work_item":257314,"work_per_sec":3886.31,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":628,"tombstones":176,"visible_bytes":822,"deleted_bytes":176}
+  memory growth after 1000 edits: wall=559.071 ms (559071248 ns), work=1000 local edits, 559071 ns/local edits, 1788.68 local edits/s, source_edits=1000, remote_applications=0, fragments=1253, tombstones=324, visible_bytes=1686, process_rss_delta=0 KB
+{"name":"memory growth after 1000 edits","wall_ns":559071248,"work_label":"local edits","work_items":1000,"source_edits":1000,"remote_applications":0,"ns_per_work_item":559071,"work_per_sec":1788.68,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":1253,"tombstones":324,"visible_bytes":1686,"deleted_bytes":324}
+  memory growth after 1500 edits: wall=1372.86 ms (1372860389 ns), work=1500 local edits, 915240 ns/local edits, 1092.61 local edits/s, source_edits=1500, remote_applications=0, fragments=1892, tombstones=500, visible_bytes=2479, process_rss_delta=0 KB
+{"name":"memory growth after 1500 edits","wall_ns":1372860389,"work_label":"local edits","work_items":1500,"source_edits":1500,"remote_applications":0,"ns_per_work_item":915240,"work_per_sec":1092.61,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":1892,"tombstones":500,"visible_bytes":2479,"deleted_bytes":500}
+  memory growth after 2000 edits: wall=2580.06 ms (2580061712 ns), work=2000 local edits, 1.29003e+06 ns/local edits, 775.175 local edits/s, source_edits=2000, remote_applications=0, fragments=2515, tombstones=660, visible_bytes=3315, process_rss_delta=0 KB
+{"name":"memory growth after 2000 edits","wall_ns":2580061712,"work_label":"local edits","work_items":2000,"source_edits":2000,"remote_applications":0,"ns_per_work_item":1.29003e+06,"work_per_sec":775.175,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":2515,"tombstones":660,"visible_bytes":3315,"deleted_bytes":660}
+  memory growth after 2500 edits: wall=4208.93 ms (4208930852 ns), work=2500 local edits, 1.68357e+06 ns/local edits, 593.975 local edits/s, source_edits=2500, remote_applications=0, fragments=3119, tombstones=826, visible_bytes=4159, process_rss_delta=0 KB
+{"name":"memory growth after 2500 edits","wall_ns":4208930852,"work_label":"local edits","work_items":2500,"source_edits":2500,"remote_applications":0,"ns_per_work_item":1.68357e+06,"work_per_sec":593.975,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":3119,"tombstones":826,"visible_bytes":4159,"deleted_bytes":826}
+  memory growth after 3000 edits: wall=6331.6 ms (6331604894 ns), work=3000 local edits, 2.11053e+06 ns/local edits, 473.814 local edits/s, source_edits=3000, remote_applications=0, fragments=3776, tombstones=1002, visible_bytes=4946, process_rss_delta=0 KB
+{"name":"memory growth after 3000 edits","wall_ns":6331604894,"work_label":"local edits","work_items":3000,"source_edits":3000,"remote_applications":0,"ns_per_work_item":2.11053e+06,"work_per_sec":473.814,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":3776,"tombstones":1002,"visible_bytes":4946,"deleted_bytes":1002}
+  memory growth after 3500 edits: wall=9524.88 ms (9524884201 ns), work=3500 local edits, 2.7214e+06 ns/local edits, 367.459 local edits/s, source_edits=3500, remote_applications=0, fragments=4402, tombstones=1170, visible_bytes=5785, process_rss_delta=0 KB
+{"name":"memory growth after 3500 edits","wall_ns":9524884201,"work_label":"local edits","work_items":3500,"source_edits":3500,"remote_applications":0,"ns_per_work_item":2.7214e+06,"work_per_sec":367.459,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":4402,"tombstones":1170,"visible_bytes":5785,"deleted_bytes":1170}
+  memory growth after 4000 edits: wall=13482.5 ms (13482542295 ns), work=4000 local edits, 3.37064e+06 ns/local edits, 296.68 local edits/s, source_edits=4000, remote_applications=0, fragments=5051, tombstones=1325, visible_bytes=6678, process_rss_delta=0 KB
+{"name":"memory growth after 4000 edits","wall_ns":13482542295,"work_label":"local edits","work_items":4000,"source_edits":4000,"remote_applications":0,"ns_per_work_item":3.37064e+06,"work_per_sec":296.68,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":5051,"tombstones":1325,"visible_bytes":6678,"deleted_bytes":1325}
+  memory growth after 4500 edits: wall=17259.4 ms (17259430308 ns), work=4500 local edits, 3.83543e+06 ns/local edits, 260.727 local edits/s, source_edits=4500, remote_applications=0, fragments=5702, tombstones=1466, visible_bytes=7615, process_rss_delta=0 KB
+{"name":"memory growth after 4500 edits","wall_ns":17259430308,"work_label":"local edits","work_items":4500,"source_edits":4500,"remote_applications":0,"ns_per_work_item":3.83543e+06,"work_per_sec":260.727,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":5702,"tombstones":1466,"visible_bytes":7615,"deleted_bytes":1466}
+  memory growth after 5000 edits: wall=21701.9 ms (21701946931 ns), work=5000 local edits, 4.34039e+06 ns/local edits, 230.394 local edits/s, source_edits=5000, remote_applications=0, fragments=6332, tombstones=1631, visible_bytes=8496, process_rss_delta=0 KB
+{"name":"memory growth after 5000 edits","wall_ns":21701946931,"work_label":"local edits","work_items":5000,"source_edits":5000,"remote_applications":0,"ns_per_work_item":4.34039e+06,"work_per_sec":230.394,"process_rss_delta_kb":0,"process_rss_kb":null,"fragments":6332,"tombstones":1631,"visible_bytes":8496,"deleted_bytes":1631}
+PASS   : TestBenchmark::memory_growth()
+QDEBUG : TestBenchmark::reconnect_sync_cost() 
+--- Reconnect Sync Cost ---
+  N=50 edits: reconnect catch-up: wall=4.76004 ms (4760040 ns), work=104 remote applications, 45769.6 ns/remote applications, 21848.6 remote applications/s, source_edits=100, remote_applications=104, fragments=116, tombstones=37, visible_bytes=1198, process_rss=47840 KB
+{"name":"N=50 edits: reconnect catch-up","wall_ns":4760040,"work_label":"remote applications","work_items":104,"source_edits":100,"remote_applications":104,"ns_per_work_item":45769.6,"work_per_sec":21848.6,"process_rss_kb":47840,"fragments":116,"tombstones":37,"visible_bytes":1198,"deleted_bytes":208}
+QDEBUG : TestBenchmark::reconnect_sync_cost()   frags 1 -> 116
+  N=100 edits: reconnect catch-up: wall=20.2533 ms (20253272 ns), work=209 remote applications, 96905.6 ns/remote applications, 10319.3 remote applications/s, source_edits=200, remote_applications=209, fragments=227, tombstones=62, visible_bytes=1565, process_rss=47840 KB
+{"name":"N=100 edits: reconnect catch-up","wall_ns":20253272,"work_label":"remote applications","work_items":209,"source_edits":200,"remote_applications":209,"ns_per_work_item":96905.6,"work_per_sec":10319.3,"process_rss_kb":47840,"fragments":227,"tombstones":62,"visible_bytes":1565,"deleted_bytes":312}
+QDEBUG : TestBenchmark::reconnect_sync_cost()   frags 1 -> 227
+  N=200 edits: reconnect catch-up: wall=83.8422 ms (83842179 ns), work=416 remote applications, 201544 ns/remote applications, 4961.7 remote applications/s, source_edits=400, remote_applications=416, fragments=448, tombstones=159, visible_bytes=2070, process_rss=47840 KB
+{"name":"N=200 edits: reconnect catch-up","wall_ns":83842179,"work_label":"remote applications","work_items":416,"source_edits":400,"remote_applications":416,"ns_per_work_item":201544,"work_per_sec":4961.7,"process_rss_kb":47840,"fragments":448,"tombstones":159,"visible_bytes":2070,"deleted_bytes":786}
+QDEBUG : TestBenchmark::reconnect_sync_cost()   frags 1 -> 448
+PASS   : TestBenchmark::reconnect_sync_cost()
+PASS   : TestBenchmark::cleanupTestCase()
+Totals: 14 passed, 0 failed, 0 skipped, 0 blacklisted, 86305ms
+********* Finished testing of TestBenchmark *********

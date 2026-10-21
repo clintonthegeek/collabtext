@@ -25,11 +25,14 @@ The C++ harness writes JSON Lines using schema `collabtext-performance-samples/1
   results. Edit workloads may include `byte_offset` to identify the sampled
   position in the fixture. Diagnostic edit samples also include
   `middle_insert_refusals` (`guard`, `nonterminal_predecessor`,
-  `missing_successor`, `ambiguous_ancestry`) and `partial_replace` (attempts,
+  `missing_successor`) and `partial_replace` (attempts,
   failures, boundary-rank refusal, then failures at stages 1–5). The stages are
   input guard; fragment/scalar validation; origin/run lookup; placement proof;
-  and staged index/tree update. These counters classify fallback work only;
-  diagnostic timings remain excluded from performance results.
+  and staged index/tree update. `work_diagnostics` also records per-call deltas
+  for fragment summary compositions, SumTree items visited, UTF-16 index
+  builds, origin/deletion index rows inserted, UndoMap queries, and undo-budget
+  entries examined, and identity-ancestry steps. These counters classify work
+  only; diagnostic timings remain excluded from performance results.
 - `case` records attempted/accepted/refused/no-op counts, setup dimensions,
   visible bytes and available structure counts, plus deterministic final-state
   and encoded-operation fingerprints.

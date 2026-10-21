@@ -1055,3 +1055,23 @@ records its diff hash, environment, and raw samples. Affected Debug passed
 The fivefold aged-mean target, 2 ms p99 target, mixed 5 KB/50%-tombstone target,
 full routed Release sweep, and relocated package gate remain outstanding. See
 [`the undo-budget paired report`](../../reports/2026-10-21-x05-undo-budget-paired/README.md).
+
+**Progress (2026-10-21):** Identity ancestry now rejects impossible future
+same-actor parents from counter order and omits a redundant reverse ancestry
+walk after the forward proof. In a diagnostics-enabled aged public trace, all
+200 calls had median 0 and p95 2 ancestry steps; the exact-run subset had
+median 2 and p95 3, down from thousands of steps before this change.
+
+**Paired evidence (2026-10-21):** Five full Release pairs against X05 baseline
+`0fbd15b` matched all 56 public state and operation fingerprints and passed
+native/recovery workloads. Aged public 10-KB/3,000-history replacement mean
+improved about 64x (10.447 to 0.165 ms median per-run mean) and p99 about 33x
+(12.259 to 0.366 ms); 3,000-run random middle insertion improved about 81x.
+No-history replacements also improved, with median mean ratios from 0.389 to
+0.505. The native 5-KB/50%-tombstone workload improved about 1.18x, below the
+2x target. Debug and Release model-sensitive routes passed 12/12 each, serial
+leak-enabled ASan/UBSan passed 11/11, and diagnostics passed 20/20. The
+candidate was a dirty worktree at parent HEAD; its diff hash and raw evidence
+are retained in [`the ancestry paired report`](../../reports/2026-10-21-x05-ancestry-paired/README.md).
+X05 remains in progress because mixed-tombstone acceptance and the complete
+routed Release and relocated package gates remain open.

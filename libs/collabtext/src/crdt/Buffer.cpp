@@ -426,8 +426,16 @@ Buffer::locate_retained_identity(Identity identity) const {
 
 bool Buffer::is_descendant_identity(Identity item, Identity ancestor) const {
     if (item == ancestor) return true;
+    // An actor's allocated counters are causally ordered. A later identity
+    // cannot occur in the immutable parent chain of an earlier identity from
+    // the same actor, so this proves non-ancestry without walking the chain.
+    if (item.actor == ancestor.actor && item.counter < ancestor.counter)
+        return false;
     const size_t limit = m_run_directory.size() + 1;
     for (size_t depth = 0; depth < limit; ++depth) {
+        if (item.actor == ancestor.actor && item.counter < ancestor.counter)
+            return false;
+        Diagnostics::record(Diagnostics::Counter::identity_ancestry_steps);
         const auto located = locate_retained_identity(item);
         if (!located) return false;
         if (ancestor.actor == located->fragment->origin.actor &&
@@ -508,14 +516,11 @@ Buffer::simple_middle_insertion(uint32_t byte_offset) const {
         return std::nullopt;
     }
     if (right && is_descendant_identity(*right, *left)) {
-        // The predecessor belongs to the right item's subtree. This is the
-        // exact adjacent left-child position only when no left sibling subtree
-        // already precedes the parent.
-        if (is_descendant_identity(*left, *right)) {
-            Diagnostics::record(
-                Diagnostics::Counter::middle_insert_refused_ambiguous_ancestry);
-            return std::nullopt;
-        }
+        // Valid identities link only to already-observed causal history, so
+        // the immutable parent graph is acyclic. The strict-descendant proof
+        // above therefore also proves the reverse relation false. Walking the
+        // reverse chain repeated thousands of lookups on deep histories
+        // without excluding any valid state.
         return std::pair{Link{right, Side::Left, right}, successor_rank};
     }
     return std::pair{Link{*left, Side::Right, right},

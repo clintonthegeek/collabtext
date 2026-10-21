@@ -68,8 +68,9 @@ std::vector<uint64_t> samples;
 std::vector<uint64_t> sample_fragment_snapshots;
 std::vector<std::optional<uint64_t>> sample_offsets;
 std::vector<std::optional<std::pair<uint32_t, uint32_t>>> sample_fragment_locations;
-std::vector<std::array<uint64_t, 4>> sample_middle_insert_refusals;
+std::vector<std::array<uint64_t, 3>> sample_middle_insert_refusals;
 std::vector<std::array<uint64_t, 8>> sample_partial_replace;
+std::vector<std::array<uint64_t, 8>> sample_work_diagnostics;
 uint64_t case_attempts = 0;
 uint64_t case_accepted = 0;
 uint64_t case_refused = 0;
@@ -106,6 +107,7 @@ void begin_case(std::string name) {
     sample_fragment_locations.clear();
     sample_middle_insert_refusals.clear();
     sample_partial_replace.clear();
+    sample_work_diagnostics.clear();
     current_sample_offset.reset();
     current_fragment_location.reset();
     case_attempts = case_accepted = case_refused = case_noop = 0;
@@ -136,9 +138,7 @@ auto timed(F&& function) {
         after.get(Diagnostics::Counter::middle_insert_refused_nonterminal_predecessor) -
             before.get(Diagnostics::Counter::middle_insert_refused_nonterminal_predecessor),
         after.get(Diagnostics::Counter::middle_insert_refused_missing_successor) -
-            before.get(Diagnostics::Counter::middle_insert_refused_missing_successor),
-        after.get(Diagnostics::Counter::middle_insert_refused_ambiguous_ancestry) -
-            before.get(Diagnostics::Counter::middle_insert_refused_ambiguous_ancestry)});
+            before.get(Diagnostics::Counter::middle_insert_refused_missing_successor)});
     sample_partial_replace.push_back({
         after.get(Diagnostics::Counter::partial_replace_attempts) -
             before.get(Diagnostics::Counter::partial_replace_attempts),
@@ -156,6 +156,23 @@ auto timed(F&& function) {
             before.get(Diagnostics::Counter::partial_replace_failure_stage_4),
         after.get(Diagnostics::Counter::partial_replace_failure_stage_5) -
             before.get(Diagnostics::Counter::partial_replace_failure_stage_5)});
+    sample_work_diagnostics.push_back({
+        after.get(Diagnostics::Counter::fragment_summary_compositions) -
+            before.get(Diagnostics::Counter::fragment_summary_compositions),
+        after.get(Diagnostics::Counter::sumtree_items_visited) -
+            before.get(Diagnostics::Counter::sumtree_items_visited),
+        after.get(Diagnostics::Counter::utf16_index_builds) -
+            before.get(Diagnostics::Counter::utf16_index_builds),
+        after.get(Diagnostics::Counter::origin_index_rows_inserted) -
+            before.get(Diagnostics::Counter::origin_index_rows_inserted),
+        after.get(Diagnostics::Counter::deletion_index_rows_inserted) -
+            before.get(Diagnostics::Counter::deletion_index_rows_inserted),
+        after.get(Diagnostics::Counter::undo_map_queries) -
+            before.get(Diagnostics::Counter::undo_map_queries),
+        after.get(Diagnostics::Counter::undo_budget_entries_examined) -
+            before.get(Diagnostics::Counter::undo_budget_entries_examined),
+        after.get(Diagnostics::Counter::identity_ancestry_steps) -
+            before.get(Diagnostics::Counter::identity_ancestry_steps)});
     current_sample_offset.reset();
     current_fragment_location.reset();
     return result;
@@ -175,13 +192,24 @@ void report_case(uint64_t visible_bytes, uint64_t prior_edits,
             const auto& refusals = sample_middle_insert_refusals[i];
             std::cout << ",\"middle_insert_refusals\":["
                       << refusals[0] << ',' << refusals[1] << ','
-                      << refusals[2] << ',' << refusals[3] << ']';
+                      << refusals[2] << ']';
             const auto& partial = sample_partial_replace[i];
             std::cout << ",\"partial_replace\":["
                       << partial[0] << ',' << partial[1] << ','
                       << partial[2] << ',' << partial[3] << ','
                       << partial[4] << ',' << partial[5] << ','
                       << partial[6] << ',' << partial[7] << ']';
+            const auto& work = sample_work_diagnostics[i];
+            std::cout << ",\"work_diagnostics\":{"
+                      << "\"fragment_summary_compositions\":" << work[0]
+                      << ",\"sumtree_items_visited\":" << work[1]
+                      << ",\"utf16_index_builds\":" << work[2]
+                      << ",\"origin_index_rows_inserted\":" << work[3]
+                      << ",\"deletion_index_rows_inserted\":" << work[4]
+                      << ",\"undo_map_queries\":" << work[5]
+                      << ",\"undo_budget_entries_examined\":" << work[6]
+                      << ",\"identity_ancestry_steps\":" << work[7]
+                      << '}';
         }
         if (sample_offsets[i])
             std::cout << ",\"byte_offset\":" << *sample_offsets[i];

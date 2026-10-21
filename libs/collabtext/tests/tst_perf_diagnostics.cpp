@@ -34,6 +34,46 @@ private slots:
         QCOMPARE(buffer.text().size(), size_t{1001});
     }
 
+    void local_replacement_reports_identity_ancestry_work() {
+        Buffer buffer(CollabText::Test::test_counter(54));
+        for (uint32_t i = 0; i < 128; ++i) {
+            const uint32_t end = buffer.visible_length();
+            auto edit = buffer.try_apply_local_edit({{end, end}}, {"a"});
+            QVERIFY2(edit, "ancestry fixture append failed");
+        }
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto edit = buffer.try_apply_local_edit({{64, 65}}, {"z"});
+        Diagnostics::end_sample();
+        QVERIFY(edit);
+        QCOMPARE(Diagnostics::snapshot().get(
+                     Diagnostics::Counter::identity_ancestry_steps),
+                 uint64_t{1});
+        QCOMPARE(buffer.text().size(), size_t{128});
+    }
+
+    void local_replacement_rejects_future_same_actor_ancestor_without_walk() {
+        Buffer buffer(CollabText::Test::test_counter(55));
+        for (uint32_t i = 0; i < 128; ++i) {
+            const uint32_t end = buffer.visible_length();
+            auto edit = buffer.try_apply_local_edit({{end, end}}, {"a"});
+            QVERIFY2(edit, "same-actor ancestry fixture append failed");
+        }
+        auto head = buffer.try_apply_local_edit({{0, 0}}, {"b"});
+        QVERIFY(head);
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto edit = buffer.try_apply_local_edit({{1, 2}}, {"z"});
+        Diagnostics::end_sample();
+        QVERIFY(edit);
+        QCOMPARE(Diagnostics::snapshot().get(
+                     Diagnostics::Counter::identity_ancestry_steps),
+                 uint64_t{0});
+        QCOMPARE(buffer.text().size(), size_t{129});
+    }
+
     void local_middle_insert_splices_a_proven_run_boundary() {
         constexpr uint32_t run_count = 128;
         Buffer buffer(CollabText::Test::test_counter(44));

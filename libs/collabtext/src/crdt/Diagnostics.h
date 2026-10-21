@@ -7,7 +7,7 @@
 
 namespace CollabText::Crdt::Diagnostics {
 
-inline constexpr std::string_view schema = "collabtext-perf-diagnostics/10";
+inline constexpr std::string_view schema = "collabtext-perf-diagnostics/12";
 
 enum class Counter : size_t {
     sumtree_items_visited,
@@ -63,7 +63,6 @@ enum class Counter : size_t {
     middle_insert_refused_guard,
     middle_insert_refused_nonterminal_predecessor,
     middle_insert_refused_missing_successor,
-    middle_insert_refused_ambiguous_ancestry,
     partial_replace_attempts,
     partial_replace_failures,
     partial_replace_refused_boundary_rank,
@@ -73,6 +72,7 @@ enum class Counter : size_t {
     partial_replace_failure_stage_4,
     partial_replace_failure_stage_5,
     undo_budget_entries_examined,
+    identity_ancestry_steps,
     count,
 };
 
@@ -140,7 +140,6 @@ inline constexpr std::array<std::string_view, counter_count> counter_names{
     "middle_insert_refused_guard",
     "middle_insert_refused_nonterminal_predecessor",
     "middle_insert_refused_missing_successor",
-    "middle_insert_refused_ambiguous_ancestry",
     "partial_replace_attempts",
     "partial_replace_failures",
     "partial_replace_refused_boundary_rank",
@@ -150,6 +149,7 @@ inline constexpr std::array<std::string_view, counter_count> counter_names{
     "partial_replace_failure_stage_4",
     "partial_replace_failure_stage_5",
     "undo_budget_entries_examined",
+    "identity_ancestry_steps",
 };
 
 #if defined(COLLABTEXT_ENABLE_PERF_DIAGNOSTICS)
