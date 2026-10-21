@@ -896,28 +896,45 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
     }
     attempt.stage = 5;
 
+    // Clone the tree before splitting so its COW leaf is the sole full-fragment
+    // copy. Move the staged fragment's text into the split pieces instead of
+    // copying the original string again before tree publication.
+    auto tree = m_fragment_tree;
     std::vector<Fragment> pieces;
     pieces.reserve(3);
-    Fragment remainder = original;
-    if (first_scalar) {
-        Fragment tail = remainder.split_off(first_scalar);
-        pieces.push_back(std::move(remainder));
-        remainder = std::move(tail);
-    }
-    Fragment suffix;
-    const uint32_t remainder_deleted_length = first_scalar
-        ? deleted_length : end_scalar;
-    if (remainder_deleted_length < remainder.length)
-        suffix = remainder.split_off(remainder_deleted_length);
-    const Identity deleted_origin = remainder.origin;
-    const uint32_t deleted_run_length = remainder.length;
-    remainder.deletions.push_back(deletion_id);
-    remainder.visible = remainder.compute_visible(m_undo_map);
-    if (remainder.visible || deleted_run_length != deleted_length)
+    Identity deleted_origin;
+    uint32_t deleted_run_length = 0;
+    bool pieces_valid = false;
+    if (!tree.edit_item<RetainedRunOffset>(RetainedRunOffset{*old_rank},
+            [&](Fragment& fragment) {
+                if (fragment.origin != original.origin ||
+                    fragment.length != original.length)
+                    return;
+                Fragment remainder = std::move(fragment);
+                fragment = Fragment{};
+                fragment.origin = original.origin;
+                fragment.length = original.length;
+                Fragment suffix;
+                if (first_scalar) {
+                    Fragment tail = remainder.split_off(first_scalar);
+                    pieces.push_back(std::move(remainder));
+                    remainder = std::move(tail);
+                }
+                const uint32_t remainder_deleted_length = first_scalar
+                    ? deleted_length : end_scalar;
+                if (remainder_deleted_length < remainder.length)
+                    suffix = remainder.split_off(remainder_deleted_length);
+                deleted_origin = remainder.origin;
+                deleted_run_length = remainder.length;
+                remainder.deletions.push_back(deletion_id);
+                remainder.visible = remainder.compute_visible(m_undo_map);
+                if (remainder.visible || deleted_run_length != deleted_length)
+                    return;
+                pieces.push_back(std::move(remainder));
+                if (suffix.length) pieces.push_back(std::move(suffix));
+                pieces_valid = !pieces.empty();
+            }) || !pieces_valid)
         return std::nullopt;
-    pieces.push_back(std::move(remainder));
-    if (suffix.length) pieces.push_back(std::move(suffix));
-    if (pieces.empty()) return std::nullopt;
 
     const uint64_t needed_run_ids = static_cast<uint64_t>(pieces.size()) + 1;
     if (needed_run_ids - 1 > UINT64_MAX - m_next_run_id)
@@ -973,7 +990,6 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
                       inserted_length, inserted_text);
     inserted.visible = true;
 
-    auto tree = m_fragment_tree;
     auto nodes = m_node_directory;
     bool replaced = false;
     if (!tree.edit_item<RetainedRunOffset>(RetainedRunOffset{*old_rank},
