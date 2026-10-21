@@ -1,0 +1,9 @@
+# X05 fragment-start replacement paired evaluation
+
+This five-pair full Release matrix compares `6f43a06f933befeefa76c41ed591cdc7b1d4b549` with `4a4e31a6df208980d54e7ae716a7875714e3ac07`, using trace v2 (`7cd89dec0cac1b6f768471c25e91141855f62e260c0aa174ed8c0e4209cae939`). All 56 public state/operation fingerprints matched; the native benchmark suite and both recovery sizes passed in every pair. Environment, raw samples, aggregate and run logs are in [`raw/`](raw/).
+
+The candidate now permits the transactional partial-run splice at a visible-fragment start, including insertion before retained tombstones, and handles replacement of a whole current fragment. Its diagnostics-enabled Release run had zero reconstruction snapshots across all 200 public 10-KB/3,000-history calls, down from 16 fallbacks in the preceding candidate's diagnostic run. Diagnostics timings are excluded from the paired measurements.
+
+For public 10-KB replacements after 3,000 prior replacements, median paired mean latency fell from 4.08 ms to 1.83 ms (ratio 0.450), and median per-run p99 fell from 21.35 ms to 11.39 ms. The median paired p50 ratio was 0.947, so typical-call latency barely changed. The p99 still exceeds X05's 2-ms target, and mean improvement is short of the 5x target. The native 5-KB/50%-tombstone workload improved from 6.18 ms to 5.38 ms median per edit (ratio 0.868), short of its 2x target. The 10-KB no-history public mean ratio was 1.010, within the 10% guard. The 1-MB no-history public mean was 1.336x the parent, an unexplained light-history regression requiring follow-up.
+
+This slice removes the identified reconstruction tail from the checked aged workload but does not meet X05 acceptance. Remaining latency is in the fast path itself or other per-call work; zero snapshots alone does not establish bounded latency. The next report measures the follow-up reduction in unnecessary large-fragment copying.

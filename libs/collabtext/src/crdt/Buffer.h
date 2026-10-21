@@ -20,6 +20,7 @@
 
 #include <collabtext/ApplyOutcome.h>
 
+#include <deque>
 #include <functional>
 #include <map>
 #include <optional>
@@ -447,7 +448,6 @@ private:
 
     /// Trim the undo stack to m_max_undo_depth entries.
     void trim_undo_stack();
-    void recalculate_undo_bytes();
     Result<void> check_retirement_budget_for_limits(size_t depth,
                                                      size_t bytes) const;
     Result<void> check_retirement_budget_for_new_entry(
@@ -485,7 +485,7 @@ private:
     };
     [[nodiscard]] LocalUndoEntrySnapshot
     snapshot_undo_entry(const UndoEntry &) const;
-    std::vector<UndoEntry> m_undo_stack;
+    std::deque<UndoEntry> m_undo_stack;
     std::vector<LocalUndoEntrySnapshot> m_retired_undo_entries;
     size_t m_retired_undo_bytes = 0;
     size_t m_undo_cursor = 0;  // Points past the last undoable entry

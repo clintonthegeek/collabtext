@@ -12,6 +12,28 @@ using namespace CollabText::Crdt;
 class TestPerfDiagnostics : public QObject {
     Q_OBJECT
 private slots:
+    void aged_undo_budget_check_examines_only_entries_to_retire() {
+        Buffer buffer(CollabText::Test::test_counter(53));
+        for (uint32_t i = 0; i < 1000; ++i) {
+            const uint32_t end = buffer.visible_length();
+            auto edit = buffer.try_apply_local_edit({{end, end}}, {"x"});
+            QVERIFY2(edit, "aged undo fixture append failed");
+        }
+        QCOMPARE(buffer.undo_depth(), size_t{1000});
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        const uint32_t end = buffer.visible_length();
+        auto edit = buffer.try_apply_local_edit({{end, end}}, {"y"});
+        Diagnostics::end_sample();
+        QVERIFY(edit);
+        QCOMPARE(buffer.undo_depth(), size_t{1000});
+        QCOMPARE(Diagnostics::snapshot().get(
+                     Diagnostics::Counter::undo_budget_entries_examined),
+                 uint64_t{2});
+        QCOMPARE(buffer.text().size(), size_t{1001});
+    }
+
     void local_middle_insert_splices_a_proven_run_boundary() {
         constexpr uint32_t run_count = 128;
         Buffer buffer(CollabText::Test::test_counter(44));

@@ -477,6 +477,15 @@ lookup and paired results are in
 - `tools/test_verify_changed.py`
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
+- `docs/reports/2026-10-21-x05-fragment-start-replacement-paired/README.md`
+- `docs/reports/2026-10-21-x05-fragment-start-replacement-paired/raw/*`
+- `docs/reports/2026-10-21-x05-fragment-move-paired/README.md`
+- `docs/reports/2026-10-21-x05-fragment-move-paired/raw/*`
+- `libs/collabtext/src/crdt/Buffer.h`
+- `libs/collabtext/src/crdt/Diagnostics.h`
+- `libs/collabtext/tests/tst_perf_diagnostics.cpp`
+- `docs/reports/2026-10-21-x05-undo-budget-paired/README.md`
+- `docs/reports/2026-10-21-x05-undo-budget-paired/raw/*`
 
 **Steps:**
 
@@ -673,8 +682,35 @@ aged public 10-KB/3,000-replacement mean, p50, and p99 ratios were 0.336, 0.018,
 and 0.930. Median per-run p99 remains about 18.5 ms, so the 2 ms target is still
 missed. The no-history public mean ratio was 0.290. This is a substantial
 partial gain, but X05 acceptance remains open. The remaining fallback calls
-dominate the tail; classify them individually and widen the fast path only
-where the FugueMax slot is proven.
+remain for only a small set of no-history interiors; the aged workload now has
+zero snapshots, but its p50 and p99 remain high. Profile work inside the
+transactional path and retain the bounded-ambiguity fallback.
+
+**Progress (2026-10-21):** The partial splice now accepts fragment-start
+replacement placements, including slots before retained tombstones, and can
+represent a replaced whole current fragment as one tombstone plus the new run.
+The registered Debug and Release changed-path routes passed 104/104; the
+serial leak-enabled ASan/UBSan route passed 103/103 outside the sandbox's
+ptrace restriction. A full five-pair matrix against `6f43a06` matched all 56
+public fingerprints and passed native and recovery cases in every pair. Aged
+public 10-KB/3,000-history replacement mean fell from 4.08 ms to 1.83 ms
+(paired median ratio 0.450); median per-run p99 fell from 21.35 ms to 11.39 ms.
+The 5-KB/50%-tombstone native workload improved 13%. Both remain short of X05
+targets. The 10-KB no-history mean stayed within the 10% guard, while 1-MB
+replacement exposed a 34% regression. Full evidence is in
+[`2026-10-21-x05-fragment-start-replacement-paired`](../../reports/2026-10-21-x05-fragment-start-replacement-paired/README.md).
+
+**Progress (2026-10-21):** Partial replacement now splits text moved from the
+staged COW leaf, avoiding a redundant copy of the whole source string. Five
+public Release pairs against `4a4e31a` matched all 56 fingerprints. The 1-MB
+no-history public and byte-control replacement means improved 28% and 27.5%
+against that parent; aged replacement mean improved 13% and per-run p99 median
+8%. This is a targeted parent-to-candidate result; the aged p99 remains above
+10 ms and X05 acceptance is unmet. Focused perf diagnostics pass 17/17; the
+model-sensitive Debug and Release routes pass 12/12 each, and the serial
+leak-enabled ASan/UBSan route passes 11/11 outside the sandbox. The complete
+routed sweeps and relocated package gate remain part of the later arc gate. See
+[`2026-10-21-x05-fragment-move-paired`](../../reports/2026-10-21-x05-fragment-move-paired/README.md).
 
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
 - Target at least 5x lower aged 10-KB/3000-prior-replacement mean and median per-run p99 at most 2 ms in a comparable paired environment; target at least 2x lower mixed 5-KB/50%-deletion mean, with no more than 10% regression in light-history cases.
@@ -999,3 +1035,23 @@ single-scalar runs. The paired runner uses that same harness against baseline
 and candidate and checks final text/operation fingerprints. A quick smoke run
 passes all 56 cases, including both new workloads. The five-pair focused public
 matrix is pending; trace v1 and its archived hash remain unchanged.
+
+**Progress (2026-10-21):** Buffer now maintains retained undo bytes incrementally
+and uses a deque so trimming the oldest undo group does not shift the remaining
+history. A diagnostics test seeds 1,000 undo entries, appends once, and asserts
+that only the two entries involved in the budget/retirement decision are
+examined. The diagnostics-enabled aged 10 KB/3,000-history trace recorded 400
+budget-entry examinations and 200 retired groups across 200 calls.
+
+**Paired evidence (2026-10-21):** Five public Release pairs against immediate
+parent `26de7bb` matched all 56 public fingerprints. The aged 10 KB/3,000-history
+public replacement mean improved 10.1% (2.057 to 1.856 ms median); median
+per-run p99 improved 9.0% (12.51 to 11.39 ms), still well above the 2 ms X05
+target. Byte-control aged mean was unchanged and bulk-undo timing changes were
+mixed. This candidate was a dirty working tree at parent HEAD; the report
+records its diff hash, environment, and raw samples. Affected Debug passed
+104/104, focused Release passed 12/12, and serial leak-enabled ASan/UBSan passed
+11/11. This is a modest directional latency improvement, not X05 acceptance.
+The fivefold aged-mean target, 2 ms p99 target, mixed 5 KB/50%-tombstone target,
+full routed Release sweep, and relocated package gate remain outstanding. See
+[`the undo-budget paired report`](../../reports/2026-10-21-x05-undo-budget-paired/README.md).

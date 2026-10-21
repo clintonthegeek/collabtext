@@ -1405,26 +1405,16 @@ Result<void> Buffer::set_max_undo_bytes(size_t bytes) {
     return Result<void>::success();
 }
 
-void Buffer::recalculate_undo_bytes() {
-    m_undo_bytes = 0;
-    for (const auto &entry : m_undo_stack) {
-        if (entry.retained_bytes > SIZE_MAX - m_undo_bytes) {
-            m_undo_bytes = SIZE_MAX;
-            return;
-        }
-        m_undo_bytes += entry.retained_bytes;
-    }
-}
-
 void Buffer::trim_undo_stack() {
-    recalculate_undo_bytes();
     while (!m_undo_stack.empty() &&
            (m_undo_stack.size() > m_max_undo_depth ||
             m_undo_bytes > m_max_undo_bytes)) {
         retire_undo_entry(m_undo_stack.front());
-        m_undo_stack.erase(m_undo_stack.begin());
+        Diagnostics::record(Diagnostics::Counter::undo_budget_entries_examined);
+        m_undo_bytes -= std::min(m_undo_bytes,
+                                 m_undo_stack.front().retained_bytes);
+        m_undo_stack.pop_front();
         if (m_undo_cursor != 0) --m_undo_cursor;
-        recalculate_undo_bytes();
     }
 }
 
@@ -1483,6 +1473,7 @@ Result<void> Buffer::check_retirement_budget_for_new_entry(
     size_t retained_bytes, size_t inserted_count, size_t deletion_count) const {
     size_t added_bytes = 0;
     size_t added_groups = 0;
+    size_t remaining_bytes = m_undo_bytes;
     auto add = [&](size_t charge) -> bool {
         if (charge > detail::kMaxPendingUndoRetirementBytes -
                          std::min(added_bytes, detail::kMaxPendingUndoRetirementBytes))
@@ -1493,6 +1484,8 @@ Result<void> Buffer::check_retirement_budget_for_new_entry(
     };
     for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i) {
         const auto &entry = m_undo_stack[i];
+        Diagnostics::record(Diagnostics::Counter::undo_budget_entries_examined);
+        remaining_bytes -= std::min(remaining_bytes, entry.retained_bytes);
         if (!add(detail::local_undo_retirement_charge(
                 entry.operation_ids.size(), entry.inserted_keys.size(),
                 entry.deletion_ids.size())))
@@ -1500,14 +1493,6 @@ Result<void> Buffer::check_retirement_budget_for_new_entry(
                          "pending undo retirement memory budget would be exceeded");
     }
 
-    size_t remaining_bytes = 0;
-    for (size_t i = 0; i < m_undo_cursor; ++i) {
-        if (m_undo_stack[i].retained_bytes > SIZE_MAX - remaining_bytes) {
-            remaining_bytes = SIZE_MAX;
-            break;
-        }
-        remaining_bytes += m_undo_stack[i].retained_bytes;
-    }
     remaining_bytes = retained_bytes > SIZE_MAX - remaining_bytes
                           ? SIZE_MAX : remaining_bytes + retained_bytes;
     size_t count = m_undo_cursor + 1;
@@ -1517,6 +1502,7 @@ Result<void> Buffer::check_retirement_budget_for_new_entry(
     while (count > m_max_undo_depth || remaining_bytes > m_max_undo_bytes) {
         if (first < m_undo_cursor) {
             const auto &entry = m_undo_stack[first++];
+            Diagnostics::record(Diagnostics::Counter::undo_budget_entries_examined);
             remaining_bytes -= std::min(remaining_bytes, entry.retained_bytes);
             if (!add(detail::local_undo_retirement_charge(
                     entry.operation_ids.size(), entry.inserted_keys.size(),
@@ -2398,9 +2384,15 @@ Result<std::pair<uint32_t,uint32_t>> Buffer::utf16_range(int position, int lengt
 }
 
 void Buffer::commit_local_history(UndoEntry&& entry) {
-    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i)
+    for (size_t i = m_undo_cursor; i < m_undo_stack.size(); ++i) {
+        Diagnostics::record(Diagnostics::Counter::undo_budget_entries_examined);
         retire_undo_entry(m_undo_stack[i]);
+        m_undo_bytes -= std::min(m_undo_bytes,
+                                 m_undo_stack[i].retained_bytes);
+    }
     m_undo_stack.resize(m_undo_cursor);
+    m_undo_bytes = entry.retained_bytes > SIZE_MAX - m_undo_bytes
+                       ? SIZE_MAX : m_undo_bytes + entry.retained_bytes;
     m_undo_stack.push_back(std::move(entry));
     m_undo_cursor = m_undo_stack.size();
     trim_undo_stack();
@@ -3131,7 +3123,6 @@ bool Buffer::coalesce_last_undo() {
     m_undo_stack.erase(m_undo_stack.begin()
                        + static_cast<ptrdiff_t>(m_undo_cursor - 1));
     m_undo_cursor--;
-    recalculate_undo_bytes();
     return true;
 }
 
@@ -3201,8 +3192,7 @@ Buffer::restore_local_history(const LocalHistorySnapshot &snapshot) {
                      "local history cursor or depth is outside configured bounds");
 
     const auto &owner = actor_id();
-    std::vector<UndoEntry> restored;
-    restored.reserve(snapshot.entries.size());
+    std::deque<UndoEntry> restored;
     std::vector<LocalUndoEntrySnapshot> retired;
     retired.reserve(snapshot.retired_entries.size());
     size_t retired_bytes = 0;

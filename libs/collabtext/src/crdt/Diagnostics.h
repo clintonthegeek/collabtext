@@ -7,7 +7,7 @@
 
 namespace CollabText::Crdt::Diagnostics {
 
-inline constexpr std::string_view schema = "collabtext-perf-diagnostics/9";
+inline constexpr std::string_view schema = "collabtext-perf-diagnostics/10";
 
 enum class Counter : size_t {
     sumtree_items_visited,
@@ -72,6 +72,7 @@ enum class Counter : size_t {
     partial_replace_failure_stage_3,
     partial_replace_failure_stage_4,
     partial_replace_failure_stage_5,
+    undo_budget_entries_examined,
     count,
 };
 
@@ -148,6 +149,7 @@ inline constexpr std::array<std::string_view, counter_count> counter_names{
     "partial_replace_failure_stage_3",
     "partial_replace_failure_stage_4",
     "partial_replace_failure_stage_5",
+    "undo_budget_entries_examined",
 };
 
 #if defined(COLLABTEXT_ENABLE_PERF_DIAGNOSTICS)
