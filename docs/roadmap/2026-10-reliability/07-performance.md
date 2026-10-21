@@ -666,6 +666,16 @@ placement runs). These counters show a substantial reduction in whole-state
 work, but paired latency is pending and no target is marked met from this
 measurement.
 
+The first five-pair public Release matrix for this partial-run splice is
+recorded in [`2026-10-21-x05-partial-replacement-paired`](../../reports/2026-10-21-x05-partial-replacement-paired/README.md).
+All 54 public fingerprints matched. Relative to the exact-run candidate, the
+aged public 10-KB/3,000-replacement mean, p50, and p99 ratios were 0.336, 0.018,
+and 0.930. Median per-run p99 remains about 18.5 ms, so the 2 ms target is still
+missed. The no-history public mean ratio was 0.290. This is a substantial
+partial gain, but X05 acceptance remains open. The remaining fallback calls
+dominate the tail; classify them individually and widen the fast path only
+where the FugueMax slot is proven.
+
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
 - Target at least 5x lower aged 10-KB/3000-prior-replacement mean and median per-run p99 at most 2 ms in a comparable paired environment; target at least 2x lower mixed 5-KB/50%-deletion mean, with no more than 10% regression in light-history cases.
 

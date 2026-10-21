@@ -1,0 +1,289 @@
+{
+  "schema": "collabtext-performance-matrix/1",
+  "baseline_sha": "bbf33c4d7d4982d3ab021937985f5982d9db6694",
+  "baseline_source": "/tmp/collabtext-x05-partial-baseline",
+  "candidate_sha": "a3b638198d71c581e9e19d278b787ac04be6ac6a",
+  "candidate_status": "",
+  "candidate_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "trace_sha256": "75deec6b0dbc221d03031c1c5d816e90d3eb1ef045a6a6f8f723b0e02c4c28ea",
+  "harness_sha256": "fcc9dde963c43fdbbe7fe53b6a914e03226ae598eb6e364019f241ee3f74059d",
+  "matrix_runner_sha256": "8e37eeef43dd096f228e1ca36c5b46e70de7c749ae3bbd83e3604895c2d6ba43",
+  "candidate_input_sha256": {
+    "superproject_cmake": "ad3fd31c8a8e594939cd601bccd1249c5b40e7c601cdc29faf7d26d81d9ba8c7",
+    "library_cmake": "fd4fdb163154f40a83ccfa1a23ddf7504f24c9d3bace11490e14c06c8b42f276",
+    "harness": "fcc9dde963c43fdbbe7fe53b6a914e03226ae598eb6e364019f241ee3f74059d",
+    "trace": "75deec6b0dbc221d03031c1c5d816e90d3eb1ef045a6a6f8f723b0e02c4c28ea"
+  },
+  "host": "Linux-6.18.49-1-MANJARO-x86_64-with-glibc2.44",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  8\nOn-line CPU(s) list:                     0-7\nVendor ID:                               GenuineIntel\nModel name:                              11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz\nCPU family:                              6\nModel:                                   140\nThread(s) per core:                      2\nCore(s) per socket:                      4\nSocket(s):                               1\nStepping:                                1\nMicrocode version:                       0xbe\nCPU(s) scaling MHz:                      76%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5990.40\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l2 cdp_l2 ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid movdiri movdir64b fsrm avx512_vp2intersect md_clear ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               192 KiB (4 instances)\nL1i cache:                               128 KiB (4 instances)\nL2 cache:                                5 MiB (4 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-7\nVulnerability Gather data sampling:      Mitigation; Microcode\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Mitigation; Aligned branch/return thunks\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI SW loop, KVM SW loop\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected",
+  "compiler": "c++ (GCC) 16.2.1 20260810\nCopyright (C) 2026 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+  "filesystem": "btrfs",
+  "governor": "powersave",
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "build_flags": "-O3 -DNDEBUG; C++20; COLLABTEXT_ENABLE_SANITIZERS=OFF",
+  "profile": "full-public-paired",
+  "benchmark_pin_cpu": 2,
+  "repeats": 5,
+  "native_methods": [
+    "single_replica_throughput",
+    "single_replica_large_doc",
+    "edit_patterns",
+    "edit_sizes",
+    "tombstone_degradation",
+    "tombstone_degradation_large",
+    "multi_replica_convergence",
+    "undo_redo_cycle",
+    "undo_stack_depth",
+    "fragment_proliferation",
+    "memory_growth",
+    "reconnect_sync_cost"
+  ],
+  "commands": [
+    {
+      "label": "baseline-configure",
+      "command": [
+        "cmake",
+        "-S",
+        "/tmp/collabtext-x05-partial-baseline",
+        "-B",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-baseline",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCOLLABTEXT_BUILD_TESTS=OFF",
+        "-DCOLLABTEXT_BUILD_BENCHMARKS=ON",
+        "-DCOLLABTEXT_BUILD_QT=OFF",
+        "-DCOLLABTEXT_BUILD_APPS=OFF",
+        "-DCOLLABTEXT_BUILD_FILE_TRANSPORT=ON",
+        "-DCOLLABTEXT_ENABLE_SANITIZERS=OFF",
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 0.8153975009918213,
+      "load_before": "3.20 5.45 6.55 3/2766 27",
+      "load_after": "3.20 5.45 6.55 2/2773 79",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/baseline-configure.log"
+    },
+    {
+      "label": "baseline-build",
+      "command": [
+        "cmake",
+        "--build",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-baseline",
+        "--target",
+        "collabtext_core",
+        "collabtext_filetransport",
+        "tst_benchmark",
+        "tst_checkpoint_recovery_benchmark",
+        "-j16"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 86.26962041854858,
+      "load_before": "3.20 5.45 6.55 3/2773 79",
+      "load_after": "9.26 7.77 7.32 3/2810 732",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/baseline-build.log"
+    },
+    {
+      "label": "candidate-configure",
+      "command": [
+        "cmake",
+        "-S",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2",
+        "-B",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-candidate",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCOLLABTEXT_BUILD_TESTS=OFF",
+        "-DCOLLABTEXT_BUILD_BENCHMARKS=ON",
+        "-DCOLLABTEXT_BUILD_QT=OFF",
+        "-DCOLLABTEXT_BUILD_APPS=OFF",
+        "-DCOLLABTEXT_BUILD_FILE_TRANSPORT=ON",
+        "-DCOLLABTEXT_ENABLE_SANITIZERS=OFF",
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 1.1162278652191162,
+      "load_before": "9.26 7.77 7.32 2/2810 732",
+      "load_after": "9.26 7.77 7.32 3/2804 784",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/candidate-configure.log"
+    },
+    {
+      "label": "candidate-build",
+      "command": [
+        "cmake",
+        "--build",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-candidate",
+        "--target",
+        "collabtext_core",
+        "collabtext_filetransport",
+        "tst_benchmark",
+        "tst_checkpoint_recovery_benchmark",
+        "collabtext_performance_benchmark",
+        "-j16"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 45.79159355163574,
+      "load_before": "9.26 7.77 7.32 3/2804 784",
+      "load_after": "6.43 7.22 7.16 2/2824 1353",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/candidate-build.log"
+    },
+    {
+      "label": "baseline-harness-compile",
+      "command": [
+        "ccache",
+        "c++",
+        "-std=c++20",
+        "-O3",
+        "-DNDEBUG",
+        "-I",
+        "/tmp/collabtext-x05-partial-baseline/libs/collabtext/include",
+        "-I",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/baseline-header-overlay",
+        "-I",
+        "/tmp/collabtext-x05-partial-baseline/libs/collabtext/src",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/benchmarks/BenchmarkRunner.cpp",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-baseline/libs/collabtext/libcollabtext_core.a",
+        "-pthread",
+        "-o",
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 4.623778343200684,
+      "load_before": "6.43 7.22 7.16 2/2824 1353",
+      "load_after": "6.24 7.17 7.14 4/2825 1358",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/baseline-harness-compile.log"
+    },
+    {
+      "label": "baseline-public-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 44.963876724243164,
+      "load_before": "6.24 7.17 7.14 5/2825 1358",
+      "load_after": "4.65 6.59 6.94 2/2884 1359",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/baseline-public-1.jsonl"
+    },
+    {
+      "label": "candidate-public-1",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 15.352091073989868,
+      "load_before": "4.65 6.59 6.94 2/2884 1359",
+      "load_after": "4.22 6.40 6.87 2/2881 1360",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/candidate-public-1.jsonl"
+    },
+    {
+      "label": "candidate-public-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 15.199898719787598,
+      "load_before": "4.22 6.40 6.87 2/2881 1360",
+      "load_after": "4.11 6.26 6.82 5/2855 1361",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/candidate-public-2.jsonl"
+    },
+    {
+      "label": "baseline-public-2",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 46.06305456161499,
+      "load_before": "4.11 6.26 6.82 4/2855 1361",
+      "load_after": "3.21 5.73 6.61 2/2908 1362",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/baseline-public-2.jsonl"
+    },
+    {
+      "label": "baseline-public-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 45.96712350845337,
+      "load_before": "3.21 5.73 6.61 3/2908 1362",
+      "load_after": "2.89 5.29 6.42 2/2939 1363",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/baseline-public-3.jsonl"
+    },
+    {
+      "label": "candidate-public-3",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 15.8002028465271,
+      "load_before": "2.89 5.29 6.42 2/2939 1363",
+      "load_after": "3.43 5.26 6.39 2/3023 1364",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/candidate-public-3.jsonl"
+    },
+    {
+      "label": "candidate-public-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 15.049097299575806,
+      "load_before": "3.43 5.26 6.39 2/3023 1364",
+      "load_after": "3.11 5.10 6.32 2/3019 1365",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/candidate-public-4.jsonl"
+    },
+    {
+      "label": "baseline-public-4",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 46.41597390174866,
+      "load_before": "3.11 5.10 6.32 2/3019 1365",
+      "load_after": "3.80 4.99 6.22 2/3055 1366",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/baseline-public-4.jsonl"
+    },
+    {
+      "label": "baseline-public-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/benchmark-baseline"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 49.01980900764465,
+      "load_before": "3.80 4.99 6.22 2/3055 1366",
+      "load_after": "4.21 4.92 6.13 4/2880 1367",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/baseline-public-5.jsonl"
+    },
+    {
+      "label": "candidate-public-5",
+      "command": [
+        "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/build-candidate/libs/collabtext/collabtext_performance_benchmark"
+      ],
+      "exit_status": 0,
+      "timed_out": false,
+      "wall_seconds": 15.748783588409424,
+      "load_before": "4.21 4.92 6.13 2/2880 1367",
+      "load_after": "4.54 4.95 6.12 2/2858 1368",
+      "log": "/home/clinton/dev/collabtext/.worktrees/reliability-v2/docs/reports/2026-10-21-x05-partial-replacement-paired/candidate-public-5.jsonl"
+    }
+  ],
+  "matrix_status": "public_measurements_complete"
+}

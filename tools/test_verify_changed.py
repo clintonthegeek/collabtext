@@ -60,6 +60,10 @@ class VerificationTests(unittest.TestCase):
             'docs/reports/2026-10-21-x05-complete-run-replacement-paired/raw/aggregate.json'])[0][
                 'docs/reports/2026-10-21-x05-complete-run-replacement-paired/raw/aggregate.json'],
             'tst_verification_tools')
+        self.assertEqual(verify.route([
+            'docs/reports/2026-10-21-x05-partial-replacement-paired/raw/aggregate.json'])[0][
+                'docs/reports/2026-10-21-x05-partial-replacement-paired/raw/aggregate.json'],
+            'tst_verification_tools')
 
     def test_frozen_performance_archive_does_not_allow_unknown_code(self):
         paths = ['docs/reports/2026-10-19-performance/' + name
