@@ -637,6 +637,16 @@ acceptance was not measured. The narrow complete-run path does not remove the
 dominant cost in the public aged replacement workload; broaden transactional
 splicing and measure fallback/work counts.
 
+A diagnostics-enabled Release run then measured fallback work for that exact
+public aged case. Of 200 timed calls, 145 took the reconstruction fallback and
+55 avoided fragment snapshots. The fallback calls flattened 1,115,949
+fragments/items, rebuilt 1,116,300 tree items, and built 290 placement indexes
+over 2,232,104 placement runs. Diagnostic timings are excluded from performance
+comparisons. See the raw JSONL in the paired report. This confirms that the next
+high-value slice is transactional splitting of partial retained runs with local
+index maintenance; keep reconstruction as oracle/fallback until the broader
+splice proves equivalent.
+
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
 - Target at least 5x lower aged 10-KB/3000-prior-replacement mean and median per-run p99 at most 2 ms in a comparable paired environment; target at least 2x lower mixed 5-KB/50%-deletion mean, with no more than 10% regression in light-history cases.
 
