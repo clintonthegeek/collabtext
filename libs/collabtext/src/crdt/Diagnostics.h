@@ -7,7 +7,7 @@
 
 namespace CollabText::Crdt::Diagnostics {
 
-inline constexpr std::string_view schema = "collabtext-perf-diagnostics/6";
+inline constexpr std::string_view schema = "collabtext-perf-diagnostics/9";
 
 enum class Counter : size_t {
     sumtree_items_visited,
@@ -60,6 +60,18 @@ enum class Counter : size_t {
     undo_retired_budget_bytes_observed,
     codec_frontier_actors_encoded,
     codec_frontier_actors_decoded,
+    middle_insert_refused_guard,
+    middle_insert_refused_nonterminal_predecessor,
+    middle_insert_refused_missing_successor,
+    middle_insert_refused_ambiguous_ancestry,
+    partial_replace_attempts,
+    partial_replace_failures,
+    partial_replace_refused_boundary_rank,
+    partial_replace_failure_stage_1,
+    partial_replace_failure_stage_2,
+    partial_replace_failure_stage_3,
+    partial_replace_failure_stage_4,
+    partial_replace_failure_stage_5,
     count,
 };
 
@@ -124,6 +136,18 @@ inline constexpr std::array<std::string_view, counter_count> counter_names{
     "undo_retired_budget_bytes_observed",
     "codec_frontier_actors_encoded",
     "codec_frontier_actors_decoded",
+    "middle_insert_refused_guard",
+    "middle_insert_refused_nonterminal_predecessor",
+    "middle_insert_refused_missing_successor",
+    "middle_insert_refused_ambiguous_ancestry",
+    "partial_replace_attempts",
+    "partial_replace_failures",
+    "partial_replace_refused_boundary_rank",
+    "partial_replace_failure_stage_1",
+    "partial_replace_failure_stage_2",
+    "partial_replace_failure_stage_3",
+    "partial_replace_failure_stage_4",
+    "partial_replace_failure_stage_5",
 };
 
 #if defined(COLLABTEXT_ENABLE_PERF_DIAGNOSTICS)

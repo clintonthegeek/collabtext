@@ -463,15 +463,20 @@ std::optional<Identity> Buffer::visible_element_before_tree(
 
 std::optional<std::pair<Link, uint64_t>>
 Buffer::simple_middle_insertion(uint32_t byte_offset) const {
-    if (!m_fragment_indexes_valid || byte_offset >= visible_length())
+    if (!m_fragment_indexes_valid || byte_offset >= visible_length()) {
+        Diagnostics::record(Diagnostics::Counter::middle_insert_refused_guard);
         return std::nullopt;
+    }
 
     const auto left = visible_element_before_tree(byte_offset);
     uint64_t successor_rank = 0;
     if (left) {
         const auto located_left = locate_retained_identity(*left);
-        if (!located_left || located_left->offset + 1 != located_left->fragment->length)
+        if (!located_left || located_left->offset + 1 != located_left->fragment->length) {
+            Diagnostics::record(
+                Diagnostics::Counter::middle_insert_refused_nonterminal_predecessor);
             return std::nullopt; // only splice between retained fragment boundaries
+        }
         successor_rank = located_left->rank + 1;
     }
 
@@ -479,23 +484,38 @@ Buffer::simple_middle_insertion(uint32_t byte_offset) const {
     auto cursor = m_fragment_tree.cursor<RetainedRunOffset>();
     if (cursor.seek({successor_rank}, Bias::Left)) {
         const auto* next = cursor.item();
-        if (!next || !next->length || cursor.position().value != successor_rank)
+        if (!next || !next->length || cursor.position().value != successor_rank) {
+            Diagnostics::record(
+                Diagnostics::Counter::middle_insert_refused_missing_successor);
             return std::nullopt;
+        }
         right = next->item_at(0);
     }
 
     if (!left) {
-        if (!right) return std::nullopt;
+        if (!right) {
+            Diagnostics::record(
+                Diagnostics::Counter::middle_insert_refused_missing_successor);
+            return std::nullopt;
+        }
         // At the sequence head there can be no earlier left-child subtree.
         return std::pair{Link{right, Side::Left, right}, successor_rank};
     }
     const auto located_left = locate_retained_identity(*left);
-    if (!located_left) return std::nullopt;
+    if (!located_left) {
+        Diagnostics::record(
+            Diagnostics::Counter::middle_insert_refused_nonterminal_predecessor);
+        return std::nullopt;
+    }
     if (right && is_descendant_identity(*right, *left)) {
         // The predecessor belongs to the right item's subtree. This is the
         // exact adjacent left-child position only when no left sibling subtree
         // already precedes the parent.
-        if (is_descendant_identity(*left, *right)) return std::nullopt;
+        if (is_descendant_identity(*left, *right)) {
+            Diagnostics::record(
+                Diagnostics::Counter::middle_insert_refused_ambiguous_ancestry);
+            return std::nullopt;
+        }
         return std::pair{Link{right, Side::Left, right}, successor_rank};
     }
     return std::pair{Link{*left, Side::Right, right},
@@ -693,7 +713,7 @@ Buffer::try_replace_exact_visible_run(uint32_t start, uint32_t end,
         interval->end != old.origin.counter + old.length)
         return std::nullopt;
     const auto rank = retained_rank_for_run(*run);
-    if (!rank || insertion_rank != *rank) return std::nullopt;
+    if (!rank || insertion_rank > *rank) return std::nullopt;
 
     inserted.visible = inserted.compute_visible(m_undo_map);
     if (!inserted.visible || !inserted.length || inserted.link != link ||
@@ -705,8 +725,9 @@ Buffer::try_replace_exact_visible_run(uint32_t start, uint32_t end,
     const uint64_t inserted_end = inserted.origin.counter + inserted.length;
 
     // Stage the deletion and insertion together. The link/rank were proved
-    // against the old visible state; retaining the tombstone means inserting at
-    // its old rank places the new run immediately before the replaced run.
+    // against the old visible state. A hidden retained run may sit between the
+    // visible predecessor and replaced run, so the proven insertion rank can
+    // precede the replaced run's retained rank.
     auto tree = m_fragment_tree;
     auto nodes = m_node_directory;
     auto deletions = m_deletion_index;
@@ -728,14 +749,17 @@ Buffer::try_replace_exact_visible_run(uint32_t start, uint32_t end,
         !nodes.refresh_path(tree, RetainedRunOffset{*rank}))
         return std::nullopt;
 
-    tree.insert_item<RetainedRunOffset>(RetainedRunOffset{*rank},
+    tree.insert_item<RetainedRunOffset>(RetainedRunOffset{insertion_rank},
                                         std::move(inserted));
-    if (!nodes.refresh_path(tree, RetainedRunOffset{*rank}) ||
+    const uint64_t shifted_target_rank = *rank + 1;
+    if (!nodes.refresh_path(tree, RetainedRunOffset{insertion_rank}) ||
+        !nodes.refresh_path(tree, RetainedRunOffset{shifted_target_rank}) ||
         !tree.has_valid_node_ids())
         return std::nullopt;
     auto inserted_cursor = tree.cursor<RetainedRunOffset>();
-    if (!inserted_cursor.seek({*rank}, Bias::Left) ||
-        !inserted_cursor.item() || inserted_cursor.position().value != *rank)
+    if (!inserted_cursor.seek({insertion_rank}, Bias::Left) ||
+        !inserted_cursor.item() ||
+        inserted_cursor.position().value != insertion_rank)
         return std::nullopt;
     const Fragment& new_fragment = *inserted_cursor.item();
     if (new_fragment.origin.counter + new_fragment.length != inserted_end ||
@@ -744,7 +768,7 @@ Buffer::try_replace_exact_visible_run(uint32_t start, uint32_t end,
         return std::nullopt;
     bool locations_valid = true;
     const bool refreshed = tree.for_each_leaf_near_path(
-        RetainedRunOffset{*rank}, [&](const BufferFragmentTree::NodePtr& leaf) {
+        RetainedRunOffset{insertion_rank}, [&](const BufferFragmentTree::NodePtr& leaf) {
             const auto& items = leaf->leaf();
             for (uint16_t slot = 0; slot < items.count; ++slot) {
                 const auto item_run = origins.find_interval_start(
@@ -754,7 +778,20 @@ Buffer::try_replace_exact_visible_run(uint32_t start, uint32_t end,
                     locations_valid = false;
             }
         });
-    if (!refreshed || !locations_valid) return std::nullopt;
+    const bool target_refreshed = tree.for_each_leaf_near_path(
+        RetainedRunOffset{shifted_target_rank},
+        [&](const BufferFragmentTree::NodePtr& leaf) {
+            const auto& items = leaf->leaf();
+            for (uint16_t slot = 0; slot < items.count; ++slot) {
+                const auto item_run = origins.find_interval_start(
+                    items.items[slot].origin.actor, items.items[slot].origin.counter);
+                if (!item_run || !runs.insert_or_assign(
+                        *item_run, RunLocation{leaf->node_id, slot}))
+                    locations_valid = false;
+            }
+        });
+    if (!refreshed || !target_refreshed || !locations_valid)
+        return std::nullopt;
     for (const auto& deletion : new_fragment.deletions)
         if (!deletions.insert(deletion, new_fragment.origin.actor,
                               new_fragment.origin.counter, inserted_end,
@@ -780,9 +817,28 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
                                         const std::string& inserted_text,
                                         uint32_t inserted_length,
                                         const Identity& deletion_id) {
+    struct Attempt {
+        bool succeeded = false;
+        uint8_t stage = 1;
+        ~Attempt() {
+            Diagnostics::record(Diagnostics::Counter::partial_replace_attempts);
+            if (!succeeded) {
+                Diagnostics::record(Diagnostics::Counter::partial_replace_failures);
+                using Counter = Diagnostics::Counter;
+                switch (stage) {
+                case 1: Diagnostics::record(Counter::partial_replace_failure_stage_1); break;
+                case 2: Diagnostics::record(Counter::partial_replace_failure_stage_2); break;
+                case 3: Diagnostics::record(Counter::partial_replace_failure_stage_3); break;
+                case 4: Diagnostics::record(Counter::partial_replace_failure_stage_4); break;
+                default: Diagnostics::record(Counter::partial_replace_failure_stage_5); break;
+                }
+            }
+        }
+    } attempt;
     if (!m_fragment_indexes_valid || !m_next_run_id || start >= end ||
         !inserted_length || inserted_text.empty())
         return std::nullopt;
+    attempt.stage = 2;
 
     auto visible = m_fragment_tree.cursor<VisibleOffset>();
     if (!visible.seek({start}, Bias::Left) || !visible.item() ||
@@ -798,9 +854,9 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
     const uint32_t local_end = end - fragment_start;
     const uint32_t first_scalar = count_utf8_chars(original.text, local_start);
     const uint32_t end_scalar = count_utf8_chars(original.text, local_end);
-    if (!first_scalar || end_scalar <= first_scalar || end_scalar > original.length ||
-        first_scalar == 0 && end_scalar == original.length)
+    if (end_scalar <= first_scalar || end_scalar > original.length)
         return std::nullopt;
+    attempt.stage = 3;
     const uint32_t deleted_length = end_scalar - first_scalar;
     if (inserted_origin.actor != deletion_id.actor || !inserted_origin.counter ||
         inserted_length > UINT64_MAX - inserted_origin.counter)
@@ -814,6 +870,7 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
         return std::nullopt;
     const auto old_rank = retained_rank_for_run(*old_run);
     if (!old_rank) return std::nullopt;
+    attempt.stage = 4;
 
     Link link;
     uint64_t insertion_rank = *old_rank;
@@ -826,11 +883,18 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
         insertion_rank += 1; // after the new prefix fragment
     } else {
         // At a retained run boundary, use the same ancestry proof as the
-        // insertion fast path. Interior run positions are handled above.
+        // insertion fast path. The next retained item may be a hidden run
+        // before this visible fragment, so insertion can precede its rank.
         const auto placement = simple_middle_insertion(start);
-        if (!placement || placement->second != *old_rank) return std::nullopt;
+        if (!placement || placement->second > *old_rank) {
+            Diagnostics::record(
+                Diagnostics::Counter::partial_replace_refused_boundary_rank);
+            return std::nullopt;
+        }
         link = placement->first;
+        insertion_rank = placement->second;
     }
+    attempt.stage = 5;
 
     std::vector<Fragment> pieces;
     pieces.reserve(3);
@@ -853,7 +917,7 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
         return std::nullopt;
     pieces.push_back(std::move(remainder));
     if (suffix.length) pieces.push_back(std::move(suffix));
-    if (pieces.size() < 2) return std::nullopt;
+    if (pieces.empty()) return std::nullopt;
 
     const uint64_t needed_run_ids = static_cast<uint64_t>(pieces.size()) + 1;
     if (needed_run_ids - 1 > UINT64_MAX - m_next_run_id)
@@ -927,16 +991,24 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
             RetainedRunOffset{*old_rank + i}, std::move(pieces[i]));
     tree.insert_item<RetainedRunOffset>(RetainedRunOffset{insertion_rank},
                                         std::move(inserted));
-    const uint64_t last_changed_rank = *old_rank + pieces.size();
-    for (uint64_t rank = *old_rank; rank <= last_changed_rank; ++rank)
+    std::vector<uint64_t> piece_ranks;
+    piece_ranks.reserve(pieces.size());
+    for (size_t i = 0; i < pieces.size(); ++i) {
+        const uint64_t old_piece_rank = *old_rank + i;
+        piece_ranks.push_back(old_piece_rank +
+                              (insertion_rank <= old_piece_rank ? 1 : 0));
+    }
+    if (!nodes.refresh_path(tree, RetainedRunOffset{insertion_rank}))
+        return std::nullopt;
+    for (const uint64_t rank : piece_ranks)
         if (!nodes.refresh_path(tree, RetainedRunOffset{rank}))
             return std::nullopt;
     if (!tree.has_valid_node_ids()) return std::nullopt;
 
     for (size_t i = 0; i < pieces.size(); ++i) {
         auto cursor = tree.cursor<RetainedRunOffset>();
-        if (!cursor.seek({*old_rank + i}, Bias::Left) || !cursor.item() ||
-            cursor.position().value != *old_rank + i)
+        if (!cursor.seek({piece_ranks[i]}, Bias::Left) || !cursor.item() ||
+            cursor.position().value != piece_ranks[i])
             return std::nullopt;
     }
     auto inserted_cursor = tree.cursor<RetainedRunOffset>();
@@ -946,7 +1018,9 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
         return std::nullopt;
 
     bool locations_valid = true;
-    for (uint64_t rank = *old_rank; rank <= last_changed_rank; ++rank) {
+    std::vector<uint64_t> changed_ranks{insertion_rank};
+    changed_ranks.insert(changed_ranks.end(), piece_ranks.begin(), piece_ranks.end());
+    for (const uint64_t rank : changed_ranks) {
         const bool refreshed = tree.for_each_leaf_near_path(
             RetainedRunOffset{rank}, [&](const BufferFragmentTree::NodePtr& leaf) {
                 const auto& items = leaf->leaf();
@@ -979,6 +1053,7 @@ Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
     m_deletion_index = std::move(deletions);
     m_run_directory = std::move(runs);
     m_next_run_id = following_run;
+    attempt.succeeded = true;
     return std::pair{EditOperation::DeletionRun{deleted_origin, deleted_run_length},
                      link};
 }

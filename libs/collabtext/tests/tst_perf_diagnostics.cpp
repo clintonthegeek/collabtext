@@ -166,6 +166,36 @@ private slots:
         QCOMPARE(layered.text(), std::string("abZdef"));
     }
 
+    void local_replacement_inserts_before_intervening_tombstone() {
+        Buffer buffer(CollabText::Test::test_counter(51));
+        auto initial = buffer.try_apply_local_edit({{0, 0}}, {"abc"});
+        QVERIFY(initial);
+        auto deleted = buffer.try_apply_local_edit({{1, 2}}, {""});
+        QVERIFY(deleted);
+        QCOMPARE(buffer.text(), std::string("ac"));
+        Buffer peer(CollabText::Test::test_counter(52));
+        QCOMPARE(peer.apply_ops({initial.value(), deleted.value()}).size(), size_t{2});
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto replaced = buffer.try_apply_local_edit({{1, 2}}, {"Z"});
+        Diagnostics::end_sample();
+        QVERIFY(replaced);
+        QCOMPARE(buffer.text(), std::string("aZ"));
+        QCOMPARE(Diagnostics::snapshot().get(
+                     Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(peer.apply_ops({replaced.value()}).size(), size_t{1});
+        QCOMPARE(peer.text(), std::string("aZ"));
+        auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("ac"));
+        auto redone = buffer.try_redo();
+        QVERIFY(redone);
+        QVERIFY(redone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("aZ"));
+    }
+
     void local_tail_insert_skips_fragment_flatten_and_rebuild() {
         Buffer buffer(CollabText::Test::test_counter(29));
         std::vector<Operation> seed;

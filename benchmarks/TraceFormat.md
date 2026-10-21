@@ -19,7 +19,17 @@ The C++ harness writes JSON Lines using schema `collabtext-performance-samples/1
   whether compile-time performance diagnostics are enabled, with a separate
   diagnostics schema identifier when they are enabled.
 - `sample` records one timed checked call in integer nanoseconds, with a stable
-  workload name, sample index and unit `call`.
+  workload name, sample index and unit `call`. With diagnostics enabled it also
+  records the per-call `fragment_snapshots` counter delta, allowing fallback
+  frequency to be localized without using diagnostic timings as performance
+  results. Edit workloads may include `byte_offset` to identify the sampled
+  position in the fixture. Diagnostic edit samples also include
+  `middle_insert_refusals` (`guard`, `nonterminal_predecessor`,
+  `missing_successor`, `ambiguous_ancestry`) and `partial_replace` (attempts,
+  failures, boundary-rank refusal, then failures at stages 1–5). The stages are
+  input guard; fragment/scalar validation; origin/run lookup; placement proof;
+  and staged index/tree update. These counters classify fallback work only;
+  diagnostic timings remain excluded from performance results.
 - `case` records attempted/accepted/refused/no-op counts, setup dimensions,
   visible bytes and available structure counts, plus deterministic final-state
   and encoded-operation fingerprints.

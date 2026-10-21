@@ -13,6 +13,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -64,6 +65,11 @@ std::unique_ptr<CrdtEngine> make_text(uint64_t actor = 1) {
 }
 
 std::vector<uint64_t> samples;
+std::vector<uint64_t> sample_fragment_snapshots;
+std::vector<std::optional<uint64_t>> sample_offsets;
+std::vector<std::optional<std::pair<uint32_t, uint32_t>>> sample_fragment_locations;
+std::vector<std::array<uint64_t, 4>> sample_middle_insert_refusals;
+std::vector<std::array<uint64_t, 8>> sample_partial_replace;
 uint64_t case_attempts = 0;
 uint64_t case_accepted = 0;
 uint64_t case_refused = 0;
@@ -74,6 +80,8 @@ int query_samples = 50;
 int codec_samples = 100;
 int bulk_samples = 5;
 bool include_middle_insert = false;
+std::optional<uint64_t> current_sample_offset;
+std::optional<std::pair<uint32_t, uint32_t>> current_fragment_location;
 
 uint64_t fnv1a(std::string_view bytes) {
     uint64_t hash = 14695981039346656037ull;
@@ -93,6 +101,13 @@ std::string hex64(uint64_t value) {
 void begin_case(std::string name) {
     case_name = std::move(name);
     samples.clear();
+    sample_fragment_snapshots.clear();
+    sample_offsets.clear();
+    sample_fragment_locations.clear();
+    sample_middle_insert_refusals.clear();
+    sample_partial_replace.clear();
+    current_sample_offset.reset();
+    current_fragment_location.reset();
     case_attempts = case_accepted = case_refused = case_noop = 0;
     Diagnostics::reset();
 }
@@ -101,13 +116,48 @@ template<class F>
 auto timed(F&& function) {
     ++case_attempts;
     const auto start = Clock::now();
+    const auto before = Diagnostics::snapshot();
     Diagnostics::begin_sample();
     auto result = function();
     Diagnostics::end_sample();
     const auto finish = Clock::now();
+    const auto after = Diagnostics::snapshot();
     ++case_accepted;
     samples.push_back(static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count()));
+    sample_fragment_snapshots.push_back(
+        after.get(Diagnostics::Counter::fragment_snapshots) -
+        before.get(Diagnostics::Counter::fragment_snapshots));
+    sample_offsets.push_back(current_sample_offset);
+    sample_fragment_locations.push_back(current_fragment_location);
+    sample_middle_insert_refusals.push_back({
+        after.get(Diagnostics::Counter::middle_insert_refused_guard) -
+            before.get(Diagnostics::Counter::middle_insert_refused_guard),
+        after.get(Diagnostics::Counter::middle_insert_refused_nonterminal_predecessor) -
+            before.get(Diagnostics::Counter::middle_insert_refused_nonterminal_predecessor),
+        after.get(Diagnostics::Counter::middle_insert_refused_missing_successor) -
+            before.get(Diagnostics::Counter::middle_insert_refused_missing_successor),
+        after.get(Diagnostics::Counter::middle_insert_refused_ambiguous_ancestry) -
+            before.get(Diagnostics::Counter::middle_insert_refused_ambiguous_ancestry)});
+    sample_partial_replace.push_back({
+        after.get(Diagnostics::Counter::partial_replace_attempts) -
+            before.get(Diagnostics::Counter::partial_replace_attempts),
+        after.get(Diagnostics::Counter::partial_replace_failures) -
+            before.get(Diagnostics::Counter::partial_replace_failures),
+        after.get(Diagnostics::Counter::partial_replace_refused_boundary_rank) -
+            before.get(Diagnostics::Counter::partial_replace_refused_boundary_rank),
+        after.get(Diagnostics::Counter::partial_replace_failure_stage_1) -
+            before.get(Diagnostics::Counter::partial_replace_failure_stage_1),
+        after.get(Diagnostics::Counter::partial_replace_failure_stage_2) -
+            before.get(Diagnostics::Counter::partial_replace_failure_stage_2),
+        after.get(Diagnostics::Counter::partial_replace_failure_stage_3) -
+            before.get(Diagnostics::Counter::partial_replace_failure_stage_3),
+        after.get(Diagnostics::Counter::partial_replace_failure_stage_4) -
+            before.get(Diagnostics::Counter::partial_replace_failure_stage_4),
+        after.get(Diagnostics::Counter::partial_replace_failure_stage_5) -
+            before.get(Diagnostics::Counter::partial_replace_failure_stage_5)});
+    current_sample_offset.reset();
+    current_fragment_location.reset();
     return result;
 }
 
@@ -117,7 +167,30 @@ void report_case(uint64_t visible_bytes, uint64_t prior_edits,
     for (size_t i = 0; i < samples.size(); ++i) {
         std::cout << "{\"record\":\"sample\",\"workload\":\"" << case_name
                   << "\",\"sample\":" << i << ",\"latency_ns\":" << samples[i]
-                  << ",\"work_items\":1,\"work_unit\":\"call\"}\n";
+                  << ",\"work_items\":1,\"work_unit\":\"call\"";
+        if (Diagnostics::enabled())
+            std::cout << ",\"fragment_snapshots\":"
+                      << sample_fragment_snapshots[i];
+        if (Diagnostics::enabled()) {
+            const auto& refusals = sample_middle_insert_refusals[i];
+            std::cout << ",\"middle_insert_refusals\":["
+                      << refusals[0] << ',' << refusals[1] << ','
+                      << refusals[2] << ',' << refusals[3] << ']';
+            const auto& partial = sample_partial_replace[i];
+            std::cout << ",\"partial_replace\":["
+                      << partial[0] << ',' << partial[1] << ','
+                      << partial[2] << ',' << partial[3] << ','
+                      << partial[4] << ',' << partial[5] << ','
+                      << partial[6] << ',' << partial[7] << ']';
+        }
+        if (sample_offsets[i])
+            std::cout << ",\"byte_offset\":" << *sample_offsets[i];
+        if (sample_fragment_locations[i])
+            std::cout << ",\"fragment_offset_bytes\":"
+                      << sample_fragment_locations[i]->first
+                      << ",\"fragment_bytes\":"
+                      << sample_fragment_locations[i]->second;
+        std::cout << "}\n";
     }
     std::cout << "{\"record\":\"case\",\"workload\":\"" << case_name
               << "\",\"samples\":" << samples.size()
@@ -174,6 +247,7 @@ void public_edits(size_t bytes, int prior_edits) {
     for (int i = 0; i < edit_samples; ++i) {
         const size_t position = random() % bytes;
         const std::string replacement(1, expected[position] == 'x' ? 'y' : 'x');
+        current_sample_offset = position;
         last = take(timed([&] {
             return engine->try_replace(static_cast<int>(position), 1, replacement);
         }));
@@ -205,6 +279,7 @@ void middle_insert_edits(uint32_t history_runs) {
         const uint32_t position = static_cast<uint32_t>(
             random() % (expected.size() + 1));
         const std::string inserted(1, static_cast<char>('b' + (i % 20)));
+        current_sample_offset = position;
         last = take(timed([&] {
             return engine.try_apply_local_edit({{position, position}}, {inserted});
         }));
@@ -238,6 +313,20 @@ void byte_edits(size_t bytes, int prior_edits) {
     for (int i = 0; i < edit_samples; ++i) {
         const uint32_t position = static_cast<uint32_t>(random() % bytes);
         const std::string replacement(1, expected[position] == 'x' ? 'y' : 'x');
+        current_sample_offset = position;
+        if (Diagnostics::enabled()) {
+            uint32_t visible_start = 0;
+            for (const auto& fragment : engine.fragments()) {
+                if (fragment.visible && fragment.byte_length &&
+                    position >= visible_start &&
+                    position - visible_start < fragment.byte_length) {
+                    current_fragment_location = std::pair{
+                        position - visible_start, fragment.byte_length};
+                    break;
+                }
+                if (fragment.visible) visible_start += fragment.byte_length;
+            }
+        }
         last = take(timed([&] {
             return engine.try_apply_local_edit({{position, position + 1}}, {replacement});
         }));
