@@ -136,6 +136,16 @@ public:
         return true;
     }
 
+    template<class Tree>
+    bool rebuild_from(const Tree& tree) {
+        std::vector<std::pair<NodeId, Entry>> entries;
+        tree.for_each_node([&](const typename Tree::NodePtr& node, NodeId id,
+                               std::optional<NodeId> parent, uint16_t slot) {
+            entries.emplace_back(id, Entry{node, parent, slot});
+        });
+        return rebuild(std::move(entries));
+    }
+
 private:
     Map m_entries;
 };

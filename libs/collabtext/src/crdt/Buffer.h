@@ -13,6 +13,7 @@
 #include "crdt/Operations.h"
 #include "crdt/OriginIndex.h"
 #include "crdt/DeletionIndex.h"
+#include "crdt/NodeDirectory.h"
 #include "crdt/RunDirectory.h"
 #include "crdt/SumTree.h"
 #include "crdt/UndoMap.h"
@@ -36,6 +37,7 @@ namespace CollabText::Crdt {
 static constexpr std::size_t FRAG_TREE_B = 6;
 
 using FragmentTree = SumTree<Fragment, FRAG_TREE_B>;
+using BufferFragmentTree = SumTree<Fragment, FRAG_TREE_B, StableNodeIds>;
 
 /// Logical Buffer state used by checkpoint adapters. Visibility and all tree
 /// summaries are deliberately excluded; restore derives them from deletions,
@@ -367,6 +369,9 @@ private:
     /// so this is a refusal in Release exactly as it is in Debug — the assert in
     /// the constructor is a developer tripwire, not the check.
     [[nodiscard]] Result<void> check_allocator() const {
+        if (!m_fragment_tree.has_valid_node_ids())
+            return Error(ErrorCode::limit_exceeded,
+                         "cannot edit: fragment-tree node identity space is unavailable");
         if (!m_allocator->actor().valid())
             return Error(ErrorCode::invalid_identity,
                          "cannot mint operation identity: the allocator has no "
@@ -406,10 +411,11 @@ private:
     /// The document, in document order, tombstones included. The order of this
     /// tree IS the list order: placement is decided by SequenceOrder::integrate,
     /// not by a key stored on each fragment.
-    FragmentTree m_fragment_tree;
+    BufferFragmentTree m_fragment_tree;
+    NodeDirectory<BufferFragmentTree::Node> m_node_directory;
     // Rebuilt derived lookups, sharing persistent AVL pages across Buffer
-    // copies. RunIds survive rebuilds while their start identity survives;
-    // RunDirectory ordinals are temporary until X05 adds stable tree nodes.
+    // copies. Stable node IDs are tree-local runtime handles; RunDirectory
+    // still maps RunIds to ordinals until its locator migration is complete.
     OriginIndex m_origin_index;
     DeletionIndex m_deletion_index;
     RunDirectory m_run_directory;

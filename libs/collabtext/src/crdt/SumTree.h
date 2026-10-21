@@ -427,6 +427,9 @@ public:
     SumTree(NodePtr root, NodeIdPolicy node_ids)
         : m_root(std::move(root)), m_node_ids(std::move(node_ids)) {}
 
+    /// Make an empty tree that can allocate IDs in this tree's lineage.
+    SumTree empty_like() const { return SumTree(m_node_ids); }
+
     // ---- Queries ----
 
     const Summary& summary() const {

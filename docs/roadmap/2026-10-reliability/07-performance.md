@@ -836,3 +836,14 @@ exercise all item coordinates after a splice and then append through a COW fork,
 refresh the path, and verify every retained rank against the new root. Focused
 Debug `tst_sumtree` passes 64/64. This enables incremental directory maintenance
 but Buffer does not call it yet; no latency claim is made.
+
+**Progress (2026-10-20):** Buffer now builds fragment trees with stable node IDs
+and owns a weak `NodeDirectory` alongside its other derived indexes. Full
+reconstruction and GC rebuild the topology directory; tail append, exact-run
+local/remote deletion, and affected visibility edits refresh changed paths and
+bounded child edges. The tree-lineage allocator is checked by local and remote
+operation entry points. Focused Debug Buffer, sequence-fast-path,
+perf-diagnostics, checkpoint-recovery, and SumTree suites pass 5/5. The
+`RunDirectory` still stores ordinals and Buffer does not yet resolve run IDs
+through node locators, so these updates establish ownership and consistency only;
+no latency claim is made.

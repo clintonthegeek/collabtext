@@ -15,6 +15,12 @@
 namespace CollabText::Crdt {
 
 namespace {
+BufferFragmentTree make_buffer_fragment_tree() {
+    auto node_ids = StableNodeIds::create();
+    if (!node_ids) return {};
+    return BufferFragmentTree(std::move(*node_ids));
+}
+
 bool gap_conflicts(const CounterGapLedger& gaps, const Operation& op) {
     if (gaps.records().empty() || !op_identity(op).actor.valid()) return false;
     if (gaps.conflicts(op)) return true;
@@ -40,7 +46,8 @@ bool gap_conflicts(const CounterGapLedger& gaps, const Operation& op) {
 
 
 Buffer::Buffer(SharedIdentityAllocator allocator)
-    : m_allocator(std::move(allocator))
+    : m_allocator(std::move(allocator)),
+      m_fragment_tree(make_buffer_fragment_tree())
 {
     // A null allocator is a programming error: nothing can be minted and there
     // is no state to recover to, so it fails loudly here.
@@ -271,14 +278,17 @@ void Buffer::set_fragments(std::vector<Fragment>&& frags) {
     RunDirectory run_directory;
     const bool run_directory_valid = run_directory.rebuild(
         std::move(run_directory_rows));
-    FragmentTree tree;
+    BufferFragmentTree tree = m_fragment_tree.empty_like();
     for (auto& f : frags) tree.push_item(std::move(f));
+    NodeDirectory<BufferFragmentTree::Node> nodes;
+    const bool nodes_valid = nodes.rebuild_from(tree);
     m_fragment_tree = std::move(tree);
+    m_node_directory = std::move(nodes);
     m_origin_index = std::move(origins);
     m_deletion_index = std::move(deletions);
     m_run_directory = std::move(run_directory);
     m_next_run_id = next_run_id;
-    m_fragment_indexes_valid = origins_valid && deletions_valid &&
+    m_fragment_indexes_valid = origins_valid && deletions_valid && nodes_valid &&
                                run_directory_valid && run_ids_valid;
 }
 
@@ -307,6 +317,10 @@ bool Buffer::try_append_fragment(Fragment fragment) {
     const uint64_t end = fragment.origin.counter + fragment.length;
     auto tree = m_fragment_tree;
     tree.push_item(std::move(fragment));
+    auto nodes = m_node_directory;
+    if (!nodes.refresh_path(tree, RetainedRunOffset{ordinal}) ||
+        !tree.has_valid_node_ids())
+        return false;
     auto origins = m_origin_index;
     auto deletions = m_deletion_index;
     auto runs = m_run_directory;
@@ -326,6 +340,7 @@ bool Buffer::try_append_fragment(Fragment fragment) {
     Diagnostics::record(Diagnostics::Counter::deletion_index_rows_inserted,
                         deletion_rows);
     m_fragment_tree = std::move(tree);
+    m_node_directory = std::move(nodes);
     m_origin_index = std::move(origins);
     m_deletion_index = std::move(deletions);
     m_run_directory = std::move(runs);
@@ -407,6 +422,7 @@ Buffer::try_delete_exact_visible_runs(uint32_t start, uint32_t end,
 
     auto tree = m_fragment_tree;
     auto deletions = m_deletion_index;
+    auto nodes = m_node_directory;
     for (const auto& target : targets) {
         const auto interval = m_origin_index.locate(target.origin);
         if (!interval || interval->run != target.run ||
@@ -428,12 +444,15 @@ Buffer::try_delete_exact_visible_runs(uint32_t start, uint32_t end,
                 changed = !fragment.visible;
             });
         if (!edited || !changed) return std::nullopt;
+        if (!nodes.refresh_path(tree, RetainedRunOffset{target.ordinal}))
+            return std::nullopt;
     }
 
     Diagnostics::record(Diagnostics::Counter::fragment_index_publications);
     Diagnostics::record(Diagnostics::Counter::deletion_index_rows_inserted,
                         targets.size());
     m_fragment_tree = std::move(tree);
+    m_node_directory = std::move(nodes);
     m_deletion_index = std::move(deletions);
     return result;
 }
@@ -443,6 +462,7 @@ void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
         m_fragment_tree.for_each_mut([this](Fragment& fragment) {
             fragment.visible = fragment.compute_visible(m_undo_map);
         });
+        m_node_directory.rebuild_from(m_fragment_tree);
         return;
     }
     std::set<RunId> affected;
@@ -511,11 +531,16 @@ void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
             stale_run_index = true;
             break;
         }
+        if (!m_node_directory.refresh_path(m_fragment_tree, offset)) {
+            stale_run_index = true;
+            break;
+        }
     }
     if (stale_run_index) {
         m_fragment_tree.for_each_mut([this](Fragment& fragment) {
             fragment.visible = fragment.compute_visible(m_undo_map);
         });
+        m_node_directory.rebuild_from(m_fragment_tree);
     }
 }
 
@@ -1015,7 +1040,7 @@ Result<size_t> Buffer::collect_garbage(
         !restored.ok())
         return restored.error();
 
-    FragmentTree rebuilt_tree;
+    BufferFragmentTree rebuilt_tree = m_fragment_tree.empty_like();
     for (size_t i = 0; i < fragments.size(); ++i) {
         if (remove[i]) continue;
         auto &fragment = fragments[i];
@@ -1024,6 +1049,8 @@ Result<size_t> Buffer::collect_garbage(
     }
     m_undo_map = std::move(rebuilt_undo);
     m_fragment_tree = std::move(rebuilt_tree);
+    if (!m_node_directory.rebuild_from(m_fragment_tree))
+        m_fragment_indexes_valid = false;
     return reclaimed_items;
 }
 
@@ -2016,12 +2043,15 @@ Buffer::ApplyStep Buffer::apply_remote_edit(const EditOperation &op) {
                                         fragment.compute_visible(m_undo_map);
                                     updated = true;
                                 });
-                            if (edited && updated) {
+                            auto nodes = m_node_directory;
+                            if (edited && updated &&
+                                nodes.refresh_path(tree, RetainedRunOffset{*ordinal})) {
                                 Diagnostics::record(
                                     Diagnostics::Counter::fragment_index_publications);
                                 Diagnostics::record(
                                     Diagnostics::Counter::deletion_index_rows_inserted);
                                 m_fragment_tree = std::move(tree);
+                                m_node_directory = std::move(nodes);
                                 m_deletion_index = std::move(deletions);
                                 observe_remote(op.timestamp);
                                 m_version.observe(op.timestamp);
@@ -2237,6 +2267,11 @@ ApplyOutcome Buffer::apply_one(const Operation& op) {
     // transport re-delivering one we already applied.
     if (gap_conflicts(m_counter_gaps, op)) return ApplyOutcome::rejected(CounterGapLedger::conflict());
     if (m_version.observed(ts)) return ApplyOutcome::duplicate();
+
+    if (!m_fragment_tree.has_valid_node_ids())
+        return ApplyOutcome::rejected(Error(
+            ErrorCode::limit_exceeded,
+            "cannot apply operation: fragment-tree node identity space is unavailable"));
 
     // Validity before causality: a record that can never be applied is refused
     // now rather than parked in the queue behind a dependency that will not
