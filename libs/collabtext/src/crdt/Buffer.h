@@ -305,6 +305,12 @@ private:
     std::optional<EditOperation::DeletionRun> try_replace_exact_visible_run(
         uint32_t start, uint32_t end, Fragment inserted,
         const Link& link, uint64_t insertion_rank, const Identity& deletion_id);
+    std::optional<std::pair<EditOperation::DeletionRun, Link>>
+    try_replace_partial_visible_run(uint32_t start, uint32_t end,
+                                    Identity inserted_origin,
+                                    const std::string& inserted_text,
+                                    uint32_t inserted_length,
+                                    const Identity& deletion_id);
 
     struct LocatedRunItem {
         BufferFragmentTree::NodePtr leaf;

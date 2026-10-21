@@ -774,6 +774,215 @@ Buffer::try_replace_exact_visible_run(uint32_t start, uint32_t end,
     return EditOperation::DeletionRun{replaced_origin, replaced_length};
 }
 
+std::optional<std::pair<EditOperation::DeletionRun, Link>>
+Buffer::try_replace_partial_visible_run(uint32_t start, uint32_t end,
+                                        Identity inserted_origin,
+                                        const std::string& inserted_text,
+                                        uint32_t inserted_length,
+                                        const Identity& deletion_id) {
+    if (!m_fragment_indexes_valid || !m_next_run_id || start >= end ||
+        !inserted_length || inserted_text.empty())
+        return std::nullopt;
+
+    auto visible = m_fragment_tree.cursor<VisibleOffset>();
+    if (!visible.seek({start}, Bias::Left) || !visible.item() ||
+        !visible.item()->visible || visible.item()->marker)
+        return std::nullopt;
+    const uint32_t fragment_start = visible.position().value;
+    const Fragment& original = *visible.item();
+    if (start < fragment_start || end > fragment_start + original.byte_length ||
+        original.text.size() != original.byte_length || !original.length ||
+        original.length > UINT64_MAX - original.origin.counter)
+        return std::nullopt;
+    const uint32_t local_start = start - fragment_start;
+    const uint32_t local_end = end - fragment_start;
+    const uint32_t first_scalar = count_utf8_chars(original.text, local_start);
+    const uint32_t end_scalar = count_utf8_chars(original.text, local_end);
+    if (!first_scalar || end_scalar <= first_scalar || end_scalar > original.length ||
+        first_scalar == 0 && end_scalar == original.length)
+        return std::nullopt;
+    const uint32_t deleted_length = end_scalar - first_scalar;
+    if (inserted_origin.actor != deletion_id.actor || !inserted_origin.counter ||
+        inserted_length > UINT64_MAX - inserted_origin.counter)
+        return std::nullopt;
+
+    const auto old_run = m_origin_index.find_interval_start(
+        original.origin.actor, original.origin.counter);
+    const auto old_interval = m_origin_index.locate(original.origin);
+    if (!old_run || !old_interval || old_interval->run != *old_run ||
+        old_interval->end != original.origin.counter + original.length)
+        return std::nullopt;
+    const auto old_rank = retained_rank_for_run(*old_run);
+    if (!old_rank) return std::nullopt;
+
+    Link link;
+    uint64_t insertion_rank = *old_rank;
+    if (first_scalar) {
+        // Inside an intact run, the next scalar is the direct right-child
+        // successor of the preceding scalar. SequenceOrder::mint_link chooses
+        // this left-child edge, which inserts immediately before that successor.
+        const Identity right = original.item_at(first_scalar);
+        link = Link{right, Side::Left, right};
+        insertion_rank += 1; // after the new prefix fragment
+    } else {
+        // At a retained run boundary, use the same ancestry proof as the
+        // insertion fast path. Interior run positions are handled above.
+        const auto placement = simple_middle_insertion(start);
+        if (!placement || placement->second != *old_rank) return std::nullopt;
+        link = placement->first;
+    }
+
+    std::vector<Fragment> pieces;
+    pieces.reserve(3);
+    Fragment remainder = original;
+    if (first_scalar) {
+        Fragment tail = remainder.split_off(first_scalar);
+        pieces.push_back(std::move(remainder));
+        remainder = std::move(tail);
+    }
+    Fragment suffix;
+    const uint32_t remainder_deleted_length = first_scalar
+        ? deleted_length : end_scalar;
+    if (remainder_deleted_length < remainder.length)
+        suffix = remainder.split_off(remainder_deleted_length);
+    const Identity deleted_origin = remainder.origin;
+    const uint32_t deleted_run_length = remainder.length;
+    remainder.deletions.push_back(deletion_id);
+    remainder.visible = remainder.compute_visible(m_undo_map);
+    if (remainder.visible || deleted_run_length != deleted_length)
+        return std::nullopt;
+    pieces.push_back(std::move(remainder));
+    if (suffix.length) pieces.push_back(std::move(suffix));
+    if (pieces.size() < 2) return std::nullopt;
+
+    const uint64_t needed_run_ids = static_cast<uint64_t>(pieces.size()) + 1;
+    if (needed_run_ids - 1 > UINT64_MAX - m_next_run_id)
+        return std::nullopt;
+    std::vector<RunId> piece_runs;
+    piece_runs.reserve(pieces.size());
+    RunId next_run = m_next_run_id;
+    for (size_t i = 0; i < pieces.size(); ++i) {
+        piece_runs.push_back(next_run);
+        next_run = next_run == UINT64_MAX ? 0 : next_run + 1;
+        if (!next_run && i + 1 < pieces.size()) return std::nullopt;
+    }
+    const RunId inserted_run = next_run;
+    if (!inserted_run) return std::nullopt;
+    const RunId following_run = inserted_run == UINT64_MAX ? 0 : inserted_run + 1;
+
+    auto origins = m_origin_index;
+    auto deletions = m_deletion_index;
+    auto runs = m_run_directory;
+    if (!origins.erase(original.origin.actor, original.origin.counter) ||
+        !runs.erase(*old_run))
+        return std::nullopt;
+    for (const Identity& old_deletion : original.deletions)
+        if (!deletions.erase(old_deletion, original.origin.actor,
+                             original.origin.counter))
+            return std::nullopt;
+
+    for (size_t i = 0; i < pieces.size(); ++i) {
+        const Fragment& piece = pieces[i];
+        if (!piece.length || piece.length > UINT64_MAX - piece.origin.counter ||
+            !origins.insert(piece.origin.actor, piece.origin.counter,
+                            piece.origin.counter + piece.length, piece_runs[i]))
+            return std::nullopt;
+        for (const Identity& old_deletion : original.deletions)
+            if (!deletions.insert(old_deletion, piece.origin.actor,
+                                  piece.origin.counter,
+                                  piece.origin.counter + piece.length,
+                                  piece_runs[i]))
+                return std::nullopt;
+        if (std::find(piece.deletions.begin(), piece.deletions.end(), deletion_id) !=
+                piece.deletions.end() &&
+            !deletions.insert(deletion_id, piece.origin.actor, piece.origin.counter,
+                              piece.origin.counter + piece.length, piece_runs[i]))
+            return std::nullopt;
+    }
+
+    const uint64_t inserted_end = inserted_origin.counter + inserted_length;
+    if (!origins.insert(inserted_origin.actor, inserted_origin.counter,
+                        inserted_end, inserted_run))
+        return std::nullopt;
+    Fragment inserted(inserted_origin, link,
+                      static_cast<uint32_t>(inserted_text.size()),
+                      inserted_length, inserted_text);
+    inserted.visible = true;
+
+    auto tree = m_fragment_tree;
+    auto nodes = m_node_directory;
+    bool replaced = false;
+    if (!tree.edit_item<RetainedRunOffset>(RetainedRunOffset{*old_rank},
+            [&](Fragment& fragment) {
+                if (fragment.origin == original.origin &&
+                    fragment.length == original.length)
+                    fragment = pieces[0];
+                else
+                    return;
+                replaced = true;
+            }) || !replaced)
+        return std::nullopt;
+    for (size_t i = 1; i < pieces.size(); ++i)
+        tree.insert_item<RetainedRunOffset>(
+            RetainedRunOffset{*old_rank + i}, std::move(pieces[i]));
+    tree.insert_item<RetainedRunOffset>(RetainedRunOffset{insertion_rank},
+                                        std::move(inserted));
+    const uint64_t last_changed_rank = *old_rank + pieces.size();
+    for (uint64_t rank = *old_rank; rank <= last_changed_rank; ++rank)
+        if (!nodes.refresh_path(tree, RetainedRunOffset{rank}))
+            return std::nullopt;
+    if (!tree.has_valid_node_ids()) return std::nullopt;
+
+    for (size_t i = 0; i < pieces.size(); ++i) {
+        auto cursor = tree.cursor<RetainedRunOffset>();
+        if (!cursor.seek({*old_rank + i}, Bias::Left) || !cursor.item() ||
+            cursor.position().value != *old_rank + i)
+            return std::nullopt;
+    }
+    auto inserted_cursor = tree.cursor<RetainedRunOffset>();
+    if (!inserted_cursor.seek({insertion_rank}, Bias::Left) ||
+        !inserted_cursor.item() || inserted_cursor.position().value != insertion_rank ||
+        inserted_cursor.item()->origin != inserted_origin)
+        return std::nullopt;
+
+    bool locations_valid = true;
+    for (uint64_t rank = *old_rank; rank <= last_changed_rank; ++rank) {
+        const bool refreshed = tree.for_each_leaf_near_path(
+            RetainedRunOffset{rank}, [&](const BufferFragmentTree::NodePtr& leaf) {
+                const auto& items = leaf->leaf();
+                for (uint16_t slot = 0; slot < items.count; ++slot) {
+                    const auto item_run = origins.find_interval_start(
+                        items.items[slot].origin.actor, items.items[slot].origin.counter);
+                    if (!item_run || !runs.insert_or_assign(
+                            *item_run, RunLocation{leaf->node_id, slot}))
+                        locations_valid = false;
+                }
+            });
+        if (!refreshed) return std::nullopt;
+    }
+    if (!locations_valid) return std::nullopt;
+
+    Diagnostics::record(Diagnostics::Counter::fragment_index_publications);
+    Diagnostics::record(Diagnostics::Counter::origin_index_rows_erased);
+    Diagnostics::record(Diagnostics::Counter::origin_index_rows_inserted,
+                        pieces.size() + 1);
+    Diagnostics::record(Diagnostics::Counter::deletion_index_rows_erased,
+                        original.deletions.size());
+    uint64_t deletion_rows = 0;
+    for (const auto& piece : pieces)
+        deletion_rows += piece.deletions.size();
+    Diagnostics::record(Diagnostics::Counter::deletion_index_rows_inserted,
+                        deletion_rows);
+    m_fragment_tree = std::move(tree);
+    m_node_directory = std::move(nodes);
+    m_origin_index = std::move(origins);
+    m_deletion_index = std::move(deletions);
+    m_run_directory = std::move(runs);
+    m_next_run_id = following_run;
+    return std::pair{EditOperation::DeletionRun{deleted_origin, deleted_run_length},
+                     link};
+}
+
 void Buffer::recompute_visibility_for(const std::vector<Identity>& identities) {
     if (!m_fragment_indexes_valid) {
         m_fragment_tree.for_each_mut([this](Fragment& fragment) {
@@ -1874,6 +2083,25 @@ Result<Operation> Buffer::try_apply_validated_local_edit(
                 if (m_on_change) m_on_change();
                 return Operation(std::move(op));
             }
+        }
+        const Identity origin(m_allocator->actor(), reserved.value());
+        if (const auto replacement = try_replace_partial_visible_run(
+                ranges[0].first, ranges[0].second, origin, new_text[0],
+                scalar_counts[0], op_identity)) {
+            const Link& link = replacement->second;
+            op.timestamp = op_identity;
+            op.deletion_id = op_identity;
+            op.deletion_runs.push_back(replacement->first);
+            op.inserted_fragments.push_back(
+                {origin, link, new_text[0], scalar_counts[0], false});
+            for (uint32_t i = 0; i < scalar_counts[0]; ++i)
+                undo_entry.inserted_keys.emplace_back(
+                    Identity(origin.actor, origin.counter + i));
+            undo_entry.deletion_ids.push_back(op_identity);
+            m_version.observe(op_identity);
+            commit_local_history(std::move(undo_entry));
+            if (m_on_change) m_on_change();
+            return Operation(std::move(op));
         }
     }
 

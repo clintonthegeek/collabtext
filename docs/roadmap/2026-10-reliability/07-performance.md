@@ -647,6 +647,25 @@ high-value slice is transactional splitting of partial retained runs with local
 index maintenance; keep reconstruction as oracle/fallback until the broader
 splice proves equivalent.
 
+**Progress (2026-10-21):** Local replacement now also covers a range contained
+inside one visible retained fragment. It stages prefix, deleted-middle, and
+suffix fragments plus the replacement at the FugueMax left-child edge proven by
+the fragment's consecutive identity chain. The candidate updates origin,
+deletion, run, and node directories before publication; unsupported boundaries
+still fall back. Tests check text, peer replay, undo/redo, and splitting a run
+that carries an undone historical deletion. The registered Debug and Release
+changed-path routes pass 31/31, and the serial leak-enabled ASan/UBSan route
+passes 30/30. A parallel sanitizer attempt tripped the existing large-document
+timing assertion under contention; the same full route passed serially.
+
+Diagnostics-enabled Release work counts for the aged public
+10-KB/3,000-prior-replacement case changed from 145 reconstruction fallbacks in
+200 calls to 34; 166 calls now avoid the full snapshot. Rebuilt tree items fell
+from 1,116,300 to 261,041, and placement-index builds from 290 to 68 (521,998
+placement runs). These counters show a substantial reduction in whole-state
+work, but paired latency is pending and no target is marked met from this
+measurement.
+
 - All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.
 - Target at least 5x lower aged 10-KB/3000-prior-replacement mean and median per-run p99 at most 2 ms in a comparable paired environment; target at least 2x lower mixed 5-KB/50%-deletion mean, with no more than 10% regression in light-history cases.
 

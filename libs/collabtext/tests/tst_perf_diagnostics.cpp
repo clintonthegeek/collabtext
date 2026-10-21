@@ -111,6 +111,61 @@ private slots:
         QCOMPARE(buffer.text(), expected);
     }
 
+    void local_partial_run_replacement_splits_and_updates_indexes() {
+        Buffer buffer(CollabText::Test::test_counter(48));
+        auto initial = buffer.try_apply_local_edit({{0, 0}}, {"abcdef"});
+        QVERIFY(initial);
+        Buffer peer(CollabText::Test::test_counter(49));
+        QCOMPARE(peer.apply_ops({initial.value()}).size(), size_t{1});
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto replaced = buffer.try_apply_local_edit({{2, 4}}, {"XY"});
+        Diagnostics::end_sample();
+        QVERIFY(replaced);
+        QCOMPARE(buffer.text(), std::string("abXYef"));
+        QCOMPARE(buffer.fragment_count(), size_t{4});
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_tree_rebuild_items), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::placement_index_builds), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::origin_index_rows_erased), uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::origin_index_rows_inserted), uint64_t{4});
+        QCOMPARE(peer.apply_ops({replaced.value()}).size(), size_t{1});
+        QCOMPARE(peer.text(), std::string("abXYef"));
+
+        auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("abcdef"));
+        auto redone = buffer.try_redo();
+        QVERIFY(redone);
+        QVERIFY(redone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("abXYef"));
+
+        Buffer layered(CollabText::Test::test_counter(50));
+        auto seeded = layered.try_apply_local_edit({{0, 0}}, {"abcdef"});
+        QVERIFY(seeded);
+        auto hidden = layered.try_apply_local_edit({{1, 4}}, {""});
+        QVERIFY(hidden);
+        auto restored = layered.try_undo();
+        QVERIFY(restored);
+        QVERIFY(restored.value().has_value());
+        QCOMPARE(layered.text(), std::string("abcdef"));
+        auto nested = layered.try_apply_local_edit({{2, 3}}, {"Z"});
+        QVERIFY(nested);
+        QCOMPARE(layered.text(), std::string("abZdef"));
+        auto nested_undo = layered.try_undo();
+        QVERIFY(nested_undo);
+        QVERIFY(nested_undo.value().has_value());
+        QCOMPARE(layered.text(), std::string("abcdef"));
+        auto nested_redo = layered.try_redo();
+        QVERIFY(nested_redo);
+        QVERIFY(nested_redo.value().has_value());
+        QCOMPARE(layered.text(), std::string("abZdef"));
+    }
+
     void local_tail_insert_skips_fragment_flatten_and_rebuild() {
         Buffer buffer(CollabText::Test::test_counter(29));
         std::vector<Operation> seed;
