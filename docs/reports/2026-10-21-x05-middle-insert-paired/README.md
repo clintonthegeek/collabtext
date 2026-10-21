@@ -1,0 +1,13 @@
+# X05 indexed middle-insert slice: paired evaluation
+
+This five-pair full performance matrix compares parent `1b431b1deed2ee847b30fc4825326b031b7cb3cb` with candidate `e9d7ba6d65adf77893b3f5a8b08768b14b9be1be`. It isolates the local indexed middle-insertion implementation from earlier X05 work. The checked harness reported 54 public workload cases; public result and operation fingerprints matched in every pair. The native benchmark suite passed 14/14 cases for every baseline/candidate run, with matching work and final-state fields. Recovery cases completed for 512 and 2,048 operations in every pair. Raw samples, native logs, exact commands, environment and the aggregate are under [`raw/`](raw/).
+
+The strongest relevant existing workload is the native fragment-proliferation test: it seeds a 10-KB document, then performs random-position single-character insertions. Median paired candidate/baseline ratios for cumulative elapsed time were 0.973 after 500 inserts, 0.931 after 1,000, 0.908 after 1,500, and 0.898 after 2,000. The final figure is about 10% lower total elapsed time. This workload exercises the new pure-insert path, but it measures a cumulative insertion series rather than isolated per-call latency, and some positions can still take the reconstruction fallback.
+
+The mixed random insert/delete memory-growth test reached a median ratio of 0.579 after 5,000 edits. This is a 42% reduction in cumulative elapsed time in that fixture, but it combines insertion, deletion and history growth and does not establish a general edit speedup. Keep it as supporting evidence only.
+
+The aged public 10-KB/3,000-replacement workload had median paired ratios of 1.132 for mean latency and 1.456 for per-run p99. The byte-control case had median mean ratio 1.099. These are replacement workloads, which do not use the new pure-insert path. They do not meet X05's aged-replacement target and cannot be attributed to this slice. Other unrelated cases also vary widely pair to pair.
+
+The host had eight logical CPUs and the powersave governor. Recorded one-minute load before public/native commands ranged from 2.90 to 10.06; the early runs were substantially more loaded. This matrix is directional and does not prove the <=10% light-history guard. The native insertion trajectory supports keeping the candidate for a focused follow-up, while the unmeasured direct per-call benefit and noisy unrelated results remain open. No X05 acceptance target is marked met.
+
+The next measurement adds a dedicated aged, random-boundary, single-insert case with per-call samples and correctness fingerprints. See the X05 progress and acceptance record in [`TASKS.json`](../../roadmap/2026-10-reliability/TASKS.json).

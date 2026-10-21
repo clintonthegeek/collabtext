@@ -12,6 +12,7 @@ SPEC = importlib.util.spec_from_file_location(
 matrix = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(matrix)
 TRACE = json.loads((ROOT / "benchmarks/traces/workloads-v1.json").read_text())
+TRACE_V2 = json.loads((ROOT / "benchmarks/traces/workloads-v2.json").read_text())
 RAW = ROOT / "docs/reports/2026-10-19-x01-baseline/raw"
 
 
@@ -33,6 +34,14 @@ class TraceValidationTests(unittest.TestCase):
                 mutate(trace)
                 with self.assertRaises(RuntimeError):
                     matrix.validate_trace(trace)
+
+    def test_v2_trace_pins_the_aged_middle_insert_window(self):
+        dimensions = matrix.validate_trace(TRACE_V2)
+        self.assertEqual(dimensions["middle_insert_calls"], 200)
+        trace = copy.deepcopy(TRACE_V2)
+        trace["dimensions"]["middle_insert_calls"] = 199
+        with self.assertRaises(RuntimeError):
+            matrix.validate_trace(trace)
 
     def test_baseline_revision_accepts_full_commit_ids_only(self):
         self.assertTrue(matrix.valid_revision(matrix.BASELINE))

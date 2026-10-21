@@ -1,9 +1,17 @@
-# Benchmark trace schema v1
+# Benchmark trace schemas v1 and v2
 
 `traces/workloads-v1.json` pins the deterministic workload definitions. Its
 SHA-256 is recorded by the paired matrix runner; changing a seed, size, operation,
 window, budget or accounting rule creates a new trace version/hash. Do not edit
 an old trace after recording results.
+
+`traces/workloads-v2.json` preserves the v1 workload grid and adds a 200-call
+aged random-boundary single-character insertion case at 128 and 3,000 retained
+single-scalar runs. Pass it with `tools/run_performance_matrix.py --trace
+benchmarks/traces/workloads-v2.json`. The runner compiles one harness source
+against both the baseline and candidate engines, validates final text and
+encoded-operation fingerprints, and records every call separately. The v1
+default and its archived hash remain unchanged.
 
 The C++ harness writes JSON Lines using schema `collabtext-performance-samples/1`:
 

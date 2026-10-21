@@ -460,6 +460,10 @@ lookup and paired results are in
 
 **Files / scope:**
 
+- `benchmarks/BenchmarkRunner.cpp`
+- `benchmarks/README.md`
+- `benchmarks/TraceFormat.md`
+- `benchmarks/traces/workloads-v2.json`
 - `libs/collabtext/src/crdt/Buffer.cpp`
 - `libs/collabtext/src/crdt/SumTree.h`
 - `libs/collabtext/src/crdt/TreeNodeId.h`
@@ -468,6 +472,9 @@ lookup and paired results are in
 - `libs/collabtext/tests/tst_sequence_differential.cpp`
 - `libs/collabtext/tests/tst_sumtree.cpp`
 - `tools/verify_changed.py`
+- `tools/run_performance_matrix.py`
+- `tools/test_run_performance_matrix.py`
+- `tools/test_verify_changed.py`
 - `docs/specs/vnext-performance-targets.md`
 - `docs/roadmap/2026-10-reliability/07-performance.md`
 
@@ -477,7 +484,7 @@ lookup and paired results are in
 2. Preserve native FugueMax integration and checked splice preconditions. Replace the measured get_fragments/vector edit/set_fragments rebuild path; do not claim a win from removing a debug consistency check that is absent from ordinary edits.
 3. Keep the old reconstruction algorithm as a test oracle and a counted, justified production fallback for unsupported complex cases until those cases are proven. Preserve immutable operation data, exact identity/version/undo effects, callback timing and refusal atomicity.
 4. Test concurrency, adversarial origins, Unicode splits, marker order, checkpoint recovery, gaps and undo/redo under allocation failure and seeded model traces. Assert common one-run edits do not enumerate/copy/rebuild the full fragment collection.
-5. Measure fresh bulk-seeded, chunk-seeded, 500/3000-prior-edit, tombstone-rich, undo and catch-up cases. Publish fallback frequency and work counts; an optimization that merely shifts an O(history) rebuild into index maintenance does not satisfy acceptance.
+5. Measure fresh bulk-seeded, chunk-seeded, 500/3000-prior-edit, tombstone-rich, undo and catch-up cases. The versioned v2 trace also measures 200 individual random-boundary single inserts after 128 and 3,000 retained single-scalar runs. Publish fallback frequency and work counts; an optimization that merely shifts an O(history) rebuild into index maintenance does not satisfy acceptance.
 
 **Progress (2026-10-20):** A generic, checked `SumTree::splice_range` primitive
 shares fully covered unaffected subtrees, validates dimension-aligned cuts,
@@ -897,3 +904,23 @@ excluding shared-pointer control blocks and allocator overhead.
 and `tst_crdt_indexes` (3/3). `tst_perf_diagnostics` also passes the
 1,024-run recursive tail-split/delete case with zero fragment snapshots, rebuild
 items, or full index rebuilds.
+
+**Paired evidence (2026-10-21):** The indexed middle-insert slice was compared
+with its immediate parent in five full matrix pairs (54 public cases, native
+suite, and two recovery sizes); all public operation/result fingerprints and
+native work/state fields matched. The native 10-KB random-position single-char
+insertion trajectory measured median cumulative ratios 0.973/0.931/0.908/0.898
+after 500/1,000/1,500/2,000 inserts. A 5,000-edit mixed random workload reached
+0.579 at its final cumulative point. These are supporting results, not isolated
+per-call speedups. The aged 10-KB/3,000 replacement case remained at 1.132 mean
+and 1.456 p99 ratios, and unrelated cases were noisy. Powersave one-minute load
+ranged 2.90–10.06. Full details and raw records are in
+[the parent-to-candidate report](../../reports/2026-10-21-x05-middle-insert-paired/README.md).
+No X05 acceptance target is met by this intermediate comparison.
+
+**Benchmark follow-up (2026-10-21):** Added trace v2 with 200 individually
+timed random-boundary pure insertions after 128 and 3,000 retained
+single-scalar runs. The paired runner uses that same harness against baseline
+and candidate and checks final text/operation fingerprints. A quick smoke run
+passes all 56 cases, including both new workloads. The five-pair focused public
+matrix is pending; trace v1 and its archived hash remain unchanged.

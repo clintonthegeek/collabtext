@@ -73,6 +73,7 @@ int edit_samples = 200;
 int query_samples = 50;
 int codec_samples = 100;
 int bulk_samples = 5;
+bool include_middle_insert = false;
 
 uint64_t fnv1a(std::string_view bytes) {
     uint64_t hash = 14695981039346656037ull;
@@ -181,6 +182,38 @@ void public_edits(size_t bytes, int prior_edits) {
     require(engine->text() == expected, "public edit result mismatch");
     const auto frame = take(encode_operation(last));
     report_case(expected.size(), prior_edits, 0, 0, hex64(fnv1a(expected)),
+                hex64(fnv1a(frame)));
+}
+
+void middle_insert_edits(uint32_t history_runs) {
+    Buffer engine(std::make_shared<CheckedAllocator>(51));
+    std::string expected;
+    expected.reserve(static_cast<size_t>(history_runs) +
+                     static_cast<size_t>(edit_samples));
+    for (uint32_t i = 0; i < history_runs; ++i) {
+        const uint32_t end = engine.visible_length();
+        take(engine.try_apply_local_edit({{end, end}}, {"a"}));
+        expected.push_back('a');
+    }
+    require(engine.fragment_count() == history_runs,
+            "middle-insert seed did not create one retained run per scalar");
+
+    std::mt19937 random(workload_seed + history_runs);
+    begin_case("middle_insert_" + std::to_string(history_runs) + "_runs");
+    Operation last;
+    for (int i = 0; i < edit_samples; ++i) {
+        const uint32_t position = static_cast<uint32_t>(
+            random() % (expected.size() + 1));
+        const std::string inserted(1, static_cast<char>('b' + (i % 20)));
+        last = take(timed([&] {
+            return engine.try_apply_local_edit({{position, position}}, {inserted});
+        }));
+        expected.insert(expected.begin() + position, inserted[0]);
+    }
+    require(engine.text() == expected, "middle-insert fixture result mismatch");
+    const auto frame = take(encode_operation(last));
+    report_case(expected.size(), history_runs, engine.fragment_count(),
+                engine.tombstone_count(), hex64(fnv1a(expected)),
                 hex64(fnv1a(frame)));
 }
 
@@ -480,13 +513,19 @@ void codec_cases() {
 
 int main(int argc, char** argv) {
     try {
-        if (argc == 2 && std::string_view(argv[1]) == "--quick") {
-            edit_samples = 5;
-            query_samples = 5;
-            codec_samples = 10;
-            bulk_samples = 1;
-        } else if (argc != 1) {
-            throw std::runtime_error("usage: collabtext_performance_benchmark [--quick]");
+        for (int i = 1; i < argc; ++i) {
+            const std::string_view argument(argv[i]);
+            if (argument == "--quick") {
+                edit_samples = 5;
+                query_samples = 5;
+                codec_samples = 10;
+                bulk_samples = 1;
+            } else if (argument == "--middle-insert") {
+                include_middle_insert = true;
+            } else {
+                throw std::runtime_error(
+                    "usage: collabtext_performance_benchmark [--quick] [--middle-insert]");
+            }
         }
         std::cout << "{\"record\":\"header\",\"schema\":\"collabtext-performance-samples/1\","
                   << "\"profile\":\"" << (edit_samples == 5 ? "quick" : "full")
@@ -501,6 +540,10 @@ int main(int argc, char** argv) {
         for (size_t bytes : {1'000u, 10'000u, 100'000u, 1'000'000u}) {
             public_edits(bytes, 0);
             byte_edits(bytes, 0);
+        }
+        if (include_middle_insert) {
+            middle_insert_edits(128);
+            middle_insert_edits(3'000);
         }
         for (int history : {500, 3'000}) {
             public_edits(10'000, history);

@@ -41,7 +41,9 @@ def capture(command, **kwargs):
 
 
 def validate_trace(trace_data):
-    if trace_data.get("schema") != "collabtext-benchmark-trace/1":
+    schema = trace_data.get("schema")
+    if schema not in ("collabtext-benchmark-trace/1",
+                      "collabtext-benchmark-trace/2"):
         raise RuntimeError("unsupported workload trace schema")
     dimensions = trace_data.get("dimensions", {})
     if trace_data.get("seed") != 42:
@@ -54,6 +56,12 @@ def validate_trace(trace_data):
         raise RuntimeError("trace codec/bulk windows do not match the checked harness")
     if dimensions.get("list_entries") != [100, 1000, 5000] or dimensions.get("causal_actors") != [1, 32, 128, 512]:
         raise RuntimeError("trace list/causal frontier grid does not match the checked harness")
+    if schema == "collabtext-benchmark-trace/2":
+        if dimensions.get("middle_insert_calls") != 200:
+            raise RuntimeError("trace middle-insert call window does not match the checked harness")
+        workload_names = {workload.get("name") for workload in trace_data.get("workloads", [])}
+        if "aged-random-boundary-single-insert" not in workload_names:
+            raise RuntimeError("trace omits the checked aged middle-insert workload")
     return dimensions
 
 
@@ -68,6 +76,8 @@ def main():
     parser.add_argument("--baseline-sha", default=BASELINE,
                         help="40-character revision for the baseline source (default: X01 baseline)")
     parser.add_argument("--candidate-root", type=Path, default=ROOT)
+    parser.add_argument("--trace", type=Path,
+                        help="versioned trace file (default: candidate workloads-v1.json)")
     parser.add_argument("--output", type=Path, required=True,
                         help="new directory for builds, raw runs and aggregates")
     parser.add_argument("--repeats", type=int, default=5)
@@ -97,7 +107,10 @@ def main():
     cache = ROOT / ".cache/ccache"
     cache.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, CCACHE_DIR=str(cache), QT_QPA_PLATFORM="offscreen")
-    trace = candidate_root / "benchmarks/traces/workloads-v1.json"
+    trace = (args.trace.resolve() if args.trace else
+             candidate_root / "benchmarks/traces/workloads-v1.json")
+    if not trace.is_file():
+        parser.error(f"workload trace does not exist: {trace}")
     harness = candidate_root / "benchmarks/BenchmarkRunner.cpp"
     trace_data = json.loads(trace.read_text())
     dimensions = validate_trace(trace_data)
@@ -240,6 +253,7 @@ def main():
                 raise RuntimeError(f"unexpected refused/no-op work: {case}")
             name = case["workload"]
             expected_samples = (
+                5 if args.smoke and name.startswith("middle_insert_") else
                 5 if args.smoke and (name.startswith("public_replace_") or
                                      name.startswith("byte_replace_") or
                                      name.startswith("unicode_append_")) else
@@ -249,6 +263,8 @@ def main():
                                      name.startswith(("list_identity_", "list_anchor_",
                                                       "list_projection_", "list_single_insert_"))) else
                 dimensions["replacement_calls"] if name.startswith(("public_replace_", "byte_replace_", "unicode_append_")) else
+                dimensions["middle_insert_calls"] if name.startswith("middle_insert_") else
+                dimensions["middle_insert_calls"] if name.startswith("middle_insert_") else
                 dimensions["query_calls"] if ("boundary_" in name or "attachment_" in name or "marker_resolve_" in name or
                                                name.startswith(("list_identity_", "list_anchor_",
                                                                 "list_projection_", "list_single_insert_"))) else
@@ -316,7 +332,12 @@ def main():
                 binary = baseline_bin if label == "baseline" else candidate_bin
                 suffix = str(repeat)
                 public_log = output / f"{label}-public-{suffix}.jsonl"
-                run(f"{label}-public-{suffix}", [binary, *(["--quick"] if args.smoke else [])],
+                benchmark_args = []
+                if args.smoke:
+                    benchmark_args.append("--quick")
+                if trace_data.get("schema") == "collabtext-benchmark-trace/2":
+                    benchmark_args.append("--middle-insert")
+                run(f"{label}-public-{suffix}", [binary, *benchmark_args],
                     timeout=300, log_path=public_log)
                 datasets[label].setdefault("public", []).append(read_public(public_log))
                 if args.smoke or args.public_only:

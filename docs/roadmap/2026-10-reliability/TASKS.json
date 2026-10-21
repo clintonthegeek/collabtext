@@ -4572,23 +4572,30 @@
         "S07"
       ],
       "files": [
+        "benchmarks/BenchmarkRunner.cpp",
+        "benchmarks/README.md",
+        "benchmarks/TraceFormat.md",
+        "benchmarks/traces/workloads-v2.json",
+        "docs/roadmap/2026-10-reliability/07-performance.md",
+        "docs/specs/vnext-performance-targets.md",
         "libs/collabtext/src/crdt/Buffer.cpp",
+        "libs/collabtext/src/crdt/SequenceOrder.cpp",
         "libs/collabtext/src/crdt/SumTree.h",
         "libs/collabtext/src/crdt/TreeNodeId.h",
-        "libs/collabtext/src/crdt/SequenceOrder.cpp",
-        "libs/collabtext/tests/tst_sequence_fast_paths.cpp",
         "libs/collabtext/tests/tst_sequence_differential.cpp",
+        "libs/collabtext/tests/tst_sequence_fast_paths.cpp",
         "libs/collabtext/tests/tst_sumtree.cpp",
-        "tools/verify_changed.py",
-        "docs/specs/vnext-performance-targets.md",
-        "docs/roadmap/2026-10-reliability/07-performance.md"
+        "tools/run_performance_matrix.py",
+        "tools/test_run_performance_matrix.py",
+        "tools/test_verify_changed.py",
+        "tools/verify_changed.py"
       ],
       "steps": [
         "Implement X04a path-copy/splice and affected-visibility operations using X04 handles and X07 aggregates. First cover checked local inserts/replacements and markers, then remote insert/delete and compensation; keep each subchange reviewable and differential-tested.",
         "Preserve native FugueMax integration and checked splice preconditions. Replace the measured get_fragments/vector edit/set_fragments rebuild path; do not claim a win from removing a debug consistency check that is absent from ordinary edits.",
         "Keep the old reconstruction algorithm as a test oracle and a counted, justified production fallback for unsupported complex cases until those cases are proven. Preserve immutable operation data, exact identity/version/undo effects, callback timing and refusal atomicity.",
         "Test concurrency, adversarial origins, Unicode splits, marker order, checkpoint recovery, gaps and undo/redo under allocation failure and seeded model traces. Assert common one-run edits do not enumerate/copy/rebuild the full fragment collection.",
-        "Measure fresh bulk-seeded, chunk-seeded, 500/3000-prior-edit, tombstone-rich, undo and catch-up cases. Publish fallback frequency and work counts; an optimization that merely shifts an O(history) rebuild into index maintenance does not satisfy acceptance."
+        "Measure fresh bulk-seeded, chunk-seeded, 500/3000-prior-edit, tombstone-rich, undo and catch-up cases. The versioned v2 trace also measures 200 individual random-boundary single inserts after 128 and 3,000 retained single-scalar runs. Publish fallback frequency and work counts; an optimization that merely shifts an O(history) rebuild into index maintenance does not satisfy acceptance."
       ],
       "acceptance": [
         "All differential/model results and transactional refusal checks pass; common local and remote edits touch tree paths and affected runs rather than cloning the entire retained collection.",
@@ -4620,7 +4627,10 @@
       "progress_2026_10_21_23": "RunDirectory now maps RunId to (leaf NodeId, slot), and Buffer resolves/validates that locator through NodeDirectory and OriginIndex before composing retained rank. Rebuilds populate locations from tree leaves; append refreshes all leaves around the changed path, covering items moved by full-leaf splits. The changed-path Debug route passes 57/57 suites, including the range-delete regression that exposed stale locators. The opt-in Release lookup fixture measured median 3,525.96 ns/query indexed versus 55,028.6 ns/query scanned across five pairs (15.6x in this fixture only); this is not a Buffer before/after result and does not meet/claim X05 latency acceptance. Updated verify_changed to keep tst_benchmark outside CTest and identify it as an explicit opt-in manual run.",
       "progress_2026_10_21_24": "Tightened the lookup chain with OriginIndex::interval_at_start and a NodeDirectory rank overload that reuses the already locked leaf; the opt-in benchmark now validates that the slot contains the queried identity. Five checked Release pairs measured median 3,408.56 ns/query indexed versus 45,191.6 ns/query scanned (13.3x for the 5,000-run fixture). This supersedes the earlier quick path measurement and remains a direct lookup-vs-scan microbenchmark, not Buffer edit before/after evidence. The 5,000-run AVL node-payload estimate is 1,631,664 bytes across origin/deletion/run/topology indexes, excluding shared_ptr control blocks and allocator overhead.",
       "progress_2026_10_21_25": "Final locator-slice verification: registered changed-path Debug passes 57/57; focused Release tst_buffer, tst_sumtree, and tst_crdt_indexes pass 3/3. Perf diagnostics pass the new 1,024-run recursive tail-split/delete test, which asserts zero fragment snapshots, rebuild items, and full index rebuilds.",
-      "progress_2026_10_21_26": "Added an indexed local middle-insert path for one pure insertion at a retained fragment boundary when neighboring ancestry proves the exact FugueMax slot. It stages the COW tree, origin/deletion indexes, stable node directory, and affected RunDirectory leaf locations before publication; ambiguous and interior-run cases retain the reconstruction fallback. The 128-run diagnostic verifies output, peer replay, undo/redo, subsequent exact-run deletion, and zero fragment snapshots/tree rebuild items/full index rebuilds/placement-index builds. Affected model-sensitive Debug route passed 31/31; focused Debug Buffer and perf-diagnostics passed 2/2; focused Release perf diagnostics passed 1/1; leak-enabled ASan Buffer passed 1/1 outside the sandbox ptrace restriction after the sandbox run passed all 66 assertions but LeakSanitizer failed to inspect processes. This is work-count evidence only. Remote middle edits, general replacements, paired timing, and X05 acceptance remain open."
+      "progress_2026_10_21_26": "Added an indexed local middle-insert path for one pure insertion at a retained fragment boundary when neighboring ancestry proves the exact FugueMax slot. It stages the COW tree, origin/deletion indexes, stable node directory, and affected RunDirectory leaf locations before publication; ambiguous and interior-run cases retain the reconstruction fallback. The 128-run diagnostic verifies output, peer replay, undo/redo, subsequent exact-run deletion, and zero fragment snapshots/tree rebuild items/full index rebuilds/placement-index builds. Affected model-sensitive Debug route passed 31/31; focused Debug Buffer and perf-diagnostics passed 2/2; focused Release perf diagnostics passed 1/1; leak-enabled ASan Buffer passed 1/1 outside the sandbox ptrace restriction after the sandbox run passed all 66 assertions but LeakSanitizer failed to inspect processes. This is work-count evidence only. Remote middle edits, general replacements, paired timing, and X05 acceptance remain open.",
+      "progress_2026_10_21_27": "Five full matrix pairs compared parent 1b431b1deed2ee847b30fc4825326b031b7cb3cb with e9d7ba6d65adf77893b3f5a8b08768b14b9be1be; 54 public fingerprints matched, native suites passed 14/14 per run, and 512/2048 recovery cases completed. Native 10-KB random-position single-character insertion cumulative median candidate/baseline ratios were 0.973/0.931/0.908/0.898 after 500/1000/1500/2000 inserts; mixed 5000-edit workload reached 0.579 at its final point. Aged 10-KB/3000 replacement measured 1.132 mean and 1.456 p99 ratios but does not use this pure-insert path. Powersave load ranged 2.90-10.06; unrelated results are noisy. Evidence: docs/reports/2026-10-21-x05-middle-insert-paired/. No acceptance target is met; add a dedicated per-call aged middle-insert measurement.",
+      "progress_2026_10_21_28": "Added benchmark trace v2 with 200 individually timed random-boundary single-character insertions after 128 and 3000 retained single-scalar runs. The paired runner compiles the same harness against baseline and candidate, requires exact final-text and operation fingerprints, and keeps the v1 trace/hash unchanged. The quick v2 smoke run passes all 56 cases. The dedicated five-pair public matrix is pending.",
+      "progress_2026_10_21_29": "Release opt-in harness builds; a v2 smoke matrix passes all 56 cases on baseline/candidate with matching fingerprints. The changed-path Debug route passes 14/14, including verification tooling; direct Python runner/verifier suites pass 5/5 and 20/20. A missing route for the newly archived raw report was caught and fixed with a route regression test. The five-pair v2 aged middle-insert measurement is pending."
     },
     {
       "id": "X06",

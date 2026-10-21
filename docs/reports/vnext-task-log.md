@@ -3553,3 +3553,27 @@ sandbox's ptrace restriction. The sandbox ASan run passed all 66 test
 assertions; LeakSanitizer itself could not inspect processes there. Plan and
 strict-scope validators both pass. The fast path still has only work-count
 proof, not paired timing evidence.
+
+## 2026-10-21 — X05 middle-insert paired measurement
+
+Ran the full five-pair matrix from parent `1b431b1` to candidate `e9d7ba6`.
+All 54 public state/operation fingerprints matched; each native suite passed
+14/14 and recovery cases completed at 512 and 2,048 operations. The native
+10-KB random-position single-character insertion fixture measured median
+cumulative candidate/baseline ratios 0.973, 0.931, 0.908 and 0.898 after
+500/1,000/1,500/2,000 insertions. A mixed 5,000-edit fixture reached 0.579 at
+its final cumulative point. The aged 10-KB/3,000-replacement case measured
+1.132 mean and 1.456 p99 ratios; that workload does not exercise this pure
+insertion path. Host powersave load ranged 2.90–10.06, making unrelated ratios
+noisy. Full samples and environment are in
+`docs/reports/2026-10-21-x05-middle-insert-paired/`. This is intermediate
+directional evidence only; X05 target acceptance remains open, and a dedicated
+per-call aged middle-insert fixture is the next measurement.
+
+X05 benchmark-tooling verification: the Release opt-in harness builds and a v2
+smoke matrix passes all 56 cases on baseline and candidate with matching
+fingerprints. The registered changed-path Debug route passes 14/14, including
+`tst_verification_tools`, and the direct runner/verifier Python suites pass
+5/5 and 20/20. The first route check caught missing coverage for the new raw
+report; an explicit route and regression assertion are now included. The
+five-pair v2 aged middle-insert measurement remains pending.

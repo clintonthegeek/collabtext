@@ -1,0 +1,160 @@
+{
+  "schema": "collabtext-benchmark-trace/2",
+  "seed": 42,
+  "dimensions": {
+    "text_bytes": [
+      1000,
+      10000,
+      100000,
+      1000000
+    ],
+    "prior_replacements": [
+      0,
+      500,
+      1000,
+      3000
+    ],
+    "replacement_calls": 200,
+    "query_calls": 50,
+    "codec_calls": 100,
+    "bulk_calls": 5,
+    "list_entries": [
+      100,
+      1000,
+      5000
+    ],
+    "causal_actors": [
+      1,
+      32,
+      128,
+      512
+    ],
+    "middle_insert_calls": 200
+  },
+  "workloads": [
+    {
+      "name": "fixed-width-ascii-replacement",
+      "seed": "single-insert-of-ascii-a",
+      "positions": "mt19937-42 modulo visible byte length",
+      "replacement": "toggle selected byte between x and y",
+      "measure": "200 individual checked calls after seeded prior replacements",
+      "controls": [
+        "public-utf16-facade",
+        "private-byte-buffer"
+      ],
+      "identity": "final encoded operation bytes must match controls"
+    },
+    {
+      "name": "utf8-coordinate-conversion",
+      "seed": "10000 repetitions of a\ud83d\ude00\u00e9 in one insertion",
+      "measure": "individual emoji insertions at consecutive UTF16 offsets",
+      "checks": [
+        "exact UTF8 body",
+        "UTF16 length"
+      ]
+    },
+    {
+      "name": "boundary-read-history",
+      "seed": "100000 ASCII bytes plus 0 or 1000 fixed-width replacements",
+      "measure": "50 fresh varying offsets or fresh tokens",
+      "checks": [
+        "each minted token resolves at its requested offset"
+      ]
+    },
+    {
+      "name": "strict-attachment-read-history",
+      "seed": "100000 ASCII bytes plus 0 or 1000 fixed-width replacements",
+      "measure": "50 varying nonzero offsets for preceding-side attachment mint and resolve",
+      "checks": [
+        "each attachment resolves at its requested offset"
+      ]
+    },
+    {
+      "name": "interleaved-position-reads",
+      "seed": "100000 ASCII bytes",
+      "measure": "fixed-width replacement followed by boundary mint; then replacement followed by marker resolution",
+      "checks": [
+        "offsets remain valid",
+        "marker remains at byte 50000"
+      ]
+    },
+    {
+      "name": "list-identity-and-projection",
+      "seed": "ordered entries with repeated value 7 and retained insertion identities",
+      "measure": "50 distributed exact-identity element/anchor lookups and full projections",
+      "checks": [
+        "resolved element index",
+        "full identity anchor",
+        "projection count and final identity"
+      ]
+    },
+    {
+      "name": "bulk-text-and-undo",
+      "seed": "five independently seeded engines per case",
+      "measure": [
+        "one bulk insert",
+        "one bulk remove",
+        "one bulk replace",
+        "undo a seeded whole-document removal"
+      ],
+      "bytes": [
+        1000,
+        100000,
+        1000000
+      ],
+      "large_document_undo_budget": "256 MiB, explicitly reported",
+      "checks": [
+        "exact final text",
+        "successful checked operation"
+      ]
+    },
+    {
+      "name": "default-import-refusal",
+      "seed": "empty engine, default 16 MiB undo byte budget",
+      "measure": "one checked 1000000-byte ASCII insertion",
+      "checks": [
+        "limit_exceeded",
+        "text remains empty",
+        "allocator unchanged"
+      ]
+    },
+    {
+      "name": "causal-operation-codec",
+      "seed": "receiver observes concurrent one-character insertions from distinct actors",
+      "measure": "100 encodes and decodes at each configured frontier size",
+      "checks": [
+        "canonical bytes",
+        "decoded operation identity",
+        "visible result"
+      ]
+    },
+    {
+      "name": "existing-native-and-recovery-suites",
+      "source": "selected tst_benchmark QtTest methods plus tst_checkpoint_recovery_benchmark",
+      "checks": [
+        "QtTest exits successfully",
+        "replicas converge",
+        "recovered text exactly matches"
+      ]
+    },
+    {
+      "name": "aged-random-boundary-single-insert",
+      "seed": "mt19937-170 plus history run count",
+      "positions": "uniform random UTF-8 scalar boundaries over visible ASCII text",
+      "fixture": "128 or 3000 retained single-scalar runs created by checked tail inserts",
+      "measure": "200 individually timed checked one-scalar pure insertions at random boundaries",
+      "checks": [
+        "one retained run per seed scalar",
+        "exact final text",
+        "final encoded operation fingerprint matches baseline"
+      ]
+    }
+  ],
+  "accounting": {
+    "refusals": "fail the harness except the explicit default-import-refusal case",
+    "no_ops": "zero in fixed-width replacement cases by construction; report attempt and accepted counts",
+    "percentile": "lower empirical order statistic at floor(q*(n-1)) within one process run",
+    "input_hash": "SHA-256 of this file, recorded in every matrix manifest",
+    "correctness_hash": "FNV-1a 64 bit state and operation summaries are comparison aids, not cryptographic hashes"
+  }
+}

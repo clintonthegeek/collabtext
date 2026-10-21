@@ -9,6 +9,24 @@ JSONL samples. See [TraceFormat.md](TraceFormat.md) and
 [`traces/workloads-v1.json`](traces/workloads-v1.json) for the frozen workload
 recipe.
 
+For the X05 aged middle-insert probe, retain v1 unchanged and select the
+versioned v2 trace explicitly:
+
+```sh
+python3 tools/run_performance_matrix.py \
+  --baseline-root /tmp/collabtext-x05-baseline \
+  --baseline-sha <full-parent-commit> \
+  --trace benchmarks/traces/workloads-v2.json \
+  --output /tmp/collabtext-x05-middle-results \
+  --repeats 5 --public-only
+```
+
+This adds 200 individually timed pure insertions at random scalar boundaries
+after 128 and 3,000 retained single-scalar runs. The measured region excludes
+fixture seeding and expected-text maintenance. The matrix still checks final
+text and operation fingerprints between revisions; keep the raw output with
+the report.
+
 To reproduce X01, extract the pinned baseline without changing the checkout,
 then run the paired matrix from the candidate checkout:
 
