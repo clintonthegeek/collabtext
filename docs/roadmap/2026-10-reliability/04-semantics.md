@@ -362,6 +362,7 @@ Run `./tools/verify-roadmap.sh debug 'tst_sequence_model|tst_sequence_semantics'
 - `libs/collabtext/CMakeLists.txt`
 - `libs/collabtext/tests/tst_sequence_fast_paths.cpp`
 - `libs/collabtext/tests/tst_edits_since.cpp`
+- `libs/collabtext/tests/tst_benchmark.cpp`
 
 **Steps:**
 

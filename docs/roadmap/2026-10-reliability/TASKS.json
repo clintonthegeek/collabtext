@@ -5,12 +5,12 @@
   "contains_branch": "feat/fuguemax-placement",
   "status": "in_progress",
   "direction": {
-    "as_of": "2026-10-19",
+    "as_of": "2026-10-30",
     "document": "docs/roadmap/2026-10-reliability/DIRECTION.md",
     "placement": "FugueMax",
     "spec": "docs/specs/vnext-sequence-algorithm.md#0",
     "next": [
-      "X07"
+      "X05"
     ],
     "unblocked_not_next": [
       "G03",
@@ -3855,6 +3855,7 @@
       ],
       "gate": null,
       "status": "not_started",
+      "notes": "2026-10-30: no Wave acceptance exists for any candidate after 0d21670. Markoff moved its pin to collabtext-perf-checkpoint-2026-10-21 (16cc48f) on 2026-10-21, and Corbomite runs 281/281 against that same engine at 2026-10-30, but neither is Wave acceptance and neither substitutes for it. Status unchanged.",
       "baseline_revision": "0d21670896d02dda3dc44d18d37f9657935333ed",
       "implementation_commits": [],
       "verification_results": {}
@@ -5066,12 +5067,13 @@
       ],
       "gate": null,
       "status": "not_started",
+      "notes": "2026-10-30: consumer evidence exists but acceptance wording is not recorded here. Markoff moved its pin to collabtext-perf-checkpoint-2026-10-21 (16cc48f) after an A14-equivalent run (Debug/Release/ASan+UBSan 100/100, relocated installed consumer green; its docs/STATUS.md and docs/handoff/2026-10-21-to-collabtext-perf-work-reaches-markoff.md). Corbomite reports 281/281 on that engine and confirms ASK-M1 and M29 at the pin in its 2026-10-30 letter. Both are production-consumer evidence, not an upstream fixture; the status stays not_started until Markoff states acceptance of the exact candidate for this row.",
       "baseline_revision": "ffe9875ee35a525f422eff3c1aaee2841f55d962",
       "implementation_commits": [],
       "verification_results": {}
     }
   ],
-  "revised": "2026-10-19",
+  "revised": "2026-10-30",
   "revision_reason": "User requested a sequenced performance implementation plan against the measured merged-master d04f151 baseline. Replace unstarted X tasks, split read/design gates, remove unrelated GC/transport prerequisites from Core optimization, preserve every existing non-X task status and external acceptance gate.",
   "removed_tasks": [
     {

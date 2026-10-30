@@ -1,5 +1,21 @@
 # Documentation map
 
+## Consumer pin and label policy
+
+- **Tag.** The supported consumer tag is the newest annotated tag on `master`
+  whose annotation says it is published. Pin that tag's exact SHA and rebuild.
+  Tags are immutable: a correction is a new tag, never a moved one. An
+  unannotated tag, or one whose annotation does not claim publication, is not a
+  pin (for example `collabtext-adoption-2026-10-11`, local provenance only).
+- **Label.** `COLLABTEXT_PRERELEASE` moves when the installed public API, the
+  capability manifest, or the supported reader formats change. Interior engine
+  work that leaves the installed surface identical keeps the label: an unchanged
+  label means no rebuild is required for API reasons.
+- **Reclamation.** Physical collection, log pruning and epoch transitions are
+  disabled. Enabling any of them is announced in
+  [`ALPHA_CAPABILITIES.md`](../libs/collabtext/include/collabtext/ALPHA_CAPABILITIES.md)
+  and in a handoff note under a new prerelease label before it lands.
+
 Current consumer entry points:
 
 - [USING_VNEXT.md](USING_VNEXT.md): build/install and public API starting point.
@@ -15,7 +31,7 @@ Current consumer entry points:
 
 Current maintainer entry points:
 
-- [07-performance.md](roadmap/2026-10-reliability/07-performance.md): current sequenced implementation plan; start X01.
+- [07-performance.md](roadmap/2026-10-reliability/07-performance.md): current sequenced implementation plan; X01–X04 complete, X05 in progress.
 - [vnext-performance-targets.md](specs/vnext-performance-targets.md): baseline, expected improvements, measurement and correctness gates.
 - [October 19 performance evaluation](reports/2026-10-19-performance-evaluation.md): measured merged-engine baseline and reproducible evidence.
 

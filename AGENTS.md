@@ -12,12 +12,15 @@ publication or master merge is authorized. One executor; model before gaps.
 
 # Collabtext implementation orientation
 
-Work only in `/home/clinton/dev/collabtext/.worktrees/reliability-v2`, branch
-`feat/fuguemax-placement`. Root master contains unrelated work; preserve it.
-Read `docs/roadmap/2026-10-reliability/DIRECTION.md`, then `DECISIONS.md` and
-`EXECUTION.md`. `TASKS.json` owns task status/dependencies; numbered phase files
+Work in `/home/clinton/dev/collabtext` on `master`. The reliability worktree
+(`.worktrees/reliability-v2`) and its branches were merged on 2026-10-19; the
+branch `feat/fuguemax-placement` is contained in `master` and is not a separate
+line of work. `TASKS.json` owns task status/dependencies; numbered phase files
 mirror its exact steps and acceptance. Completed tasks describe historical work,
 not instructions to perform it again.
+
+Read `docs/roadmap/2026-10-reliability/DIRECTION.md`, then `DECISIONS.md` and
+`EXECUTION.md`.
 
 The 2026-10-11 user authorized deep native-engine changes, API additions and
 optimization to finish Wave's Core requirements before Markoff starts. The active

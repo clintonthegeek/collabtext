@@ -4,15 +4,26 @@
 
 The reliability engine line (329 commits) merged into `master` on 2026-10-19 and
 is tagged `collabtext-integration-2026-10-19` (package `0.2.0-alpha.5`, manifest
-v17). Read `AGENTS.md` and `docs/roadmap/2026-10-reliability/README.md` first;
-`TASKS.json` owns status and `DIRECTION.md` carries the current next steps
-(E07a/E07b complete; Q06 Wave acceptance and M06 Markoff acceptance are next,
-then the G03/G06/G07/G08 reclamation series and the X-series performance work).
+v17). The newest published tag is `collabtext-perf-checkpoint-2026-10-21`
+(`16cc48f`), same package label and manifest because the installed API did not
+change; Markoff pins it. Read `AGENTS.md` and
+`docs/roadmap/2026-10-reliability/README.md` first; `TASKS.json` owns status and
+`DIRECTION.md` carries the current next steps.
 
-The engine branches `feat/fuguemax-placement` and `roadmap/reliability-v2`, and
-the `.worktrees/reliability-v2` checkout, were merged and deleted on 2026-10-19;
-their commits are reachable from `master` and the candidate tags. That roadmap
-supersedes the historical OpStream scope below.
+**Current status (2026-10-30).** Work is on `master`; the X-series performance
+lane is the active lane, and X05 (transactional splices replacing whole-fragment
+rebuilds) is in progress. Its aged-edit targets pass on the current tree; the
+mixed 5-KB/50%-tombstone target (~1.18x against 2x) and the arc Release/relocated
+package gates are open. The next algorithm slice is multi-fragment transactional
+replacement. Q06 (Wave acceptance) and M06 (Markoff acceptance record) remain
+external and `not_started`; Markoff's 2026-10-21 pin move and Corbomite's 281/281
+at that engine are consumer evidence, not a substitute for acceptance wording.
+G03/G06 are paused in progress; G07/G08 and the remaining A/E tasks are untouched.
+
+The old worktree `.worktrees/reliability-v2` and its branches were merged on
+2026-10-19 and removed; `feat/fuguemax-placement` still exists locally but its
+tip (`16cc48f`) is contained in `master`, so it is not a second line of work.
+That roadmap supersedes the historical OpStream scope below.
 W1–W6 external consumer requirements are in `docs/specs/vnext-external-position-contract.md`. All product-policy questions are resolved
 in its `DECISIONS.md`: improve the existing C++ engine incrementally. No Rust
 rewrite, Yrs adoption, or replacement-engine trial is in scope. No Superpowers

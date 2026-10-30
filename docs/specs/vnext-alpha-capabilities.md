@@ -52,7 +52,10 @@ A later supported release must, for stored version-1 bytes:
 What a supported version does **not** buy a consumer, and must not be read as:
 
 - **No pin.** Storing bytes creates no retention obligation. Physical GC is
-  disabled, so nothing is reclaimed and nothing can go missing yet.
+  disabled, so nothing is reclaimed and nothing can go missing yet. Any change
+  that enables physical collection, log pruning or epoch transitions is
+  announced here and in a handoff note, under a new prerelease label, before it
+  lands.
 - **No reclamation survival.** When S05/G06/G08 enable physical GC, a live
   registered pin must keep its referent, or a boundary stub / checked translation
   must keep the original bytes resolving. That work does not exist.

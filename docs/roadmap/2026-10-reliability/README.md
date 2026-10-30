@@ -1,10 +1,12 @@
-# Current lane — 2026-10-19
+# Current lane — 2026-10-30
 
-Start **X01** in [07-performance.md](07-performance.md), using the measured
+Continue **X05** in [07-performance.md](07-performance.md), using the measured
 [d04f151 baseline](../../reports/2026-10-19-performance-evaluation.md) and
 [target/verification contract](../../specs/vnext-performance-targets.md).
-The revised X tasks supersede the old performance sequencing. The amendment
-below records historical adoption authorization; it is not today's selected lane.
+X01–X04 are complete; X05 is the active task and its remaining target is the
+mixed 5-KB/50%-tombstone row. The revised X tasks supersede the old performance
+sequencing. The amendment below records historical adoption authorization; it is
+not today's selected lane.
 
 # 2026-10-11 Markoff adoption amendment
 
@@ -20,9 +22,9 @@ publication or master merge is authorized. One executor; model before gaps.
 
 # Reliability roadmap
 
-Execution branch: `feat/fuguemax-placement` in the isolated
-`.worktrees/reliability-v2` worktree. Root `master` contains unrelated work and
-must be preserved.
+Execution branch: `master`. The worktree `.worktrees/reliability-v2` and its
+branches were merged on 2026-10-19; `feat/fuguemax-placement` is contained in
+`master` and is not a second line of work.
 Read [DIRECTION.md](DIRECTION.md), [DECISIONS.md](DECISIONS.md), then
 [EXECUTION.md](EXECUTION.md). [TASKS.json](TASKS.json) is the authoritative
 status/dependency registry. Numbered phase files mirror the registry exactly;
@@ -35,7 +37,7 @@ packaging, performance and release tasks retain their exact registry status.
 The active user-directed lane is [07 — measured performance](07-performance.md);
 X01/X02/X07a/X04a/X07/X07b are complete; X07b retained X07's exact-width
 summary after the compact prototype missed cumulative byte-control thresholds.
-X04 is next.
+X04 is complete; X05 is the active task.
 [09 — Wave Core](09-wave-core.md) and [10 — Markoff Core](10-markoff-core.md)
 record completed upstream work and remaining external acceptance. Do not repeat
 completed implementation or treat external acceptance as an optimization prerequisite.

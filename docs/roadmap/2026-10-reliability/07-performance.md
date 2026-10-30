@@ -486,6 +486,9 @@ lookup and paired results are in
 - `libs/collabtext/tests/tst_perf_diagnostics.cpp`
 - `docs/reports/2026-10-21-x05-undo-budget-paired/README.md`
 - `docs/reports/2026-10-21-x05-undo-budget-paired/raw/*`
+- `docs/reports/2026-10-21-x05-ancestry-paired/README.md`
+- `docs/reports/2026-10-21-x05-ancestry-paired/raw/*`
+- `libs/collabtext/tests/tst_benchmark.cpp`
 
 **Steps:**
 

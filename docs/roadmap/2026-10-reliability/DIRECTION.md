@@ -1,9 +1,10 @@
 # Current direction
 
-As of 2026-10-20. Performance work is executing in the isolated
-`.worktrees/reliability-v2` worktree on `feat/fuguemax-placement`; preserve root
-`master` and its unrelated changes. TASKS.json owns exact status/dependencies;
-completed phase procedures are history, not work to repeat.
+As of 2026-10-30. Performance work executes on `master`; the isolated
+`.worktrees/reliability-v2` worktree and its branches were retired into `master`
+on 2026-10-19, and `feat/fuguemax-placement` is contained in it. TASKS.json owns
+exact status/dependencies; completed phase procedures are history, not work to
+repeat.
 
 The selected local lane is **[07 — measured performance](07-performance.md)**.
 X01, X02, X07a, X04a, X07, and X07b are complete. X07 delivered a 3.11× median
@@ -32,7 +33,16 @@ Do not edit consumers or infer their acceptance from upstream fixtures.
 
 Current integrated package: **0.2.0-alpha.5**, capability manifest **v17**,
 `collabtext-integration-2026-10-19`. All earlier candidate tags remain immutable.
-No package, manifest or tag change is needed to start performance work.
+No package, manifest or tag change is needed to start performance work. The
+newest published tag is `collabtext-perf-checkpoint-2026-10-21` (`16cc48f`),
+same label and manifest; consumers follow the newest published annotated tag on
+`master` per `docs/README.md`.
+
+Open consumer-observed row (2026-10-30, from
+[Corbomite's ask](../../handoff/2026-10-30-from-collabtext-reply.md)):
+`IdList::set_entries` still rebuilds the whole entry tree. X05 does not cover it;
+it needs its own registry task ID before work starts, and it must not be folded
+into an X05 measurement claim.
 
 Current normative extensions:
 [Wave contract](../../specs/wave-core-adoption.md),

@@ -3577,3 +3577,39 @@ fingerprints. The registered changed-path Debug route passes 14/14, including
 5/5 and 20/20. The first route check caught missing coverage for the new raw
 report; an explicit route and regression assertion are now included. The
 five-pair v2 aged middle-insert measurement remains pending.
+## 2026-10-30 — X05 tombstone fallback profile (16cc48f) and doc/consumer sync
+
+Commit `16cc48f` added opt-in diagnostics around the existing native
+3K/5K/8K tombstone scaling benchmark; the benchmark stays out of CTest and out
+of timing acceptance. In the 5-KB/50%-tombstone 50-edit window the instrumented
+run counted 32 fragment snapshots, 120,924 snapshot items, 120,972 rebuilt tree
+items and 40 placement-index builds. Partial replacement was attempted 23 times
+and stopped at stage 2 in 15 of them because the requested visible range crossed
+a retained-fragment boundary. That identifies multi-fragment transactional
+replacement as the next X05 algorithm slice; the counts are structural evidence,
+not latency evidence. Details are in `07-performance.md` and
+`docs/reports/2026-10-21-x05-ancestry-paired/raw/candidate-native-tombstone-diagnostics.log`.
+
+Same day, documentation and registry state were re-synchronised after the
+2026-10-19 worktree retirement: `AGENTS.md`, `DIRECTION.md`, the roadmap
+`README.md`, `EXECUTION.md` and `CLAUDE.md` no longer point at
+`.worktrees/reliability-v2` or name X04/X01 as the next task; `TASKS.json`
+`direction.as_of` is 2026-10-30 with `next: ["X05"]`, and Q06/M06 carry notes
+recording Markoff's 2026-10-21 pin move and Corbomite's 281/281 without changing
+their `not_started` status. The S07/X05 Markdown file lists were synced to the
+registry, so `validate-plan.py` and `check-scope.py --strict` pass again.
+
+Consumer policy is now written down: `docs/README.md` states the supported tag
+rule (newest published annotated tag on `master`, immutable), the prerelease
+label rule, and the announcement obligation before physical reclamation returns;
+`docs/specs/vnext-alpha-capabilities.md` repeats the reclamation commitment
+beside the "physical GC disabled" statement. The reply to Corbomite's five asks
+is `docs/handoff/2026-10-30-from-collabtext-reply.md` (also written to
+`Corbomite/docs/handoff/`).
+
+Verification: `python3 validate-plan.py` valid (90 tasks); `python3 check-scope.py --strict`
+0 hits needing review; `./tools/verify-roadmap.sh debug '^tst_buffer$'` passed
+1/1; `./tools/verify-roadmap.sh release '^(tst_operation_validation|tst_idlist)$'`
+passed 2/2 in Release/NDEBUG (evidence
+`build-roadmap-release/verification/20261030T172615Z-1240999`), which is the
+release leg Corbomite asked about — it is local, not yet in CI.
