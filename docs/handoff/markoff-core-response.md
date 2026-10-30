@@ -154,3 +154,49 @@ from one stable BlockIdentity, then use that same scope for writer, peers,
 restart, routes and expected bundles. Do not weaken the adapter's canonical
 name validation. Rerun the probe and add the new identity/gap/archive acceptance
 trace to production-owned coverage. Its checkout was not modified by this work.
+
+## M06 acceptance recorded — 2026-10-31
+
+Markoff accepted the candidate in
+[`2026-10-31-from-markoff-m06-acceptance.md`](2026-10-31-from-markoff-m06-acceptance.md);
+the wording is reproduced here because this file is the M06 record.
+
+> **Markoff accepts `collabtext-perf-checkpoint-2026-10-21`
+> (`16cc48f4969abc2940a7fb332b72af018075dab7`, package `0.2.0-alpha.5`,
+> capability manifest v17) as the engine of its production document path**,
+> recorded at Markoff revision `78cac549` on 2026-10-31. The acceptance is
+> Markoff's own: its provider seams ran against the installed package at
+> `build-collabtext-perf-checkpoint/install`, and independently as a standalone
+> consumer configured against a relocated copy of that prefix
+> (`/tmp/collabtext-16cc48f-relocated`). The relocated consumer suite passed
+> 4/4 and Markoff's full Debug suite passed 101/101 offscreen, including
+> `markoff_collabtext_vnext_probe`, `markoff_document_storage_provider_test`,
+> `markoff_provider_scope_test`, `markoff_provider_interface_conformance` and
+> `markoff_provider_backed_document_test`. No upstream-shaped fixture or
+> unchanged older probe was substituted.
+
+| Item | Value |
+|---|---|
+| Consumer revision | Markoff `78cac549` (acceptance tree: `4e470f0c` + build-configuration fix in `78cac549`) |
+| Producer | tag `collabtext-perf-checkpoint-2026-10-21` = `16cc48f4969abc2940a7fb332b72af018075dab7` |
+| Package | `0.2.0-alpha.5`, capability manifest v17, `CollabText::Core` |
+| Prefix | `build-collabtext-perf-checkpoint/install` (rebuilt from the tag) |
+| Relocated prefix | `/tmp/collabtext-16cc48f-relocated` (copy of the prefix) |
+| Full Debug suite | 101/101 `ctest`, offscreen |
+| Relocated standalone consumer suite | 4/4 `ctest`, offscreen |
+
+Commands are recorded in Markoff's letter and in the M06 registry row. Coverage
+against the named obligations — document keys and canonical stream names, full
+insertion identities, committed terminal-gap recovery, retained CTLO/0002 and
+CTGP/0001 archives — is Markoff's own list; this repository records it and does
+not certify it.
+
+**Scope.** Acceptance of that candidate for Markoff's production path. It is not
+certification of the producer's X05 gates and it does not touch Q06, which stays
+open. Merge authorization remains the user's.
+
+**Note on the newer checkpoint.** X05 reached its acceptance on 2026-10-30 and
+`collabtext-perf-checkpoint-2026-10-30` (`fd3c09e`) is now the newest published
+annotated tag on `master`; the installed API, package label and manifest are
+unchanged. M06's acceptance is of `16cc48f` and is not extended to that tag by
+implication — a pin move needs Markoff's own rebuild and re-acceptance record.

@@ -193,3 +193,11 @@ Run validate-plan.py, check-scope.py --strict, tooling tests, full correctness, 
 
 Consumer executes its production acceptance and supplies evidence; upstream does not certify it.
 
+**Recorded 2026-10-31:** Markoff accepted `collabtext-perf-checkpoint-2026-10-21`
+(`16cc48f`) for its production document path at revision `78cac549`, with Debug
+101/101 and a relocated-consumer 4/4. Wording and evidence are in
+[`../../handoff/markoff-core-response.md`](../../handoff/markoff-core-response.md) and
+[`../../handoff/2026-10-31-from-markoff-m06-acceptance.md`](../../handoff/2026-10-31-from-markoff-m06-acceptance.md).
+The acceptance is candidate-specific and does not extend to
+`collabtext-perf-checkpoint-2026-10-30`; Q06 stays open.
+

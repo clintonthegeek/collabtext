@@ -27,10 +27,15 @@ The frozen source baseline is not a substitute for the paired harness: X01 has
 now established that checked harness, and each optimization must retain its
 correctness and measurement gates.
 
-Wave Q01–Q05/Q04a and Markoff M01–M05 are upstream complete. Q06/M06 remain
-external production acceptance on the exact candidate, independent of local
-performance work. Earlier alpha.3/alpha.4 probe findings are historical; current
-consumer evidence is recorded in the
+Wave Q01–Q05/Q04a and Markoff M01–M06 are upstream complete: Markoff recorded
+production acceptance of `collabtext-perf-checkpoint-2026-10-21` (`16cc48f`) at
+its revision `78cac549`
+([letter](../../handoff/2026-10-31-from-markoff-m06-acceptance.md),
+[record](../../handoff/markoff-core-response.md)). That acceptance does not extend
+to the newer `collabtext-perf-checkpoint-2026-10-30`. Q06 remains external
+production acceptance on the exact candidate, independent of local performance
+work. Earlier alpha.3/alpha.4 probe findings are historical; current consumer
+evidence is recorded in the
 [master integration review](../../reports/2026-10-19-master-integration-review.md).
 Do not edit consumers or infer their acceptance from upstream fixtures.
 
@@ -80,4 +85,5 @@ suppress findings; time-based checks need an uncontended verification run.
 The previous master integration/publication is complete. Do not edit consumers,
 message them, push, publish or perform another merge without a new explicit
 instruction. Provide local evidence; consumers supply real adapter/transaction
-acceptance. Q06/M06 are not complete merely because upstream-shaped tests pass.
+acceptance. Q06 is not complete merely because upstream-shaped tests pass, and
+M06's recorded acceptance covers only the candidate it names.

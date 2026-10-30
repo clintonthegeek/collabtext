@@ -15,9 +15,11 @@ lane is the active lane, and X05 (transactional splices replacing whole-fragment
 rebuilds) is in progress. Its aged-edit targets pass on the current tree; the
 mixed 5-KB/50%-tombstone target (~1.18x against 2x) and the arc Release/relocated
 package gates are open. The next algorithm slice is multi-fragment transactional
-replacement. Q06 (Wave acceptance) and M06 (Markoff acceptance record) remain
-external and `not_started`; Markoff's 2026-10-21 pin move and Corbomite's 281/281
-at that engine are consumer evidence, not a substitute for acceptance wording.
+replacement. Q06 (Wave acceptance) remains `not_started`. M06 is complete:
+Markoff accepted `collabtext-perf-checkpoint-2026-10-21` (`16cc48f`) for its
+production path at its revision `78cac549` on 2026-10-31; that acceptance does not
+extend to `collabtext-perf-checkpoint-2026-10-30`. Corbomite runs 281/281 on
+`16cc48f`.
 G03/G06 are paused in progress; G07/G08 and the remaining A/E tasks are untouched.
 
 The old worktree `.worktrees/reliability-v2` and its branches were merged on

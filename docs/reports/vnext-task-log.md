@@ -3643,3 +3643,26 @@ Implementation `8019a8b`; report
 `docs/reports/2026-10-30-x05-multi-run-replacement/`. Remaining snapshots in the
 tombstone fixture are pure middle insertions whose indexed proof belongs to
 X07/X04, not a splice refusal. Arc B's post-X08 rerun still applies.
+## 2026-10-31 — M06 complete: Markoff production acceptance recorded
+
+Markoff stated acceptance of `collabtext-perf-checkpoint-2026-10-21`
+(`16cc48f`, package `0.2.0-alpha.5`, manifest v17) as the engine of its
+production document path at its revision `78cac549`, with its own provider
+seams: Debug 101/101 offscreen and a standalone consumer project configured
+against a relocated copy of the install prefix at 4/4. Coverage named by the
+consumer spans document keys and canonical stream names, full insertion
+identities, committed terminal-gap recovery, and retained CTLO/0002 and
+CTGP/0001 archives.
+
+Recorded in `docs/handoff/markoff-core-response.md` (wording and evidence
+table), the M06 row of `TASKS.json` (consumer revision, producer SHA, both
+prefixes, commands reference, explicit acceptance), and the M06 block of
+`10-markoff-core.md`. The reply
+`docs/handoff/2026-10-31-to-markoff-m06-recorded.md` also corrects the letter's
+stale premise: X05 closed on 2026-10-30 and `collabtext-perf-checkpoint-2026-10-30`
+(`fd3c09e`) is now the newest published annotated tag with an identical
+installed API. The acceptance is not extended to that tag by implication.
+
+Verification: `validate-plan.py` valid and `check-scope.py --strict` clean; no
+source change, so no engine build was rerun. Q06 stays `not_started`, and no
+consumer repository was edited.
