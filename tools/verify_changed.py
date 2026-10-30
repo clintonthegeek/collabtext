@@ -49,6 +49,8 @@ ROUTES = [
     *[(f'docs/reports/2026-10-19-performance/{name}', 'tst_verification_tools')
       for name in PERFORMANCE_EVIDENCE],
     ('.gitignore', ''), ('*.md', ''), ('docs/*.json', ''),
+    # Removed 2026-10-30: a tracked May-2026 scratch CTest log, not evidence.
+    ('test_results.log', ''),
     ('docs/roadmap/*/*.py', 'tst_verification_tools'),
     ('tools/verify-consumer-package.sh', PACKAGING),
     # E07a/E07b candidate preparation configures, builds, installs, consumes and

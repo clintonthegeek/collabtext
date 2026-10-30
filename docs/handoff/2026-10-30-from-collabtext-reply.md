@@ -126,3 +126,14 @@ If we ever need you to rebuild for a reason other than the label, we will say so
 in a handoff note with the reason and the exact new pin. If you find a row that
 regresses on your side, send the failing CTest target name and we will pin the
 report to our tree.
+
+## Addendum, same day: X05 is closed
+
+After this reply was written, X05 reached its acceptance on the same tree. Five
+pinned Release pairs against `16cc48f` put the mixed 5-KB/50%-tombstone per-edit
+mean at 0.263 (3.8x; worst pair 0.283), with the 0%-tombstone control at 0.621
+and no-history public rows at 0.975–1.011 mean. The installed API is unchanged,
+so the label stays `0.2.0-alpha.5` and no rebuild is required for API reasons.
+The current supported pin is the newest annotated tag on `master` — under the
+rule above, that is the checkpoint tag cut with this change. Report:
+`docs/reports/2026-10-30-x05-multi-run-replacement/`.
