@@ -228,6 +228,146 @@ private slots:
         QCOMPARE(layered.text(), std::string("abZdef"));
     }
 
+    void local_replacement_across_retained_runs_splices_each_boundary() {
+        Buffer buffer(CollabText::Test::test_counter(60));
+        Buffer peer(CollabText::Test::test_counter(61));
+        const auto apply = [&](Buffer& target, uint32_t start, uint32_t end,
+                               const char* text) {
+            auto op = target.try_apply_local_edit({{start, end}}, {text});
+            return op;
+        };
+        auto first = apply(buffer, 0, 0, "aaa");
+        QVERIFY(first);
+        QCOMPARE(peer.apply_ops({first.value()}).size(), size_t{1});
+        auto second = apply(buffer, 3, 3, "bbb");
+        QVERIFY(second);
+        QCOMPARE(peer.apply_ops({second.value()}).size(), size_t{1});
+        auto third = apply(buffer, 6, 6, "ccc");
+        QVERIFY(third);
+        QCOMPARE(peer.apply_ops({third.value()}).size(), size_t{1});
+        QCOMPARE(buffer.text(), std::string("aaabbbccc"));
+        QCOMPARE(buffer.fragment_count(), size_t{3});
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto replaced = apply(buffer, 1, 8, "XY");
+        Diagnostics::end_sample();
+        QVERIFY(replaced);
+        QCOMPARE(buffer.text(), std::string("aXYc"));
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::placement_index_builds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::visible_run_replace_attempts),
+                 uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::visible_run_replace_failures),
+                 uint64_t{0});
+
+        QCOMPARE(peer.apply_ops({replaced.value()}).size(), size_t{1});
+        QCOMPARE(peer.text(), std::string("aXYc"));
+
+        auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("aaabbbccc"));
+        auto redone = buffer.try_redo();
+        QVERIFY(redone);
+        QVERIFY(redone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("aXYc"));
+    }
+
+    void local_replacement_crosses_an_intervening_tombstone() {
+        Buffer buffer(CollabText::Test::test_counter(62));
+        Buffer peer(CollabText::Test::test_counter(63));
+        auto seeded_a = buffer.try_apply_local_edit({{0, 0}}, {"aaa"});
+        QVERIFY(seeded_a);
+        QCOMPARE(peer.apply_ops({seeded_a.value()}).size(), size_t{1});
+        auto seeded_b = buffer.try_apply_local_edit({{3, 3}}, {"bbb"});
+        QVERIFY(seeded_b);
+        QCOMPARE(peer.apply_ops({seeded_b.value()}).size(), size_t{1});
+        auto seeded_c = buffer.try_apply_local_edit({{6, 6}}, {"ccc"});
+        QVERIFY(seeded_c);
+        QCOMPARE(peer.apply_ops({seeded_c.value()}).size(), size_t{1});
+        QCOMPARE(buffer.fragment_count(), size_t{3});
+        auto hidden = buffer.try_apply_local_edit({{3, 6}}, {""});
+        QVERIFY(hidden);
+        QCOMPARE(peer.apply_ops({hidden.value()}).size(), size_t{1});
+        QCOMPARE(buffer.text(), std::string("aaaccc"));
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto replaced = buffer.try_apply_local_edit({{1, 4}}, {"Z"});
+        Diagnostics::end_sample();
+        QVERIFY(replaced);
+        QCOMPARE(buffer.text(), std::string("aZcc"));
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::visible_run_replace_attempts),
+                 uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::visible_run_replace_failures),
+                 uint64_t{0});
+
+        QCOMPARE(peer.apply_ops({replaced.value()}).size(), size_t{1});
+        QCOMPARE(peer.text(), std::string("aZcc"));
+        auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("aaaccc"));
+    }
+
+    void local_deletion_across_retained_runs_splices_each_boundary() {
+        Buffer buffer(CollabText::Test::test_counter(64));
+        Buffer peer(CollabText::Test::test_counter(65));
+        auto seeded_a = buffer.try_apply_local_edit({{0, 0}}, {"aaa"});
+        QVERIFY(seeded_a);
+        QCOMPARE(peer.apply_ops({seeded_a.value()}).size(), size_t{1});
+        auto seeded_b = buffer.try_apply_local_edit({{3, 3}}, {"bbb"});
+        QVERIFY(seeded_b);
+        QCOMPARE(peer.apply_ops({seeded_b.value()}).size(), size_t{1});
+        auto seeded_c = buffer.try_apply_local_edit({{6, 6}}, {"ccc"});
+        QVERIFY(seeded_c);
+        QCOMPARE(peer.apply_ops({seeded_c.value()}).size(), size_t{1});
+        QCOMPARE(buffer.fragment_count(), size_t{3});
+
+        Diagnostics::reset();
+        Diagnostics::begin_sample();
+        auto deleted = buffer.try_apply_local_edit({{1, 8}}, {""});
+        Diagnostics::end_sample();
+        QVERIFY(deleted);
+        QCOMPARE(buffer.text(), std::string("ac"));
+        const auto counts = Diagnostics::snapshot();
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_snapshots), uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_tree_rebuild_items),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::fragment_index_full_rebuilds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::placement_index_builds),
+                 uint64_t{0});
+        QCOMPARE(counts.get(Diagnostics::Counter::visible_run_delete_attempts),
+                 uint64_t{1});
+        QCOMPARE(counts.get(Diagnostics::Counter::visible_run_delete_failures),
+                 uint64_t{0});
+
+        QCOMPARE(peer.apply_ops({deleted.value()}).size(), size_t{1});
+        QCOMPARE(peer.text(), std::string("ac"));
+        auto undone = buffer.try_undo();
+        QVERIFY(undone);
+        QVERIFY(undone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("aaabbbccc"));
+        auto redone = buffer.try_redo();
+        QVERIFY(redone);
+        QVERIFY(redone.value().has_value());
+        QCOMPARE(buffer.text(), std::string("ac"));
+    }
+
     void local_replacement_inserts_before_intervening_tombstone() {
         Buffer buffer(CollabText::Test::test_counter(51));
         auto initial = buffer.try_apply_local_edit({{0, 0}}, {"abc"});

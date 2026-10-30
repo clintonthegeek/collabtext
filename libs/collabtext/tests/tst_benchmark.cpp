@@ -601,7 +601,21 @@ private slots:
                     << " failure_stage_4="
                     << work.get(Diagnostics::Counter::partial_replace_failure_stage_4)
                     << " failure_stage_5="
-                    << work.get(Diagnostics::Counter::partial_replace_failure_stage_5);
+                    << work.get(Diagnostics::Counter::partial_replace_failure_stage_5)
+                    << " visible_replace="
+                    << work.get(Diagnostics::Counter::visible_run_replace_attempts)
+                    << " replace_fail="
+                    << work.get(Diagnostics::Counter::visible_run_replace_failures)
+                    << " replace_collect="
+                    << work.get(Diagnostics::Counter::visible_run_replace_refused_collect)
+                    << " replace_place="
+                    << work.get(Diagnostics::Counter::visible_run_replace_refused_placement)
+                    << " visible_delete="
+                    << work.get(Diagnostics::Counter::visible_run_delete_attempts)
+                    << " delete_collect="
+                    << work.get(Diagnostics::Counter::visible_run_delete_refused_collect)
+                    << " publish_fail="
+                    << work.get(Diagnostics::Counter::visible_run_publish_failures);
             }
         }
     }

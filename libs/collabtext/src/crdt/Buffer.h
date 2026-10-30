@@ -312,6 +312,29 @@ private:
                                     const std::string& inserted_text,
                                     uint32_t inserted_length,
                                     const Identity& deletion_id);
+    struct CoveredVisibleRun {
+        Fragment fragment;
+        uint64_t rank = 0;
+        RunId run = 0;
+        uint32_t first_scalar = 0;
+        uint32_t last_scalar = 0;
+    };
+    std::optional<std::vector<CoveredVisibleRun>>
+    collect_covered_visible_runs(uint32_t start, uint32_t end) const;
+    std::optional<std::vector<EditOperation::DeletionRun>>
+    publish_visible_run_deletions(std::vector<CoveredVisibleRun> covered,
+                                  const Identity& deletion_id,
+                                  std::optional<Fragment> inserted,
+                                  uint64_t insertion_rank);
+    std::optional<std::pair<std::vector<EditOperation::DeletionRun>, Link>>
+    try_replace_visible_runs(uint32_t start, uint32_t end,
+                             Identity inserted_origin,
+                             const std::string& inserted_text,
+                             uint32_t inserted_length,
+                             const Identity& deletion_id);
+    std::optional<std::vector<EditOperation::DeletionRun>>
+    try_delete_visible_runs(uint32_t start, uint32_t end,
+                            const Identity& deletion_id);
 
     struct LocatedRunItem {
         BufferFragmentTree::NodePtr leaf;
