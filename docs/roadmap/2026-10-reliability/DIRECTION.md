@@ -14,7 +14,10 @@ prototype missed the cumulative 1.10 byte-control thresholds and was reverted;
 the exact-width X07 representation remains. See the
 [X07b report](../../reports/2026-10-20-x07b/README.md). X04 completed at
 `0fbd15b` with measured lookup/work-count gains and mixed edit-latency results.
-X05 is now active and uses that result as its paired baseline.
+X05 is complete: replacement and deletion splices cross retained-fragment
+boundaries, the mixed 5-KB/50%-tombstone row is 3.8x faster (2x required), and
+the aged public targets and light-history guard hold in five pinned pairs. X06 is
+next, using X05's result as its baseline.
 The user requested an implementable optimization plan after
 [the new evaluation](../../reports/2026-10-19-performance-evaluation.md).
 The frozen source baseline is `d04f151b3a70b161b72c33a8de6895efbd1c13e2`.

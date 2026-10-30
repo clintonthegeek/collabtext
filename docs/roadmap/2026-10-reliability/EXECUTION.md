@@ -58,7 +58,7 @@ settles affinity, scope, collapse, strict referent restoration and codec rules.
 P06b codecs, S04b native live positions, W02 baseline probes, the W03 strict live
 gate, S02/S03 ordering and E07a/E07b preparation are complete. Their steps are
 history, not instructions to run again. A model/fixture pass is not a production
-capability pass. X04 is complete; X05 is the active local task.
+capability pass. X04 and X05 are complete; X06 is the next local task.
 Read [current handoff](../../handoff/2026-10-05-state-at-handoff.md),
 [boundary contract](../../specs/vnext-boundary-semantics.md) and
 [external requirements](../../specs/vnext-external-position-contract.md).

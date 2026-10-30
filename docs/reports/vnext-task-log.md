@@ -3613,3 +3613,33 @@ Verification: `python3 validate-plan.py` valid (90 tasks); `python3 check-scope.
 passed 2/2 in Release/NDEBUG (evidence
 `build-roadmap-release/verification/20261030T172615Z-1240999`), which is the
 release leg Corbomite asked about — it is local, not yet in CI.
+## 2026-10-30 — X05 complete: multi-run replacement and deletion splices
+
+`try_replace_visible_runs` and `try_delete_visible_runs` now handle a visible
+range that crosses retained-fragment boundaries, sharing one staging path
+(`collect_covered_visible_runs` + `publish_visible_run_deletions`). Each covered
+run is split at its covered edges, exactly the covered scalars are tombstoned,
+the inserted run's FugueMax slot is proved against the old state, tree edits run
+highest retained rank first, node paths are refreshed across the affected span
+(untouched runs included), the staged order is verified before publication, and
+origin/deletion/run rows are maintained incrementally. Deletion reuses the same
+staging without an inserted run, so partial-run deletes no longer copy and
+rebuild the fragment list.
+
+Two staging bugs found by the diagnostics fixture were fixed before measurement:
+the affected span started one rank too late when the inserted run landed before
+the first covered fragment, and the untouched run that occupied the insertion
+rank was omitted from the staged-order check.
+
+Verification: five pinned Release pairs against `16cc48f` matched all 56 public
+fingerprints and passed native 14/14 and recovery at 512/2,048. The
+5-KB/50%-tombstone per-edit mean ratio is 0.263 (3.8x; worst pair 0.283), 3-KB
+0.342, 8-KB 0.177, 0%-tombstone control 0.621; no-history public rows are
+0.975–1.011 mean. Diagnostics in the same fixture dropped from 16/14/16 fragment
+snapshots to 9/7/4 with zero publish failures. Routed Debug, Release and
+leak-enabled ASan/UBSan each passed 103/103; relocated installed-package gates
+passed in Debug, Release and ASan, and the strict live gate passed in Release.
+Implementation `8019a8b`; report
+`docs/reports/2026-10-30-x05-multi-run-replacement/`. Remaining snapshots in the
+tombstone fixture are pure middle insertions whose indexed proof belongs to
+X07/X04, not a splice refusal. Arc B's post-X08 rerun still applies.

@@ -1,10 +1,9 @@
 # Current lane — 2026-10-30
 
-Continue **X05** in [07-performance.md](07-performance.md), using the measured
+Continue **X06** in [07-performance.md](07-performance.md), using the measured
 [d04f151 baseline](../../reports/2026-10-19-performance-evaluation.md) and
 [target/verification contract](../../specs/vnext-performance-targets.md).
-X01–X04 are complete; X05 is the active task and its remaining target is the
-mixed 5-KB/50%-tombstone row. The revised X tasks supersede the old performance
+X01–X05 are complete; X05's mixed 5-KB/50%-tombstone row is met at 3.8x. The revised X tasks supersede the old performance
 sequencing. The amendment below records historical adoption authorization; it is
 not today's selected lane.
 
@@ -37,7 +36,7 @@ packaging, performance and release tasks retain their exact registry status.
 The active user-directed lane is [07 — measured performance](07-performance.md);
 X01/X02/X07a/X04a/X07/X07b are complete; X07b retained X07's exact-width
 summary after the compact prototype missed cumulative byte-control thresholds.
-X04 is complete; X05 is the active task.
+X04 and X05 are complete; X06 is next.
 [09 — Wave Core](09-wave-core.md) and [10 — Markoff Core](10-markoff-core.md)
 record completed upstream work and remaining external acceptance. Do not repeat
 completed implementation or treat external acceptance as an optimization prerequisite.

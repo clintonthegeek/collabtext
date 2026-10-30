@@ -1087,3 +1087,18 @@ times; 15 attempts stopped at stage 2 because the visible range crossed a
 retained-fragment boundary. This identifies multi-fragment replacement as the
 next X05 algorithm slice. Diagnostics alter timings, so these counts are not
 latency evidence; the exact manual run is in the ancestry report's raw folder.
+
+**X05 complete (2026-10-30):** Replacement and deletion splices now cover visible
+ranges that cross retained-fragment boundaries: each covered run is split at its
+covered edges, exactly the covered scalars are tombstoned, and one inserted run
+is published in the same transaction. Five pinned Release pairs against `16cc48f`
+matched all 56 public fingerprints and passed native/recovery gates: the
+5-KB/50%-tombstone per-edit mean ratio is 0.263 (3.8x, worst pair 0.283), 3-KB
+0.342, 8-KB 0.177, the 0%-tombstone control 0.621, and no-history public rows are
+0.975-1.011 mean — inside the 10% guard. Diagnostics in the same fixture dropped
+from 16/14/16 fragment snapshots to 9/7/4 with zero splice publish failures;
+the remaining snapshots are pure middle insertions whose indexed proof belongs to
+X07/X04. Implementation `8019a8b`; routed Debug/Release/ASan passed 103/103 each;
+relocated installed-package gates passed in Debug, Release and ASan. Arc B's
+post-X08 rerun still applies. Report:
+[`../../reports/2026-10-30-x05-multi-run-replacement/README.md`](../../reports/2026-10-30-x05-multi-run-replacement/README.md).
