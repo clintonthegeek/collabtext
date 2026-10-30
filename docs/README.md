@@ -6,7 +6,9 @@
   whose annotation says it is published. Pin that tag's exact SHA and rebuild.
   Tags are immutable: a correction is a new tag, never a moved one. An
   unannotated tag, or one whose annotation does not claim publication, is not a
-  pin (for example `collabtext-adoption-2026-10-11`, local provenance only).
+  pin (for example `collabtext-adoption-2026-10-11`, local provenance only). A
+  tag may trail `master` by documentation-only commits; pin the tag's SHA, never
+  the branch tip.
 - **Label.** `COLLABTEXT_PRERELEASE` moves when the installed public API, the
   capability manifest, or the supported reader formats change. Interior engine
   work that leaves the installed surface identical keeps the label: an unchanged
